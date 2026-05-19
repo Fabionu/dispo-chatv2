@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #0c0d10;
+  color: #f4f1ec;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+input, button, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+
+input::placeholder {
+  color: #4e4d5a;
+}
+
+button {
+  cursor: pointer;
+}
+
+.eyebrow {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #8a8896;
+}
+
+/* Subtle radial background lines for right panel */
+.aurora {
+  background:
+    radial-gradient(1200px 600px at 80% 10%, rgba(255,255,255,0.025), transparent 60%),
+    radial-gradient(900px 500px at 110% 90%, rgba(255,255,255,0.02), transparent 65%),
+    #0c0d10;
+}
+
+/* Custom checkbox */
+.checkbox {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 3px;
+  background: transparent;
+  position: relative;
+  flex-shrink: 0;
+  transition: background 120ms, border-color 120ms;
+}
+.checkbox:checked {
+  background: #f4f1ec;
+  border-color: #f4f1ec;
+}
+.checkbox:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 5px;
+  height: 9px;
+  border: solid #0c0d10;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}

@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create *)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(mkdir web *)",
+      "Bash(mv index.html src tailwind.config.js postcss.config.js vite.config.ts tsconfig.json package.json package-lock.json node_modules dist tsconfig.tsbuildinfo web/)",
+      "Bash(powershell -NoProfile -Command \"Move-Item -Path .\\\\src -Destination .\\\\web\\\\src -Force\")",
+      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(32\\).toString\\('hex'\\)\\)\")"
+    ]
+  }
+}
