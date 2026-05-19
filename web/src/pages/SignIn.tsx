@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { Box, Lock } from 'lucide-react'
+import { useAuth } from '../auth/AuthContext'
 
 type Tab = 'signin' | 'signup'
 
 export default function SignIn() {
+  const { refresh } = useAuth()
   const [tab, setTab] = useState<Tab>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -64,7 +66,7 @@ export default function SignIn() {
           return
         }
       }
-      window.location.reload()
+      await refresh()
     } catch {
       setError('Network error.')
     } finally {

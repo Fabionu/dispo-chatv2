@@ -152,9 +152,15 @@ authRouter.get('/me', async (req, res) => {
     display_name: string
     role: string
     workspace_id: string
+    workspace_name: string
+    workspace_slug: string
   }>(
-    `select id, email, display_name, role, workspace_id
-       from users where id = $1 limit 1`,
+    `select u.id, u.email, u.display_name, u.role,
+            u.workspace_id, w.name as workspace_name, w.slug as workspace_slug
+       from users u
+       join workspaces w on w.id = u.workspace_id
+      where u.id = $1
+      limit 1`,
     [session.userId],
   )
   const u = rows[0]
@@ -166,7 +172,11 @@ authRouter.get('/me', async (req, res) => {
       email: u.email,
       displayName: u.display_name,
       role: u.role,
-      workspaceId: u.workspace_id,
+    },
+    workspace: {
+      id: u.workspace_id,
+      name: u.workspace_name,
+      slug: u.workspace_slug,
     },
   })
 })
