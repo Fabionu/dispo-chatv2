@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Box, Lock } from 'lucide-react'
+import { Box, Eye, EyeOff, Lock } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 
 type Tab = 'signin' | 'signup'
@@ -12,6 +12,7 @@ export default function SignIn() {
   const [displayName, setDisplayName] = useState('')
   const [companyName, setCompanyName] = useState('')
   const [keep, setKeep] = useState(true)
+  const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -120,18 +121,6 @@ export default function SignIn() {
               : 'Set up a workspace for your transport company. You become the first admin.'}
           </p>
 
-          {/* test account note — only on sign-in */}
-          {isSignIn && (
-            <div className="rounded-btn border border-dashed border-white/[0.12] px-4 py-3 mb-6">
-              <div className="eyebrow mb-1.5">Test account</div>
-              <div className="font-mono text-[12.5px] leading-5 text-text/90">
-                maroonyelnats@yahoo.com
-                <br />
-                123
-              </div>
-            </div>
-          )}
-
           {/* form */}
           <form onSubmit={onSubmit} className="space-y-4">
             {!isSignIn && (
@@ -182,16 +171,32 @@ export default function SignIn() {
                   </button>
                 )}
               </div>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={isSignIn ? '••••••••••••' : 'At least 8 characters'}
-                autoComplete={isSignIn ? 'current-password' : 'new-password'}
-                required
-                className="w-full bg-transparent border border-white/[0.08] rounded-btn px-3 py-2.5 text-[13.5px] focus:outline-none focus:border-white/[0.22] transition-colors"
-              />
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={isSignIn ? '••••••••••••' : 'At least 8 characters'}
+                  autoComplete={isSignIn ? 'current-password' : 'new-password'}
+                  required
+                  className="w-full bg-transparent border border-white/[0.08] rounded-btn pl-3 pr-10 py-2.5 text-[13.5px] focus:outline-none focus:border-white/[0.22] transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                  tabIndex={-1}
+                  className="absolute inset-y-0 right-0 px-3 flex items-center text-faint hover:text-text transition-colors"
+                >
+                  {showPassword ? (
+                    <EyeOff size={15} strokeWidth={1.6} />
+                  ) : (
+                    <Eye size={15} strokeWidth={1.6} />
+                  )}
+                </button>
+              </div>
             </div>
 
             {isSignIn && (

@@ -12,11 +12,12 @@ html, body, #root {
 
 body {
   margin: 0;
-  background: #0c0d10;
+  background: #000000;
   color: #f4f1ec;
-  font-family: 'DM Sans', system-ui, sans-serif;
+  font-family: 'Inter', system-ui, sans-serif;
   font-size: 14px;
   line-height: 1.5;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -42,12 +43,26 @@ button {
   color: #8a8896;
 }
 
+.modal-input {
+  width: 100%;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 7px 10px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 120ms;
+}
+.modal-input:focus {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
 /* Subtle radial background lines for right panel */
 .aurora {
   background:
     radial-gradient(1200px 600px at 80% 10%, rgba(255,255,255,0.025), transparent 60%),
     radial-gradient(900px 500px at 110% 90%, rgba(255,255,255,0.02), transparent 65%),
-    #0c0d10;
+    #000000;
 }
 
 /* Custom checkbox */
@@ -73,7 +88,7 @@ button {
   top: 1px;
   width: 5px;
   height: 9px;
-  border: solid #0c0d10;
+  border: solid #000000;
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }

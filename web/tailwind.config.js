@@ -4,10 +4,10 @@ export default {
   theme: {
     extend: {
       colors: {
-        bg: '#0c0d10',
-        surface: '#15161b',
-        'surface-2': '#1d1f26',
-        rail: '#08090c',
+        bg: '#000000',
+        surface: '#141416',
+        'surface-2': '#1d1d20',
+        rail: '#000000',
         text: '#f4f1ec',
         muted: '#8a8896',
         faint: '#4e4d5a',
@@ -21,7 +21,7 @@ export default {
         light: 'rgba(255,255,255,0.05)',
       },
       fontFamily: {
-        sans: ['"DM Sans"', 'system-ui', 'sans-serif'],
+        sans: ['"Inter"', 'system-ui', 'sans-serif'],
         mono: ['ui-monospace', '"SF Mono"', 'Menlo', 'monospace'],
       },
       borderRadius: {

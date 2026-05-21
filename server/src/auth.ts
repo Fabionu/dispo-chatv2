@@ -10,6 +10,15 @@ export type SessionPayload = {
   workspaceId: string
 }
 
+// Make `req.session` visible to every handler without per-file casting.
+// The `requireAuth` middleware populates it; routes mounted after that
+// middleware can treat it as required (with non-null assertion or guard).
+declare module 'express-serve-static-core' {
+  interface Request {
+    session?: SessionPayload
+  }
+}
+
 export function issueSession(res: Response, payload: SessionPayload) {
   const token = jwt.sign(payload, env.JWT_SECRET, { expiresIn: '7d' })
   res.cookie(COOKIE, token, {
@@ -35,11 +44,7 @@ export function readSession(req: Request): SessionPayload | null {
   }
 }
 
-export function requireAuth(
-  req: Request & { session?: SessionPayload },
-  res: Response,
-  next: NextFunction,
-) {
+export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const session = readSession(req)
   if (!session) return res.status(401).json({ error: 'unauthenticated' })
   req.session = session

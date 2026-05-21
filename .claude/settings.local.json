@@ -13,7 +13,21 @@
       "Bash(git push *)",
       "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" https://dispo-chatv2-production.up.railway.app/)",
       "Bash(curl -s https://dispo-chatv2-production.up.railway.app/api/health)",
-      "Bash(curl -s -X POST https://dispo-chatv2-production.up.railway.app/api/auth/signin -H \"content-type: application/json\" -d '{\"email\":\"nonexistent@test.com\",\"password\":\"x\"}')"
+      "Bash(curl -s -X POST https://dispo-chatv2-production.up.railway.app/api/auth/signin -H \"content-type: application/json\" -d '{\"email\":\"nonexistent@test.com\",\"password\":\"x\"}')",
+      "Bash(cd /tmp)",
+      "Bash(rm -f cookies.txt)",
+      "Bash(curl -s -c cookies.txt -X POST http://localhost:3001/api/auth/signup -H 'content-type: application/json' -d '{\"email\":\"smoke@test.local\",\"password\":\"smoke12345\",\"displayName\":\"Smoke Tester\",\"companyName\":\"Smoke Logistics\"}')",
+      "Bash(curl -s -b cookies.txt http://localhost:3001/api/groups)",
+      "PowerShell(Get-NetTCPConnection -LocalPort 3001,5173,5174 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue; \"killed $_\" })",
+      "Bash(rm -f ck.txt)",
+      "Bash(curl -s http://localhost:3001/api/health)",
+      "Bash(curl -s -o b.txt -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:3001/api/auth/signin -H \"content-type: application/json\" -d '{\"email\":\"nobody@x.test\",\"password\":\"wrong\"}')",
+      "Bash(curl -s -c ck.txt -o b.txt -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:3001/api/auth/signup -H \"content-type: application/json\" -d '{\"email\":\"batch3@test.local\",\"password\":\"batch3pass\",\"displayName\":\"Batch Three\",\"companyName\":\"Batch Three Co\"}')",
+      "Bash(curl -s -o b.txt -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:3001/api/auth/signup -H \"content-type: application/json\" -d '{\"email\":\"batch3@test.local\",\"password\":\"batch3pass\",\"displayName\":\"Batch Three\",\"companyName\":\"Another Co\"}')",
+      "Bash(curl -s -b ck.txt -o b.txt -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:3001/api/connections/request -H \"content-type: application/json\" -d '{\"toUserId\":\"1d8ccd14-47c0-49fe-b9d4-c61bfe1aff22\"}')",
+      "Bash(curl -s -b ck.txt -o b.txt -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:3001/api/groups -H \"content-type: application/json\" -d '{\"type\":\"vehicle\",\"name\":\"Bad Members\",\"memberIds\":[\"00000000-0000-0000-0000-000000000000\"]}')",
+      "Bash(curl -s -b ck.txt -o b.txt -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:3001/api/groups/00000000-0000-0000-0000-000000000000/messages -H \"content-type: application/json\" -d '{\"body\":\"hello\"}')",
+      "Bash(curl -s -o b.txt -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:3001/api/auth/signup -H \"content-type: application/json\" -d '{\"email\":\"notanemail\"}')"
     ]
   }
 }

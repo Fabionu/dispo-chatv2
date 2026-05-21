@@ -10,6 +10,13 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
+      // Socket.IO handshake + upgrade. ws:true forwards the WebSocket
+      // upgrade so realtime works identically in dev and prod.
+      '/socket.io': {
+        target: 'http://localhost:3001',
+        ws: true,
+        changeOrigin: true,
+      },
     },
   },
 })
