@@ -57,11 +57,12 @@ button {
   border-color: rgba(255, 255, 255, 0.22);
 }
 
-/* Subtle radial background lines for right panel */
+/* Brand panel: pure-black base with two soft radial glows. Sits one tonal
+   step below the form panel (--bg) so the two login panes read as distinct. */
 .aurora {
   background:
-    radial-gradient(1200px 600px at 80% 10%, rgba(255,255,255,0.025), transparent 60%),
-    radial-gradient(900px 500px at 110% 90%, rgba(255,255,255,0.02), transparent 65%),
+    radial-gradient(1100px 600px at 85% 8%, rgba(255,255,255,0.05), transparent 60%),
+    radial-gradient(820px 520px at 100% 96%, rgba(255,255,255,0.035), transparent 65%),
     #000000;
 }
 

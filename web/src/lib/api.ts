@@ -1,6 +1,7 @@
 import type {
   Connection,
   ConnectionsResponse,
+  DirectoryUser,
   Group,
   Message,
   WorkspaceMember,
@@ -79,6 +80,11 @@ export const api = {
 
   workspace: {
     members: () => request<{ members: WorkspaceMember[] }>('/workspace/members'),
+  },
+
+  directory: {
+    searchUsers: (q: string) =>
+      request<{ users: DirectoryUser[] }>(`/directory/users?q=${encodeURIComponent(q)}`),
   },
 
   connections: {

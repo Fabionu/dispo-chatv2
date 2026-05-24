@@ -7,7 +7,7 @@ export default {
         bg: '#000000',
         surface: '#141416',
         'surface-2': '#1d1d20',
-        rail: '#000000',
+        rail: '#0c0c0c',
         text: '#f4f1ec',
         muted: '#8a8896',
         faint: '#4e4d5a',

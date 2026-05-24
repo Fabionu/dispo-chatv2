@@ -271,7 +271,7 @@ export default function SignIn() {
       </section>
 
       {/* RIGHT — marketing */}
-      <section className="relative hidden lg:flex flex-col aurora border-l border-white/[0.05] px-14 py-10">
+      <section className="relative hidden lg:flex flex-col aurora border-l border-white/[0.08] px-14 py-10">
         {/* logo */}
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-card border border-white/[0.1] bg-white/[0.03] flex items-center justify-center">

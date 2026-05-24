@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Box, ChevronDown, LogOut, MessageSquare, Plus, Search, Settings } from 'lucide-react'
 import type { User, Workspace as WorkspaceT } from '../auth/AuthContext'
-import type { Group, IncomingMessage } from '../lib/types'
+import type { Connection, ConnectionsResponse, Group, IncomingMessage } from '../lib/types'
 import { groupHasUnread, groupLabel } from '../lib/types'
 import { api } from '../lib/api'
 import { getSocket } from '../lib/socket'
 import ChatView from '../components/ChatView'
+import ConnectionRequestView from '../components/connections/ConnectionRequestView'
+import ConnectionRequestsSection from '../components/connections/ConnectionRequestsSection'
 import CreateVehicleGroupModal from '../components/CreateVehicleGroupModal'
-import NewDirectMessageModal from '../components/NewDirectMessageModal'
+import NewMessageModal from '../components/NewMessageModal'
 
 type Props = {
   user: User
@@ -16,6 +18,19 @@ type Props = {
 }
 
 type NewGroupKind = 'vehicle' | 'direct'
+
+// What the main pane is currently showing. A group chat, a pending request,
+// or nothing (the empty state).
+type Selection =
+  | { kind: 'group'; id: string }
+  | { kind: 'request'; id: string }
+  | null
+
+const EMPTY_CONNECTIONS: ConnectionsResponse = {
+  accepted: [],
+  pendingReceived: [],
+  pendingSent: [],
+}
 
 function byRecent(a: Group, b: Group): number {
   const at = a.lastMessageAt ?? a.createdAt
@@ -29,7 +44,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   const [modal, setModal] = useState<NewGroupKind | null>(null)
   const [groups, setGroups] = useState<Group[]>([])
   const [loadingGroups, setLoadingGroups] = useState(true)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selection, setSelection] = useState<Selection>(null)
+  const [connections, setConnections] = useState<ConnectionsResponse>(EMPTY_CONNECTIONS)
 
   const userMenuRef = useRef<HTMLDivElement>(null)
   const newMenuRef = useRef<HTMLDivElement>(null)
@@ -74,6 +90,29 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     }
   }, [refreshGroups])
 
+  // Connections: load once, then refetch whenever a connection event fires.
+  // Refetching (rather than patching) keeps the three buckets consistent.
+  const refreshConnections = useCallback(async () => {
+    setConnections(await api.connections.list())
+  }, [])
+
+  useEffect(() => {
+    void refreshConnections()
+  }, [refreshConnections])
+
+  useEffect(() => {
+    const socket = getSocket()
+    const onChange = () => void refreshConnections()
+    socket.on('connection:requested', onChange)
+    socket.on('connection:accepted', onChange)
+    socket.on('connection:declined', onChange)
+    return () => {
+      socket.off('connection:requested', onChange)
+      socket.off('connection:accepted', onChange)
+      socket.off('connection:declined', onChange)
+    }
+  }, [refreshConnections])
+
   // Close menus on outside click / Esc.
   useEffect(() => {
     if (!userMenuOpen && !newMenuOpen) return
@@ -109,7 +148,28 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   async function handleCreated(groupId: string) {
     setModal(null)
     await refreshGroups()
-    setSelectedId(groupId)
+    setSelection({ kind: 'group', id: groupId })
+  }
+
+  // Open (or create) a DM with an accepted connection. Used after accepting
+  // a request, so the natural next step (talk to them) is one click closer.
+  const openDirect = useCallback(
+    async (userId: string) => {
+      const { group } = await api.groups.createDirect(userId)
+      await refreshGroups()
+      setSelection({ kind: 'group', id: group.id })
+    },
+    [refreshGroups],
+  )
+
+  async function handleAccepted(otherUserId: string) {
+    await refreshConnections()
+    await openDirect(otherUserId)
+  }
+
+  async function handleDeclined() {
+    await refreshConnections()
+    setSelection(null)
   }
 
   // Patch a single group's lastReadAt locally so the unread dot clears
@@ -124,15 +184,22 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
 
   const vehicleGroups = useMemo(() => groups.filter((g) => g.type === 'vehicle'), [groups])
   const directGroups = useMemo(() => groups.filter((g) => g.type === 'direct'), [groups])
-  const selected = useMemo(
-    () => groups.find((g) => g.id === selectedId) ?? null,
-    [groups, selectedId],
-  )
+  const pendingReceived = connections.pendingReceived
+
+  const selectedGroup = useMemo<Group | null>(() => {
+    if (selection?.kind !== 'group') return null
+    return groups.find((g) => g.id === selection.id) ?? null
+  }, [groups, selection])
+
+  const selectedRequest = useMemo<Connection | null>(() => {
+    if (selection?.kind !== 'request') return null
+    return pendingReceived.find((c) => c.id === selection.id) ?? null
+  }, [pendingReceived, selection])
 
   return (
     <div className="h-screen w-full flex bg-bg text-text overflow-hidden">
       {/* Left rail */}
-      <aside className="w-[288px] shrink-0 bg-rail border-r border-white/[0.05] flex flex-col">
+      <aside className="w-[340px] shrink-0 bg-rail border-r border-white/[0.08] flex flex-col">
         {/* Workspace switcher */}
         <button className="flex items-center gap-2.5 px-4 py-3.5 border-b border-white/[0.05] hover:bg-white/[0.02] transition-colors text-left">
           <div className="h-7 w-7 rounded-chip border border-white/[0.1] bg-white/[0.03] flex items-center justify-center shrink-0">
@@ -159,7 +226,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               placeholder="Jump to…"
               className="bg-transparent text-[12.5px] flex-1 outline-none placeholder:text-faint min-w-0"
             />
-            <kbd className="font-mono text-[10px] text-faint shrink-0">⌘K</kbd>
           </label>
 
           <div className="relative shrink-0" ref={newMenuRef}>
@@ -183,18 +249,24 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 className="absolute right-0 top-[calc(100%+6px)] w-[200px] rounded-card border border-white/[0.08] bg-surface overflow-hidden z-20 py-1"
               >
                 <CreateMenuItem label="Vehicle group" onClick={() => startCreate('vehicle')} />
-                <CreateMenuItem label="Direct message" onClick={() => startCreate('direct')} />
+                <CreateMenuItem label="Search for a connection" onClick={() => startCreate('direct')} />
               </div>
             )}
           </div>
         </div>
 
-        {/* Group list */}
-        <nav className="flex-1 overflow-y-auto px-2 pt-3 pb-2 space-y-6">
+        {/* Group + requests list */}
+        <nav className="flex-1 overflow-y-auto px-2 pt-2 pb-2 space-y-6">
           {loadingGroups ? (
             <div className="px-2 text-[11.5px] text-faint">Loading…</div>
           ) : (
             <>
+              <ConnectionRequestsSection
+                pendingReceived={pendingReceived}
+                selectedId={selection?.kind === 'request' ? selection.id : null}
+                onSelect={(id) => setSelection({ kind: 'request', id })}
+              />
+
               <ChannelGroup label="Vehicles & trips">
                 {vehicleGroups.length === 0 ? (
                   <EmptyHint>No trips yet.</EmptyHint>
@@ -203,8 +275,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                     <GroupRow
                       key={g.id}
                       group={g}
-                      selected={g.id === selectedId}
-                      onClick={() => setSelectedId(g.id)}
+                      selected={selection?.kind === 'group' && selection.id === g.id}
+                      onClick={() => setSelection({ kind: 'group', id: g.id })}
                     />
                   ))
                 )}
@@ -218,8 +290,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                     <GroupRow
                       key={g.id}
                       group={g}
-                      selected={g.id === selectedId}
-                      onClick={() => setSelectedId(g.id)}
+                      selected={selection?.kind === 'group' && selection.id === g.id}
+                      onClick={() => setSelection({ kind: 'group', id: g.id })}
                     />
                   ))
                 )}
@@ -269,12 +341,19 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
 
       {/* Main */}
       <main className="flex-1 flex flex-col min-w-0">
-        {selected ? (
+        {selectedGroup ? (
           <ChatView
-            key={selected.id}
-            group={selected}
+            key={selectedGroup.id}
+            group={selectedGroup}
             currentUserId={user.id}
             onRead={markGroupRead}
+          />
+        ) : selectedRequest ? (
+          <ConnectionRequestView
+            key={selectedRequest.id}
+            connection={selectedRequest}
+            onAccepted={handleAccepted}
+            onDeclined={handleDeclined}
           />
         ) : (
           <EmptyState
@@ -290,7 +369,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         <CreateVehicleGroupModal onClose={() => setModal(null)} onCreated={handleCreated} />
       )}
       {modal === 'direct' && (
-        <NewDirectMessageModal onClose={() => setModal(null)} onCreated={handleCreated} />
+        <NewMessageModal onClose={() => setModal(null)} onOpenGroup={handleCreated} />
       )}
     </div>
   )

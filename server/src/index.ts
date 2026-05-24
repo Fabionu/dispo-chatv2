@@ -10,6 +10,7 @@ import { authRouter } from './routes/auth.js'
 import { groupsRouter } from './routes/groups.js'
 import { connectionsRouter } from './routes/connections.js'
 import { workspaceRouter } from './routes/workspace.js'
+import { directoryRouter } from './routes/directory.js'
 import { initRealtime } from './realtime.js'
 import { errorHandler } from './http.js'
 
@@ -32,6 +33,7 @@ app.use('/api/auth', authRouter)
 app.use('/api/groups', groupsRouter)
 app.use('/api/connections', connectionsRouter)
 app.use('/api/workspace', workspaceRouter)
+app.use('/api/directory', directoryRouter)
 
 // In production, serve the built frontend from web/dist.
 if (isProd) {

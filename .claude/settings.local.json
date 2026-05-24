@@ -27,7 +27,20 @@
       "Bash(curl -s -b ck.txt -o b.txt -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:3001/api/connections/request -H \"content-type: application/json\" -d '{\"toUserId\":\"1d8ccd14-47c0-49fe-b9d4-c61bfe1aff22\"}')",
       "Bash(curl -s -b ck.txt -o b.txt -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:3001/api/groups -H \"content-type: application/json\" -d '{\"type\":\"vehicle\",\"name\":\"Bad Members\",\"memberIds\":[\"00000000-0000-0000-0000-000000000000\"]}')",
       "Bash(curl -s -b ck.txt -o b.txt -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:3001/api/groups/00000000-0000-0000-0000-000000000000/messages -H \"content-type: application/json\" -d '{\"body\":\"hello\"}')",
-      "Bash(curl -s -o b.txt -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:3001/api/auth/signup -H \"content-type: application/json\" -d '{\"email\":\"notanemail\"}')"
+      "Bash(curl -s -o b.txt -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:3001/api/auth/signup -H \"content-type: application/json\" -d '{\"email\":\"notanemail\"}')",
+      "Bash(rm -f s.txt)",
+      "Bash(curl -s -c s.txt -o /dev/null -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:3001/api/auth/signin -H \"content-type: application/json\" -d '{\"email\":\"alice@alpha.test\",\"password\":\"alphapass1\"}')",
+      "Bash(curl -s -b s.txt \"http://localhost:3001/api/directory/users?q=bob\")",
+      "Bash(curl -s -b s.txt \"http://localhost:3001/api/directory/users?q=beta\")",
+      "Bash(curl -s -b s.txt \"http://localhost:3001/api/directory/users?q=b\")",
+      "Bash(curl -s -b s.txt \"http://localhost:3001/api/directory/users?q=batch3\")",
+      "Bash(rm -f c1.txt c2.txt)",
+      "Bash(curl -s -c c1.txt -o /dev/null -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:3001/api/auth/signin -H \"content-type: application/json\" -d '{\"email\":\"batch3@test.local\",\"password\":\"batch3pass\"}')",
+      "Bash(curl -s -b c1.txt -o /dev/null -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:3001/api/connections/request -H \"content-type: application/json\" -d '{\"toUserId\":\"1215826e-c954-4416-bce4-51da4b0a04c9\",\"message\":\"Hi, we run weekly Berlin routes - keen to swap return loads.\"}')",
+      "Bash(curl -s -c c2.txt -o /dev/null -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:3001/api/auth/signin -H \"content-type: application/json\" -d '{\"email\":\"bob@beta.test\",\"password\":\"betapass1\"}')",
+      "Bash(curl -s -b c2.txt http://localhost:3001/api/connections)",
+      "Bash(git rm *)",
+      "Bash(npm.cmd run *)"
     ]
   }
 }

@@ -54,6 +54,20 @@ export type WorkspaceMember = {
   role: string
 }
 
+// A person returned by the platform-wide directory search. `connection` is
+// the caller's connection state with this user (null if none exists).
+export type DirectoryUser = {
+  id: string
+  displayName: string
+  email: string
+  workspace: { id: string; name: string }
+  sameWorkspace: boolean
+  connection: {
+    status: 'pending' | 'accepted' | 'declined'
+    requestedByMe: boolean
+  } | null
+}
+
 export type ConnectionUser = {
   id: string
   displayName: string
