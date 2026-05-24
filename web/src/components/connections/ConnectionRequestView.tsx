@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import type { Connection } from '../../lib/types'
+import type { Connection, ConnectionUser } from '../../lib/types'
 import { api, ApiError } from '../../lib/api'
 
 type Props = {
   connection: Connection
-  onAccepted: (otherUserId: string) => void | Promise<void>
+  onAccepted: (otherUser: ConnectionUser) => void | Promise<void>
   onDeclined: () => void | Promise<void>
 }
 
@@ -22,7 +22,7 @@ export default function ConnectionRequestView({ connection, onAccepted, onDeclin
     setError(null)
     try {
       await api.connections.accept(connection.id)
-      await onAccepted(u.id)
+      await onAccepted(u)
     } catch (err) {
       setError(messageFor(err))
       setBusy(null)

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import type { WorkspaceMember } from '../lib/types'
+import type { Group, WorkspaceMember } from '../lib/types'
 import { api } from '../lib/api'
 import Modal from './Modal'
 
 type Props = {
   onClose: () => void
-  onCreated: (groupId: string) => void
+  onCreated: (group: Group) => void
 }
 
 export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
@@ -40,14 +40,34 @@ export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
     }
     setSubmitting(true)
     setError(null)
+    const nameTrim = name.trim()
+    const plateTrim = plate.trim()
+    const tripTrim = trip.trim()
     try {
       const { group } = await api.groups.createVehicle({
-        name: name.trim(),
-        plate: plate.trim() || undefined,
-        trip: trip.trim() || undefined,
+        name: nameTrim,
+        plate: plateTrim || undefined,
+        trip: tripTrim || undefined,
         memberIds: [...selected],
       })
-      onCreated(group.id)
+      const now = new Date().toISOString()
+      // Build an optimistic Group from the form fields so the rail can
+      // render the row before refreshGroups() catches up.
+      onCreated({
+        id: group.id,
+        type: 'vehicle',
+        name: nameTrim,
+        description: null,
+        meta: {
+          ...(plateTrim ? { plate: plateTrim } : {}),
+          ...(tripTrim ? { trip: tripTrim } : {}),
+        },
+        lastMessageAt: null,
+        lastReadAt: now,
+        createdAt: now,
+        memberCount: 1 + selected.size,
+        directPeer: null,
+      })
     } catch {
       setError('Could not create the group. Try again.')
       setSubmitting(false)

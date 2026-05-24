@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Box, ChevronDown, LogOut, MessageSquare, Plus, Search, Settings } from 'lucide-react'
 import type { User, Workspace as WorkspaceT } from '../auth/AuthContext'
-import type { Connection, ConnectionsResponse, Group, IncomingMessage } from '../lib/types'
+import type {
+  Connection,
+  ConnectionsResponse,
+  ConnectionUser,
+  Group,
+  IncomingMessage,
+} from '../lib/types'
 import { groupHasUnread, groupLabel } from '../lib/types'
 import { api } from '../lib/api'
 import { getSocket } from '../lib/socket'
@@ -144,27 +150,42 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     setModal(kind)
   }
 
-  // After a modal creates (or finds) a group, refresh and open it.
-  async function handleCreated(groupId: string) {
-    setModal(null)
-    await refreshGroups()
-    setSelection({ kind: 'group', id: groupId })
-  }
-
-  // Open (or create) a DM with an accepted connection. Used after accepting
-  // a request, so the natural next step (talk to them) is one click closer.
-  const openDirect = useCallback(
-    async (userId: string) => {
-      const { group } = await api.groups.createDirect(userId)
-      await refreshGroups()
+  // Drop the given group into local state immediately, select it, and
+  // reconcile against the server in the background. This is what makes new
+  // chats appear instantly even on slow connections — the rail and main
+  // pane don't wait for the follow-up GET /groups round trip.
+  const openGroupOptimistically = useCallback(
+    (group: Group) => {
+      setGroups((prev) => {
+        if (prev.some((g) => g.id === group.id)) return prev
+        return [group, ...prev].sort(byRecent)
+      })
       setSelection({ kind: 'group', id: group.id })
+      void refreshGroups()
     },
     [refreshGroups],
   )
 
-  async function handleAccepted(otherUserId: string) {
+  function handleCreated(group: Group) {
+    setModal(null)
+    openGroupOptimistically(group)
+  }
+
+  // Open (or create) a DM with an accepted connection. Used after accepting
+  // a request, so the natural next step (talk to them) is one click closer.
+  const openDirectFor = useCallback(
+    async (otherUser: ConnectionUser) => {
+      const { group } = await api.groups.createDirect(otherUser.id)
+      openGroupOptimistically(
+        optimisticDirectGroup(group.id, otherUser),
+      )
+    },
+    [openGroupOptimistically],
+  )
+
+  async function handleAccepted(otherUser: ConnectionUser) {
     await refreshConnections()
-    await openDirect(otherUserId)
+    await openDirectFor(otherUser)
   }
 
   async function handleDeclined() {
@@ -487,6 +508,25 @@ function CreateMenuItem({ label, onClick }: { label: string; onClick: () => void
       {label}
     </button>
   )
+}
+
+// Shape an optimistic direct-message Group from what we already know about
+// the other user, so the rail can render the row before the server confirms.
+// `refreshGroups()` will replace this with the canonical record.
+function optimisticDirectGroup(id: string, other: ConnectionUser): Group {
+  const now = new Date().toISOString()
+  return {
+    id,
+    type: 'direct',
+    name: null,
+    description: null,
+    meta: {},
+    lastMessageAt: null,
+    lastReadAt: now,
+    createdAt: now,
+    memberCount: 2,
+    directPeer: { id: other.id, name: other.displayName, workspace: other.workspace.name },
+  }
 }
 
 function initials(name: string): string {

@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Search } from 'lucide-react'
-import type { DirectoryUser } from '../lib/types'
+import type { DirectoryUser, Group } from '../lib/types'
 import { api, ApiError } from '../lib/api'
 import Modal from './Modal'
 
 type Props = {
   onClose: () => void
-  onOpenGroup: (groupId: string) => void
+  onOpenGroup: (group: Group) => void
 }
 
 // Platform-wide people search. Finding someone is the same regardless of
@@ -52,7 +52,21 @@ export default function NewMessageModal({ onClose, onOpenGroup }: Props) {
     setError(null)
     try {
       const { group } = await api.groups.createDirect(u.id)
-      onOpenGroup(group.id)
+      const now = new Date().toISOString()
+      // Build an optimistic Group from the row we already have, so the rail
+      // shows the DM instantly while refreshGroups() reconciles.
+      onOpenGroup({
+        id: group.id,
+        type: 'direct',
+        name: null,
+        description: null,
+        meta: {},
+        lastMessageAt: null,
+        lastReadAt: now,
+        createdAt: now,
+        memberCount: 2,
+        directPeer: { id: u.id, name: u.displayName, workspace: u.workspace.name },
+      })
     } catch (err) {
       setError(
         err instanceof ApiError && err.code === 'connection_required'
