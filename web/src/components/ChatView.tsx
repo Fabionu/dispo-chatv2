@@ -231,15 +231,27 @@ export default function ChatView({ group, currentUserId, onRead }: Props) {
                   </button>
                 </div>
               )}
-              {messages.map((m, i) => (
-                <MessageRow
-                  key={m.id}
-                  message={m}
-                  mine={m.authorId === currentUserId}
-                  prev={messages[i - 1]}
-                  onRetry={retry}
-                />
-              ))}
+              {messages.map((m, i) => {
+                const next = messages[i + 1]
+                // Hide the timestamp on any message that's immediately
+                // followed by another from the same sender within the same
+                // calendar minute. Only the last message of such a run keeps
+                // its timestamp, like WhatsApp.
+                const lastInMinuteGroup =
+                  !next ||
+                  next.authorId !== m.authorId ||
+                  minuteKey(next.createdAt) !== minuteKey(m.createdAt)
+                return (
+                  <MessageRow
+                    key={m.id}
+                    message={m}
+                    mine={m.authorId === currentUserId}
+                    prev={messages[i - 1]}
+                    onRetry={retry}
+                    showTimestamp={lastInMinuteGroup}
+                  />
+                )
+              })}
             </div>
           )}
         </div>
@@ -278,11 +290,13 @@ function MessageRow({
   mine,
   prev,
   onRetry,
+  showTimestamp,
 }: {
   message: LocalMessage
   mine: boolean
   prev?: LocalMessage
   onRetry: (localId: string, body: string) => void
+  showTimestamp: boolean
 }) {
   // Collapse the author line when the previous message is from the same
   // author within a couple of minutes — keeps bursts readable.
@@ -295,7 +309,6 @@ function MessageRow({
     prev === undefined ||
     new Date(prev.createdAt).toDateString() !== new Date(message.createdAt).toDateString()
 
-  const pending = message.pending === true
   const failed = message.failed === true
 
   const bubbleBase = 'max-w-[78%] px-3 pt-1.5 pb-1 text-[13px] leading-[1.5] flex flex-col text-text'
@@ -314,24 +327,40 @@ function MessageRow({
           <div className="h-px flex-1 bg-white/[0.06]" />
         </div>
       )}
-      <div className={`flex flex-col ${mine ? 'items-end' : 'items-start'} ${sameAuthorAsPrev ? 'mt-0.5' : 'mt-2.5'}`}>
-        {!mine && !sameAuthorAsPrev && (
-          <div className="text-[11px] text-muted mb-1 px-1">{message.authorName}</div>
+      <div className={`flex ${sameAuthorAsPrev ? 'mt-0.5' : 'mt-2.5'}`}>
+        {!mine && (
+          // Fixed-width avatar slot: shows the initials circle on the first
+          // message of a burst, stays empty (but reserved) on grouped follow-ups
+          // so bubbles stay aligned under the avatar.
+          <div className="w-7 mr-2 shrink-0">
+            {!sameAuthorAsPrev && (
+              <div className="h-7 w-7 rounded-full bg-active/30 border border-active/40 flex items-center justify-center text-[10px] font-semibold uppercase font-mono">
+                {initials(message.authorName)}
+              </div>
+            )}
+          </div>
         )}
-        <div className={`${bubbleBase} ${bubbleSkin} ${pending ? 'opacity-70' : ''}`}>
-          <span className="whitespace-pre-wrap break-words">{message.body}</span>
-          <span className="text-[10.5px] text-muted leading-none mt-1 self-end">
-            {pending ? 'Sending…' : failed ? 'Failed' : formatTime(message.createdAt)}
-          </span>
+        <div className={`flex-1 min-w-0 flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
+          {!mine && !sameAuthorAsPrev && (
+            <div className="text-[11px] text-muted mb-1 px-1">{message.authorName}</div>
+          )}
+          <div className={`${bubbleBase} ${bubbleSkin}`}>
+            <span className="whitespace-pre-wrap break-words">{message.body}</span>
+            {(failed || showTimestamp) && (
+              <span className="text-[10.5px] text-muted leading-none mt-1 self-end">
+                {failed ? 'Failed' : formatTime(message.createdAt)}
+              </span>
+            )}
+          </div>
+          {failed && mine && message.localId && (
+            <button
+              onClick={() => onRetry(message.localId!, message.body)}
+              className="text-[10.5px] text-alert hover:text-text transition-colors mt-1 px-1"
+            >
+              Tap to retry
+            </button>
+          )}
         </div>
-        {failed && mine && message.localId && (
-          <button
-            onClick={() => onRetry(message.localId!, message.body)}
-            className="text-[10.5px] text-alert hover:text-text transition-colors mt-1 px-1"
-          >
-            Tap to retry
-          </button>
-        )}
       </div>
     </>
   )
@@ -339,6 +368,18 @@ function MessageRow({
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).slice(0, 2)
+  return parts.map((p) => p[0] ?? '').join('').toUpperCase() || '?'
+}
+
+// Truncate to the minute (UTC ms / 60000) so two messages with different
+// seconds within the same calendar minute compare equal. Used to collapse
+// timestamps inside bursts.
+function minuteKey(iso: string): number {
+  return Math.floor(new Date(iso).getTime() / 60000)
 }
 
 function formatDay(iso: string): string {
