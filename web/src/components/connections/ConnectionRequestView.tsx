@@ -57,7 +57,7 @@ export default function ConnectionRequestView({ connection, onAccepted, onDeclin
 
       {/* Body — chat-style area with a single in-chat invite row */}
       <div className="flex-1 overflow-y-auto px-5 py-4">
-        <div className="mx-auto w-full xl:max-w-[960px] 2xl:max-w-[1040px]">
+        <div className="mx-auto w-full xl:max-w-[1100px] 2xl:max-w-[1240px] min-[1700px]:max-w-[1320px]">
           <div className="flex flex-col gap-0.5">
             <div className="flex items-center gap-3 py-3">
               <div className="h-px flex-1 bg-white/[0.06]" />

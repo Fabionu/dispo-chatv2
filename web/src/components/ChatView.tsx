@@ -211,7 +211,7 @@ export default function ChatView({ group, currentUserId, onRead }: Props) {
 
       {/* Messages */}
       <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto px-5 py-4">
-        <div className="mx-auto w-full xl:max-w-[960px] 2xl:max-w-[1040px]">
+        <div className="mx-auto w-full xl:max-w-[1100px] 2xl:max-w-[1240px] min-[1700px]:max-w-[1320px]">
           {loading ? (
             <div className="text-[12px] text-faint">Loading messages…</div>
           ) : messages.length === 0 ? (
@@ -259,7 +259,7 @@ export default function ChatView({ group, currentUserId, onRead }: Props) {
 
       {/* Composer */}
       <div className="px-5 pb-4 pt-1 shrink-0">
-        <div className="mx-auto w-full xl:max-w-[960px] 2xl:max-w-[1040px]">
+        <div className="mx-auto w-full xl:max-w-[1100px] 2xl:max-w-[1240px] min-[1700px]:max-w-[1320px]">
           {error && <div className="text-[11.5px] text-alert mb-1.5">{error}</div>}
           <div className="flex items-end gap-2 rounded-card border border-white/[0.08] bg-white/[0.02] focus-within:border-white/[0.16] transition-colors px-3 py-2">
             <textarea
@@ -311,7 +311,10 @@ function MessageRow({
 
   const failed = message.failed === true
 
-  const bubbleBase = 'max-w-[78%] px-3 pt-1.5 pb-1 text-[13px] leading-[1.5] flex flex-col text-text'
+  // 78% keeps bubbles narrower than the column on small screens; the absolute
+  // 640px cap keeps them comfortably readable when the column gets wider on
+  // 2K+ monitors. CSS min() picks whichever is smaller at the current width.
+  const bubbleBase = 'max-w-[min(78%,640px)] px-3 pt-1.5 pb-1 text-[13px] leading-[1.5] flex flex-col text-text'
   const bubbleSkin = mine
     ? failed
       ? 'bg-[#222225] border border-alert/50 rounded-[7px] rounded-br-[2px]'
