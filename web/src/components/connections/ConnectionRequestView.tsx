@@ -45,7 +45,7 @@ export default function ConnectionRequestView({ connection, onAccepted, onDeclin
   return (
     <>
       {/* Header — mirrors ChatView */}
-      <header className="h-12 flex items-center justify-between px-5 border-b border-white/[0.06] shrink-0">
+      <header className="h-[var(--header-height)] flex items-center justify-between px-5 border-b border-white/[0.06] bg-rail shrink-0">
         <div className="min-w-0">
           <div className="text-[13.5px] font-semibold truncate">{u.displayName}</div>
           <div className="text-[11px] text-muted truncate">{u.workspace.name}</div>
@@ -57,7 +57,7 @@ export default function ConnectionRequestView({ connection, onAccepted, onDeclin
 
       {/* Body — chat-style area with a single in-chat invite row */}
       <div className="flex-1 overflow-y-auto px-5 py-4">
-        <div className="mx-auto w-full xl:max-w-[1100px] 2xl:max-w-[1240px] min-[1700px]:max-w-[1320px]">
+        <div className="mx-auto w-full xl:max-w-[1280px] 2xl:max-w-[1440px] min-[1700px]:max-w-[1560px]">
           <div className="flex flex-col gap-0.5">
             <div className="flex items-center gap-3 py-3">
               <div className="h-px flex-1 bg-white/[0.06]" />
@@ -66,7 +66,7 @@ export default function ConnectionRequestView({ connection, onAccepted, onDeclin
             </div>
 
             <div className="flex items-start gap-2.5 mt-2.5">
-              <div className="h-7 w-7 rounded-full bg-active/30 border border-active/40 flex items-center justify-center shrink-0 text-[10px] font-semibold uppercase font-mono mt-0.5">
+              <div className="h-9 w-9 rounded-full bg-active/30 border border-active/40 flex items-center justify-center shrink-0 text-[11.5px] font-semibold uppercase font-mono mt-0.5">
                 {initials(u.displayName)}
               </div>
               <div className="min-w-0 flex-1 flex flex-col items-start">

@@ -40,7 +40,9 @@
       "Bash(curl -s -c c2.txt -o /dev/null -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:3001/api/auth/signin -H \"content-type: application/json\" -d '{\"email\":\"bob@beta.test\",\"password\":\"betapass1\"}')",
       "Bash(curl -s -b c2.txt http://localhost:3001/api/connections)",
       "Bash(git rm *)",
-      "Bash(npm.cmd run *)"
+      "Bash(npm.cmd run *)",
+      "Bash(npm.cmd install *)",
+      "Bash(cd \"/c/Users/Home/Desktop/dispo-chatv2\" && grep -n \"Tap to retry\\\\|message.localId\" web/src/components/ChatView.tsx)"
     ]
   }
 }

@@ -1,9 +1,17 @@
 import { Router } from 'express'
+import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { pool } from '../db/pool.js'
 import { requireAuth } from '../auth.js'
 import { getIO, roomForGroup, subscribeUserToGroup } from '../realtime.js'
 import { groupCreateLimiter, messageLimiter } from '../middleware/rateLimit.js'
+import {
+  MAX_DOC_BYTES,
+  MAX_IMAGE_BYTES,
+  isImage,
+  uploadSingle,
+} from '../middleware/upload.js'
+import { saveBuffer, deleteFile } from '../storage.js'
 import { directPairKey, sortPair } from '../util/pair.js'
 import { asyncHandler, HttpError, withTransaction } from '../http.js'
 
@@ -261,9 +269,30 @@ groupsRouter.get(
       body: string
       created_at: string
       edited_at: string | null
+      // jsonb aggregate of attachment rows for this message — null when none.
+      attachments:
+        | Array<{
+            id: string
+            original_name: string
+            mime_type: string
+            byte_size: number
+          }>
+        | null
     }>(
       `select m.id, m.author_id, u.display_name as author_name,
-              m.body, m.created_at, m.edited_at
+              m.body, m.created_at, m.edited_at,
+              -- aggregate attachments per message in a subquery so the message
+              -- row stays unique even when a message has multiple files.
+              (select coalesce(
+                  jsonb_agg(jsonb_build_object(
+                    'id',            a.id,
+                    'original_name', a.original_name,
+                    'mime_type',     a.mime_type,
+                    'byte_size',     a.byte_size
+                  ) order by a.created_at asc),
+                  '[]'::jsonb)
+                 from attachments a
+                where a.message_id = m.id) as attachments
          from messages m
          join users u on u.id = m.author_id
         where ${where}
@@ -285,6 +314,13 @@ groupsRouter.get(
           body: m.body,
           createdAt: m.created_at,
           editedAt: m.edited_at,
+          attachments: (m.attachments ?? []).map((a) => ({
+            id: a.id,
+            originalName: a.original_name,
+            mimeType: a.mime_type,
+            byteSize: Number(a.byte_size),
+            url: `/api/attachments/${a.id}`,
+          })),
         }))
         .reverse(), // client renders oldest-first
       nextCursor, // pass back as ?before= to load older
@@ -293,67 +329,131 @@ groupsRouter.get(
 )
 
 // ── POST /api/groups/:id/messages ────────────────────────────────────────
-// Insert a message and broadcast to the group room. Updates last_message_at
-// on the group in the same transaction so the sidebar re-sorts instantly.
+// Insert a message and broadcast to the group room. Supports two content
+// types:
+//   - application/json                 → text-only message
+//   - multipart/form-data (file=…)     → text + one attachment
+// Multer parses multipart into req.body (text fields) + req.file (binary).
+// JSON requests skip multer's processing untouched.
 const postMessageSchema = z.object({
-  body: z.string().trim().min(1).max(8000),
+  // Empty body is OK when an attachment is present — we enforce the
+  // "something must be sent" rule explicitly below.
+  body: z.string().trim().max(8000).optional().default(''),
 })
 
 groupsRouter.post(
   '/:id/messages',
   messageLimiter,
+  uploadSingle,
   asyncHandler(async (req, res) => {
     const parsed = postMessageSchema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: 'invalid_input' })
 
+    const file = req.file
+    const body = parsed.data.body
+
+    if (!body && !file) return res.status(400).json({ error: 'empty_message' })
+
+    // Per-mime size cap. multer has already enforced the global 25MB ceiling;
+    // we tighten it for images so a 24MB GIF can't sneak through.
+    if (file && isImage(file.mimetype) && file.size > MAX_IMAGE_BYTES) {
+      return res.status(413).json({ error: 'image_too_large' })
+    }
+    if (file && !isImage(file.mimetype) && file.size > MAX_DOC_BYTES) {
+      return res.status(413).json({ error: 'file_too_large' })
+    }
+
     const { userId } = req.session!
     const groupId = req.params.id
 
-    // Single round trip: gate on membership, insert the message, bump the
-    // group's last_message_at + the author's last_read_at, and return the
-    // author's display name for the broadcast payload. On Railway with a
-    // separate DB instance this is the difference between ~250ms and ~2s.
-    const { rows } = await pool.query<{
-      id: string
-      created_at: string
-      display_name: string
-    }>(
-      `with member as (
-         select 1 from group_members where group_id = $1 and user_id = $2
-       ),
-       ins as (
-         insert into messages (group_id, author_id, body)
-         select $1, $2, $3 from member
-         returning id, created_at
-       ),
-       g as (
-         update groups set last_message_at = (select created_at from ins)
-         where id = $1 and exists (select 1 from ins)
-       ),
-       r as (
-         update group_members set last_read_at = (select created_at from ins)
-         where group_id = $1 and user_id = $2 and exists (select 1 from ins)
-       )
-       select ins.id, ins.created_at, u.display_name
-       from ins, users u
-       where u.id = $2`,
-      [groupId, userId, parsed.data.body],
-    )
-
-    if (rows.length === 0) throw new HttpError(403, 'not_a_member')
-    const row = rows[0]
-
-    const payload = {
-      id: row.id,
-      groupId,
-      authorId: userId,
-      authorName: row.display_name,
-      body: parsed.data.body,
-      createdAt: row.created_at,
+    // We commit to the attachment id up front so we can persist the file to
+    // disk before the DB INSERT, and roll the file back on DB failure. This
+    // keeps the storage layer ignorant of UUIDs handed out by Postgres.
+    let storagePath: string | null = null
+    let attachmentId: string | null = null
+    if (file) {
+      attachmentId = randomUUID()
+      const saved = await saveBuffer(attachmentId, file.originalname, file.buffer)
+      storagePath = saved.storagePath
     }
 
-    getIO().to(roomForGroup(groupId)).emit('message:new', payload)
-    res.status(201).json({ message: payload })
+    try {
+      const { rows } = await pool.query<{
+        id: string
+        created_at: string
+        display_name: string
+      }>(
+        `with member as (
+           select 1 from group_members where group_id = $1 and user_id = $2
+         ),
+         ins as (
+           insert into messages (group_id, author_id, body)
+           select $1, $2, $3 from member
+           returning id, created_at
+         ),
+         g as (
+           update groups set last_message_at = (select created_at from ins)
+           where id = $1 and exists (select 1 from ins)
+         ),
+         r as (
+           update group_members set last_read_at = (select created_at from ins)
+           where group_id = $1 and user_id = $2 and exists (select 1 from ins)
+         ),
+         att as (
+           insert into attachments (id, message_id, original_name, mime_type, byte_size, storage_path)
+           select $4::uuid, ins.id, $5, $6, $7::bigint, $8
+           from ins
+           where $4::uuid is not null
+         )
+         select ins.id, ins.created_at, u.display_name
+         from ins, users u
+         where u.id = $2`,
+        [
+          groupId,
+          userId,
+          body,
+          attachmentId,
+          file?.originalname ?? null,
+          file?.mimetype ?? null,
+          file?.size ?? null,
+          storagePath,
+        ],
+      )
+
+      if (rows.length === 0) {
+        // Caller isn't a member — clean up the orphaned file.
+        if (storagePath) await deleteFile(storagePath)
+        throw new HttpError(403, 'not_a_member')
+      }
+
+      const row = rows[0]
+      const attachment =
+        file && attachmentId
+          ? {
+              id: attachmentId,
+              originalName: file.originalname,
+              mimeType: file.mimetype,
+              byteSize: file.size,
+              url: `/api/attachments/${attachmentId}`,
+            }
+          : null
+
+      const payload = {
+        id: row.id,
+        groupId,
+        authorId: userId,
+        authorName: row.display_name,
+        body,
+        createdAt: row.created_at,
+        attachments: attachment ? [attachment] : [],
+      }
+
+      getIO().to(roomForGroup(groupId)).emit('message:new', payload)
+      res.status(201).json({ message: payload })
+    } catch (err) {
+      if (storagePath) await deleteFile(storagePath)
+      throw err
+    }
   }),
 )
 

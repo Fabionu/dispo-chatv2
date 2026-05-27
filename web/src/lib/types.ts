@@ -35,6 +35,15 @@ export function groupHasUnread(g: Group): boolean {
   return new Date(g.lastMessageAt) > new Date(g.lastReadAt)
 }
 
+export type Attachment = {
+  id: string
+  originalName: string
+  mimeType: string
+  byteSize: number
+  /** Authenticated URL (relative to origin) — fetch with credentials. */
+  url: string
+}
+
 export type Message = {
   id: string
   authorId: string
@@ -42,6 +51,7 @@ export type Message = {
   body: string
   createdAt: string
   editedAt?: string | null
+  attachments?: Attachment[]
 }
 
 // Payload of the `message:new` socket event — same as Message plus groupId.

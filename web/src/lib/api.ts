@@ -22,9 +22,15 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // FormData manages its own multipart boundary — we must NOT send a manual
+  // content-type for those requests or the boundary gets lost.
+  const isForm = init?.body instanceof FormData
+  const headers: HeadersInit = isForm
+    ? { ...init?.headers }
+    : { 'content-type': 'application/json', ...init?.headers }
   const res = await fetch(`/api${path}`, {
     credentials: 'include',
-    headers: { 'content-type': 'application/json', ...init?.headers },
+    headers,
     ...init,
   })
   if (!res.ok) {
@@ -65,11 +71,26 @@ export const api = {
         `/groups/${groupId}/messages${before ? `?before=${encodeURIComponent(before)}` : ''}`,
       ),
 
-    postMessage: (groupId: string, body: string) =>
-      request<{ message: Message & { groupId: string } }>(`/groups/${groupId}/messages`, {
-        method: 'POST',
-        body: JSON.stringify({ body }),
-      }),
+    postMessage: (groupId: string, body: string, file?: File | null) => {
+      // Multipart only when there's actually a file; JSON otherwise to keep
+      // the wire format and server parsing path as simple as possible.
+      if (file) {
+        const form = new FormData()
+        form.append('body', body)
+        form.append('file', file, file.name)
+        return request<{ message: Message & { groupId: string } }>(
+          `/groups/${groupId}/messages`,
+          { method: 'POST', body: form },
+        )
+      }
+      return request<{ message: Message & { groupId: string } }>(
+        `/groups/${groupId}/messages`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ body }),
+        },
+      )
+    },
 
     markRead: (groupId: string, upTo?: string) =>
       request<{ ok: true; lastReadAt: string }>(`/groups/${groupId}/read`, {

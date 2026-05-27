@@ -4,6 +4,38 @@
 
 :root {
   color-scheme: dark;
+
+  /* App scale tokens. Only a handful of surfaces grow with monitor size —
+     just enough to keep the same visual density on a 2K/4K display as on a
+     14" laptop, without making the UI feel "big". Everything else stays at
+     its compact, hand-picked size. */
+  --app-font-size: 14px;
+  --chat-msg-font-size: 13px;
+  /* The main-pane header and the sidebar's workspace switcher are both
+     pinned to this so they line up exactly across the seam. */
+  --header-height: 56px;
+  --sidebar-width: 380px;
+}
+
+/* 2xl: subtle step up — common QHD monitor territory. */
+@media (min-width: 1536px) {
+  :root {
+    --app-font-size: 14.5px;
+    --chat-msg-font-size: 13.5px;
+    --header-height: 58px;
+    --sidebar-width: 400px;
+  }
+}
+
+/* Full-HD ultrawide / 4K — one more nudge so the chat doesn't read as a
+   miniature on a large desk display. */
+@media (min-width: 1920px) {
+  :root {
+    --app-font-size: 15px;
+    --chat-msg-font-size: 14px;
+    --header-height: 60px;
+    --sidebar-width: 420px;
+  }
 }
 
 html, body, #root {
@@ -15,7 +47,7 @@ body {
   background: #000000;
   color: #f4f1ec;
   font-family: 'Inter', system-ui, sans-serif;
-  font-size: 14px;
+  font-size: var(--app-font-size);
   line-height: 1.5;
   font-feature-settings: 'cv11', 'ss01', 'ss03';
   -webkit-font-smoothing: antialiased;
@@ -25,6 +57,41 @@ body {
 input, button, textarea, select {
   font: inherit;
   color: inherit;
+}
+
+/* Custom scrollbar — slim, dark, in keeping with the operations-tool feel.
+   Track is transparent so the scrollbar blends into whatever surface it sits
+   on; thumb uses the same white/[0.08] palette as our borders, lifts on hover.
+   Firefox falls back to `scrollbar-width` + `scrollbar-color`. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.10);
+  border-radius: 10px;
+  /* Transparent border lets the track show through so the thumb looks inset
+     and slimmer than the gutter — same trick GitHub/Linear use. */
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.18);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 input::placeholder {

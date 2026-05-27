@@ -220,9 +220,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   return (
     <div className="h-screen w-full flex bg-bg text-text overflow-hidden">
       {/* Left rail */}
-      <aside className="w-[380px] shrink-0 bg-rail border-r border-white/[0.08] flex flex-col">
+      <aside className="w-[var(--sidebar-width)] shrink-0 bg-rail border-r border-white/[0.08] flex flex-col">
         {/* Workspace switcher */}
-        <button className="flex items-center gap-2.5 px-4 py-3.5 border-b border-white/[0.05] hover:bg-white/[0.02] transition-colors text-left">
+        <button className="h-[var(--header-height)] flex items-center gap-2.5 px-4 border-b border-white/[0.05] hover:bg-white/[0.02] transition-colors text-left">
           <div className="h-7 w-7 rounded-chip border border-white/[0.1] bg-white/[0.03] flex items-center justify-center shrink-0">
             <Box size={14} strokeWidth={1.6} />
           </div>
@@ -407,7 +407,7 @@ function EmptyState({
 }) {
   return (
     <>
-      <header className="h-12 flex items-center px-5 border-b border-white/[0.06] shrink-0">
+      <header className="h-[var(--header-height)] flex items-center px-5 border-b border-white/[0.06] bg-rail shrink-0">
         <span className="eyebrow">Inbox</span>
       </header>
       <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
