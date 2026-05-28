@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { pool } from '../db/pool.js'
 import { requireAuth } from '../auth.js'
 import { asyncHandler } from '../http.js'
-import { openStream } from '../storage.js'
+import { getObject, FileNotFound } from '../storage.js'
 
 export const attachmentsRouter = Router()
 attachmentsRouter.use(requireAuth)
@@ -36,8 +36,24 @@ attachmentsRouter.get(
     if (rows.length === 0) return res.status(404).json({ error: 'not_found' })
     const a = rows[0]
 
+    // Pull the bytes from object storage (private bucket) and proxy them
+    // through this membership-gated route, so the bucket is never exposed
+    // directly. A row whose object no longer exists (uploaded before the
+    // storage migration, when files lived on a since-wiped ephemeral disk)
+    // resolves to a clean 404 — the client renders an "unavailable" placeholder
+    // rather than a broken image.
+    let buffer: Buffer
+    try {
+      buffer = await getObject(a.storage_path)
+    } catch (err) {
+      if (err instanceof FileNotFound) {
+        return res.status(404).json({ error: 'file_missing' })
+      }
+      throw err
+    }
+
     res.setHeader('Content-Type', a.mime_type)
-    res.setHeader('Content-Length', a.byte_size)
+    res.setHeader('Content-Length', String(buffer.byteLength))
     // Inline so images render directly in <img>; the browser still respects
     // the filename on a manual save thanks to the attachment fallback.
     res.setHeader(
@@ -46,14 +62,6 @@ attachmentsRouter.get(
     )
     // Private cache only — bytes are user-scoped.
     res.setHeader('Cache-Control', 'private, max-age=3600')
-
-    const stream = openStream(a.storage_path)
-    stream.on('error', (err) => {
-      // If the file's missing on disk (orphan row, manual cleanup, etc.),
-      // close the response with a 500 unless headers have already gone out.
-      if (!res.headersSent) res.status(500).json({ error: 'read_failed' })
-      else res.destroy(err)
-    })
-    stream.pipe(res)
+    res.send(buffer)
   }),
 )

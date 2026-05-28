@@ -424,7 +424,7 @@ groupsRouter.post(
     let attachmentId: string | null = null
     if (file) {
       attachmentId = randomUUID()
-      const saved = await saveBuffer(attachmentId, file.originalname, file.buffer)
+      const saved = await saveBuffer(attachmentId, file.originalname, file.buffer, file.mimetype)
       storagePath = saved.storagePath
     }
 
@@ -719,7 +719,7 @@ groupsRouter.post(
       for (const a of srcAtts) {
         const buf = await readBuffer(a.storage_path)
         const newId = randomUUID()
-        const saved = await saveBuffer(newId, a.original_name, buf)
+        const saved = await saveBuffer(newId, a.original_name, buf, a.mime_type)
         copied.push({
           id: newId,
           originalName: a.original_name,

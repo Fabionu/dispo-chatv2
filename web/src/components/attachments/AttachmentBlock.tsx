@@ -1,4 +1,5 @@
-import { Download, Eye } from 'lucide-react'
+import { useState } from 'react'
+import { Download, Eye, ImageOff } from 'lucide-react'
 import type { Attachment } from '../../lib/types'
 import { DocIcon, formatBytes } from './attachmentUtils'
 
@@ -20,8 +21,12 @@ export default function AttachmentBlock({ attachment, onActivate, onImageLoad }:
   const isImage = attachment.mimeType.startsWith('image/')
   const isPdf = attachment.mimeType === 'application/pdf'
   const hasUrl = Boolean(attachment.url)
+  // True when the image bytes can't be fetched (e.g. an old upload whose file
+  // was lost to ephemeral storage before the Supabase migration). We render a
+  // calm placeholder instead of a broken-image glyph.
+  const [imgFailed, setImgFailed] = useState(false)
 
-  if (isImage) {
+  if (isImage && !imgFailed) {
     return (
       <button
         type="button"
@@ -33,9 +38,24 @@ export default function AttachmentBlock({ attachment, onActivate, onImageLoad }:
           src={attachment.url}
           alt={attachment.originalName}
           onLoad={onImageLoad}
+          onError={() => setImgFailed(true)}
           className="max-w-full max-h-[320px] rounded-card border border-white/[0.08] object-contain bg-bg"
         />
       </button>
+    )
+  }
+
+  if (isImage && imgFailed) {
+    return (
+      <div className="flex items-center gap-2.5 rounded-card border border-white/[0.08] bg-white/[0.02] px-2.5 py-2 max-w-[360px]">
+        <div className="h-9 w-9 rounded-chip border border-white/[0.10] bg-white/[0.03] flex items-center justify-center shrink-0">
+          <ImageOff size={15} strokeWidth={1.6} className="text-faint" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[12px] text-muted truncate">{attachment.originalName}</div>
+          <div className="text-[10.5px] text-faint">Image unavailable</div>
+        </div>
+      </div>
     )
   }
 

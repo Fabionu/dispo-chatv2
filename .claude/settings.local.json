@@ -55,7 +55,13 @@
       "Bash(curl -s -c /tmp/olivia.cookie -X POST http://localhost:3001/api/auth/signin -H \"content-type: application/json\" -d '{\"email\":\"driver@optima.local\",\"password\":\"devpassword\"}' -o /dev/null -w \"signin:%{http_code}\\\\n\")",
       "Bash(curl -s -b /tmp/olivia.cookie http://localhost:3001/api/auth/me)",
       "Bash(node -e \"const {Pool}=require\\('pg'\\); require\\('dotenv'\\).config\\(\\); const p=new Pool\\({connectionString:process.env.DATABASE_URL}\\); \\(async\\(\\)=>{const c=await p.connect\\(\\); try{await c.query\\('begin'\\); const ws='6ec5cfab-5801-4829-957c-e3b7ea49affc'; const g=await c.query\\(\\\\\"select id from groups where workspace_id=\\\\$1 and name like 'QA Cache%'\\\\\",[ws]\\); const ids=g.rows.map\\(r=>r.id\\); console.log\\('removing groups:',ids\\); if\\(ids.length\\){await c.query\\('delete from message_deletions where message_id in \\(select id from messages where group_id = any\\(\\\\$1::uuid[]\\)\\)',[ids]\\); await c.query\\('delete from attachments where message_id in \\(select id from messages where group_id = any\\(\\\\$1::uuid[]\\)\\)',[ids]\\); await c.query\\('delete from messages where group_id = any\\(\\\\$1::uuid[]\\)',[ids]\\); await c.query\\('delete from group_members where group_id = any\\(\\\\$1::uuid[]\\)',[ids]\\); await c.query\\('delete from groups where id = any\\(\\\\$1::uuid[]\\)',[ids]\\);} await c.query\\('commit'\\); console.log\\('cleanup done'\\); }catch\\(e\\){await c.query\\('rollback'\\); throw e;} finally{c.release\\(\\); await p.end\\(\\);}}\\)\\(\\).catch\\(e=>{console.error\\(e.message\\);process.exit\\(1\\)}\\)\")",
-      "Bash(rm -f /c/Users/Home/Desktop/dispo-chatv2/server/qa-seed.cjs /c/Users/Home/Desktop/dispo-chatv2/.claude/launch.json /tmp/olivia.cookie)"
+      "Bash(rm -f /c/Users/Home/Desktop/dispo-chatv2/server/qa-seed.cjs /c/Users/Home/Desktop/dispo-chatv2/.claude/launch.json /tmp/olivia.cookie)",
+      "Bash(xargs grep -ln \"attachments/\")",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(Object.keys\\(p.dependencies\\)\\)\")",
+      "Bash(node -e \"require.resolve\\('@supabase/supabase-js', {paths:['/c/Users/Home/Desktop/dispo-chatv2/server','/c/Users/Home/Desktop/dispo-chatv2']}\\); console.log\\('resolves OK'\\)\")",
+      "Bash(node --input-type=module -e \"import\\('@supabase/supabase-js'\\).then\\(m=>console.log\\('import OK', typeof m.createClient\\)\\).catch\\(e=>console.log\\('FAIL', e.message\\)\\)\")",
+      "Bash(curl -s -o /dev/null -w \"api3001:%{http_code}\\\\n\" --max-time 4 http://localhost:3001/api/health)",
+      "Bash(node -e ' *)"
     ]
   }
 }
