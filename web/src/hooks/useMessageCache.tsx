@@ -48,6 +48,8 @@ export type MessageCache = {
   replaceMessage: (groupId: string, fromId: string, message: LocalMessage) => void
   removeMessage: (groupId: string, id: string) => void
   setRevalidating: (groupId: string, value: boolean) => void
+  // Revoke + strip the local blob previews in a thread (call on chat unmount).
+  clearThreadPreviews: (groupId: string) => void
   // Background-load a group's latest page if it isn't already cached/loading.
   prefetch: (groupId: string) => void
 }
@@ -59,22 +61,78 @@ const EMPTY_THREAD: Thread = {
   revalidating: false,
 }
 
-// Dedupe by id (later wins, fields merged), drop pending optimistic messages
-// the server has already echoed (a real message from us with the same body
-// exists), and keep the list sorted by createdAt ascending (stable).
+// Merge two cached versions of the SAME message id (e.g. our folded local copy
+// + a later server echo / revalidate). Server payloads don't carry the
+// client-only fields, so preserve `localId` and any attachment `localPreviewUrl`
+// from the version we already had — otherwise the just-sent image would lose its
+// flicker-free local preview on the next merge.
+function mergeSameId(prev: LocalMessage, next: LocalMessage): LocalMessage {
+  const merged: LocalMessage = { ...prev, ...next, localId: next.localId ?? prev.localId }
+  if (prev.attachments && merged.attachments) {
+    merged.attachments = merged.attachments.map((a, i) => {
+      const pa = prev.attachments![i]
+      return pa?.localPreviewUrl && !a.localPreviewUrl
+        ? { ...a, localPreviewUrl: pa.localPreviewUrl }
+        : a
+    })
+  }
+  return merged
+}
+
+// Fold an optimistic message into its real server echo: keep the optimistic
+// `localId` (so React reuses the same row across reconcile — no remount/flash)
+// and carry its local image blob onto the real attachment as `localPreviewUrl`
+// so the just-sent image keeps showing the already-decoded local bytes instead
+// of refetching the server URL.
+function foldOptimistic(real: LocalMessage, optimistic: LocalMessage): LocalMessage {
+  const blob = optimistic.attachments?.find((a) => a.url?.startsWith('blob:'))?.url
+  return {
+    ...real,
+    localId: optimistic.localId ?? real.localId,
+    attachments:
+      blob && real.attachments
+        ? real.attachments.map((a, i) =>
+            i === 0 && a.mimeType.startsWith('image/') ? { ...a, localPreviewUrl: blob } : a,
+          )
+        : real.attachments,
+  }
+}
+
+// Dedupe by id (later wins, fields merged); reconcile any pending optimistic
+// message with its real server echo (same author + body) by folding the
+// optimistic's stable key + local preview onto the real one and dropping the
+// optimistic; keep the list sorted by createdAt ascending (stable).
 function normalize(list: LocalMessage[], currentUserId: string): LocalMessage[] {
   const byId = new Map<string, LocalMessage>()
   for (const m of list) {
     const prev = byId.get(m.id)
-    byId.set(m.id, prev ? { ...prev, ...m } : m)
+    byId.set(m.id, prev ? mergeSameId(prev, m) : m)
   }
   let out = Array.from(byId.values())
-  const echoedBodies = new Set(
-    out.filter((m) => !m.pending && m.authorId === currentUserId).map((m) => m.body),
-  )
-  out = out.filter((m) => !(m.pending && m.authorId === currentUserId && echoedBodies.has(m.body)))
+
+  const optimistic = out.filter((m) => m.pending && m.authorId === currentUserId)
+  if (optimistic.length) {
+    const folded = new Set<string>()
+    out = out.map((m) => {
+      if (m.pending || m.authorId !== currentUserId) return m
+      const opt = optimistic.find((o) => !folded.has(o.id) && o.body === m.body)
+      if (!opt) return m
+      folded.add(opt.id)
+      return foldOptimistic(m, opt)
+    })
+    out = out.filter((m) => !folded.has(m.id))
+  }
+
   out.sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0))
   return out
+}
+
+// Revoke any blob: object URL hanging off a message's attachments.
+function revokeMessageBlobs(m: LocalMessage) {
+  for (const a of m.attachments ?? []) {
+    if (a.localPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(a.localPreviewUrl)
+    if (a.url?.startsWith('blob:')) URL.revokeObjectURL(a.url)
+  }
 }
 
 const Ctx = createContext<MessageCache | null>(null)
@@ -161,12 +219,16 @@ export function MessageCacheProvider({
   const replaceMessage = useCallback(
     (groupId: string, fromId: string, message: LocalMessage) => {
       update(groupId, (t) => {
+        const optimistic = t.messages.find((m) => m.id === fromId)
+        // Carry the optimistic's stable key + local image preview onto the real
+        // message so the row reconciles in place with no flicker.
+        const real = optimistic ? foldOptimistic(message, optimistic) : message
         // If the socket already delivered the real message, just drop the
         // optimistic placeholder; otherwise swap it in place.
         const hasReal = t.messages.some((m) => m.id === message.id)
         const list = hasReal
           ? t.messages.filter((m) => m.id !== fromId)
-          : t.messages.map((m) => (m.id === fromId ? message : m))
+          : t.messages.map((m) => (m.id === fromId ? real : m))
         return { ...t, messages: normalize(list, userIdRef.current) }
       })
     },
@@ -176,8 +238,35 @@ export function MessageCacheProvider({
   const removeMessage = useCallback(
     (groupId: string, id: string) => {
       update(groupId, (t) => {
-        if (!t.messages.some((m) => m.id === id)) return t
+        const target = t.messages.find((m) => m.id === id)
+        if (!target) return t
+        revokeMessageBlobs(target)
         return { ...t, messages: t.messages.filter((m) => m.id !== id) }
+      })
+    },
+    [update],
+  )
+
+  // Revoke + strip all local blob previews in a thread. Called when the chat
+  // view unmounts (group switch / sign out): freed bytes that the just-sent
+  // images no longer need, and on a later revisit the rows fall back to the
+  // server URL.
+  const clearThreadPreviews = useCallback(
+    (groupId: string) => {
+      update(groupId, (t) => {
+        let touched = false
+        const messages = t.messages.map((m) => {
+          if (!m.attachments?.some((a) => a.localPreviewUrl)) return m
+          touched = true
+          return {
+            ...m,
+            attachments: m.attachments.map((a) => {
+              if (a.localPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(a.localPreviewUrl)
+              return a.localPreviewUrl ? { ...a, localPreviewUrl: undefined } : a
+            }),
+          }
+        })
+        return touched ? { ...t, messages } : t
       })
     },
     [update],
@@ -256,6 +345,7 @@ export function MessageCacheProvider({
       replaceMessage,
       removeMessage,
       setRevalidating,
+      clearThreadPreviews,
       prefetch,
     }),
     [
@@ -269,6 +359,7 @@ export function MessageCacheProvider({
       replaceMessage,
       removeMessage,
       setRevalidating,
+      clearThreadPreviews,
       prefetch,
     ],
   )

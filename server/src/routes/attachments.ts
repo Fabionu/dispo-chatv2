@@ -60,8 +60,10 @@ attachmentsRouter.get(
       'Content-Disposition',
       `inline; filename="${encodeURIComponent(a.original_name)}"`,
     )
-    // Private cache only — bytes are user-scoped.
-    res.setHeader('Cache-Control', 'private, max-age=3600')
+    // Private (bytes are user-scoped) but immutable: an attachment id always
+    // maps to the same bytes, so the browser can reuse them for a long time
+    // instead of refetching on every render/reload.
+    res.setHeader('Cache-Control', 'private, max-age=31536000, immutable')
     res.send(buffer)
   }),
 )

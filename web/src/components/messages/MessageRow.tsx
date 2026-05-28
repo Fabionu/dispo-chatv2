@@ -168,10 +168,13 @@ export default function MessageRow({
               )}
               {!deleted && message.attachments && message.attachments.length > 0 && (
                 <div className="flex flex-col gap-1.5 mb-1">
-                  {message.attachments.map((a) => (
+                  {message.attachments.map((a, i) => (
                     <AttachmentBlock
-                      key={a.id}
+                      // Index key keeps the block (and its <img>) mounted across
+                      // the optimistic→real swap, so the blob preview persists.
+                      key={i}
                       attachment={a}
+                      uploading={pending}
                       onActivate={onActivateAttachment}
                       onImageLoad={onImageLoad}
                     />

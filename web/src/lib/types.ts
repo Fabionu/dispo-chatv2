@@ -42,6 +42,14 @@ export type Attachment = {
   byteSize: number
   /** Authenticated URL (relative to origin) — fetch with credentials. */
   url: string
+  /**
+   * Transient local object URL (blob:) for an image the current user just
+   * sent. Set client-side only — the server never returns it. Rendered in
+   * place of `url` so the just-sent image shows instantly with zero flicker
+   * across the optimistic→server reconcile, then revoked when the conversation
+   * unmounts.
+   */
+  localPreviewUrl?: string
 }
 
 // Compact view of the message a reply points at — author + a short

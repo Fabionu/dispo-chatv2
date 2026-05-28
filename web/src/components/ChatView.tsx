@@ -113,7 +113,11 @@ export default function ChatView({
     () => () => {
       window.clearTimeout(highlightTimer.current)
       window.clearTimeout(noticeTimer.current)
+      // Free the local image blob previews this conversation was holding.
+      cache.clearThreadPreviews(group.id)
     },
+    // group.id is stable for this mount (keyed remount per group); cache is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   )
 
@@ -201,9 +205,11 @@ export default function ChatView({
 
   // ── Attachment activation (image lightbox / PDF inline / file download) ──
   const activateAttachment = useCallback((a: Attachment) => {
-    if (!a.url) return
+    if (!a.url && !a.localPreviewUrl) return
     if (a.mimeType.startsWith('image/')) {
-      setPreviewAttachment(a)
+      // Prefer the already-decoded local blob so the lightbox is instant for a
+      // just-sent image (falls back to the server URL after the blob is freed).
+      setPreviewAttachment(a.localPreviewUrl ? { ...a, url: a.localPreviewUrl } : a)
     } else if (a.mimeType === 'application/pdf') {
       setPdfAttachment(a)
     } else {
@@ -264,12 +270,10 @@ export default function ChatView({
         replyTo?.id ?? null,
       )
       // replaceMessage swaps the optimistic for the real one (or drops it if
-      // the socket already delivered the real message).
+      // the socket already delivered the real message), carrying the local
+      // blob preview onto the real attachment so the image doesn't flicker.
+      // The blob is revoked later — on conversation unmount or message removal.
       cache.replaceMessage(group.id, localId, res.message)
-      // Revoke the optimistic blob URL — the bubble now uses the server URL.
-      if (optimisticAttachment?.url.startsWith('blob:')) {
-        URL.revokeObjectURL(optimisticAttachment.url)
-      }
     } catch (err) {
       cache.patchMessage(group.id, localId, { pending: false, failed: true })
       if (err instanceof ApiError) {
@@ -515,7 +519,10 @@ export default function ChatView({
                         minuteKey(next.createdAt) !== minuteKey(m.createdAt)
                       return (
                         <MessageRow
-                          key={m.id}
+                          // Stable across the optimistic→real reconcile (localId
+                          // is preserved on the real message) so the row — and
+                          // its image — never remounts/flickers.
+                          key={m.localId ?? m.id}
                           message={m}
                           mine={m.authorId === currentUserId}
                           prev={messages[i - 1]}
