@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { pool } from '../db/pool.js'
 import { requireAuth } from '../auth.js'
-import { getIO, roomForGroup, subscribeUserToGroup } from '../realtime.js'
+import { getIO, roomForGroup, roomForUser, subscribeUserToGroup } from '../realtime.js'
 import { groupCreateLimiter, messageLimiter } from '../middleware/rateLimit.js'
 import {
   MAX_DOC_BYTES,
@@ -11,7 +11,7 @@ import {
   isImage,
   uploadSingle,
 } from '../middleware/upload.js'
-import { saveBuffer, deleteFile } from '../storage.js'
+import { saveBuffer, readBuffer, deleteFile } from '../storage.js'
 import { directPairKey, sortPair } from '../util/pair.js'
 import { asyncHandler, HttpError, withTransaction } from '../http.js'
 
@@ -254,11 +254,20 @@ groupsRouter.get(
     )
     if (membership.length === 0) return res.status(403).json({ error: 'not_a_member' })
 
-    const params: unknown[] = [groupId]
-    let where = 'group_id = $1 and deleted_at is null'
+    // Deleted messages are kept in the page so the client can render the
+    // "this message was deleted" placeholder (otherwise replies-to-deleted
+    // would render gaps); the server clears the body / attachments in the
+    // mapping step below.
+    // $2 is the caller — used to hide messages they've "deleted for me".
+    const params: unknown[] = [groupId, userId]
+    let where = `m.group_id = $1
+        and not exists (
+          select 1 from message_deletions md
+           where md.message_id = m.id and md.user_id = $2
+        )`
     if (before) {
       params.push(before)
-      where += ` and created_at < $${params.length}`
+      where += ` and m.created_at < $${params.length}`
     }
     params.push(limit + 1) // +1 to detect a next page
 
@@ -269,7 +278,9 @@ groupsRouter.get(
       body: string
       created_at: string
       edited_at: string | null
-      // jsonb aggregate of attachment rows for this message — null when none.
+      deleted_at: string | null
+      deleted_by: string | null
+      forwarded: boolean
       attachments:
         | Array<{
             id: string
@@ -278,9 +289,17 @@ groupsRouter.get(
             byte_size: number
           }>
         | null
+      reply_to: {
+        id: string
+        author_name: string
+        body: string
+        has_attachments: boolean
+        deleted: boolean
+      } | null
     }>(
       `select m.id, m.author_id, u.display_name as author_name,
               m.body, m.created_at, m.edited_at,
+              m.deleted_at, m.deleted_by, m.forwarded,
               -- aggregate attachments per message in a subquery so the message
               -- row stays unique even when a message has multiple files.
               (select coalesce(
@@ -292,7 +311,18 @@ groupsRouter.get(
                   ) order by a.created_at asc),
                   '[]'::jsonb)
                  from attachments a
-                where a.message_id = m.id) as attachments
+                where a.message_id = m.id) as attachments,
+              -- reply target snippet, joined from messages onto itself.
+              (select jsonb_build_object(
+                  'id',              rm.id,
+                  'author_name',     ru.display_name,
+                  'body',            case when rm.deleted_at is not null then '' else rm.body end,
+                  'has_attachments', exists (select 1 from attachments ra where ra.message_id = rm.id),
+                  'deleted',         rm.deleted_at is not null
+                )
+                 from messages rm
+                 join users ru on ru.id = rm.author_id
+                where rm.id = m.reply_to_message_id) as reply_to
          from messages m
          join users u on u.id = m.author_id
         where ${where}
@@ -307,21 +337,40 @@ groupsRouter.get(
 
     res.json({
       messages: page
-        .map((m) => ({
-          id: m.id,
-          authorId: m.author_id,
-          authorName: m.author_name,
-          body: m.body,
-          createdAt: m.created_at,
-          editedAt: m.edited_at,
-          attachments: (m.attachments ?? []).map((a) => ({
-            id: a.id,
-            originalName: a.original_name,
-            mimeType: a.mime_type,
-            byteSize: Number(a.byte_size),
-            url: `/api/attachments/${a.id}`,
-          })),
-        }))
+        .map((m) => {
+          const isDeleted = m.deleted_at !== null
+          return {
+            id: m.id,
+            authorId: m.author_id,
+            authorName: m.author_name,
+            // Server clears the content of soft-deleted messages — even
+            // admins shouldn't see the original text via the API.
+            body: isDeleted ? '' : m.body,
+            createdAt: m.created_at,
+            editedAt: m.edited_at,
+            deletedAt: m.deleted_at,
+            deletedBy: m.deleted_by,
+            forwarded: m.forwarded,
+            attachments: isDeleted
+              ? []
+              : (m.attachments ?? []).map((a) => ({
+                  id: a.id,
+                  originalName: a.original_name,
+                  mimeType: a.mime_type,
+                  byteSize: Number(a.byte_size),
+                  url: `/api/attachments/${a.id}`,
+                })),
+            replyTo: m.reply_to
+              ? {
+                  id: m.reply_to.id,
+                  authorName: m.reply_to.author_name,
+                  body: m.reply_to.body,
+                  hasAttachments: m.reply_to.has_attachments,
+                  deleted: m.reply_to.deleted,
+                }
+              : null,
+          }
+        })
         .reverse(), // client renders oldest-first
       nextCursor, // pass back as ?before= to load older
     })
@@ -339,6 +388,7 @@ const postMessageSchema = z.object({
   // Empty body is OK when an attachment is present — we enforce the
   // "something must be sent" rule explicitly below.
   body: z.string().trim().max(8000).optional().default(''),
+  replyToMessageId: z.string().uuid().optional(),
 })
 
 groupsRouter.post(
@@ -351,6 +401,7 @@ groupsRouter.post(
 
     const file = req.file
     const body = parsed.data.body
+    const replyToMessageId = parsed.data.replyToMessageId ?? null
 
     if (!body && !file) return res.status(400).json({ error: 'empty_message' })
 
@@ -377,19 +428,44 @@ groupsRouter.post(
       storagePath = saved.storagePath
     }
 
+    // If the caller specified a reply target, verify it exists and that the
+    // sender is allowed to quote it — i.e. they're a member of the target
+    // message's group. Usually that's this same group, but "reply privately"
+    // quotes a group message into a DM, so we authorize by access (membership
+    // of the target's group) rather than by an exact group match.
+    if (replyToMessageId) {
+      const { rows: replyCheck } = await pool.query(
+        `select 1
+           from messages m
+           join group_members gm on gm.group_id = m.group_id and gm.user_id = $2
+          where m.id = $1
+          limit 1`,
+        [replyToMessageId, userId],
+      )
+      if (replyCheck.length === 0) {
+        if (storagePath) await deleteFile(storagePath)
+        return res.status(400).json({ error: 'invalid_reply' })
+      }
+    }
+
     try {
       const { rows } = await pool.query<{
         id: string
         created_at: string
         display_name: string
+        reply_id: string | null
+        reply_author: string | null
+        reply_body: string | null
+        reply_has_attachments: boolean | null
+        reply_is_deleted: boolean | null
       }>(
         `with member as (
            select 1 from group_members where group_id = $1 and user_id = $2
          ),
          ins as (
-           insert into messages (group_id, author_id, body)
-           select $1, $2, $3 from member
-           returning id, created_at
+           insert into messages (group_id, author_id, body, reply_to_message_id)
+           select $1, $2, $3, $9::uuid from member
+           returning id, created_at, reply_to_message_id
          ),
          g as (
            update groups set last_message_at = (select created_at from ins)
@@ -405,9 +481,16 @@ groupsRouter.post(
            from ins
            where $4::uuid is not null
          )
-         select ins.id, ins.created_at, u.display_name
-         from ins, users u
-         where u.id = $2`,
+         select ins.id, ins.created_at, u.display_name,
+                rm.id as reply_id,
+                ru.display_name as reply_author,
+                case when rm.deleted_at is not null then '' else rm.body end as reply_body,
+                exists (select 1 from attachments ra where ra.message_id = rm.id) as reply_has_attachments,
+                (rm.deleted_at is not null) as reply_is_deleted
+         from ins
+         join users u on u.id = $2
+         left join messages rm on rm.id = ins.reply_to_message_id
+         left join users ru    on ru.id = rm.author_id`,
         [
           groupId,
           userId,
@@ -417,6 +500,7 @@ groupsRouter.post(
           file?.mimetype ?? null,
           file?.size ?? null,
           storagePath,
+          replyToMessageId,
         ],
       )
 
@@ -445,7 +529,21 @@ groupsRouter.post(
         authorName: row.display_name,
         body,
         createdAt: row.created_at,
+        editedAt: null as string | null,
+        deletedAt: null as string | null,
+        deletedBy: null as string | null,
+        forwarded: false,
         attachments: attachment ? [attachment] : [],
+        replyTo:
+          row.reply_id && row.reply_author !== null
+            ? {
+                id: row.reply_id,
+                authorName: row.reply_author,
+                body: row.reply_body ?? '',
+                hasAttachments: row.reply_has_attachments ?? false,
+                deleted: row.reply_is_deleted ?? false,
+              }
+            : null,
       }
 
       getIO().to(roomForGroup(groupId)).emit('message:new', payload)
@@ -454,6 +552,277 @@ groupsRouter.post(
       if (storagePath) await deleteFile(storagePath)
       throw err
     }
+  }),
+)
+
+// ── PATCH /api/groups/:id/messages/:messageId ────────────────────────────
+// Edit a message. Authors may edit their own non-deleted messages. We don't
+// support editing attachments here — only the text body. The client uses
+// this to repair typos; for richer history we'd add an edits table.
+const editMessageSchema = z.object({
+  body: z.string().trim().min(1).max(8000),
+})
+
+groupsRouter.patch(
+  '/:id/messages/:messageId',
+  messageLimiter,
+  asyncHandler(async (req, res) => {
+    const parsed = editMessageSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'invalid_input' })
+
+    const { userId } = req.session!
+    const groupId = req.params.id
+    const messageId = req.params.messageId
+
+    const { rows } = await pool.query<{
+      id: string
+      body: string
+      edited_at: string
+    }>(
+      `update messages
+          set body = $1, edited_at = now()
+        where id = $2
+          and group_id = $3
+          and author_id = $4
+          and deleted_at is null
+       returning id, body, edited_at`,
+      [parsed.data.body, messageId, groupId, userId],
+    )
+
+    if (rows.length === 0) {
+      // Either not the author, not a real message in this group, or already
+      // deleted. We can't tell exactly without another query; one error
+      // code keeps the API surface small.
+      return res.status(403).json({ error: 'cannot_edit' })
+    }
+
+    const row = rows[0]
+    const payload = {
+      id: row.id,
+      groupId,
+      body: row.body,
+      editedAt: row.edited_at,
+    }
+    getIO().to(roomForGroup(groupId)).emit('message:edited', payload)
+    res.json({ message: payload })
+  }),
+)
+
+// ── POST /api/groups/:id/messages/:messageId/delete-for-everyone ─────────
+// Soft-delete a message for the whole group. Authors only, and only for
+// five minutes after sending. After that window the action is no longer
+// allowed — the client hides the menu item to match.
+const DELETE_WINDOW_MINUTES = 5
+
+groupsRouter.post(
+  '/:id/messages/:messageId/delete-for-everyone',
+  asyncHandler(async (req, res) => {
+    const { userId } = req.session!
+    const groupId = req.params.id
+    const messageId = req.params.messageId
+
+    const { rows } = await pool.query<{
+      id: string
+      deleted_at: string
+      deleted_by: string
+    }>(
+      `update messages
+          set deleted_at = now(), deleted_by = $1
+        where id = $2
+          and group_id = $3
+          and author_id = $1
+          and deleted_at is null
+          and created_at > now() - interval '${DELETE_WINDOW_MINUTES} minutes'
+       returning id, deleted_at, deleted_by`,
+      [userId, messageId, groupId],
+    )
+
+    if (rows.length === 0) {
+      return res.status(403).json({ error: 'cannot_delete' })
+    }
+
+    const row = rows[0]
+    const payload = {
+      id: row.id,
+      groupId,
+      deletedAt: row.deleted_at,
+      deletedBy: row.deleted_by,
+    }
+    getIO().to(roomForGroup(groupId)).emit('message:deleted', payload)
+    res.json({ ok: true, message: payload })
+  }),
+)
+
+// ── POST /api/groups/:id/messages/:messageId/forward ─────────────────────
+// Forward a message into another group the caller also belongs to. A forward
+// is a fresh, standalone message: it copies the source body and duplicates
+// each attachment's bytes into new stored files, so deleting the original
+// never affects the forward. The `forwarded` flag drives the client label.
+const forwardSchema = z.object({
+  toGroupId: z.string().uuid(),
+})
+
+groupsRouter.post(
+  '/:id/messages/:messageId/forward',
+  messageLimiter,
+  asyncHandler(async (req, res) => {
+    const parsed = forwardSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'invalid_input' })
+
+    const { userId } = req.session!
+    const fromGroupId = req.params.id
+    const messageId = req.params.messageId
+    const { toGroupId } = parsed.data
+
+    // The caller must belong to BOTH ends: the source (to read it) and the
+    // target (to post into it).
+    const { rows: membership } = await pool.query<{ group_id: string }>(
+      `select group_id from group_members
+        where user_id = $1 and group_id = any($2::uuid[])`,
+      [userId, [fromGroupId, toGroupId]],
+    )
+    const memberOf = new Set(membership.map((r) => r.group_id))
+    if (!memberOf.has(fromGroupId) || !memberOf.has(toGroupId)) {
+      return res.status(403).json({ error: 'not_a_member' })
+    }
+
+    // Load the source. Forwarding a deleted message is meaningless.
+    const { rows: srcRows } = await pool.query<{ body: string; deleted_at: string | null }>(
+      'select body, deleted_at from messages where id = $1 and group_id = $2',
+      [messageId, fromGroupId],
+    )
+    if (srcRows.length === 0) return res.status(404).json({ error: 'message_not_found' })
+    if (srcRows[0].deleted_at !== null) return res.status(400).json({ error: 'message_deleted' })
+    const srcBody = srcRows[0].body
+
+    const { rows: srcAtts } = await pool.query<{
+      original_name: string
+      mime_type: string
+      byte_size: string
+      storage_path: string
+    }>(
+      `select original_name, mime_type, byte_size, storage_path
+         from attachments where message_id = $1 order by created_at asc`,
+      [messageId],
+    )
+
+    // Copy attachment bytes into fresh stored files up front so the forward
+    // owns an independent copy. Track new paths to roll them back on failure.
+    const copied: Array<{
+      id: string
+      originalName: string
+      mimeType: string
+      byteSize: number
+      storagePath: string
+    }> = []
+    try {
+      for (const a of srcAtts) {
+        const buf = await readBuffer(a.storage_path)
+        const newId = randomUUID()
+        const saved = await saveBuffer(newId, a.original_name, buf)
+        copied.push({
+          id: newId,
+          originalName: a.original_name,
+          mimeType: a.mime_type,
+          byteSize: Number(a.byte_size),
+          storagePath: saved.storagePath,
+        })
+      }
+
+      const result = await withTransaction(async (client) => {
+        const { rows: ins } = await client.query<{
+          id: string
+          created_at: string
+          display_name: string
+        }>(
+          `with ins as (
+             insert into messages (group_id, author_id, body, forwarded)
+             values ($1, $2, $3, true)
+             returning id, created_at
+           ),
+           g as (
+             update groups set last_message_at = (select created_at from ins)
+              where id = $1
+           ),
+           r as (
+             update group_members set last_read_at = (select created_at from ins)
+              where group_id = $1 and user_id = $2
+           )
+           select ins.id, ins.created_at, u.display_name
+             from ins join users u on u.id = $2`,
+          [toGroupId, userId, srcBody],
+        )
+        const msg = ins[0]
+        for (const a of copied) {
+          await client.query(
+            `insert into attachments (id, message_id, original_name, mime_type, byte_size, storage_path)
+             values ($1, $2, $3, $4, $5::bigint, $6)`,
+            [a.id, msg.id, a.originalName, a.mimeType, a.byteSize, a.storagePath],
+          )
+        }
+        return msg
+      })
+
+      const payload = {
+        id: result.id,
+        groupId: toGroupId,
+        authorId: userId,
+        authorName: result.display_name,
+        body: srcBody,
+        createdAt: result.created_at,
+        editedAt: null as string | null,
+        deletedAt: null as string | null,
+        deletedBy: null as string | null,
+        forwarded: true,
+        attachments: copied.map((a) => ({
+          id: a.id,
+          originalName: a.originalName,
+          mimeType: a.mimeType,
+          byteSize: a.byteSize,
+          url: `/api/attachments/${a.id}`,
+        })),
+        replyTo: null,
+      }
+      getIO().to(roomForGroup(toGroupId)).emit('message:new', payload)
+      res.status(201).json({ message: payload })
+    } catch (err) {
+      for (const a of copied) await deleteFile(a.storagePath)
+      throw err
+    }
+  }),
+)
+
+// ── POST /api/groups/:id/messages/:messageId/delete-for-me ───────────────
+// Hide a single message for the calling user only. Records a per-user row;
+// the message stays fully intact for everyone else. We emit to the user's
+// room so their other open tabs/devices hide it too.
+groupsRouter.post(
+  '/:id/messages/:messageId/delete-for-me',
+  asyncHandler(async (req, res) => {
+    const { userId } = req.session!
+    const groupId = req.params.id
+    const messageId = req.params.messageId
+
+    // Verify membership AND that the message belongs to this group in one go,
+    // so a non-member can't probe for message existence.
+    const { rows: check } = await pool.query(
+      `select 1
+         from messages m
+         join group_members gm on gm.group_id = m.group_id and gm.user_id = $1
+        where m.id = $2 and m.group_id = $3
+        limit 1`,
+      [userId, messageId, groupId],
+    )
+    if (check.length === 0) return res.status(403).json({ error: 'cannot_delete' })
+
+    await pool.query(
+      `insert into message_deletions (message_id, user_id)
+       values ($1, $2) on conflict do nothing`,
+      [messageId, userId],
+    )
+
+    getIO().to(roomForUser(userId)).emit('message:hidden', { groupId, id: messageId })
+    res.json({ ok: true })
   }),
 )
 

@@ -42,7 +42,9 @@
       "Bash(git rm *)",
       "Bash(npm.cmd run *)",
       "Bash(npm.cmd install *)",
-      "Bash(cd \"/c/Users/Home/Desktop/dispo-chatv2\" && grep -n \"Tap to retry\\\\|message.localId\" web/src/components/ChatView.tsx)"
+      "Bash(cd \"/c/Users/Home/Desktop/dispo-chatv2\" && grep -n \"Tap to retry\\\\|message.localId\" web/src/components/ChatView.tsx)",
+      "Bash(cd web *)",
+      "Bash(cd /c/Users/Home/Desktop/dispo-chatv2 && echo \"=== ROOT ===\" && cat package.json 2>/dev/null | grep -A20 '\"scripts\"'; echo \"=== WEB ===\" && cat web/package.json | grep -A15 '\"scripts\"'; echo \"=== SERVER ===\" && cat server/package.json | grep -A15 '\"scripts\"')"
     ]
   }
 }

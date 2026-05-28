@@ -71,12 +71,18 @@ export const api = {
         `/groups/${groupId}/messages${before ? `?before=${encodeURIComponent(before)}` : ''}`,
       ),
 
-    postMessage: (groupId: string, body: string, file?: File | null) => {
+    postMessage: (
+      groupId: string,
+      body: string,
+      file?: File | null,
+      replyToMessageId?: string | null,
+    ) => {
       // Multipart only when there's actually a file; JSON otherwise to keep
       // the wire format and server parsing path as simple as possible.
       if (file) {
         const form = new FormData()
         form.append('body', body)
+        if (replyToMessageId) form.append('replyToMessageId', replyToMessageId)
         form.append('file', file, file.name)
         return request<{ message: Message & { groupId: string } }>(
           `/groups/${groupId}/messages`,
@@ -87,10 +93,41 @@ export const api = {
         `/groups/${groupId}/messages`,
         {
           method: 'POST',
-          body: JSON.stringify({ body }),
+          body: JSON.stringify({
+            body,
+            ...(replyToMessageId ? { replyToMessageId } : {}),
+          }),
         },
       )
     },
+
+    editMessage: (groupId: string, messageId: string, body: string) =>
+      request<{ message: { id: string; groupId: string; body: string; editedAt: string } }>(
+        `/groups/${groupId}/messages/${messageId}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ body }),
+        },
+      ),
+
+    deleteForEveryone: (groupId: string, messageId: string) =>
+      request<{
+        ok: true
+        message: { id: string; groupId: string; deletedAt: string; deletedBy: string }
+      }>(`/groups/${groupId}/messages/${messageId}/delete-for-everyone`, {
+        method: 'POST',
+      }),
+
+    deleteForMe: (groupId: string, messageId: string) =>
+      request<{ ok: true }>(`/groups/${groupId}/messages/${messageId}/delete-for-me`, {
+        method: 'POST',
+      }),
+
+    forwardMessage: (fromGroupId: string, messageId: string, toGroupId: string) =>
+      request<{ message: Message & { groupId: string } }>(
+        `/groups/${fromGroupId}/messages/${messageId}/forward`,
+        { method: 'POST', body: JSON.stringify({ toGroupId }) },
+      ),
 
     markRead: (groupId: string, upTo?: string) =>
       request<{ ok: true; lastReadAt: string }>(`/groups/${groupId}/read`, {

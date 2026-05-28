@@ -7,6 +7,7 @@ import type {
   ConnectionUser,
   Group,
   IncomingMessage,
+  ReplyToPreview,
 } from '../lib/types'
 import { groupHasUnread, groupLabel } from '../lib/types'
 import { api } from '../lib/api'
@@ -52,6 +53,12 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   const [loadingGroups, setLoadingGroups] = useState(true)
   const [selection, setSelection] = useState<Selection>(null)
   const [connections, setConnections] = useState<ConnectionsResponse>(EMPTY_CONNECTIONS)
+  // A quote to seed a DM's composer with, set when a DM is opened via "Reply
+  // privately". Scoped to a group id so it only seeds that conversation.
+  const [pendingReply, setPendingReply] = useState<{
+    groupId: string
+    reply: ReplyToPreview
+  } | null>(null)
 
   const userMenuRef = useRef<HTMLDivElement>(null)
   const newMenuRef = useRef<HTMLDivElement>(null)
@@ -179,6 +186,32 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
       openGroupOptimistically(
         optimisticDirectGroup(group.id, otherUser),
       )
+    },
+    [openGroupOptimistically],
+  )
+
+  // Navigate to a private DM opened from a message action ("Reply privately"
+  // / "Send message in private"). ChatView has already created the group
+  // server-side; we drop an optimistic row in and reconcile in the background.
+  const openDirectMessage = useCallback(
+    (
+      info: { groupId: string; peerId: string; peerName: string },
+      reply?: ReplyToPreview,
+    ) => {
+      const now = new Date().toISOString()
+      openGroupOptimistically({
+        id: info.groupId,
+        type: 'direct',
+        name: null,
+        description: null,
+        meta: {},
+        lastMessageAt: null,
+        lastReadAt: now,
+        createdAt: now,
+        memberCount: 2,
+        directPeer: { id: info.peerId, name: info.peerName, workspace: null },
+      })
+      setPendingReply(reply ? { groupId: info.groupId, reply } : null)
     },
     [openGroupOptimistically],
   )
@@ -368,6 +401,11 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             group={selectedGroup}
             currentUserId={user.id}
             onRead={markGroupRead}
+            onOpenDirectMessage={openDirectMessage}
+            initialReplyContext={
+              pendingReply?.groupId === selectedGroup.id ? pendingReply.reply : null
+            }
+            onConsumeInitialReply={() => setPendingReply(null)}
           />
         ) : selectedRequest ? (
           <ConnectionRequestView

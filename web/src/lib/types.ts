@@ -44,6 +44,17 @@ export type Attachment = {
   url: string
 }
 
+// Compact view of the message a reply points at — author + a short
+// snippet + whether the original had attachments / has been deleted.
+// Just enough to render the quoted preview without round-tripping.
+export type ReplyToPreview = {
+  id: string
+  authorName: string
+  body: string
+  hasAttachments: boolean
+  deleted: boolean
+}
+
 export type Message = {
   id: string
   authorId: string
@@ -51,7 +62,11 @@ export type Message = {
   body: string
   createdAt: string
   editedAt?: string | null
+  deletedAt?: string | null
+  deletedBy?: string | null
+  forwarded?: boolean
   attachments?: Attachment[]
+  replyTo?: ReplyToPreview | null
 }
 
 // Payload of the `message:new` socket event — same as Message plus groupId.

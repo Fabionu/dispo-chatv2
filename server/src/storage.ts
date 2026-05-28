@@ -1,5 +1,5 @@
 import { mkdirSync, createReadStream, existsSync } from 'node:fs'
-import { writeFile, unlink, stat } from 'node:fs/promises'
+import { writeFile, readFile, unlink, stat } from 'node:fs/promises'
 import { extname, join, resolve } from 'node:path'
 
 // Local-disk attachment storage. Keep the surface narrow (save / open / delete
@@ -31,6 +31,14 @@ export async function saveBuffer(
 
 export function openStream(storagePath: string) {
   return createReadStream(join(UPLOAD_DIR, storagePath))
+}
+
+// Read a stored file fully into memory. Used by the forward path, which
+// copies an existing attachment's bytes into a brand-new stored file so the
+// forwarded message owns an independent copy (deleting the original won't
+// orphan the forward's attachment).
+export async function readBuffer(storagePath: string): Promise<Buffer> {
+  return readFile(join(UPLOAD_DIR, storagePath))
 }
 
 export async function fileSize(storagePath: string): Promise<number | null> {

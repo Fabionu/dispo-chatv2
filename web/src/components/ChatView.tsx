@@ -1,100 +1,129 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import {
-  ArrowDown,
-  ArrowUp,
-  Download,
-  Eye,
-  File as FileIcon,
-  FileSpreadsheet,
-  FileText,
-  Image as ImageIcon,
-  Paperclip,
-  X,
-} from 'lucide-react'
-import type { Attachment, Group, IncomingMessage, Message } from '../lib/types'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ArrowDown } from 'lucide-react'
+import type { Attachment, Group, IncomingMessage, ReplyToPreview } from '../lib/types'
 import { groupLabel } from '../lib/types'
 import { api, ApiError } from '../lib/api'
 import { getSocket } from '../lib/socket'
 import ImagePreviewModal from './attachments/ImagePreviewModal'
 import InlinePdfPreview from './attachments/InlinePdfPreview'
+import ChatComposer, { type ChatComposerHandle, type EditContext } from './composer/ChatComposer'
+import MessageRow from './messages/MessageRow'
+import ForwardModal from './messages/ForwardModal'
+import ConfirmDialog from './ConfirmDialog'
+import { initials, minuteKey } from './messages/messageUtils'
+import type { LocalMessage } from './messages/types'
+import { useChatScroll } from '../hooks/useChatScroll'
 
 type Props = {
   group: Group
   currentUserId: string
   onRead: (groupId: string) => void
+  // Open (or reuse) a 1:1 DM with another user — used by the "Reply privately"
+  // and "Send message in private" actions. The caller has already created the
+  // group server-side; this just navigates to it. `reply` (when present)
+  // carries the quoted message context into the destination DM's composer.
+  onOpenDirectMessage: (
+    info: { groupId: string; peerId: string; peerName: string },
+    reply?: ReplyToPreview,
+  ) => void
+  // A reply quote to seed the composer with on mount — set when this view was
+  // opened via "Reply privately" from another conversation.
+  initialReplyContext?: ReplyToPreview | null
+  // Called once after the seeded reply context has been consumed, so the
+  // parent can drop it (and not re-seed on a later remount of this group).
+  onConsumeInitialReply?: () => void
 }
 
-// A message that may not have hit the server yet. `localId` is the temporary
-// id we render under until the API returns the real message; `pending` /
-// `failed` drive the bubble's visual state. `pendingFile` lets the retry
-// flow re-upload the same file without forcing the user to re-pick it.
-type LocalMessage = Message & {
-  localId?: string
-  pending?: boolean
-  failed?: boolean
-  pendingFile?: File
+// Build the compact reply snapshot the composer + bubble render from a message.
+function toReplyPreview(m: LocalMessage): ReplyToPreview {
+  return {
+    id: m.id,
+    authorName: m.authorName,
+    body: m.body,
+    hasAttachments: (m.attachments?.length ?? 0) > 0,
+    deleted: Boolean(m.deletedAt),
+  }
 }
 
-// Allowed attachment types — split by category so the user can pick which
-// kind of file the OS picker should narrow to. The server's allowlist is the
-// union of both.
-const IMAGE_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif'
-const DOC_ACCEPT =
-  'application/pdf,' +
-  'application/msword,' +
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document,' +
-  'application/vnd.ms-excel,' +
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,' +
-  'text/csv,text/plain'
-
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024
-const MAX_DOC_BYTES = 25 * 1024 * 1024
-
-export default function ChatView({ group, currentUserId, onRead }: Props) {
+export default function ChatView({
+  group,
+  currentUserId,
+  onRead,
+  onOpenDirectMessage,
+  initialReplyContext = null,
+  onConsumeInitialReply,
+}: Props) {
+  // ── Core state ─────────────────────────────────────────────────────────
   const [messages, setMessages] = useState<LocalMessage[]>([])
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [text, setText] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [showScrollDown, setShowScrollDown] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null)
   const [pdfAttachment, setPdfAttachment] = useState<Attachment | null>(null)
-  const [attachMenuOpen, setAttachMenuOpen] = useState(false)
-  const attachMenuRef = useRef<HTMLDivElement>(null)
+  // Reply context: when set, the composer shows the quoted preview and the
+  // next outbound message is sent with `replyToMessageId` filled in. Seeded
+  // from `initialReplyContext` when this view was opened via "Reply privately".
+  const [replyContext, setReplyContext] = useState<ReplyToPreview | null>(initialReplyContext)
+  // Edit context: when set, the composer is in "Editing message" mode and
+  // pressing send PATCHes the existing message instead of POSTing a new one.
+  const [editContext, setEditContext] = useState<EditContext | null>(null)
+  // Message currently being forwarded (drives the picker modal).
+  const [forwardTarget, setForwardTarget] = useState<LocalMessage | null>(null)
+  // Pending delete awaiting confirmation. `scope` picks which delete runs.
+  const [pendingDelete, setPendingDelete] = useState<{
+    message: LocalMessage
+    scope: 'me' | 'everyone'
+  } | null>(null)
+  // Transient confirmation after a successful forward.
+  const [notice, setNotice] = useState<string | null>(null)
+  // Row to briefly pulse after a jump-to-original; cleared on a timer.
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null)
 
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const nearBottomRef = useRef(true)
-  // When prepending older messages we must keep the viewport anchored — we
-  // record scrollHeight before the prepend and restore the delta after.
-  const prependAnchorRef = useRef<number | null>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const composerHandleRef = useRef<ChatComposerHandle>(null)
+  const highlightTimer = useRef<number | undefined>(undefined)
+  const noticeTimer = useRef<number | undefined>(undefined)
 
-  // Local preview URL for the staged file. Recomputes when the file changes;
-  // revoked on cleanup so we don't leak blobs. Used both as the composer
-  // thumbnail and as the optimistic bubble's image source until the server
-  // returns the canonical /api/attachments/... URL.
-  const filePreviewUrl = useMemo(() => {
-    if (!file || !file.type.startsWith('image/')) return null
-    return URL.createObjectURL(file)
-  }, [file])
+  // ── Scroll / autosize ──────────────────────────────────────────────────
+  const {
+    scrollRef,
+    composerRef,
+    onScroll,
+    scrollToBottom,
+    showScrollDown,
+    handleImageLoaded,
+    anchorBeforePrepend,
+    pinToBottomNext,
+  } = useChatScroll(messages, loading)
+
+  useEffect(
+    () => () => {
+      window.clearTimeout(highlightTimer.current)
+      window.clearTimeout(noticeTimer.current)
+    },
+    [],
+  )
+
+  // If opened via "Reply privately", the composer is pre-seeded with the quote
+  // (state initializer above). Focus it so the user can type immediately, and
+  // tell the parent to drop the seed so a later remount doesn't re-apply it.
   useEffect(() => {
-    if (!filePreviewUrl) return
-    return () => URL.revokeObjectURL(filePreviewUrl)
-  }, [filePreviewUrl])
+    if (!initialReplyContext) return
+    composerHandleRef.current?.focus()
+    onConsumeInitialReply?.()
+    // Mount-only: the seed is captured once into state; deps intentionally empty.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  // Auto-grow the composer textarea: reset to auto so we can shrink, then
-  // pin to the content's scrollHeight. CSS max-height clamps the growth at
-  // ~6 lines; once we hit that, the textarea's own overflow takes over.
-  useLayoutEffect(() => {
-    const el = textareaRef.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${el.scrollHeight}px`
-  }, [text])
+  function flashNotice(msg: string) {
+    setNotice(msg)
+    window.clearTimeout(noticeTimer.current)
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 2200)
+  }
 
+  // ── Read receipts ──────────────────────────────────────────────────────
   const markRead = useCallback(() => {
     api.groups
       .markRead(group.id)
@@ -102,8 +131,9 @@ export default function ChatView({ group, currentUserId, onRead }: Props) {
       .catch(() => {})
   }, [group.id, onRead])
 
-  // Initial history load. `key={group.id}` on the parent remounts this
-  // component per group, so this runs fresh each time.
+  // ── Initial history load ───────────────────────────────────────────────
+  // `key={group.id}` on the parent remounts this component per group, so
+  // this runs fresh each time.
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -123,7 +153,7 @@ export default function ChatView({ group, currentUserId, onRead }: Props) {
     }
   }, [group.id, markRead])
 
-  // Live messages for this group.
+  // ── Live socket events ─────────────────────────────────────────────────
   useEffect(() => {
     const socket = getSocket()
     function onNew(msg: IncomingMessage) {
@@ -147,61 +177,60 @@ export default function ChatView({ group, currentUserId, onRead }: Props) {
       })
       markRead()
     }
+    function onEdited(p: { id: string; groupId: string; body: string; editedAt: string }) {
+      if (p.groupId !== group.id) return
+      setMessages((prev) =>
+        prev.map((m) => (m.id === p.id ? { ...m, body: p.body, editedAt: p.editedAt } : m)),
+      )
+    }
+    function onDeleted(p: {
+      id: string
+      groupId: string
+      deletedAt: string
+      deletedBy: string
+    }) {
+      if (p.groupId !== group.id) return
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === p.id
+            ? { ...m, body: '', attachments: [], deletedAt: p.deletedAt, deletedBy: p.deletedBy }
+            : m,
+        ),
+      )
+    }
+    // Per-user "delete for me" — emitted to the user's room so this user's
+    // other tabs/devices hide the message too.
+    function onHidden(p: { groupId: string; id: string }) {
+      if (p.groupId !== group.id) return
+      setMessages((prev) => prev.filter((m) => m.id !== p.id))
+    }
     socket.on('message:new', onNew)
+    socket.on('message:edited', onEdited)
+    socket.on('message:deleted', onDeleted)
+    socket.on('message:hidden', onHidden)
     return () => {
       socket.off('message:new', onNew)
+      socket.off('message:edited', onEdited)
+      socket.off('message:deleted', onDeleted)
+      socket.off('message:hidden', onHidden)
     }
   }, [group.id, currentUserId, markRead])
 
-  // Scroll management. After the initial load jump to the newest message;
-  // after a live message only follow if the user was already at the bottom;
-  // after a prepend, restore the prior anchor so the view doesn't jump.
-  useLayoutEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    if (prependAnchorRef.current !== null) {
-      el.scrollTop = el.scrollHeight - prependAnchorRef.current
-      prependAnchorRef.current = null
-      return
+  // ── Older messages (paginated) ─────────────────────────────────────────
+  async function loadOlder() {
+    if (!nextCursor || loadingOlder) return
+    setLoadingOlder(true)
+    try {
+      const res = await api.groups.messages(group.id, nextCursor)
+      anchorBeforePrepend()
+      setMessages((prev) => [...res.messages, ...prev])
+      setNextCursor(res.nextCursor)
+    } finally {
+      setLoadingOlder(false)
     }
-    if (loading) return
-    if (nearBottomRef.current) el.scrollTop = el.scrollHeight
-  }, [messages, loading])
-
-  function onScroll() {
-    const el = scrollRef.current
-    if (!el) return
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-    nearBottomRef.current = distanceFromBottom < 120
-    // 240px keeps the button from flickering right at the edge: it lights up
-    // only once the user has scrolled meaningfully away from the latest.
-    setShowScrollDown(distanceFromBottom > 240)
   }
 
-  function scrollToBottom() {
-    const el = scrollRef.current
-    if (!el) return
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-    nearBottomRef.current = true
-    setShowScrollDown(false)
-  }
-
-  // Images change row height *after* their <img> finishes loading, so the
-  // initial scroll-on-append isn't enough. If the user was at the bottom
-  // when the message arrived, we re-pin them after every image load. If
-  // they've intentionally scrolled up to read older messages, we leave
-  // their view alone.
-  const handleImageLoaded = useCallback(() => {
-    const el = scrollRef.current
-    if (!el) return
-    if (nearBottomRef.current) {
-      el.scrollTop = el.scrollHeight
-    }
-  }, [])
-
-  // Decide what an attachment click does based on its mime. Images open the
-  // image lightbox, PDFs open the PDF preview overlay, everything else
-  // triggers a programmatic download — no anchor leaving the app.
+  // ── Attachment activation (image lightbox / PDF inline / file download) ──
   const activateAttachment = useCallback((a: Attachment) => {
     if (!a.url) return
     if (a.mimeType.startsWith('image/')) {
@@ -219,24 +248,12 @@ export default function ChatView({ group, currentUserId, onRead }: Props) {
     }
   }, [])
 
-  async function loadOlder() {
-    if (!nextCursor || loadingOlder) return
-    setLoadingOlder(true)
-    try {
-      const res = await api.groups.messages(group.id, nextCursor)
-      const el = scrollRef.current
-      prependAnchorRef.current = el ? el.scrollHeight : null
-      setMessages((prev) => [...res.messages, ...prev])
-      setNextCursor(res.nextCursor)
-    } finally {
-      setLoadingOlder(false)
-    }
-  }
-
-  // Optimistic send. The bubble appears instantly under a temporary localId
-  // and is reconciled when the server returns (or the socket echoes first).
-  // The composer never blocks: the user can keep typing the next message.
-  async function sendBody(body: string, attachedFile: File | null) {
+  // ── Send / edit / retry ────────────────────────────────────────────────
+  async function sendBody(
+    body: string,
+    attachedFile: File | null,
+    replyTo: ReplyToPreview | null,
+  ) {
     if (!body && !attachedFile) return
     const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
@@ -265,12 +282,18 @@ export default function ChatView({ group, currentUserId, onRead }: Props) {
       pending: true,
       attachments: optimisticAttachment ? [optimisticAttachment] : undefined,
       pendingFile: attachedFile ?? undefined,
+      replyTo: replyTo,
     }
     setMessages((prev) => [...prev, optimistic])
-    nearBottomRef.current = true
+    pinToBottomNext()
 
     try {
-      const res = await api.groups.postMessage(group.id, body, attachedFile)
+      const res = await api.groups.postMessage(
+        group.id,
+        body,
+        attachedFile,
+        replyTo?.id ?? null,
+      )
       setMessages((prev) => {
         // If the socket beat the POST and already added the real message,
         // drop the optimistic. Otherwise swap it in place.
@@ -297,79 +320,194 @@ export default function ChatView({ group, currentUserId, onRead }: Props) {
     }
   }
 
+  // Edit submit: PATCH the message, optimistically reflect locally, revert
+  // on failure. The socket message:edited will arrive shortly with the real
+  // editedAt — we keep our optimistic stamp until then.
+  async function submitEdit(messageId: string, body: string, originalBody: string) {
+    if (!body) return
+    if (body === originalBody) {
+      setEditContext(null)
+      setText('')
+      return
+    }
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId ? { ...m, body, editedAt: new Date().toISOString() } : m,
+      ),
+    )
+    setEditContext(null)
+    setText('')
+    setError(null)
+    try {
+      await api.groups.editMessage(group.id, messageId, body)
+    } catch {
+      // Best-effort revert.
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, body: originalBody } : m)),
+      )
+      setError('Could not save edit.')
+    }
+  }
+
   function send() {
+    if (editContext) {
+      void submitEdit(editContext.id, text.trim(), editContext.originalBody)
+      return
+    }
     const body = text.trim()
     const f = file
     if (!body && !f) return
+    const reply = replyContext
     setText('')
     setFile(null)
+    setReplyContext(null)
     setError(null)
-    if (fileInputRef.current) fileInputRef.current.value = ''
-    void sendBody(body, f)
+    void sendBody(body, f, reply)
   }
 
   function retry(localId: string, body: string, attachedFile: File | null) {
     setMessages((prev) => prev.filter((m) => m.id !== localId))
-    void sendBody(body, attachedFile)
+    void sendBody(body, attachedFile, null)
   }
 
-  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const picked = e.target.files?.[0]
-    if (!picked) return
-    const isImage = picked.type.startsWith('image/')
-    const cap = isImage ? MAX_IMAGE_BYTES : MAX_DOC_BYTES
-    if (picked.size > cap) {
-      setError(isImage ? 'Image too large (max 10MB).' : 'File too large (max 25MB).')
-      e.target.value = ''
-      return
-    }
-    setFile(picked)
-    setError(null)
+  // ── Message action callbacks ───────────────────────────────────────────
+  function startReply(m: LocalMessage) {
+    setEditContext(null)
+    setReplyContext(toReplyPreview(m))
+    composerHandleRef.current?.focus()
   }
 
-  function removeFile() {
+  function startEdit(m: LocalMessage) {
+    setReplyContext(null)
+    setEditContext({ id: m.id, originalBody: m.body })
+    setText(m.body)
     setFile(null)
-    if (fileInputRef.current) fileInputRef.current.value = ''
+    // Defer focus until React applies the new text; without this the cursor
+    // can land before the value is set.
+    requestAnimationFrame(() => composerHandleRef.current?.focus())
   }
 
-  // The paperclip opens a small popover so the user picks which kind of
-  // file to attach; the OS picker is then narrowed accordingly (so a
-  // "Photos" pick doesn't surface PDFs and vice-versa).
-  function pickKind(accept: string) {
-    setAttachMenuOpen(false)
-    const input = fileInputRef.current
-    if (!input) return
-    input.accept = accept
-    input.click()
+  function cancelEdit() {
+    setEditContext(null)
+    setText('')
   }
 
-  // Outside-click + Esc close for the attach menu.
-  useEffect(() => {
-    if (!attachMenuOpen) return
-    function onDown(e: MouseEvent) {
-      const t = e.target as Node
-      if (attachMenuRef.current && !attachMenuRef.current.contains(t)) {
-        setAttachMenuOpen(false)
+  async function deleteForEveryone(m: LocalMessage) {
+    const original = { body: m.body, attachments: m.attachments }
+    const now = new Date().toISOString()
+    setMessages((prev) =>
+      prev.map((row) =>
+        row.id === m.id
+          ? {
+              ...row,
+              body: '',
+              attachments: [],
+              deletedAt: now,
+              deletedBy: currentUserId,
+            }
+          : row,
+      ),
+    )
+    try {
+      await api.groups.deleteForEveryone(group.id, m.id)
+    } catch {
+      setMessages((prev) =>
+        prev.map((row) =>
+          row.id === m.id
+            ? {
+                ...row,
+                body: original.body,
+                attachments: original.attachments,
+                deletedAt: null,
+                deletedBy: null,
+              }
+            : row,
+        ),
+      )
+      setError('Could not delete message.')
+    }
+  }
+
+  // Hide a single message for the current user only. Optimistically remove it
+  // and restore at its original position if the request fails.
+  async function deleteForMe(m: LocalMessage) {
+    let removedIndex = -1
+    setMessages((prev) => {
+      removedIndex = prev.findIndex((x) => x.id === m.id)
+      return prev.filter((x) => x.id !== m.id)
+    })
+    try {
+      await api.groups.deleteForMe(group.id, m.id)
+    } catch {
+      setMessages((prev) => {
+        if (prev.some((x) => x.id === m.id)) return prev
+        const next = [...prev]
+        next.splice(removedIndex >= 0 ? Math.min(removedIndex, next.length) : next.length, 0, m)
+        return next
+      })
+      setError('Could not delete message.')
+    }
+  }
+
+  // The menu actions open a confirmation first; the actual delete runs only
+  // once the user confirms.
+  function confirmPendingDelete() {
+    if (!pendingDelete) return
+    const { message, scope } = pendingDelete
+    setPendingDelete(null)
+    if (scope === 'everyone') void deleteForEveryone(message)
+    else void deleteForMe(message)
+  }
+
+  // Open (or reuse) a private DM with a message's author. Connection rules are
+  // enforced server-side by createDirect. When `reply` is passed (from "Reply
+  // privately") the quote is carried into the destination DM's composer.
+  async function openPrivate(m: LocalMessage, reply?: ReplyToPreview) {
+    setError(null)
+    try {
+      const { group: dm } = await api.groups.createDirect(m.authorId)
+      onOpenDirectMessage({ groupId: dm.id, peerId: m.authorId, peerName: m.authorName }, reply)
+    } catch (err) {
+      setError(
+        err instanceof ApiError && err.code === 'connection_required'
+          ? 'Connect with this person before messaging.'
+          : 'Could not open a private conversation.',
+      )
+    }
+  }
+
+  // "Reply privately": open a DM with the author and carry the quoted message
+  // as reply context. If the DM already exists this just navigates to it with
+  // the composer pre-seeded.
+  function replyPrivately(m: LocalMessage) {
+    void openPrivate(m, toReplyPreview(m))
+  }
+
+  // "Send message in private": same DM, no quote.
+  function sendPrivate(m: LocalMessage) {
+    void openPrivate(m)
+  }
+
+  // Scroll to (and briefly pulse) the original message a reply points at, if
+  // it's currently loaded. Otherwise show a subtle, transient hint.
+  const jumpToMessage = useCallback(
+    (messageId: string) => {
+      const el = scrollRef.current?.querySelector<HTMLElement>(
+        `[data-message-id="${CSS.escape(messageId)}"]`,
+      )
+      if (!el) {
+        flashNotice('Original message not loaded.')
+        return
       }
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setAttachMenuOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [attachMenuOpen])
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      setHighlightedMessageId(messageId)
+      window.clearTimeout(highlightTimer.current)
+      highlightTimer.current = window.setTimeout(() => setHighlightedMessageId(null), 1800)
+    },
+    [scrollRef],
+  )
 
-  function onComposerKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      send()
-    }
-  }
-
+  // ── Header subtitle ────────────────────────────────────────────────────
   const subtitle =
     group.type === 'vehicle'
       ? group.meta.trip ?? `${group.memberCount} member${group.memberCount === 1 ? '' : 's'}`
@@ -379,9 +517,16 @@ export default function ChatView({ group, currentUserId, onRead }: Props) {
     <>
       {/* Header */}
       <header className="h-[var(--header-height)] flex items-center justify-between px-5 border-b border-white/[0.06] bg-rail shrink-0">
-        <div className="min-w-0">
-          <div className="text-[13.5px] font-semibold truncate">{groupLabel(group)}</div>
-          <div className="text-[11px] text-muted truncate">{subtitle}</div>
+        <div className="min-w-0 flex items-center gap-2.5">
+          {group.type === 'direct' && (
+            <div className="h-9 w-9 rounded-full bg-active/30 border border-active/40 flex items-center justify-center shrink-0 text-[11.5px] font-semibold uppercase font-mono">
+              {initials(groupLabel(group))}
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className="text-[13.5px] font-semibold truncate">{groupLabel(group)}</div>
+            <div className="text-[11px] text-muted truncate">{subtitle}</div>
+          </div>
         </div>
         {group.type === 'vehicle' && group.meta.plate && (
           <span className="font-mono text-[11px] text-muted border border-white/[0.08] rounded-chip px-2 py-0.5 shrink-0">
@@ -397,145 +542,111 @@ export default function ChatView({ group, currentUserId, onRead }: Props) {
         />
       ) : (
         <>
-      {/* Messages — wrapped in a relative container so the floating
-          scroll-to-latest button can overlay the scroll area without
-          scrolling along with the content. */}
-      <div className="flex-1 flex flex-col relative min-h-0">
-      <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto px-5 py-4">
-        <div className="mx-auto w-full xl:max-w-[1280px] 2xl:max-w-[1440px] min-[1700px]:max-w-[1560px]">
-          {loading ? (
-            <div className="text-[12px] text-faint">Loading messages…</div>
-          ) : messages.length === 0 ? (
-            <div className="h-full flex items-center justify-center">
-              <p className="text-[12.5px] text-faint">No messages yet. Say something.</p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-0.5">
-              {nextCursor && (
-                <div className="flex justify-center pb-3">
-                  <button
-                    onClick={loadOlder}
-                    disabled={loadingOlder}
-                    className="text-[11.5px] text-muted hover:text-text border border-white/[0.10] rounded-chip px-3 py-1 transition-colors disabled:opacity-50"
-                  >
-                    {loadingOlder ? 'Loading…' : 'Load earlier messages'}
-                  </button>
-                </div>
-              )}
-              {messages.map((m, i) => {
-                const next = messages[i + 1]
-                // Hide the timestamp on any message that's immediately
-                // followed by another from the same sender within the same
-                // calendar minute. Only the last message of such a run keeps
-                // its timestamp, like WhatsApp.
-                const lastInMinuteGroup =
-                  !next ||
-                  next.authorId !== m.authorId ||
-                  minuteKey(next.createdAt) !== minuteKey(m.createdAt)
-                return (
-                  <MessageRow
-                    key={m.id}
-                    message={m}
-                    mine={m.authorId === currentUserId}
-                    prev={messages[i - 1]}
-                    onRetry={retry}
-                    showTimestamp={lastInMinuteGroup}
-                    onActivateAttachment={activateAttachment}
-                    onImageLoad={handleImageLoaded}
-                  />
-                )
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-        {showScrollDown && (
-          <button
-            onClick={scrollToBottom}
-            aria-label="Scroll to latest messages"
-            className="absolute bottom-3 left-1/2 -translate-x-1/2 h-9 w-9 rounded-full bg-surface border border-white/[0.10] text-text hover:bg-surface-2 hover:border-white/[0.20] flex items-center justify-center transition-colors shadow-[0_4px_14px_rgba(0,0,0,0.55)]"
-          >
-            <ArrowDown size={16} strokeWidth={1.8} />
-          </button>
-        )}
-      </div>
-
-      {/* Composer */}
-      <div className="px-5 pb-4 pt-1 shrink-0">
-        <div className="mx-auto w-full xl:max-w-[1280px] 2xl:max-w-[1440px] min-[1700px]:max-w-[1560px]">
-          {error && <div className="text-[11.5px] text-alert mb-1.5">{error}</div>}
-          <div className="rounded-card border border-white/[0.08] bg-white/[0.02] focus-within:border-white/[0.16] transition-colors">
-            {file && (
-              <ComposerAttachmentPreview
-                file={file}
-                previewUrl={filePreviewUrl}
-                onRemove={removeFile}
-              />
-            )}
-            <div className="flex items-end gap-2 px-3 py-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept={`${IMAGE_ACCEPT},${DOC_ACCEPT}`}
-                onChange={onPickFile}
-                className="hidden"
-              />
-              <div className="relative shrink-0" ref={attachMenuRef}>
-                <button
-                  onClick={() => setAttachMenuOpen((v) => !v)}
-                  aria-label="Attach"
-                  aria-haspopup="menu"
-                  aria-expanded={attachMenuOpen}
-                  className={`h-7 w-7 flex items-center justify-center rounded-chip transition-colors ${
-                    attachMenuOpen
-                      ? 'text-text bg-white/[0.06]'
-                      : 'text-muted hover:text-text hover:bg-white/[0.04]'
-                  }`}
-                >
-                  <Paperclip size={15} strokeWidth={1.8} />
-                </button>
-                {attachMenuOpen && (
-                  <div
-                    role="menu"
-                    className="absolute bottom-[calc(100%+6px)] left-0 w-[180px] rounded-card border border-white/[0.08] bg-surface overflow-hidden z-20 py-1"
-                  >
-                    <AttachMenuItem
-                      icon={<ImageIcon size={14} strokeWidth={1.6} />}
-                      onClick={() => pickKind(IMAGE_ACCEPT)}
-                    >
-                      Photos
-                    </AttachMenuItem>
-                    <AttachMenuItem
-                      icon={<FileText size={14} strokeWidth={1.6} />}
-                      onClick={() => pickKind(DOC_ACCEPT)}
-                    >
-                      Documents
-                    </AttachMenuItem>
+          {/* Messages — wrapped in a relative container so the floating
+              scroll-to-latest button can overlay the scroll area without
+              scrolling along with the content. */}
+          <div className="flex-1 flex flex-col relative min-h-0">
+            <div
+              ref={scrollRef}
+              onScroll={onScroll}
+              className="flex-1 overflow-y-auto px-5 py-4"
+            >
+              <div className="mx-auto w-full xl:max-w-[1280px] 2xl:max-w-[1440px] min-[1700px]:max-w-[1560px]">
+                {loading ? (
+                  <div className="text-[12px] text-faint">Loading messages…</div>
+                ) : messages.length === 0 ? (
+                  <div className="h-full flex items-center justify-center">
+                    <p className="text-[12.5px] text-faint">No messages yet. Say something.</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-0.5">
+                    {nextCursor && (
+                      <div className="flex justify-center pb-3">
+                        <button
+                          onClick={loadOlder}
+                          disabled={loadingOlder}
+                          className="text-[11.5px] text-muted hover:text-text border border-white/[0.10] rounded-chip px-3 py-1 transition-colors disabled:opacity-50"
+                        >
+                          {loadingOlder ? 'Loading…' : 'Load earlier messages'}
+                        </button>
+                      </div>
+                    )}
+                    {messages.map((m, i) => {
+                      const next = messages[i + 1]
+                      // Hide the timestamp on any message that's immediately
+                      // followed by another from the same sender within the
+                      // same calendar minute. Only the last message of such a
+                      // run keeps its timestamp, like WhatsApp.
+                      const lastInMinuteGroup =
+                        !next ||
+                        next.authorId !== m.authorId ||
+                        minuteKey(next.createdAt) !== minuteKey(m.createdAt)
+                      return (
+                        <MessageRow
+                          key={m.id}
+                          message={m}
+                          mine={m.authorId === currentUserId}
+                          prev={messages[i - 1]}
+                          groupType={group.type}
+                          highlighted={highlightedMessageId === m.id}
+                          onRetry={retry}
+                          showTimestamp={lastInMinuteGroup}
+                          onActivateAttachment={activateAttachment}
+                          onImageLoad={handleImageLoaded}
+                          onReply={startReply}
+                          onEdit={startEdit}
+                          onForward={setForwardTarget}
+                          onReplyPrivately={replyPrivately}
+                          onSendPrivate={sendPrivate}
+                          onDeleteForMe={(m) => setPendingDelete({ message: m, scope: 'me' })}
+                          onDeleteForEveryone={(m) =>
+                            setPendingDelete({ message: m, scope: 'everyone' })
+                          }
+                          onJumpToMessage={jumpToMessage}
+                        />
+                      )
+                    })}
                   </div>
                 )}
               </div>
-              <textarea
-                ref={textareaRef}
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                onKeyDown={onComposerKeyDown}
-                rows={1}
-                placeholder={`Message ${groupLabel(group)}`}
-                className="flex-1 bg-transparent text-[length:var(--chat-msg-font-size)] leading-[1.5] outline-none resize-none placeholder:text-faint overflow-y-auto max-h-[9em] py-1"
-              />
+            </div>
+            {showScrollDown && (
               <button
-                onClick={send}
-                disabled={!text.trim() && !file}
-                aria-label="Send message"
-                className="h-7 w-7 shrink-0 flex items-center justify-center rounded-chip bg-text text-bg transition-opacity disabled:opacity-30"
+                onClick={scrollToBottom}
+                aria-label="Scroll to latest messages"
+                className="absolute bottom-3 left-1/2 -translate-x-1/2 h-9 w-9 rounded-full bg-surface border border-white/[0.10] text-text hover:bg-surface-2 hover:border-white/[0.20] flex items-center justify-center transition-colors shadow-[0_4px_14px_rgba(0,0,0,0.55)]"
               >
-                <ArrowUp size={15} strokeWidth={2.2} />
+                <ArrowDown size={16} strokeWidth={1.8} />
               </button>
+            )}
+            {notice && (
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-chip bg-surface border border-white/[0.10] text-[11.5px] text-muted px-3 py-1.5 shadow-[0_4px_14px_rgba(0,0,0,0.55)]">
+                {notice}
+              </div>
+            )}
+          </div>
+
+          {/* Composer */}
+          <div ref={composerRef} className="px-5 pb-4 pt-1 shrink-0">
+            <div className="mx-auto w-full xl:max-w-[1280px] 2xl:max-w-[1440px] min-[1700px]:max-w-[1560px]">
+              {error && <div className="text-[11.5px] text-alert mb-1.5">{error}</div>}
+              <ChatComposer
+                ref={composerHandleRef}
+                placeholder={`Message ${groupLabel(group)}`}
+                text={text}
+                onTextChange={setText}
+                file={file}
+                onFileChange={setFile}
+                replyContext={replyContext}
+                onCancelReply={() => setReplyContext(null)}
+                editContext={editContext}
+                onCancelEdit={cancelEdit}
+                onSend={send}
+                onFileError={setError}
+                onClearError={() => setError(null)}
+              />
             </div>
           </div>
-        </div>
-      </div>
-
         </>
       )}
 
@@ -545,290 +656,32 @@ export default function ChatView({ group, currentUserId, onRead }: Props) {
           onClose={() => setPreviewAttachment(null)}
         />
       )}
-    </>
-  )
-}
 
-function MessageRow({
-  message,
-  mine,
-  prev,
-  onRetry,
-  showTimestamp,
-  onActivateAttachment,
-  onImageLoad,
-}: {
-  message: LocalMessage
-  mine: boolean
-  prev?: LocalMessage
-  onRetry: (localId: string, body: string, file: File | null) => void
-  showTimestamp: boolean
-  onActivateAttachment: (attachment: Attachment) => void
-  onImageLoad: () => void
-}) {
-  // Collapse the author line when the previous message is from the same
-  // author within a couple of minutes — keeps bursts readable.
-  const sameAuthorAsPrev =
-    prev !== undefined &&
-    prev.authorId === message.authorId &&
-    new Date(message.createdAt).getTime() - new Date(prev.createdAt).getTime() < 4 * 60 * 1000
-
-  const showDayDivider =
-    prev === undefined ||
-    new Date(prev.createdAt).toDateString() !== new Date(message.createdAt).toDateString()
-
-  const failed = message.failed === true
-
-  // 78% keeps bubbles narrower than the column on small screens; the absolute
-  // 640px cap keeps them comfortably readable when the column gets wider on
-  // 2K+ monitors. CSS min() picks whichever is smaller at the current width.
-  // Font size comes from --chat-msg-font-size so it scales with the display.
-  const bubbleBase =
-    'max-w-[min(78%,640px)] px-3 pt-1.5 pb-1 text-[length:var(--chat-msg-font-size)] leading-[1.5] flex flex-col text-text'
-  const bubbleSkin = mine
-    ? failed
-      ? 'bg-[#222225] border border-alert/50 rounded-[7px] rounded-br-[2px]'
-      : 'bg-[#222225] border border-white/[0.06] rounded-[7px] rounded-br-[2px]'
-    : 'bg-surface border border-white/[0.08] rounded-[7px] rounded-bl-[2px]'
-
-  return (
-    <>
-      {showDayDivider && (
-        <div className="flex items-center gap-3 py-3">
-          <div className="h-px flex-1 bg-white/[0.06]" />
-          <span className="eyebrow">{formatDay(message.createdAt)}</span>
-          <div className="h-px flex-1 bg-white/[0.06]" />
-        </div>
-      )}
-      <div className={`flex ${sameAuthorAsPrev ? 'mt-0.5' : 'mt-2.5'}`}>
-        {!mine && (
-          // Fixed-width avatar slot: shows the initials circle on the first
-          // message of a burst, stays empty (but reserved) on grouped follow-ups
-          // so bubbles stay aligned under the avatar.
-          <div className="w-9 mr-2.5 shrink-0">
-            {!sameAuthorAsPrev && (
-              <div className="h-9 w-9 rounded-full bg-active/30 border border-active/40 flex items-center justify-center text-[11.5px] font-semibold uppercase font-mono">
-                {initials(message.authorName)}
-              </div>
-            )}
-          </div>
-        )}
-        <div className={`flex-1 min-w-0 flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
-          {!mine && !sameAuthorAsPrev && (
-            <div className="text-[11px] text-muted mb-1 px-1">{message.authorName}</div>
-          )}
-          <div className={`${bubbleBase} ${bubbleSkin}`}>
-            {message.attachments && message.attachments.length > 0 && (
-              <div className="flex flex-col gap-1.5 mb-1">
-                {message.attachments.map((a) => (
-                  <AttachmentBlock
-                    key={a.id}
-                    attachment={a}
-                    onActivate={onActivateAttachment}
-                    onImageLoad={onImageLoad}
-                  />
-                ))}
-              </div>
-            )}
-            {message.body && (
-              <span className="whitespace-pre-wrap break-words">{message.body}</span>
-            )}
-            {(failed || showTimestamp) && (
-              <span className="text-[10.5px] text-muted leading-none mt-1 self-end">
-                {failed ? 'Failed' : formatTime(message.createdAt)}
-              </span>
-            )}
-          </div>
-          {failed && mine && message.localId && (
-            <button
-              onClick={() =>
-                onRetry(message.localId!, message.body, message.pendingFile ?? null)
-              }
-              className="text-[10.5px] text-alert hover:text-text transition-colors mt-1 px-1"
-            >
-              Tap to retry
-            </button>
-          )}
-        </div>
-      </div>
-    </>
-  )
-}
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).slice(0, 2)
-  return parts.map((p) => p[0] ?? '').join('').toUpperCase() || '?'
-}
-
-// Truncate to the minute (UTC ms / 60000) so two messages with different
-// seconds within the same calendar minute compare equal. Used to collapse
-// timestamps inside bursts.
-function minuteKey(iso: string): number {
-  return Math.floor(new Date(iso).getTime() / 60000)
-}
-
-function formatDay(iso: string): string {
-  const d = new Date(iso)
-  const today = new Date()
-  const yesterday = new Date()
-  yesterday.setDate(today.getDate() - 1)
-  if (d.toDateString() === today.toDateString()) return 'Today'
-  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
-  return d.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-}
-
-// Pick a sensible lucide icon for a document's mime type. Keeps the surface
-// modest — three buckets is enough until we add previewing.
-function DocIcon({ mime }: { mime: string }) {
-  if (mime === 'application/pdf' || mime === 'text/plain') {
-    return <FileText size={15} strokeWidth={1.6} className="text-muted" />
-  }
-  if (
-    mime === 'text/csv' ||
-    mime === 'application/vnd.ms-excel' ||
-    mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-  ) {
-    return <FileSpreadsheet size={15} strokeWidth={1.6} className="text-muted" />
-  }
-  if (mime.startsWith('image/')) {
-    return <ImageIcon size={15} strokeWidth={1.6} className="text-muted" />
-  }
-  return <FileIcon size={15} strokeWidth={1.6} className="text-muted" />
-}
-
-// In-bubble attachment renderer. Every attachment is a themed button — the
-// parent's `onActivate` callback decides what to do (image → lightbox,
-// pdf → preview overlay, other → download). No raw <a target="_blank">
-// anywhere, so attachments don't look like browser links.
-//
-// The optimistic path may pass a blob URL — that just works for images and
-// renders a card without a working action for docs (button is disabled
-// until the real URL arrives a beat later via the server reconcile).
-function AttachmentBlock({
-  attachment,
-  onActivate,
-  onImageLoad,
-}: {
-  attachment: Attachment
-  onActivate: (a: Attachment) => void
-  onImageLoad: () => void
-}) {
-  const isImage = attachment.mimeType.startsWith('image/')
-  const isPdf = attachment.mimeType === 'application/pdf'
-  const hasUrl = Boolean(attachment.url)
-
-  if (isImage) {
-    return (
-      <button
-        type="button"
-        onClick={() => onActivate(attachment)}
-        aria-label={`Open ${attachment.originalName}`}
-        className="block p-0 border-0 bg-transparent cursor-zoom-in"
-      >
-        <img
-          src={attachment.url}
-          alt={attachment.originalName}
-          onLoad={onImageLoad}
-          className="max-w-full max-h-[320px] rounded-card border border-white/[0.08] object-contain bg-bg"
+      {forwardTarget && (
+        <ForwardModal
+          fromGroupId={group.id}
+          message={forwardTarget}
+          onClose={() => setForwardTarget(null)}
+          onForwarded={() => flashNotice('Message forwarded.')}
         />
-      </button>
-    )
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={() => onActivate(attachment)}
-      disabled={!hasUrl}
-      aria-label={isPdf ? `Preview ${attachment.originalName}` : `Download ${attachment.originalName}`}
-      className="flex items-center gap-2.5 rounded-card border border-white/[0.08] bg-white/[0.02] px-2.5 py-2 max-w-[360px] hover:bg-white/[0.04] disabled:opacity-50 disabled:cursor-default transition-colors text-left"
-    >
-      <div className="h-9 w-9 rounded-chip border border-white/[0.10] bg-white/[0.03] flex items-center justify-center shrink-0">
-        <DocIcon mime={attachment.mimeType} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-[12px] text-text truncate">{attachment.originalName}</div>
-        <div className="text-[10.5px] text-muted">{formatBytes(attachment.byteSize)}</div>
-      </div>
-      {hasUrl && (
-        isPdf ? (
-          <Eye size={14} strokeWidth={1.6} className="text-muted shrink-0" />
-        ) : (
-          <Download size={14} strokeWidth={1.6} className="text-muted shrink-0" />
-        )
       )}
-    </button>
-  )
-}
 
-function AttachMenuItem({
-  icon,
-  onClick,
-  children,
-}: {
-  icon: React.ReactNode
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      role="menuitem"
-      className="w-full flex items-center gap-2.5 px-3 py-2 text-[12.5px] hover:bg-white/[0.03] transition-colors text-left"
-    >
-      <span className="text-muted">{icon}</span>
-      {children}
-    </button>
-  )
-}
-
-// In-composer preview row. Sits above the textarea inside the composer card
-// and reserves a remove-button so the user can drop the staged file before
-// sending.
-function ComposerAttachmentPreview({
-  file,
-  previewUrl,
-  onRemove,
-}: {
-  file: File
-  previewUrl: string | null
-  onRemove: () => void
-}) {
-  return (
-    <div className="flex items-center gap-2.5 px-3 py-2 border-b border-white/[0.06]">
-      {previewUrl ? (
-        <img
-          src={previewUrl}
-          alt={file.name}
-          className="h-10 w-10 rounded-chip object-cover shrink-0 border border-white/[0.10]"
+      {pendingDelete && (
+        <ConfirmDialog
+          title={pendingDelete.scope === 'everyone' ? 'Delete for everyone?' : 'Delete for me?'}
+          message={
+            pendingDelete.scope === 'everyone'
+              ? "This message will be removed for everyone in the conversation. This can't be undone."
+              : 'This message will be hidden from your view only. Other members will still see it.'
+          }
+          confirmLabel={
+            pendingDelete.scope === 'everyone' ? 'Delete for everyone' : 'Delete for me'
+          }
+          tone="alert"
+          onConfirm={confirmPendingDelete}
+          onCancel={() => setPendingDelete(null)}
         />
-      ) : (
-        <div className="h-10 w-10 rounded-chip border border-white/[0.10] bg-white/[0.03] flex items-center justify-center shrink-0">
-          <DocIcon mime={file.type} />
-        </div>
       )}
-      <div className="min-w-0 flex-1">
-        <div className="text-[12px] text-text truncate">{file.name}</div>
-        <div className="text-[10.5px] text-muted">{formatBytes(file.size)}</div>
-      </div>
-      <button
-        onClick={onRemove}
-        aria-label="Remove attachment"
-        className="h-6 w-6 shrink-0 flex items-center justify-center rounded-chip text-muted hover:text-text hover:bg-white/[0.04] transition-colors"
-      >
-        <X size={13} strokeWidth={1.8} />
-      </button>
-    </div>
+    </>
   )
 }
