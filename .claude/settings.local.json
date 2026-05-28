@@ -61,7 +61,12 @@
       "Bash(node -e \"require.resolve\\('@supabase/supabase-js', {paths:['/c/Users/Home/Desktop/dispo-chatv2/server','/c/Users/Home/Desktop/dispo-chatv2']}\\); console.log\\('resolves OK'\\)\")",
       "Bash(node --input-type=module -e \"import\\('@supabase/supabase-js'\\).then\\(m=>console.log\\('import OK', typeof m.createClient\\)\\).catch\\(e=>console.log\\('FAIL', e.message\\)\\)\")",
       "Bash(curl -s -o /dev/null -w \"api3001:%{http_code}\\\\n\" --max-time 4 http://localhost:3001/api/health)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(netstat -ano)",
+      "Bash(rm -f /c/Users/Home/Desktop/dispo-chatv2/server/e2e-storage.cjs /c/Users/Home/Desktop/dispo-chatv2/tmp_px.png /c/Users/Home/Desktop/dispo-chatv2/tmp_got.png /tmp/disp.cookie /tmp/cleanup.env)",
+      "Bash(curl -s -o /dev/null -w \"web5173:%{http_code}\\\\n\" --max-time 3 http://localhost:5173/)",
+      "Bash(curl -s -o /dev/null -w \"api3001:%{http_code}\\\\n\" --max-time 3 http://localhost:3001/api/health)",
+      "Bash(rm -f /c/Users/Home/Desktop/dispo-chatv2/.claude/launch.json && echo \"removed launch.json\")"
     ]
   }
 }

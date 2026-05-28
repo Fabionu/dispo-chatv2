@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Box, Eye, EyeOff, Lock } from 'lucide-react'
+import { Box, Eye, EyeOff, Loader2, Lock } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 
 type Tab = 'signin' | 'signup'
@@ -152,7 +152,7 @@ export default function SignIn() {
               type="email"
               value={email}
               onChange={setEmail}
-              placeholder="dispatch@optima-logistics.eu"
+              placeholder="Type your email..."
               autoComplete="email"
               required
             />
@@ -177,7 +177,7 @@ export default function SignIn() {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder={isSignIn ? '••••••••••••' : 'At least 8 characters'}
+                  placeholder="Type your password..."
                   autoComplete={isSignIn ? 'current-password' : 'new-password'}
                   required
                   className="w-full bg-transparent border border-white/[0.08] rounded-btn pl-3 pr-10 py-2.5 text-[13.5px] focus:outline-none focus:border-white/[0.22] transition-colors"
@@ -197,6 +197,9 @@ export default function SignIn() {
                   )}
                 </button>
               </div>
+              {/* Strength meter — only while creating a password (signup); on
+                  sign-in you're entering an existing one, so it's not shown. */}
+              {!isSignIn && password.length > 0 && <StrengthMeter password={password} />}
             </div>
 
             {isSignIn && (
@@ -220,8 +223,9 @@ export default function SignIn() {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full mt-2 bg-text text-bg font-semibold text-[13.5px] py-3 rounded-btn hover:bg-text/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full mt-2 bg-text text-bg font-semibold text-[13.5px] py-3 rounded-btn hover:bg-text/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
+              {submitting && <Loader2 size={15} strokeWidth={2.2} className="animate-spin" />}
               {submitting
                 ? isSignIn
                   ? 'Signing in…'
@@ -387,6 +391,58 @@ function TabButton({
       {children}
       {active && <span className="absolute left-0 right-0 -bottom-px h-[1.5px] bg-text" />}
     </button>
+  )
+}
+
+// Advisory password-strength scoring. Score 1–4 from length + character
+// variety. The server still enforces the hard minimum (8 chars); this just
+// nudges toward a stronger choice while creating a workspace.
+function passwordStrength(pw: string): { score: number; label: string } {
+  let raw = 0
+  if (pw.length >= 8) raw++
+  if (pw.length >= 12) raw++
+  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) raw++
+  if (/\d/.test(pw)) raw++
+  if (/[^A-Za-z0-9]/.test(pw)) raw++
+  const score = Math.min(4, Math.max(1, raw))
+  const label = pw.length < 8 ? 'Too short' : ['', 'Weak', 'Fair', 'Good', 'Strong'][score]
+  return { score, label }
+}
+
+function StrengthMeter({ password }: { password: string }) {
+  const tooShort = password.length < 8
+  const { score, label } = passwordStrength(password)
+  // Themed tiers: alert (warm red) → active (tan) → done (muted green).
+  const fillClass = tooShort
+    ? 'bg-alert'
+    : score >= 4
+      ? 'bg-done'
+      : score >= 2
+        ? 'bg-active'
+        : 'bg-alert'
+  const textClass = tooShort
+    ? 'text-alert'
+    : score >= 4
+      ? 'text-done'
+      : score >= 2
+        ? 'text-active'
+        : 'text-alert'
+  // When too short we still light a single segment red as a warning.
+  const filled = tooShort ? 1 : score
+  return (
+    <div className="mt-2">
+      <div className="flex gap-1" aria-hidden>
+        {[0, 1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className={`h-1 flex-1 rounded-full transition-colors ${
+              i < filled ? fillClass : 'bg-white/[0.08]'
+            }`}
+          />
+        ))}
+      </div>
+      <div className={`mt-1 text-[11px] ${textClass}`}>Password strength: {label}</div>
+    </div>
   )
 }
 
