@@ -1,13 +1,22 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { LocalMessage } from '../components/messages/types'
 
-// Encapsulates everything ChatView needs to keep the message list scrolled
-// the way users expect:
-//   - jump to bottom on initial load
-//   - follow new messages when already at the bottom
-//   - keep the viewport anchored when prepending older messages
-//   - reveal a "scroll to latest" button when the user has drifted up
-//   - re-pin after images load (their height grows after render)
+// Keeps the message list scrolled the way users expect — WITHOUT scrolling
+// "whenever the messages array changes". Movement is event-driven: each change
+// is classified by what happened at the ENDS of the list, and we only move the
+// viewport for the cases that warrant it:
+//
+//   initial-load / cached-open : land at the bottom once, instantly
+//   append-new (incl. own send): follow to the bottom only if already near it
+//   prepend-older              : restore the pre-prepend anchor (no visible move)
+//   revalidate / in-place edit : preserve scrollTop exactly (no move at all)
+//
+// This is what stops the "open a cached conversation → it jumps a few seconds
+// later" bug: background revalidation produces a new (often content-identical)
+// messages array, which previously re-pinned to the bottom. Now an unchanged
+// tail is a no-op. Native CSS scroll-anchoring keeps content steady when an
+// off-screen message above the viewport changes height, so the preserve path
+// is a deliberate no-op there too.
 export function useChatScroll(messages: LocalMessage[], loading: boolean) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const nearBottomRef = useRef(true)
@@ -15,21 +24,71 @@ export function useChatScroll(messages: LocalMessage[], loading: boolean) {
   // When prepending older messages we must keep the viewport anchored — we
   // record scrollHeight before the prepend and restore the delta after.
   const prependAnchorRef = useRef<number | null>(null)
+  // Change-classification state. These reset per conversation because ChatView
+  // remounts this hook on group switch (so no stale anchors carry over).
+  const didInitialRef = useRef(false)
+  const prevFirstIdRef = useRef<string | null>(null)
+  const prevLastIdRef = useRef<string | null>(null)
+  const prevLenRef = useRef(0)
   const [showScrollDown, setShowScrollDown] = useState(false)
 
-  // Scroll management. After the initial load jump to the newest message;
-  // after a live message only follow if the user was already at the bottom;
-  // after a prepend, restore the prior anchor so the view doesn't jump.
+  // Classify the change at the list ends and move the viewport only when the
+  // event type calls for it. Runs after DOM mutation, before paint, so any
+  // positioning we do is invisible (no pre-scroll frame).
   useLayoutEffect(() => {
     const el = scrollRef.current
     if (!el) return
+
+    const len = messages.length
+    const firstId = len ? messages[0].id : null
+    const lastId = len ? messages[len - 1].id : null
+    const remember = () => {
+      prevFirstIdRef.current = firstId
+      prevLastIdRef.current = lastId
+      prevLenRef.current = len
+    }
+
+    // prepend-older: an older page was just loaded above the viewport. Restore
+    // the recorded anchor so the visible message stays put.
     if (prependAnchorRef.current !== null) {
       el.scrollTop = el.scrollHeight - prependAnchorRef.current
       prependAnchorRef.current = null
+      remember()
       return
     }
-    if (loading) return
-    if (nearBottomRef.current) el.scrollTop = el.scrollHeight
+
+    // Nothing to anchor against yet (still loading, or an empty thread).
+    if (loading || len === 0) {
+      remember()
+      return
+    }
+
+    // initial-load / cached-open: land at the bottom exactly once per
+    // conversation, instantly.
+    if (!didInitialRef.current) {
+      didInitialRef.current = true
+      el.scrollTop = el.scrollHeight
+      nearBottomRef.current = true
+      remember()
+      return
+    }
+
+    // append-new: the tail id changed AND the list grew, with the head
+    // unchanged — i.e. new message(s) at the bottom (live arrival or our own
+    // optimistic send, which pins nearBottom first so it always follows).
+    const appendedAtEnd =
+      len > prevLenRef.current &&
+      lastId !== prevLastIdRef.current &&
+      firstId === prevFirstIdRef.current
+    if (appendedAtEnd) {
+      if (nearBottomRef.current) el.scrollTop = el.scrollHeight
+      remember()
+      return
+    }
+
+    // revalidate / in-place edit / unchanged tail (e.g. optimistic→real swap):
+    // preserve scrollTop exactly — do not move.
+    remember()
   }, [messages, loading])
 
   // Watch the composer wrapper's height. When it grows/shrinks (a reply or

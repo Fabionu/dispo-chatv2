@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Box, ChevronDown, LogOut, MessageSquare, Plus, Search, Settings } from 'lucide-react'
+import {
+  Box,
+  ChevronDown,
+  CircleUser,
+  LogOut,
+  MessageSquare,
+  Plus,
+  Search,
+  Settings,
+  Truck,
+} from 'lucide-react'
 import type { User, Workspace as WorkspaceT } from '../auth/AuthContext'
 import type {
   Connection,
@@ -490,6 +500,9 @@ function GroupRow({
   onClick: () => void
 }) {
   const unread = !selected && groupHasUnread(group)
+  // Leading type glyph: a single contact for DMs, a truck for vehicle/trip
+  // groups. Kept subtle (faint) so the conversation name stays the focus.
+  const TypeIcon = group.type === 'direct' ? CircleUser : Truck
   return (
     <button
       onClick={onClick}
@@ -501,6 +514,11 @@ function GroupRow({
     >
       <span
         className={`h-1.5 w-1.5 rounded-full shrink-0 ${unread ? 'bg-active' : 'bg-transparent'}`}
+      />
+      <TypeIcon
+        size={14}
+        strokeWidth={1.6}
+        className={`shrink-0 ${unread ? 'text-muted' : 'text-faint'}`}
       />
       <span className={`flex-1 truncate text-[13px] ${unread ? 'text-text font-medium' : ''}`}>
         {groupLabel(group)}
