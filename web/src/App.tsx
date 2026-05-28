@@ -1,6 +1,7 @@
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import SignIn from './pages/SignIn'
 import Workspace from './pages/Workspace'
+import { MessageCacheProvider } from './hooks/useMessageCache'
 
 function Gate() {
   const auth = useAuth()
@@ -17,7 +18,11 @@ function Gate() {
     return <SignIn />
   }
 
-  return <Workspace user={auth.user} workspace={auth.workspace} onSignOut={auth.signOut} />
+  return (
+    <MessageCacheProvider userId={auth.user.id}>
+      <Workspace user={auth.user} workspace={auth.workspace} onSignOut={auth.signOut} />
+    </MessageCacheProvider>
+  )
 }
 
 export default function App() {

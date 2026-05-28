@@ -12,6 +12,7 @@ import type {
 import { groupHasUnread, groupLabel } from '../lib/types'
 import { api } from '../lib/api'
 import { getSocket } from '../lib/socket'
+import { useMessageCache } from '../hooks/useMessageCache'
 import ChatView from '../components/ChatView'
 import ConnectionRequestView from '../components/connections/ConnectionRequestView'
 import ConnectionRequestsSection from '../components/connections/ConnectionRequestsSection'
@@ -63,6 +64,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   const userMenuRef = useRef<HTMLDivElement>(null)
   const newMenuRef = useRef<HTMLDivElement>(null)
 
+  const { prefetch } = useMessageCache()
+
   const refreshGroups = useCallback(async () => {
     const { groups } = await api.groups.list()
     setGroups([...groups].sort(byRecent))
@@ -71,6 +74,14 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   useEffect(() => {
     refreshGroups().finally(() => setLoadingGroups(false))
   }, [refreshGroups])
+
+  // Warm the cache for the few most-recent conversations once the rail is up,
+  // so opening them is instant. Lightweight + idempotent: prefetch skips groups
+  // already cached or in flight, and runs in the background without blocking.
+  useEffect(() => {
+    if (loadingGroups) return
+    for (const g of groups.slice(0, 3)) prefetch(g.id)
+  }, [loadingGroups, groups, prefetch])
 
   // Socket: keep the rail in sync. A new message bumps its group to the top
   // (and marks it unread unless it's the open one). A new group prompts a

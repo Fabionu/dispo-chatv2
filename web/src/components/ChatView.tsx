@@ -13,6 +13,11 @@ import ConfirmDialog from './ConfirmDialog'
 import { initials, minuteKey } from './messages/messageUtils'
 import type { LocalMessage } from './messages/types'
 import { useChatScroll } from '../hooks/useChatScroll'
+import { useMessageCache } from '../hooks/useMessageCache'
+
+// Stable empty list so a group with no cached thread doesn't hand a fresh
+// array to useChatScroll on every render.
+const NO_MESSAGES: LocalMessage[] = []
 
 type Props = {
   group: Group
@@ -53,10 +58,16 @@ export default function ChatView({
   initialReplyContext = null,
   onConsumeInitialReply,
 }: Props) {
+  // ── Cached thread (session-level, instant on revisit) ──────────────────
+  const cache = useMessageCache()
+  const thread = cache.threads[group.id]
+  const messages = thread?.messages ?? NO_MESSAGES
+  const nextCursor = thread?.nextCursor ?? null
+  // Show the blocking loader only when there's nothing cached yet for this
+  // group; otherwise we render cached messages and revalidate silently.
+  const loading = !(thread?.loaded ?? false) && messages.length === 0
+
   // ── Core state ─────────────────────────────────────────────────────────
-  const [messages, setMessages] = useState<LocalMessage[]>([])
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [text, setText] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -131,90 +142,49 @@ export default function ChatView({
       .catch(() => {})
   }, [group.id, onRead])
 
-  // ── Initial history load ───────────────────────────────────────────────
-  // `key={group.id}` on the parent remounts this component per group, so
-  // this runs fresh each time.
+  // ── Initial load / background revalidate ───────────────────────────────
+  // `key={group.id}` on the parent remounts this component per group. If the
+  // thread was already loaded (opened earlier, or prefetched) we keep its
+  // cached cursor and just fold in the latest page; otherwise this is a first
+  // load and we seed the thread (cursor + loaded flag). Either way the cached
+  // messages render immediately — only a never-loaded group shows the loader.
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
+    const hadCache = cache.hasThread(group.id)
+    cache.setRevalidating(group.id, true)
     api.groups
       .messages(group.id)
       .then((res) => {
         if (cancelled) return
-        setMessages(res.messages)
-        setNextCursor(res.nextCursor)
+        if (hadCache) cache.mergeThreadMessages(group.id, res.messages)
+        else cache.setThreadMessages(group.id, res.messages, res.nextCursor)
       })
+      .catch(() => {})
       .finally(() => {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) cache.setRevalidating(group.id, false)
       })
     markRead()
     return () => {
       cancelled = true
     }
+    // Cache methods are stable; re-run only when the open group changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [group.id, markRead])
 
-  // ── Live socket events ─────────────────────────────────────────────────
+  // ── Read receipts on live arrivals ─────────────────────────────────────
+  // The cache itself is kept fresh by a global socket listener; here we only
+  // need to mark the *open* group read as new messages land in it.
   useEffect(() => {
     const socket = getSocket()
     function onNew(msg: IncomingMessage) {
       if (msg.groupId !== group.id) return
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === msg.id)) return prev
-        // If this is the server echo of one of our own pending optimistic
-        // messages, replace by matching body so the bubble doesn't briefly
-        // double up before the POST response arrives.
-        if (msg.authorId === currentUserId) {
-          const idx = prev.findIndex(
-            (m) => m.pending && m.authorId === currentUserId && m.body === msg.body,
-          )
-          if (idx !== -1) {
-            const next = [...prev]
-            next[idx] = msg
-            return next
-          }
-        }
-        return [...prev, msg]
-      })
       markRead()
     }
-    function onEdited(p: { id: string; groupId: string; body: string; editedAt: string }) {
-      if (p.groupId !== group.id) return
-      setMessages((prev) =>
-        prev.map((m) => (m.id === p.id ? { ...m, body: p.body, editedAt: p.editedAt } : m)),
-      )
-    }
-    function onDeleted(p: {
-      id: string
-      groupId: string
-      deletedAt: string
-      deletedBy: string
-    }) {
-      if (p.groupId !== group.id) return
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === p.id
-            ? { ...m, body: '', attachments: [], deletedAt: p.deletedAt, deletedBy: p.deletedBy }
-            : m,
-        ),
-      )
-    }
-    // Per-user "delete for me" — emitted to the user's room so this user's
-    // other tabs/devices hide the message too.
-    function onHidden(p: { groupId: string; id: string }) {
-      if (p.groupId !== group.id) return
-      setMessages((prev) => prev.filter((m) => m.id !== p.id))
-    }
     socket.on('message:new', onNew)
-    socket.on('message:edited', onEdited)
-    socket.on('message:deleted', onDeleted)
-    socket.on('message:hidden', onHidden)
     return () => {
       socket.off('message:new', onNew)
-      socket.off('message:edited', onEdited)
-      socket.off('message:deleted', onDeleted)
-      socket.off('message:hidden', onHidden)
     }
-  }, [group.id, currentUserId, markRead])
+  }, [group.id, markRead])
 
   // ── Older messages (paginated) ─────────────────────────────────────────
   async function loadOlder() {
@@ -223,8 +193,7 @@ export default function ChatView({
     try {
       const res = await api.groups.messages(group.id, nextCursor)
       anchorBeforePrepend()
-      setMessages((prev) => [...res.messages, ...prev])
-      setNextCursor(res.nextCursor)
+      cache.prependOlderMessages(group.id, res.messages, res.nextCursor)
     } finally {
       setLoadingOlder(false)
     }
@@ -284,7 +253,7 @@ export default function ChatView({
       pendingFile: attachedFile ?? undefined,
       replyTo: replyTo,
     }
-    setMessages((prev) => [...prev, optimistic])
+    cache.upsertMessage(group.id, optimistic)
     pinToBottomNext()
 
     try {
@@ -294,22 +263,15 @@ export default function ChatView({
         attachedFile,
         replyTo?.id ?? null,
       )
-      setMessages((prev) => {
-        // If the socket beat the POST and already added the real message,
-        // drop the optimistic. Otherwise swap it in place.
-        if (prev.some((m) => m.id === res.message.id)) {
-          return prev.filter((m) => m.id !== localId)
-        }
-        return prev.map((m) => (m.id === localId ? res.message : m))
-      })
+      // replaceMessage swaps the optimistic for the real one (or drops it if
+      // the socket already delivered the real message).
+      cache.replaceMessage(group.id, localId, res.message)
       // Revoke the optimistic blob URL — the bubble now uses the server URL.
       if (optimisticAttachment?.url.startsWith('blob:')) {
         URL.revokeObjectURL(optimisticAttachment.url)
       }
     } catch (err) {
-      setMessages((prev) =>
-        prev.map((m) => (m.id === localId ? { ...m, pending: false, failed: true } : m)),
-      )
+      cache.patchMessage(group.id, localId, { pending: false, failed: true })
       if (err instanceof ApiError) {
         if (err.code === 'too_many_requests') {
           setError('Slow down — too many messages.')
@@ -330,11 +292,7 @@ export default function ChatView({
       setText('')
       return
     }
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === messageId ? { ...m, body, editedAt: new Date().toISOString() } : m,
-      ),
-    )
+    cache.patchMessage(group.id, messageId, { body, editedAt: new Date().toISOString() })
     setEditContext(null)
     setText('')
     setError(null)
@@ -342,9 +300,7 @@ export default function ChatView({
       await api.groups.editMessage(group.id, messageId, body)
     } catch {
       // Best-effort revert.
-      setMessages((prev) =>
-        prev.map((m) => (m.id === messageId ? { ...m, body: originalBody } : m)),
-      )
+      cache.patchMessage(group.id, messageId, { body: originalBody })
       setError('Could not save edit.')
     }
   }
@@ -366,7 +322,7 @@ export default function ChatView({
   }
 
   function retry(localId: string, body: string, attachedFile: File | null) {
-    setMessages((prev) => prev.filter((m) => m.id !== localId))
+    cache.removeMessage(group.id, localId)
     void sendBody(body, attachedFile, null)
   }
 
@@ -394,57 +350,33 @@ export default function ChatView({
 
   async function deleteForEveryone(m: LocalMessage) {
     const original = { body: m.body, attachments: m.attachments }
-    const now = new Date().toISOString()
-    setMessages((prev) =>
-      prev.map((row) =>
-        row.id === m.id
-          ? {
-              ...row,
-              body: '',
-              attachments: [],
-              deletedAt: now,
-              deletedBy: currentUserId,
-            }
-          : row,
-      ),
-    )
+    cache.patchMessage(group.id, m.id, {
+      body: '',
+      attachments: [],
+      deletedAt: new Date().toISOString(),
+      deletedBy: currentUserId,
+    })
     try {
       await api.groups.deleteForEveryone(group.id, m.id)
     } catch {
-      setMessages((prev) =>
-        prev.map((row) =>
-          row.id === m.id
-            ? {
-                ...row,
-                body: original.body,
-                attachments: original.attachments,
-                deletedAt: null,
-                deletedBy: null,
-              }
-            : row,
-        ),
-      )
+      cache.patchMessage(group.id, m.id, {
+        body: original.body,
+        attachments: original.attachments,
+        deletedAt: null,
+        deletedBy: null,
+      })
       setError('Could not delete message.')
     }
   }
 
-  // Hide a single message for the current user only. Optimistically remove it
-  // and restore at its original position if the request fails.
+  // Hide a single message for the current user only. Optimistically remove it;
+  // re-insert (normalize re-sorts it back into place) if the request fails.
   async function deleteForMe(m: LocalMessage) {
-    let removedIndex = -1
-    setMessages((prev) => {
-      removedIndex = prev.findIndex((x) => x.id === m.id)
-      return prev.filter((x) => x.id !== m.id)
-    })
+    cache.removeMessage(group.id, m.id)
     try {
       await api.groups.deleteForMe(group.id, m.id)
     } catch {
-      setMessages((prev) => {
-        if (prev.some((x) => x.id === m.id)) return prev
-        const next = [...prev]
-        next.splice(removedIndex >= 0 ? Math.min(removedIndex, next.length) : next.length, 0, m)
-        return next
-      })
+      cache.upsertMessage(group.id, m)
       setError('Could not delete message.')
     }
   }
