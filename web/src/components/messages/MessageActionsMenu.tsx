@@ -6,6 +6,9 @@ export type MessageAction = {
   onClick: () => void
   disabled?: boolean
   tone?: 'default' | 'alert'
+  // Render a faint divider above this item — used to set the destructive
+  // (delete) actions apart from the rest.
+  separator?: boolean
 }
 
 type Props = {
@@ -74,27 +77,29 @@ export default function MessageActionsMenu({ anchorEl, actions, onClose }: Props
         zIndex: 60,
         visibility: pos.visible ? 'visible' : 'hidden',
       }}
-      className="min-w-[200px] rounded-card border border-white/[0.08] bg-surface overflow-hidden py-1 shadow-[0_12px_32px_rgba(0,0,0,0.55)]"
+      className="min-w-[136px] rounded-card border border-white/[0.08] bg-surface overflow-hidden py-1 shadow-[0_12px_32px_rgba(0,0,0,0.55)]"
     >
       {actions.map((a, i) => (
-        <button
-          key={i}
-          type="button"
-          role="menuitem"
-          disabled={a.disabled}
-          onClick={() => {
-            if (a.disabled) return
-            a.onClick()
-            onClose()
-          }}
-          className={`w-full text-left px-3 py-2 text-[12.5px] transition-colors disabled:opacity-30 disabled:cursor-default ${
-            a.tone === 'alert'
-              ? 'text-alert hover:bg-alert/10'
-              : 'text-text hover:bg-white/[0.04]'
-          }`}
-        >
-          {a.label}
-        </button>
+        <div key={i}>
+          {a.separator && <div className="my-1 h-px bg-white/[0.06]" />}
+          <button
+            type="button"
+            role="menuitem"
+            disabled={a.disabled}
+            onClick={() => {
+              if (a.disabled) return
+              a.onClick()
+              onClose()
+            }}
+            className={`w-full text-left px-2.5 py-1.5 text-[12.5px] whitespace-nowrap transition-colors disabled:opacity-30 disabled:cursor-default ${
+              a.tone === 'alert'
+                ? 'text-alert hover:bg-alert/10'
+                : 'text-text hover:bg-white/[0.04]'
+            }`}
+          >
+            {a.label}
+          </button>
+        </div>
       ))}
     </div>,
     document.body,

@@ -321,15 +321,30 @@ export function MessageCacheProvider({
     function onHidden(p: { groupId: string; id: string }) {
       removeMessage(p.groupId, p.id)
     }
+    // Keep the in-bubble "Pinned" indicator fresh on every client. A no-op when
+    // the message isn't in the loaded thread — the pinned bar handles that.
+    function onPinned(p: { groupId: string; message: Message }) {
+      patchMessage(p.groupId, p.message.id, {
+        pinnedAt: p.message.pinnedAt,
+        pinnedBy: p.message.pinnedBy,
+      })
+    }
+    function onUnpinned(p: { groupId: string; id: string }) {
+      patchMessage(p.groupId, p.id, { pinnedAt: null, pinnedBy: null })
+    }
     socket.on('message:new', onNew)
     socket.on('message:edited', onEdited)
     socket.on('message:deleted', onDeleted)
     socket.on('message:hidden', onHidden)
+    socket.on('message:pinned', onPinned)
+    socket.on('message:unpinned', onUnpinned)
     return () => {
       socket.off('message:new', onNew)
       socket.off('message:edited', onEdited)
       socket.off('message:deleted', onDeleted)
       socket.off('message:hidden', onHidden)
+      socket.off('message:pinned', onPinned)
+      socket.off('message:unpinned', onUnpinned)
     }
   }, [upsertMessage, patchMessage, removeMessage])
 

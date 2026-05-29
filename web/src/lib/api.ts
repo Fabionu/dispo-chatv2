@@ -123,6 +123,22 @@ export const api = {
         method: 'POST',
       }),
 
+    // Pinned messages are group-wide; any member can pin/unpin.
+    pins: (groupId: string) =>
+      request<{ messages: Message[] }>(`/groups/${groupId}/pins`),
+
+    pin: (groupId: string, messageId: string) =>
+      request<{ message: Message & { groupId: string } }>(
+        `/groups/${groupId}/messages/${messageId}/pin`,
+        { method: 'POST' },
+      ),
+
+    unpin: (groupId: string, messageId: string) =>
+      request<{ ok: true; id: string }>(
+        `/groups/${groupId}/messages/${messageId}/unpin`,
+        { method: 'POST' },
+      ),
+
     forwardMessage: (fromGroupId: string, messageId: string, toGroupId: string) =>
       request<{ message: Message & { groupId: string } }>(
         `/groups/${fromGroupId}/messages/${messageId}/forward`,

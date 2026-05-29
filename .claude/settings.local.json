@@ -66,7 +66,11 @@
       "Bash(rm -f /c/Users/Home/Desktop/dispo-chatv2/server/e2e-storage.cjs /c/Users/Home/Desktop/dispo-chatv2/tmp_px.png /c/Users/Home/Desktop/dispo-chatv2/tmp_got.png /tmp/disp.cookie /tmp/cleanup.env)",
       "Bash(curl -s -o /dev/null -w \"web5173:%{http_code}\\\\n\" --max-time 3 http://localhost:5173/)",
       "Bash(curl -s -o /dev/null -w \"api3001:%{http_code}\\\\n\" --max-time 3 http://localhost:3001/api/health)",
-      "Bash(rm -f /c/Users/Home/Desktop/dispo-chatv2/.claude/launch.json && echo \"removed launch.json\")"
+      "Bash(rm -f /c/Users/Home/Desktop/dispo-chatv2/.claude/launch.json && echo \"removed launch.json\")",
+      "PowerShell(npm.cmd run build)",
+      "Bash(grep -n \"sharp\" server/package.json package.json)",
+      "Bash(ls node_modules/sharp/package.json)",
+      "Bash(ls server/node_modules/sharp)"
     ]
   }
 }

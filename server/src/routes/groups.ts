@@ -11,7 +11,8 @@ import {
   isImage,
   uploadSingle,
 } from '../middleware/upload.js'
-import { saveBuffer, readBuffer, deleteFile } from '../storage.js'
+import { saveBuffer, savePreview, readBuffer, deleteFile } from '../storage.js'
+import { makePreview } from '../util/image.js'
 import { directPairKey, sortPair } from '../util/pair.js'
 import { asyncHandler, HttpError, withTransaction } from '../http.js'
 
@@ -19,6 +20,120 @@ export const groupsRouter = Router()
 
 // All routes require a valid session.
 groupsRouter.use(requireAuth)
+
+// ── Shared message projection ────────────────────────────────────────────
+// One column list + row type + mapper so every endpoint that returns a fully
+// rendered message (the thread page, the pins list, a freshly pinned message)
+// produces the exact same client shape. Selects from `messages m join users u
+// on u.id = m.author_id`; subqueries reference `m`, so no extra params.
+const MESSAGE_COLUMNS = `
+  m.id, m.author_id, u.display_name as author_name,
+  m.body, m.created_at, m.edited_at,
+  m.deleted_at, m.deleted_by, m.forwarded,
+  m.pinned_at, m.pinned_by,
+  (select coalesce(
+      jsonb_agg(jsonb_build_object(
+        'id',            a.id,
+        'original_name', a.original_name,
+        'mime_type',     a.mime_type,
+        'byte_size',     a.byte_size,
+        'preview_path',  a.preview_path,
+        'width',         a.width,
+        'height',        a.height,
+        'missing',       a.missing
+      ) order by a.created_at asc),
+      '[]'::jsonb)
+     from attachments a
+    where a.message_id = m.id) as attachments,
+  (select jsonb_build_object(
+      'id',              rm.id,
+      'author_name',     ru.display_name,
+      'body',            case when rm.deleted_at is not null then '' else rm.body end,
+      'has_attachments', exists (select 1 from attachments ra where ra.message_id = rm.id),
+      'deleted',         rm.deleted_at is not null
+    )
+     from messages rm
+     join users ru on ru.id = rm.author_id
+    where rm.id = m.reply_to_message_id) as reply_to`
+
+const MESSAGE_FROM = `from messages m join users u on u.id = m.author_id`
+
+type MessageRow = {
+  id: string
+  author_id: string
+  author_name: string
+  body: string
+  created_at: string
+  edited_at: string | null
+  deleted_at: string | null
+  deleted_by: string | null
+  forwarded: boolean
+  pinned_at: string | null
+  pinned_by: string | null
+  attachments:
+    | Array<{
+        id: string
+        original_name: string
+        mime_type: string
+        byte_size: number
+        preview_path: string | null
+        width: number | null
+        height: number | null
+        missing: boolean
+      }>
+    | null
+  reply_to: {
+    id: string
+    author_name: string
+    body: string
+    has_attachments: boolean
+    deleted: boolean
+  } | null
+}
+
+// Map a DB row to the API message shape. Soft-deleted messages have their body
+// and attachments cleared server-side so the original content never leaks.
+function mapMessageRow(m: MessageRow) {
+  const isDeleted = m.deleted_at !== null
+  return {
+    id: m.id,
+    authorId: m.author_id,
+    authorName: m.author_name,
+    body: isDeleted ? '' : m.body,
+    createdAt: m.created_at,
+    editedAt: m.edited_at,
+    deletedAt: m.deleted_at,
+    deletedBy: m.deleted_by,
+    forwarded: m.forwarded,
+    pinnedAt: m.pinned_at,
+    pinnedBy: m.pinned_by,
+    attachments: isDeleted
+      ? []
+      : (m.attachments ?? []).map((a) => ({
+          id: a.id,
+          originalName: a.original_name,
+          mimeType: a.mime_type,
+          byteSize: Number(a.byte_size),
+          url: `/api/attachments/${a.id}`,
+          // Small preview for chat bubbles; only when one was generated
+          // (GIFs / pre-migration images fall back to the original).
+          ...(a.preview_path
+            ? { previewUrl: `/api/attachments/${a.id}?variant=preview` }
+            : {}),
+          ...(a.width && a.height ? { width: a.width, height: a.height } : {}),
+          ...(a.missing ? { missing: true } : {}),
+        })),
+    replyTo: m.reply_to
+      ? {
+          id: m.reply_to.id,
+          authorName: m.reply_to.author_name,
+          body: m.reply_to.body,
+          hasAttachments: m.reply_to.has_attachments,
+          deleted: m.reply_to.deleted,
+        }
+      : null,
+  }
+}
 
 // ── GET /api/groups ──────────────────────────────────────────────────────
 // Lists every group the current user belongs to, ordered by recent activity.
@@ -271,60 +386,9 @@ groupsRouter.get(
     }
     params.push(limit + 1) // +1 to detect a next page
 
-    const { rows } = await pool.query<{
-      id: string
-      author_id: string
-      author_name: string
-      body: string
-      created_at: string
-      edited_at: string | null
-      deleted_at: string | null
-      deleted_by: string | null
-      forwarded: boolean
-      attachments:
-        | Array<{
-            id: string
-            original_name: string
-            mime_type: string
-            byte_size: number
-          }>
-        | null
-      reply_to: {
-        id: string
-        author_name: string
-        body: string
-        has_attachments: boolean
-        deleted: boolean
-      } | null
-    }>(
-      `select m.id, m.author_id, u.display_name as author_name,
-              m.body, m.created_at, m.edited_at,
-              m.deleted_at, m.deleted_by, m.forwarded,
-              -- aggregate attachments per message in a subquery so the message
-              -- row stays unique even when a message has multiple files.
-              (select coalesce(
-                  jsonb_agg(jsonb_build_object(
-                    'id',            a.id,
-                    'original_name', a.original_name,
-                    'mime_type',     a.mime_type,
-                    'byte_size',     a.byte_size
-                  ) order by a.created_at asc),
-                  '[]'::jsonb)
-                 from attachments a
-                where a.message_id = m.id) as attachments,
-              -- reply target snippet, joined from messages onto itself.
-              (select jsonb_build_object(
-                  'id',              rm.id,
-                  'author_name',     ru.display_name,
-                  'body',            case when rm.deleted_at is not null then '' else rm.body end,
-                  'has_attachments', exists (select 1 from attachments ra where ra.message_id = rm.id),
-                  'deleted',         rm.deleted_at is not null
-                )
-                 from messages rm
-                 join users ru on ru.id = rm.author_id
-                where rm.id = m.reply_to_message_id) as reply_to
-         from messages m
-         join users u on u.id = m.author_id
+    const { rows } = await pool.query<MessageRow>(
+      `select ${MESSAGE_COLUMNS}
+         ${MESSAGE_FROM}
         where ${where}
         order by m.created_at desc
         limit $${params.length}`,
@@ -336,44 +400,43 @@ groupsRouter.get(
     const nextCursor = hasMore ? page[page.length - 1].created_at : null
 
     res.json({
-      messages: page
-        .map((m) => {
-          const isDeleted = m.deleted_at !== null
-          return {
-            id: m.id,
-            authorId: m.author_id,
-            authorName: m.author_name,
-            // Server clears the content of soft-deleted messages — even
-            // admins shouldn't see the original text via the API.
-            body: isDeleted ? '' : m.body,
-            createdAt: m.created_at,
-            editedAt: m.edited_at,
-            deletedAt: m.deleted_at,
-            deletedBy: m.deleted_by,
-            forwarded: m.forwarded,
-            attachments: isDeleted
-              ? []
-              : (m.attachments ?? []).map((a) => ({
-                  id: a.id,
-                  originalName: a.original_name,
-                  mimeType: a.mime_type,
-                  byteSize: Number(a.byte_size),
-                  url: `/api/attachments/${a.id}`,
-                })),
-            replyTo: m.reply_to
-              ? {
-                  id: m.reply_to.id,
-                  authorName: m.reply_to.author_name,
-                  body: m.reply_to.body,
-                  hasAttachments: m.reply_to.has_attachments,
-                  deleted: m.reply_to.deleted,
-                }
-              : null,
-          }
-        })
-        .reverse(), // client renders oldest-first
+      messages: page.map(mapMessageRow).reverse(), // client renders oldest-first
       nextCursor, // pass back as ?before= to load older
     })
+  }),
+)
+
+// ── GET /api/groups/:id/pins ─────────────────────────────────────────────
+// The group's pinned messages, newest pin first. Drives the "Pinned" bar, so
+// it returns pins regardless of the thread page currently loaded. Excludes
+// deleted messages and ones the caller has hidden ("delete for me").
+groupsRouter.get(
+  '/:id/pins',
+  asyncHandler(async (req, res) => {
+    const { userId } = req.session!
+    const groupId = req.params.id
+
+    const { rows: membership } = await pool.query(
+      'select 1 from group_members where group_id = $1 and user_id = $2 limit 1',
+      [groupId, userId],
+    )
+    if (membership.length === 0) return res.status(403).json({ error: 'not_a_member' })
+
+    const { rows } = await pool.query<MessageRow>(
+      `select ${MESSAGE_COLUMNS}
+         ${MESSAGE_FROM}
+        where m.group_id = $1
+          and m.pinned_at is not null
+          and m.deleted_at is null
+          and not exists (
+            select 1 from message_deletions md
+             where md.message_id = m.id and md.user_id = $2
+          )
+        order by m.pinned_at desc`,
+      [groupId, userId],
+    )
+
+    res.json({ messages: rows.map(mapMessageRow) })
   }),
 )
 
@@ -421,11 +484,32 @@ groupsRouter.post(
     // disk before the DB INSERT, and roll the file back on DB failure. This
     // keeps the storage layer ignorant of UUIDs handed out by Postgres.
     let storagePath: string | null = null
+    let previewPath: string | null = null
+    let imgWidth: number | null = null
+    let imgHeight: number | null = null
     let attachmentId: string | null = null
     if (file) {
       attachmentId = randomUUID()
       const saved = await saveBuffer(attachmentId, file.originalname, file.buffer, file.mimetype)
       storagePath = saved.storagePath
+      // For images, generate a downscaled WebP preview for chat bubbles. Best
+      // -effort: if it can't be made (GIF / undecodable) the bubble falls back
+      // to the original. Stored as a sibling object under the same id.
+      if (isImage(file.mimetype)) {
+        const preview = await makePreview(file.buffer, file.mimetype)
+        if (preview) {
+          const savedPreview = await savePreview(attachmentId, preview.buffer)
+          previewPath = savedPreview.storagePath
+          imgWidth = preview.width
+          imgHeight = preview.height
+        }
+      }
+    }
+
+    // Roll back both objects on any early-exit / failure below.
+    const cleanupFiles = async () => {
+      if (storagePath) await deleteFile(storagePath)
+      if (previewPath) await deleteFile(previewPath)
     }
 
     // If the caller specified a reply target, verify it exists and that the
@@ -443,7 +527,7 @@ groupsRouter.post(
         [replyToMessageId, userId],
       )
       if (replyCheck.length === 0) {
-        if (storagePath) await deleteFile(storagePath)
+        await cleanupFiles()
         return res.status(400).json({ error: 'invalid_reply' })
       }
     }
@@ -476,8 +560,8 @@ groupsRouter.post(
            where group_id = $1 and user_id = $2 and exists (select 1 from ins)
          ),
          att as (
-           insert into attachments (id, message_id, original_name, mime_type, byte_size, storage_path)
-           select $4::uuid, ins.id, $5, $6, $7::bigint, $8
+           insert into attachments (id, message_id, original_name, mime_type, byte_size, storage_path, preview_path, width, height)
+           select $4::uuid, ins.id, $5, $6, $7::bigint, $8, $10, $11::int, $12::int
            from ins
            where $4::uuid is not null
          )
@@ -501,12 +585,15 @@ groupsRouter.post(
           file?.size ?? null,
           storagePath,
           replyToMessageId,
+          previewPath,
+          imgWidth,
+          imgHeight,
         ],
       )
 
       if (rows.length === 0) {
-        // Caller isn't a member — clean up the orphaned file.
-        if (storagePath) await deleteFile(storagePath)
+        // Caller isn't a member — clean up the orphaned file(s).
+        await cleanupFiles()
         throw new HttpError(403, 'not_a_member')
       }
 
@@ -519,6 +606,10 @@ groupsRouter.post(
               mimeType: file.mimetype,
               byteSize: file.size,
               url: `/api/attachments/${attachmentId}`,
+              ...(previewPath
+                ? { previewUrl: `/api/attachments/${attachmentId}?variant=preview` }
+                : {}),
+              ...(imgWidth && imgHeight ? { width: imgWidth, height: imgHeight } : {}),
             }
           : null
 
@@ -549,7 +640,7 @@ groupsRouter.post(
       getIO().to(roomForGroup(groupId)).emit('message:new', payload)
       res.status(201).json({ message: payload })
     } catch (err) {
-      if (storagePath) await deleteFile(storagePath)
+      await cleanupFiles()
       throw err
     }
   }),
@@ -653,6 +744,72 @@ groupsRouter.post(
   }),
 )
 
+// ── POST /api/groups/:id/messages/:messageId/pin ─────────────────────────
+// Pin a message for the whole group. Any member may pin; pinned_by records who
+// did it last. Idempotent — re-pinning just refreshes the stamp. Broadcasts the
+// fully rendered message so every client can drop it into the "Pinned" bar.
+groupsRouter.post(
+  '/:id/messages/:messageId/pin',
+  asyncHandler(async (req, res) => {
+    const { userId } = req.session!
+    const groupId = req.params.id
+    const messageId = req.params.messageId
+
+    // Gate on membership + a real, non-deleted message in this group, then
+    // stamp the pin. The membership check rides on the same UPDATE.
+    const { rows } = await pool.query<{ id: string }>(
+      `update messages m
+          set pinned_at = now(), pinned_by = $1
+        where m.id = $2
+          and m.group_id = $3
+          and m.deleted_at is null
+          and exists (
+            select 1 from group_members gm
+             where gm.group_id = m.group_id and gm.user_id = $1
+          )
+       returning m.id`,
+      [userId, messageId, groupId],
+    )
+    if (rows.length === 0) return res.status(403).json({ error: 'cannot_pin' })
+
+    const { rows: full } = await pool.query<MessageRow>(
+      `select ${MESSAGE_COLUMNS} ${MESSAGE_FROM} where m.id = $1`,
+      [messageId],
+    )
+    const message = { ...mapMessageRow(full[0]), groupId }
+    getIO().to(roomForGroup(groupId)).emit('message:pinned', { groupId, message })
+    res.json({ message })
+  }),
+)
+
+// ── POST /api/groups/:id/messages/:messageId/unpin ───────────────────────
+// Remove a group-wide pin. Any member may unpin. Broadcasts just the id.
+groupsRouter.post(
+  '/:id/messages/:messageId/unpin',
+  asyncHandler(async (req, res) => {
+    const { userId } = req.session!
+    const groupId = req.params.id
+    const messageId = req.params.messageId
+
+    const { rows } = await pool.query<{ id: string }>(
+      `update messages m
+          set pinned_at = null, pinned_by = null
+        where m.id = $2
+          and m.group_id = $3
+          and exists (
+            select 1 from group_members gm
+             where gm.group_id = m.group_id and gm.user_id = $1
+          )
+       returning m.id`,
+      [userId, messageId, groupId],
+    )
+    if (rows.length === 0) return res.status(403).json({ error: 'cannot_unpin' })
+
+    getIO().to(roomForGroup(groupId)).emit('message:unpinned', { groupId, id: messageId })
+    res.json({ ok: true, id: messageId })
+  }),
+)
+
 // ── POST /api/groups/:id/messages/:messageId/forward ─────────────────────
 // Forward a message into another group the caller also belongs to. A forward
 // is a fresh, standalone message: it copies the source body and duplicates
@@ -714,18 +871,38 @@ groupsRouter.post(
       mimeType: string
       byteSize: number
       storagePath: string
+      previewPath: string | null
+      width: number | null
+      height: number | null
     }> = []
     try {
       for (const a of srcAtts) {
         const buf = await readBuffer(a.storage_path)
         const newId = randomUUID()
         const saved = await saveBuffer(newId, a.original_name, buf, a.mime_type)
+        // Regenerate the preview for the copy so the forward owns independent
+        // objects (and back-fills a preview even if the source predated them).
+        let previewPath: string | null = null
+        let width: number | null = null
+        let height: number | null = null
+        if (isImage(a.mime_type)) {
+          const preview = await makePreview(buf, a.mime_type)
+          if (preview) {
+            const savedPreview = await savePreview(newId, preview.buffer)
+            previewPath = savedPreview.storagePath
+            width = preview.width
+            height = preview.height
+          }
+        }
         copied.push({
           id: newId,
           originalName: a.original_name,
           mimeType: a.mime_type,
           byteSize: Number(a.byte_size),
           storagePath: saved.storagePath,
+          previewPath,
+          width,
+          height,
         })
       }
 
@@ -755,9 +932,19 @@ groupsRouter.post(
         const msg = ins[0]
         for (const a of copied) {
           await client.query(
-            `insert into attachments (id, message_id, original_name, mime_type, byte_size, storage_path)
-             values ($1, $2, $3, $4, $5::bigint, $6)`,
-            [a.id, msg.id, a.originalName, a.mimeType, a.byteSize, a.storagePath],
+            `insert into attachments (id, message_id, original_name, mime_type, byte_size, storage_path, preview_path, width, height)
+             values ($1, $2, $3, $4, $5::bigint, $6, $7, $8::int, $9::int)`,
+            [
+              a.id,
+              msg.id,
+              a.originalName,
+              a.mimeType,
+              a.byteSize,
+              a.storagePath,
+              a.previewPath,
+              a.width,
+              a.height,
+            ],
           )
         }
         return msg
@@ -780,13 +967,20 @@ groupsRouter.post(
           mimeType: a.mimeType,
           byteSize: a.byteSize,
           url: `/api/attachments/${a.id}`,
+          ...(a.previewPath
+            ? { previewUrl: `/api/attachments/${a.id}?variant=preview` }
+            : {}),
+          ...(a.width && a.height ? { width: a.width, height: a.height } : {}),
         })),
         replyTo: null,
       }
       getIO().to(roomForGroup(toGroupId)).emit('message:new', payload)
       res.status(201).json({ message: payload })
     } catch (err) {
-      for (const a of copied) await deleteFile(a.storagePath)
+      for (const a of copied) {
+        await deleteFile(a.storagePath)
+        if (a.previewPath) await deleteFile(a.previewPath)
+      }
       throw err
     }
   }),

@@ -8,16 +8,23 @@ import ImagePreviewModal from './attachments/ImagePreviewModal'
 import InlinePdfPreview from './attachments/InlinePdfPreview'
 import ChatComposer, { type ChatComposerHandle, type EditContext } from './composer/ChatComposer'
 import MessageRow from './messages/MessageRow'
+import PinnedBar from './messages/PinnedBar'
 import ForwardModal from './messages/ForwardModal'
 import ConfirmDialog from './ConfirmDialog'
 import { initials, minuteKey } from './messages/messageUtils'
 import type { LocalMessage } from './messages/types'
 import { useChatScroll } from '../hooks/useChatScroll'
 import { useMessageCache } from '../hooks/useMessageCache'
+import { preloadImage } from '../lib/attachmentCache'
 
 // Stable empty list so a group with no cached thread doesn't hand a fresh
 // array to useChatScroll on every render.
 const NO_MESSAGES: LocalMessage[] = []
+
+// How many of the newest messages get their images treated as "recent": loaded
+// eagerly in-bubble and warmed in the browser cache when the thread opens.
+// Older messages stay lazy so a huge backlog doesn't fetch everything at once.
+const RECENT_IMAGE_WINDOW = 15
 
 type Props = {
   group: Group
@@ -92,6 +99,10 @@ export default function ChatView({
   const [notice, setNotice] = useState<string | null>(null)
   // Row to briefly pulse after a jump-to-original; cleared on a timer.
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null)
+  // Group-wide pinned messages, newest pin first. Fetched on open and kept
+  // fresh via socket events — independent of the loaded thread page so a pin
+  // older than the current page still shows in the bar.
+  const [pinned, setPinned] = useState<LocalMessage[]>([])
 
   const composerHandleRef = useRef<ChatComposerHandle>(null)
   const highlightTimer = useRef<number | undefined>(undefined)
@@ -174,6 +185,68 @@ export default function ChatView({
     // Cache methods are stable; re-run only when the open group changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [group.id, markRead])
+
+  // ── Preload recent image attachments ───────────────────────────────────
+  // When the thread changes (open, revalidate, new arrival), warm the browser
+  // cache for images in the newest messages so they're painted by the time
+  // their row is on screen. Bounded to the recent window so opening a huge
+  // backlog doesn't fetch every picture. Documents/PDFs are skipped — their
+  // cards render from metadata and the file only loads on click. Just-sent
+  // images (localPreviewUrl) are already decoded, so they're skipped too.
+  // preloadImage dedupes against in-flight + already-loaded ids.
+  useEffect(() => {
+    const recent = messages.slice(-RECENT_IMAGE_WINDOW)
+    for (const m of recent) {
+      if (m.deletedAt) continue
+      for (const a of m.attachments ?? []) {
+        // Warm the same lightweight URL the bubble renders (preview when
+        // available, else the original); skip just-sent images (already
+        // decoded) and known-missing objects (no point re-requesting a 404).
+        const src = a.previewUrl ?? a.url
+        if (a.mimeType.startsWith('image/') && src && !a.localPreviewUrl && !a.missing) {
+          preloadImage(a.id, src)
+        }
+      }
+    }
+  }, [messages])
+
+  // ── Pinned messages (fetch + live sync) ────────────────────────────────
+  // Load the group's pins on open, then keep the bar in sync with live pin/
+  // unpin/delete events. Held separately from the thread cache so a pin older
+  // than the loaded page still shows.
+  useEffect(() => {
+    let cancelled = false
+    api.groups
+      .pins(group.id)
+      .then((res) => {
+        if (!cancelled) setPinned(res.messages as LocalMessage[])
+      })
+      .catch(() => {})
+
+    const socket = getSocket()
+    function onPinned(p: { groupId: string; message: LocalMessage }) {
+      if (p.groupId !== group.id) return
+      // Replace if already present, else prepend (newest pin first).
+      setPinned((prev) => [p.message, ...prev.filter((m) => m.id !== p.message.id)])
+    }
+    function onUnpinned(p: { groupId: string; id: string }) {
+      if (p.groupId !== group.id) return
+      setPinned((prev) => prev.filter((m) => m.id !== p.id))
+    }
+    function onDeleted(p: { groupId: string; id: string }) {
+      if (p.groupId !== group.id) return
+      setPinned((prev) => prev.filter((m) => m.id !== p.id))
+    }
+    socket.on('message:pinned', onPinned)
+    socket.on('message:unpinned', onUnpinned)
+    socket.on('message:deleted', onDeleted)
+    return () => {
+      cancelled = true
+      socket.off('message:pinned', onPinned)
+      socket.off('message:unpinned', onUnpinned)
+      socket.off('message:deleted', onDeleted)
+    }
+  }, [group.id])
 
   // ── Read receipts on live arrivals ─────────────────────────────────────
   // The cache itself is kept fresh by a global socket listener; here we only
@@ -443,6 +516,60 @@ export default function ChatView({
     [scrollRef],
   )
 
+  // ── Copy / pin / unpin ─────────────────────────────────────────────────
+  const copyMessage = useCallback(
+    (m: LocalMessage) => {
+      if (!m.body) return
+      navigator.clipboard
+        .writeText(m.body)
+        .then(() => flashNotice('Copied to clipboard.'))
+        .catch(() => setError('Could not copy message.'))
+    },
+    // flashNotice/setError are stable enough for this handler's lifetime.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  )
+
+  // Optimistically reflect the pin (bubble indicator via cache + bar) and
+  // reconcile with the server's authoritative message; revert on failure.
+  async function pinMessage(m: LocalMessage) {
+    const stampedAt = new Date().toISOString()
+    cache.patchMessage(group.id, m.id, { pinnedAt: stampedAt, pinnedBy: currentUserId })
+    setPinned((prev) => [
+      { ...m, pinnedAt: stampedAt, pinnedBy: currentUserId },
+      ...prev.filter((p) => p.id !== m.id),
+    ])
+    try {
+      const { message } = await api.groups.pin(group.id, m.id)
+      cache.patchMessage(group.id, m.id, {
+        pinnedAt: message.pinnedAt,
+        pinnedBy: message.pinnedBy,
+      })
+      setPinned((prev) => [
+        message as LocalMessage,
+        ...prev.filter((p) => p.id !== m.id),
+      ])
+    } catch {
+      cache.patchMessage(group.id, m.id, { pinnedAt: null, pinnedBy: null })
+      setPinned((prev) => prev.filter((p) => p.id !== m.id))
+      setError('Could not pin message.')
+    }
+  }
+
+  async function unpinMessage(m: LocalMessage) {
+    cache.patchMessage(group.id, m.id, { pinnedAt: null, pinnedBy: null })
+    setPinned((prev) => prev.filter((p) => p.id !== m.id))
+    try {
+      await api.groups.unpin(group.id, m.id)
+    } catch {
+      cache.patchMessage(group.id, m.id, { pinnedAt: m.pinnedAt, pinnedBy: m.pinnedBy })
+      setPinned((prev) =>
+        prev.some((p) => p.id === m.id) ? prev : [m, ...prev],
+      )
+      setError('Could not unpin message.')
+    }
+  }
+
   // ── Header subtitle ────────────────────────────────────────────────────
   const subtitle =
     group.type === 'vehicle'
@@ -478,6 +605,7 @@ export default function ChatView({
         />
       ) : (
         <>
+          <PinnedBar messages={pinned} onJump={jumpToMessage} onUnpin={unpinMessage} />
           {/* Messages — wrapped in a relative container so the floating
               scroll-to-latest button can overlay the scroll area without
               scrolling along with the content. */}
@@ -489,7 +617,16 @@ export default function ChatView({
             >
               <div className="mx-auto w-full xl:max-w-[1280px] 2xl:max-w-[1440px] min-[1700px]:max-w-[1560px]">
                 {loading ? (
-                  <div className="text-[12px] text-faint">Loading messages…</div>
+                  <div
+                    className="h-full flex flex-col items-center justify-center gap-2"
+                    role="status"
+                    aria-label="Loading messages"
+                  >
+                    {/* Two-tone ring: faint base, warm active accent on the
+                        moving segment. Compact and theme-matched. */}
+                    <div className="h-5 w-5 rounded-full border-2 border-white/[0.12] border-t-active animate-spin" />
+                    <span className="text-[11px] text-faint">Loading</span>
+                  </div>
                 ) : messages.length === 0 ? (
                   <div className="h-full flex items-center justify-center">
                     <p className="text-[12.5px] text-faint">No messages yet. Say something.</p>
@@ -530,8 +667,12 @@ export default function ChatView({
                           highlighted={highlightedMessageId === m.id}
                           onRetry={retry}
                           showTimestamp={lastInMinuteGroup}
+                          imagePriority={i >= messages.length - RECENT_IMAGE_WINDOW}
                           onActivateAttachment={activateAttachment}
                           onImageLoad={handleImageLoaded}
+                          onCopy={copyMessage}
+                          onPin={pinMessage}
+                          onUnpin={unpinMessage}
                           onReply={startReply}
                           onEdit={startEdit}
                           onForward={setForwardTarget}

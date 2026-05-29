@@ -54,6 +54,33 @@ export async function saveBuffer(
   return { storagePath: key, byteSize: buffer.byteLength }
 }
 
+// Store a generated WebP preview under a key derived from the attachment id.
+// Kept separate from the original object so either can be served/deleted
+// independently. `upsert: true` keeps re-uploads idempotent.
+export async function savePreview(id: string, buffer: Buffer): Promise<StoredFile> {
+  const key = `${id}_preview.webp`
+  const { error } = await supabase.storage.from(BUCKET).upload(key, buffer, {
+    contentType: 'image/webp',
+    upsert: true,
+  })
+  if (error) throw error
+  return { storagePath: key, byteSize: buffer.byteLength }
+}
+
+// Mint a short-lived signed URL for a private object. The serve route streams
+// from this instead of buffering the whole object into Node memory. Throws
+// FileNotFound if the object can't be signed (i.e. it's gone).
+export async function createSignedUrl(
+  storagePath: string,
+  expiresIn = 600,
+): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(storagePath, expiresIn)
+  if (error || !data?.signedUrl) throw new FileNotFound(storagePath)
+  return data.signedUrl
+}
+
 // Read an object fully into memory. Throws FileNotFound if it's gone.
 export async function getObject(storagePath: string): Promise<Buffer> {
   const { data, error } = await supabase.storage.from(BUCKET).download(storagePath)

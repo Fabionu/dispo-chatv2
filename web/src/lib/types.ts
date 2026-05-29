@@ -40,8 +40,24 @@ export type Attachment = {
   originalName: string
   mimeType: string
   byteSize: number
-  /** Authenticated URL (relative to origin) — fetch with credentials. */
+  /** Authenticated URL (relative to origin) — fetch with credentials. The
+   *  full original; used by the lightbox modal and downloads. */
   url: string
+  /**
+   * Authenticated URL of the small WebP preview, for chat-bubble rendering.
+   * Present only for images that have a generated preview; absent for GIFs,
+   * documents, and images uploaded before previews existed — callers fall
+   * back to `url`.
+   */
+  previewUrl?: string
+  /** Preview's intrinsic dimensions (shares the original's aspect ratio), used
+   *  to reserve the bubble box and avoid layout shift. */
+  width?: number
+  height?: number
+  /** The backing storage object is known to be gone (detected on a prior serve
+   *  attempt). The bubble renders the "unavailable" card immediately instead of
+   *  attempting to load. */
+  missing?: boolean
   /**
    * Transient local object URL (blob:) for an image the current user just
    * sent. Set client-side only — the server never returns it. Rendered in
@@ -75,6 +91,9 @@ export type Message = {
   forwarded?: boolean
   attachments?: Attachment[]
   replyTo?: ReplyToPreview | null
+  /** Set when the message is pinned group-wide; null/absent otherwise. */
+  pinnedAt?: string | null
+  pinnedBy?: string | null
 }
 
 // Payload of the `message:new` socket event — same as Message plus groupId.

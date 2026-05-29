@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Pin } from 'lucide-react'
 import type { Attachment, GroupType } from '../../lib/types'
 import AttachmentBlock from '../attachments/AttachmentBlock'
 import MessageActionsMenu, { type MessageAction } from './MessageActionsMenu'
@@ -15,8 +15,14 @@ type Props = {
   highlighted: boolean
   onRetry: (localId: string, body: string, file: File | null) => void
   showTimestamp: boolean
+  // This row is among the newest in the thread — load its image attachments
+  // eagerly so recent pictures appear together with the conversation.
+  imagePriority: boolean
   onActivateAttachment: (attachment: Attachment) => void
   onImageLoad: () => void
+  onCopy: (m: LocalMessage) => void
+  onPin: (m: LocalMessage) => void
+  onUnpin: (m: LocalMessage) => void
   onReply: (m: LocalMessage) => void
   onEdit: (m: LocalMessage) => void
   onForward: (m: LocalMessage) => void
@@ -35,8 +41,12 @@ export default function MessageRow({
   highlighted,
   onRetry,
   showTimestamp,
+  imagePriority,
   onActivateAttachment,
   onImageLoad,
+  onCopy,
+  onPin,
+  onUnpin,
   onReply,
   onEdit,
   onForward,
@@ -62,6 +72,9 @@ export default function MessageRow({
   const deleted = Boolean(message.deletedAt)
   const edited = Boolean(message.editedAt) && !deleted
   const forwarded = message.forwarded === true && !deleted
+  const pinned = Boolean(message.pinnedAt) && !deleted
+  // Copy lifts the text body; disabled for attachment-only messages.
+  const canCopy = !deleted && Boolean(message.body)
   const hasImageAttachment =
     !deleted && Boolean(message.attachments?.some((a) => a.mimeType.startsWith('image/')))
   // Optimistic + failed bubbles aren't real messages yet, so they shouldn't
@@ -107,6 +120,11 @@ export default function MessageRow({
 
   const actions: MessageAction[] = [
     { label: 'Reply', onClick: () => onReply(message) },
+    {
+      label: pinned ? 'Unpin message' : 'Pin message',
+      onClick: () => (pinned ? onUnpin(message) : onPin(message)),
+    },
+    { label: 'Copy', onClick: () => onCopy(message), disabled: !canCopy },
     { label: 'Forward', onClick: () => onForward(message) },
     ...(canMessagePrivately
       ? [
@@ -115,7 +133,12 @@ export default function MessageRow({
         ]
       : []),
     ...(mine ? [{ label: 'Edit', onClick: () => onEdit(message), disabled: !canEdit }] : []),
-    { label: 'Delete for me', onClick: () => onDeleteForMe(message) },
+    {
+      label: 'Delete for me',
+      onClick: () => onDeleteForMe(message),
+      tone: 'alert' as const,
+      separator: true,
+    },
     ...(mine
       ? [
           {
@@ -158,6 +181,12 @@ export default function MessageRow({
               is capped here so the trigger hugs the bubble's edge. */}
           <div className={`group relative ${rowMaxW}`}>
             <div className={`${bubbleBase} ${bubbleSkin} ${highlightSkin}`}>
+              {pinned && (
+                <span className="flex items-center gap-1 text-[10.5px] text-active mb-1 leading-none">
+                  <Pin size={10} strokeWidth={2} className="fill-current" />
+                  Pinned
+                </span>
+              )}
               {forwarded && (
                 <span className="text-[10.5px] text-muted italic mb-1 leading-none">
                   Forwarded
@@ -175,6 +204,7 @@ export default function MessageRow({
                       key={i}
                       attachment={a}
                       uploading={pending}
+                      priority={imagePriority}
                       onActivate={onActivateAttachment}
                       onImageLoad={onImageLoad}
                     />
