@@ -1,6 +1,7 @@
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import SignIn from './pages/SignIn'
 import Workspace from './pages/Workspace'
+import Spinner from './components/Spinner'
 import { MessageCacheProvider } from './hooks/useMessageCache'
 
 function Gate() {
@@ -8,8 +9,8 @@ function Gate() {
 
   if (auth.status === 'loading') {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-bg text-muted text-[12px]">
-        <div className="eyebrow">Loading</div>
+      <div className="min-h-screen w-full flex items-center justify-center bg-bg">
+        <Spinner size={26} label="Loading" />
       </div>
     )
   }

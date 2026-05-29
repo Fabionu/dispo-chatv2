@@ -9,8 +9,10 @@ import InlinePdfPreview from './attachments/InlinePdfPreview'
 import ChatComposer, { type ChatComposerHandle, type EditContext } from './composer/ChatComposer'
 import MessageRow from './messages/MessageRow'
 import PinnedBar from './messages/PinnedBar'
+import TypingIndicator, { type TypingUser } from './messages/TypingIndicator'
 import ForwardModal from './messages/ForwardModal'
 import ConfirmDialog from './ConfirmDialog'
+import Spinner from './Spinner'
 import { initials, minuteKey } from './messages/messageUtils'
 import type { LocalMessage } from './messages/types'
 import { useChatScroll } from '../hooks/useChatScroll'
@@ -25,6 +27,13 @@ const NO_MESSAGES: LocalMessage[] = []
 // eagerly in-bubble and warmed in the browser cache when the thread opens.
 // Older messages stay lazy so a huge backlog doesn't fetch everything at once.
 const RECENT_IMAGE_WINDOW = 15
+
+// Typing indicator cadence. We re-announce "still typing" at most once per
+// THROTTLE while keys are flowing, send a stop after STOP_IDLE of silence, and
+// each receiver auto-expires a typer after TTL as a backstop if a stop is lost.
+const TYPING_THROTTLE_MS = 2500
+const TYPING_STOP_IDLE_MS = 3000
+const TYPING_TTL_MS = 6000
 
 type Props = {
   group: Group
@@ -103,10 +112,18 @@ export default function ChatView({
   // fresh via socket events — independent of the loaded thread page so a pin
   // older than the current page still shows in the bar.
   const [pinned, setPinned] = useState<LocalMessage[]>([])
+  // Who else is currently typing in this conversation (excludes self).
+  const [typingUsers, setTypingUsers] = useState<TypingUser[]>([])
 
   const composerHandleRef = useRef<ChatComposerHandle>(null)
   const highlightTimer = useRef<number | undefined>(undefined)
   const noticeTimer = useRef<number | undefined>(undefined)
+  // Typing-emission bookkeeping (outbound).
+  const typingActiveRef = useRef(false)
+  const typingSentAtRef = useRef(0)
+  const typingStopTimer = useRef<number | undefined>(undefined)
+  // Per-typer auto-expiry timers (inbound).
+  const typingExpiry = useRef<Record<string, number>>({})
 
   // ── Scroll / autosize ──────────────────────────────────────────────────
   const {
@@ -247,6 +264,84 @@ export default function ChatView({
       socket.off('message:deleted', onDeleted)
     }
   }, [group.id])
+
+  // ── Typing indicator: emit (outbound) ──────────────────────────────────
+  // Driven by the composer text we own. Announce "typing" at most once per
+  // throttle window while keys flow; schedule a "stop" after a short idle.
+  useEffect(() => {
+    const socket = getSocket()
+    const sendStop = () => {
+      window.clearTimeout(typingStopTimer.current)
+      if (typingActiveRef.current) {
+        typingActiveRef.current = false
+        socket.emit('typing:stop', { groupId: group.id })
+      }
+    }
+    if (text.trim().length === 0) {
+      sendStop()
+      return
+    }
+    const now = Date.now()
+    if (!typingActiveRef.current || now - typingSentAtRef.current > TYPING_THROTTLE_MS) {
+      typingActiveRef.current = true
+      typingSentAtRef.current = now
+      socket.emit('typing:start', { groupId: group.id })
+    }
+    window.clearTimeout(typingStopTimer.current)
+    typingStopTimer.current = window.setTimeout(sendStop, TYPING_STOP_IDLE_MS)
+  }, [text, group.id])
+
+  // Make sure we tell the room we stopped when leaving the conversation.
+  useEffect(
+    () => () => {
+      window.clearTimeout(typingStopTimer.current)
+      if (typingActiveRef.current) {
+        typingActiveRef.current = false
+        getSocket().emit('typing:stop', { groupId: group.id })
+      }
+    },
+    [group.id],
+  )
+
+  // ── Typing indicator: receive (inbound) ────────────────────────────────
+  useEffect(() => {
+    const socket = getSocket()
+    const expiry = typingExpiry.current
+    const remove = (id: string) => {
+      window.clearTimeout(expiry[id])
+      delete expiry[id]
+      setTypingUsers((prev) => prev.filter((u) => u.id !== id))
+    }
+    function onTyping(p: {
+      groupId: string
+      userId: string
+      name?: string
+      typing: boolean
+    }) {
+      if (p.groupId !== group.id || p.userId === currentUserId) return
+      if (!p.typing) return remove(p.userId)
+      // Refresh the auto-expiry backstop in case a stop event is dropped.
+      window.clearTimeout(expiry[p.userId])
+      expiry[p.userId] = window.setTimeout(() => remove(p.userId), TYPING_TTL_MS)
+      setTypingUsers((prev) => {
+        const name = p.name || 'Someone'
+        const existing = prev.find((u) => u.id === p.userId)
+        if (existing) {
+          return existing.name === name
+            ? prev
+            : prev.map((u) => (u.id === p.userId ? { ...u, name } : u))
+        }
+        return [...prev, { id: p.userId, name }]
+      })
+    }
+    socket.on('typing', onTyping)
+    return () => {
+      socket.off('typing', onTyping)
+      for (const id of Object.keys(expiry)) window.clearTimeout(expiry[id])
+      typingExpiry.current = {}
+      setTypingUsers([])
+    }
+  }, [group.id, currentUserId])
 
   // ── Read receipts on live arrivals ─────────────────────────────────────
   // The cache itself is kept fresh by a global socket listener; here we only
@@ -617,16 +712,7 @@ export default function ChatView({
             >
               <div className="mx-auto w-full xl:max-w-[1280px] 2xl:max-w-[1440px] min-[1700px]:max-w-[1560px]">
                 {loading ? (
-                  <div
-                    className="h-full flex flex-col items-center justify-center gap-2"
-                    role="status"
-                    aria-label="Loading messages"
-                  >
-                    {/* Two-tone ring: faint base, warm active accent on the
-                        moving segment. Compact and theme-matched. */}
-                    <div className="h-5 w-5 rounded-full border-2 border-white/[0.12] border-t-active animate-spin" />
-                    <span className="text-[11px] text-faint">Loading</span>
-                  </div>
+                  <Spinner label="Loading" className="h-full" />
                 ) : messages.length === 0 ? (
                   <div className="h-full flex items-center justify-center">
                     <p className="text-[12.5px] text-faint">No messages yet. Say something.</p>
@@ -709,6 +795,11 @@ export default function ChatView({
           {/* Composer */}
           <div ref={composerRef} className="px-5 pb-4 pt-1 shrink-0">
             <div className="mx-auto w-full xl:max-w-[1280px] 2xl:max-w-[1440px] min-[1700px]:max-w-[1560px]">
+              {typingUsers.length > 0 && (
+                <div className="mb-1 px-1">
+                  <TypingIndicator users={typingUsers} />
+                </div>
+              )}
               {error && <div className="text-[11.5px] text-alert mb-1.5">{error}</div>}
               <ChatComposer
                 ref={composerHandleRef}

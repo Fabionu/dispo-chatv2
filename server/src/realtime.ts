@@ -13,6 +13,9 @@ declare module 'socket.io' {
   interface SocketData {
     userId: string
     workspaceId: string
+    // Resolved once on connect so typing relays can carry a name without a
+    // per-keystroke DB lookup.
+    displayName: string
   }
 }
 
@@ -78,16 +81,25 @@ export async function initRealtime(httpServer: HttpServer) {
 
     // Pre-subscribe to every group the user is currently a member of, so
     // messages broadcast to group rooms reach them without an explicit join.
+    // Resolve the display name in the same trip for typing relays.
     try {
-      const { rows } = await pool.query<{ group_id: string }>(
-        'select group_id from group_members where user_id = $1',
-        [userId],
-      )
-      for (const r of rows) socket.join(roomForGroup(r.group_id))
+      const [{ rows: groups }, { rows: users }] = await Promise.all([
+        pool.query<{ group_id: string }>(
+          'select group_id from group_members where user_id = $1',
+          [userId],
+        ),
+        pool.query<{ display_name: string }>(
+          'select display_name from users where id = $1',
+          [userId],
+        ),
+      ])
+      for (const r of groups) socket.join(roomForGroup(r.group_id))
+      socket.data.displayName = users[0]?.display_name ?? 'Someone'
     } catch (err) {
       // Log but don't kill the socket — they can still send/receive on
       // group rooms they join later.
       console.error('failed to preload rooms for', userId, err)
+      socket.data.displayName = 'Someone'
     }
 
     socket.emit('ready', { userId })
@@ -96,6 +108,26 @@ export async function initRealtime(httpServer: HttpServer) {
     socket.on('ping:client', (cb?: (t: number) => void) => {
       if (typeof cb === 'function') cb(Date.now())
     })
+
+    // ── Typing indicator ──────────────────────────────────────────────────
+    // Relay typing state to the rest of the group room (never echoed back to
+    // the sender). Gated on actual room membership so a client can't spam a
+    // group it isn't in. `socket.to(room)` excludes this socket; ephemeral —
+    // nothing is persisted.
+    const relayTyping = (raw: unknown, typing: boolean) => {
+      const groupId = (raw as { groupId?: unknown })?.groupId
+      if (typeof groupId !== 'string') return
+      const room = roomForGroup(groupId)
+      if (!socket.rooms.has(room)) return
+      socket.to(room).emit('typing', {
+        groupId,
+        userId,
+        name: socket.data.displayName,
+        typing,
+      })
+    }
+    socket.on('typing:start', (p: unknown) => relayTyping(p, true))
+    socket.on('typing:stop', (p: unknown) => relayTyping(p, false))
 
     socket.on('disconnect', () => {
       // Socket.IO leaves rooms automatically on disconnect — nothing to do.
