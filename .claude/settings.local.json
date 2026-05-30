@@ -70,7 +70,11 @@
       "PowerShell(npm.cmd run build)",
       "Bash(grep -n \"sharp\" server/package.json package.json)",
       "Bash(ls node_modules/sharp/package.json)",
-      "Bash(ls server/node_modules/sharp)"
+      "Bash(ls server/node_modules/sharp)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__Claude_in_Chrome__tabs_create_mcp",
+      "mcp__Claude_in_Chrome__navigate",
+      "mcp__Claude_in_Chrome__read_network_requests"
     ]
   }
 }

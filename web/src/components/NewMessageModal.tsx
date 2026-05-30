@@ -65,6 +65,7 @@ export default function NewMessageModal({ onClose, onOpenGroup }: Props) {
         lastReadAt: now,
         createdAt: now,
         memberCount: 2,
+        unreadCount: 0,
         directPeer: { id: u.id, name: u.displayName, workspace: u.workspace.name },
       })
     } catch (err) {

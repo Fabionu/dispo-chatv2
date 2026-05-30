@@ -66,6 +66,7 @@ export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
         lastReadAt: now,
         createdAt: now,
         memberCount: 1 + selected.size,
+        unreadCount: 0,
         directPeer: null,
       })
     } catch {

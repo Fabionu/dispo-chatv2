@@ -121,7 +121,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
     : !text.trim() && !file
 
   return (
-    <div className="rounded-card border border-white/[0.08] bg-white/[0.02] focus-within:border-white/[0.16] transition-colors">
+    <div className="rounded-card border border-white/[0.14] bg-white/[0.045] focus-within:border-white/[0.24] focus-within:bg-white/[0.06] transition-colors shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">
       {replyContext && (
         <ComposerContextRow
           tone="reply"
@@ -149,7 +149,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           onRemove={removeFile}
         />
       )}
-      <div className="flex items-end gap-2 px-3 py-2">
+      <div className="flex items-end gap-2 px-3.5 py-2.5">
         <input
           ref={fileInputRef}
           type="file"

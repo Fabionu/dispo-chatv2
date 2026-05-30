@@ -19,6 +19,10 @@ export type Group = {
   lastReadAt: string | null
   createdAt: string
   memberCount: number
+  /** Count of messages from others, after my last read, that I haven't seen.
+   *  Optional: older API responses omit it — callers fall back to the
+   *  timestamp-based `groupHasUnread`. */
+  unreadCount?: number
   directPeer: DirectPeer | null
 }
 

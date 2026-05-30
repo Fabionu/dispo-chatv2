@@ -149,13 +149,13 @@ export default function ChatView({
     [],
   )
 
-  // If opened via "Reply privately", the composer is pre-seeded with the quote
-  // (state initializer above). Focus it so the user can type immediately, and
-  // tell the parent to drop the seed so a later remount doesn't re-apply it.
+  // Focus the composer on open so the user can start typing immediately —
+  // no click needed. (rAF lets the textarea finish mounting/layout first.)
+  // Also drop any "Reply privately" seed so a later remount doesn't re-apply it.
   useEffect(() => {
-    if (!initialReplyContext) return
-    composerHandleRef.current?.focus()
-    onConsumeInitialReply?.()
+    const raf = requestAnimationFrame(() => composerHandleRef.current?.focus())
+    if (initialReplyContext) onConsumeInitialReply?.()
+    return () => cancelAnimationFrame(raf)
     // Mount-only: the seed is captured once into state; deps intentionally empty.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

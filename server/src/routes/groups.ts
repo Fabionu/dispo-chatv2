@@ -159,6 +159,7 @@ groupsRouter.get(
       created_at: string
       last_read_at: string | null
       member_count: number
+      unread_count: number
       peer_id: string | null
       peer_name: string | null
       peer_workspace: string | null
@@ -167,6 +168,18 @@ groupsRouter.get(
               g.last_message_at, g.created_at,
               gm.last_read_at,
               (select count(*)::int from group_members where group_id = g.id) as member_count,
+              -- unread = messages by others, not deleted, after my last read,
+              -- excluding ones I've hidden ("delete for me").
+              (select count(*)::int
+                 from messages msg
+                where msg.group_id = g.id
+                  and msg.author_id <> $1
+                  and msg.deleted_at is null
+                  and msg.created_at > coalesce(gm.last_read_at, 'epoch'::timestamptz)
+                  and not exists (
+                    select 1 from message_deletions md
+                     where md.message_id = msg.id and md.user_id = $1
+                  )) as unread_count,
               peer.peer_id, peer.peer_name, peer.peer_workspace
          from groups g
          join group_members gm on gm.group_id = g.id and gm.user_id = $1
@@ -197,6 +210,7 @@ groupsRouter.get(
         lastReadAt: r.last_read_at,
         createdAt: r.created_at,
         memberCount: r.member_count,
+        unreadCount: r.unread_count,
         directPeer:
           r.type === 'direct' && r.peer_id
             ? { id: r.peer_id, name: r.peer_name, workspace: r.peer_workspace }

@@ -73,6 +73,12 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
 
   const userMenuRef = useRef<HTMLDivElement>(null)
   const newMenuRef = useRef<HTMLDivElement>(null)
+  // Mirror the currently-open group id into a ref so the socket handler (set up
+  // once) can tell whether an arriving message belongs to the open chat without
+  // re-subscribing on every selection change.
+  const openGroupId = selection?.kind === 'group' ? selection.id : null
+  const openGroupIdRef = useRef(openGroupId)
+  openGroupIdRef.current = openGroupId
 
   const { prefetch } = useMessageCache()
 
@@ -106,7 +112,15 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           void refreshGroups()
           return prev
         }
-        const updated: Group = { ...prev[idx], lastMessageAt: msg.createdAt }
+        // Bump unread only for messages from others landing in a group that
+        // isn't the one currently open (the open one gets marked read).
+        const bumpUnread =
+          msg.authorId !== user.id && openGroupIdRef.current !== msg.groupId
+        const updated: Group = {
+          ...prev[idx],
+          lastMessageAt: msg.createdAt,
+          unreadCount: (prev[idx].unreadCount ?? 0) + (bumpUnread ? 1 : 0),
+        }
         const next = prev.filter((_, i) => i !== idx)
         next.unshift(updated)
         return next
@@ -122,7 +136,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
       socket.off('message:new', onMessageNew)
       socket.off('group:added', onGroupAdded)
     }
-  }, [refreshGroups])
+  }, [refreshGroups, user.id])
 
   // Connections: load once, then refetch whenever a connection event fires.
   // Refetching (rather than patching) keeps the three buckets consistent.
@@ -230,6 +244,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         lastReadAt: now,
         createdAt: now,
         memberCount: 2,
+        unreadCount: 0,
         directPeer: { id: info.peerId, name: info.peerName, workspace: null },
       })
       setPendingReply(reply ? { groupId: info.groupId, reply } : null)
@@ -247,12 +262,14 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     setSelection(null)
   }
 
-  // Patch a single group's lastReadAt locally so the unread dot clears
-  // without a full refetch.
+  // Patch a single group's lastReadAt + clear its unread counter locally so the
+  // badge clears without a full refetch.
   const markGroupRead = useCallback((groupId: string) => {
     setGroups((prev) =>
       prev.map((g) =>
-        g.id === groupId ? { ...g, lastReadAt: new Date().toISOString() } : g,
+        g.id === groupId
+          ? { ...g, lastReadAt: new Date().toISOString(), unreadCount: 0 }
+          : g,
       ),
     )
   }, [])
@@ -499,7 +516,12 @@ function GroupRow({
   selected: boolean
   onClick: () => void
 }) {
-  const unread = !selected && groupHasUnread(group)
+  // Selecting a group clears its indicator immediately (it's about to be read).
+  // Prefer the precise server count; fall back to the timestamp-based flag when
+  // the API didn't send a count (older server) so the dot never disappears.
+  const hasCount = typeof group.unreadCount === 'number'
+  const unreadCount = selected ? 0 : group.unreadCount ?? 0
+  const unread = selected ? false : hasCount ? unreadCount > 0 : groupHasUnread(group)
   // Leading type glyph: a single contact for DMs, a truck for vehicle/trip
   // groups. Kept subtle (faint) so the conversation name stays the focus.
   const TypeIcon = group.type === 'direct' ? CircleUser : Truck
@@ -525,6 +547,14 @@ function GroupRow({
       </span>
       {group.type === 'vehicle' && group.meta.plate && (
         <span className="font-mono text-[10px] text-faint shrink-0">{group.meta.plate}</span>
+      )}
+      {unread && hasCount && unreadCount > 0 && (
+        <span
+          aria-label={`${unreadCount} unread`}
+          className="shrink-0 min-w-[18px] h-[18px] px-1.5 rounded-full bg-active text-bg text-[10.5px] font-semibold leading-none flex items-center justify-center"
+        >
+          {unreadCount > 99 ? '99+' : unreadCount}
+        </span>
       )}
     </button>
   )
@@ -592,6 +622,7 @@ function optimisticDirectGroup(id: string, other: ConnectionUser): Group {
     lastReadAt: now,
     createdAt: now,
     memberCount: 2,
+    unreadCount: 0,
     directPeer: { id: other.id, name: other.displayName, workspace: other.workspace.name },
   }
 }
