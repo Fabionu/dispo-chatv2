@@ -14,7 +14,24 @@ export type Group = {
   type: GroupType
   name: string | null
   description: string | null
-  meta: { plate?: string; trip?: string } & Record<string, unknown>
+  /**
+   * Vehicle metadata. A vehicle group is a permanent thread for one truck,
+   * reused across many trips/loads over time:
+   *   - `tractorPlate` — cap tractor registration number
+   *   - `trailerPlate` — remorca registration number
+   * `plate` is the legacy single-plate field from before the tractor/trailer
+   * split; it's still read (mapped to the tractor plate) so existing groups
+   * keep working. `trip` is legacy too — old groups may carry it, but it's no
+   * longer asked for or surfaced. New groups never set either.
+   */
+  meta: {
+    tractorPlate?: string
+    trailerPlate?: string
+    /** @deprecated legacy single plate — read as a tractor-plate fallback. */
+    plate?: string
+    /** @deprecated legacy one-trip label — kept for old groups, not shown. */
+    trip?: string
+  } & Record<string, unknown>
   lastMessageAt: string | null
   lastReadAt: string | null
   createdAt: string
@@ -31,6 +48,19 @@ export type Group = {
 export function groupLabel(g: Group): string {
   if (g.type === 'direct') return g.directPeer?.name ?? 'Direct message'
   return g.name ?? 'Untitled group'
+}
+
+// Tractor (cap) registration for a vehicle group, falling back to the legacy
+// single `plate` so groups created before the tractor/trailer split still show
+// their plate. Returns undefined when none is set.
+export function tractorPlate(g: Group): string | undefined {
+  return g.meta.tractorPlate ?? g.meta.plate
+}
+
+// Trailer (remorca) registration for a vehicle group. No legacy fallback —
+// trailers were not modelled before the split.
+export function trailerPlate(g: Group): string | undefined {
+  return g.meta.trailerPlate
 }
 
 export function groupHasUnread(g: Group): boolean {
@@ -98,6 +128,16 @@ export type Message = {
   /** Set when the message is pinned group-wide; null/absent otherwise. */
   pinnedAt?: string | null
   pinnedBy?: string | null
+  /**
+   * Activity-row kind. 'user' (default/absent) is a normal chat message;
+   * 'system' is a persisted activity entry (e.g. pin/unpin) rendered as a
+   * compact centered timeline row, not a bubble.
+   */
+  kind?: 'user' | 'system'
+  /** For system rows: which activity this is. */
+  systemEvent?: string | null
+  /** For system rows: the message the activity refers to (clickable to jump). */
+  systemTargetMessageId?: string | null
 }
 
 // Payload of the `message:new` socket event — same as Message plus groupId.

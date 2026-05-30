@@ -10,8 +10,8 @@ type Props = {
 
 export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
   const [name, setName] = useState('')
-  const [plate, setPlate] = useState('')
-  const [trip, setTrip] = useState('')
+  const [tractorPlate, setTractorPlate] = useState('')
+  const [trailerPlate, setTrailerPlate] = useState('')
   const [members, setMembers] = useState<WorkspaceMember[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [submitting, setSubmitting] = useState(false)
@@ -41,13 +41,13 @@ export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
     setSubmitting(true)
     setError(null)
     const nameTrim = name.trim()
-    const plateTrim = plate.trim()
-    const tripTrim = trip.trim()
+    const tractorTrim = tractorPlate.trim()
+    const trailerTrim = trailerPlate.trim()
     try {
       const { group } = await api.groups.createVehicle({
         name: nameTrim,
-        plate: plateTrim || undefined,
-        trip: tripTrim || undefined,
+        tractorPlate: tractorTrim || undefined,
+        trailerPlate: trailerTrim || undefined,
         memberIds: [...selected],
       })
       const now = new Date().toISOString()
@@ -59,8 +59,8 @@ export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
         name: nameTrim,
         description: null,
         meta: {
-          ...(plateTrim ? { plate: plateTrim } : {}),
-          ...(tripTrim ? { trip: tripTrim } : {}),
+          ...(tractorTrim ? { tractorPlate: tractorTrim } : {}),
+          ...(trailerTrim ? { trailerPlate: trailerTrim } : {}),
         },
         lastMessageAt: null,
         lastReadAt: now,
@@ -77,8 +77,8 @@ export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
 
   return (
     <Modal
-      title="New vehicle group"
-      subtitle="A channel for one truck and its current trip."
+      title="New vehicle chat"
+      subtitle="A permanent channel for one truck, reused across every trip and load."
       onClose={onClose}
       footer={
         <>
@@ -110,20 +110,20 @@ export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
         </ModalField>
 
         <div className="grid grid-cols-2 gap-3">
-          <ModalField label="Plate">
+          <ModalField label="Tractor reg. number">
             <input
-              value={plate}
-              onChange={(e) => setPlate(e.target.value)}
+              value={tractorPlate}
+              onChange={(e) => setTractorPlate(e.target.value)}
               placeholder="B-123-ABC"
               className="modal-input font-mono"
             />
           </ModalField>
-          <ModalField label="Trip">
+          <ModalField label="Trailer reg. number">
             <input
-              value={trip}
-              onChange={(e) => setTrip(e.target.value)}
-              placeholder="Cluj → Berlin"
-              className="modal-input"
+              value={trailerPlate}
+              onChange={(e) => setTrailerPlate(e.target.value)}
+              placeholder="B-456-XYZ"
+              className="modal-input font-mono"
             />
           </ModalField>
         </div>

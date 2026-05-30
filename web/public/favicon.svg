@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Dark rounded backdrop, full-bleed so there is no transparent padding. -->
+  <rect width="32" height="32" rx="7" fill="#0c0c0c" />
+
+  <!-- Chat bubble: the Lucide message-circle glyph scaled up ~1.45x about its
+       body center so it nearly touches the canvas edges (≈2px padding). Bold
+       stroke for tab-size legibility. Drawn, not a literal small icon. -->
+  <g transform="translate(16,16) scale(1.45) translate(-12,-12)">
+    <path
+      d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"
+      fill="none"
+      stroke="#f4f1ec"
+      stroke-width="2"
+      stroke-linejoin="round"
+      stroke-linecap="round"
+    />
+  </g>
+
+  <!-- Black disc behind the box: large, high-contrast, but inside the bubble so
+       the white outline still reads as a chat bubble. -->
+  <circle cx="16" cy="15.5" r="8.4" fill="#000000" />
+
+  <!-- Box: a simplified cube drawn directly at favicon scale so the stroke stays
+       thick and the internal edges survive at 16x16. Occupies roughly half the
+       visible symbol. Vertices (cube silhouette + the three edges meeting at the
+       front-top vertex) are spelled out manually rather than via Lucide. -->
+  <g
+    fill="none"
+    stroke="#f4f1ec"
+    stroke-width="2.6"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+  >
+    <!-- Hexagonal cube silhouette, centered on (16,15.5). -->
+    <path d="M16 8.2 L23 12 L23 19 L16 22.8 L9 19 L9 12 Z" />
+    <!-- The two top edges meeting at the front-top vertex (the V). -->
+    <path d="M9 12 L16 15.5 L23 12" />
+    <!-- Front vertical edge down to the bottom vertex. -->
+    <path d="M16 15.5 L16 22.8" />
+  </g>
+</svg>

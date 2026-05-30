@@ -1,0 +1,85 @@
+-- Index tuning for high-volume chat.
+--
+-- This migration fixes one correctness-of-plan regression on the hottest read
+-- path (message pagination) and trims two redundant indexes that only add write
+-- amplification. Each change is explained inline.
+--
+-- ── Operational note (large prod tables) ──────────────────────────────────
+-- The migration runner wraps every file in a single transaction, so we use
+-- plain CREATE/DROP INDEX (which briefly lock the table for writes while the
+-- index builds/drops). On a fresh or small database that's instant. If the
+-- `messages` table is ALREADY large in production, build the new index OUT of
+-- band to avoid blocking writes:
+--
+--     CREATE INDEX CONCURRENTLY messages_group_created_idx
+--       ON messages (group_id, created_at DESC);
+--     -- then drop the superseded partial index, also CONCURRENTLY
+--
+-- and record this migration id in _migrations manually so it isn't re-run.
+-- CONCURRENTLY cannot run inside a transaction, which is why it isn't used
+-- here.
+
+-- ── 1. Full (group_id, created_at) index for message pagination ────────────
+-- Pagination is the single hottest query in the app:
+--
+--     where m.group_id = $1
+--       and not exists (… message_deletions …)        -- "delete for me"
+--       [and m.created_at < $cursor]                   -- keyset cursor
+--     order by m.created_at desc
+--     limit $n
+--
+-- It is cursor-based (a `created_at < cursor` keyset range, never OFFSET), so
+-- the right index turns each page into a bounded backward range scan with no
+-- sort and no rows skipped.
+--
+-- The catch: since migration 0008, soft-deleted ("delete for everyone")
+-- messages are RETAINED in the thread as tombstones, so this query no longer
+-- filters `deleted_at is null`. The only (group_id, created_at) index we had —
+-- `messages_group_time_idx` — is PARTIAL with `WHERE deleted_at is null`.
+-- Postgres can only use a partial index when the query's predicate implies the
+-- index predicate; this query does not exclude deleted rows, so the planner
+-- CANNOT use it and falls back to scanning + sorting the group's messages.
+-- That degrades from O(page) to O(group history) as volume grows.
+--
+-- A full (non-partial) index restores an index-only range scan for pagination,
+-- and also serves the unread-count and recent-activity scans (with a cheap
+-- `deleted_at` recheck on the small post-last-read window). DESC matches the
+-- query's order (a btree can scan either direction, but mirroring intent keeps
+-- plans obvious).
+create index messages_group_created_idx
+  on messages (group_id, created_at desc);
+
+-- ── 2. Drop the now-superseded partial index ──────────────────────────────
+-- `messages_group_created_idx` is strictly more general than the partial
+-- `messages_group_time_idx` (same key columns, no row filter): it serves every
+-- query the partial did (pagination, unread `created_at > last_read` scans,
+-- "recent in group") plus the tombstone-inclusive pagination the partial could
+-- not. Keeping both would double index maintenance on `messages` INSERT — the
+-- hottest write path — for a marginal (smaller-index) read gain on the unread
+-- scan, which only touches the few rows since a member's last read. The
+-- write-throughput win outweighs it at chat volume, so we drop the partial.
+-- (Created the replacement first above, so there is never a window without a
+-- usable (group_id, created_at) index.)
+drop index if exists messages_group_time_idx;
+
+-- ── 3. Drop the redundant single-column group_members(user_id) index ───────
+-- Authorization and the sidebar lean on two membership directions:
+--   • "is user X in group Y"  → primary key (group_id, user_id)
+--   • "groups of user X"      → group_members_user_group_idx (user_id, group_id)
+-- A btree on (user_id, group_id) fully serves any lookup keyed on user_id alone
+-- (leading-column prefix), so the older single-column `group_members_user_idx
+-- (user_id)` from migration 0002 is redundant. Dropping it removes needless
+-- index maintenance on every membership insert/delete with zero read impact.
+drop index if exists group_members_user_idx;
+
+-- ── Audited and intentionally left unchanged ───────────────────────────────
+-- • connections:  (user_a_id=$1 OR user_b_id=$1) AND status IN (…) is served by
+--   connections_a_status_idx + connections_b_status_idx via a BitmapOr; the
+--   pair gate uses the unique (user_a_id, user_b_id). Fully covered.
+-- • attachments:  thread aggregation seeks by attachments_message_idx
+--   (message_id); the authenticated serve route seeks by primary key (id).
+--   Fully covered.
+-- • group list:   driven from group_members (user_id, group_id) into groups by
+--   PK; the activity sort is over a single user's (capped) group set.
+-- • pins:         messages_pinned_idx (group_id, pinned_at desc) WHERE pinned_at
+--   is not null already serves the partial pins list.

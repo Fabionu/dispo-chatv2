@@ -186,7 +186,8 @@ Goal: prepare for external users.
 - [x] Rate limits for auth and message creation.
 - [x] Same-site cookie strategy (`httpOnly`, `sameSite=lax`, `secure` in prod).
 - [ ] CSRF protection review for state-changing requests.
-- [ ] Structured logs and error monitoring.
+- [~] Structured logs (JSON lines) on hot paths + preview-job + socket
+  connection events. Error monitoring / metrics export still TODO.
 - [ ] CI for build, lint, migrations, and tests.
 - [ ] Deployment checklist for Railway.
 - [ ] Privacy, retention, and data export decisions.
@@ -195,6 +196,97 @@ Definition of done:
 
 - The app can be deployed, monitored, recovered, and updated without
   guesswork.
+
+## Horizontal Scaling (Realtime)
+
+The realtime layer is multi-instance ready. Socket.IO keeps each client's
+connection pinned to one API instance, so with more than one instance behind a
+load balancer the default in-memory adapter would silently drop cross-instance
+events (a `message:new` emitted on instance A never reaches a group member whose
+socket is on instance B). The **Socket.IO Redis adapter** removes that limit by
+pub/sub-ing every room operation between instances.
+
+What's already wired:
+
+- `@socket.io/redis-adapter` + `redis` clients in `server/src/realtime.ts`,
+  enabled automatically when `REDIS_URL` is set, no-op (in-memory) when it isn't.
+- All realtime paths go through the adapter, so they're correct across
+  instances with zero call-site changes:
+  - broadcasts: `io.to(group:<id>).emit(...)` for `message:new` /
+    `message:edited` / `message:deleted` / `message:pinned` / `message:unpinned`
+    and per-user `group:added`.
+  - membership mutations: `subscribeUserToGroup` / `unsubscribeUserFromGroup`
+    use `io.in(user:<id>).socketsJoin/Leave(...)`, which the adapter fans out to
+    every node, so a user's sockets join/leave the room wherever they live.
+  - typing relays use `socket.to(room)` and propagate the same way.
+
+Deployment requirements:
+
+- **Single instance / local dev:** leave `REDIS_URL` unset. No Redis needed.
+- **Two or more instances:** `REDIS_URL` is **required** and must point at a
+  shared, reachable Redis (`redis://…`, or `rediss://…` for TLS). Set it on
+  every instance. Without it, realtime breaks in non-obvious ways (events reach
+  only the subset of users on the emitting instance).
+- The load balancer does **not** need sticky sessions when the client uses the
+  WebSocket transport (the default here). If you ever allow HTTP long-polling
+  fallback across instances, enable sticky sessions too.
+- Redis is for realtime fan-out only — it holds no durable state, so it can be a
+  small managed instance and is safe to restart (clients reconnect, node-redis
+  retries with backoff; a Redis outage degrades realtime, not the REST API).
+- Production safety: if `REDIS_URL` is set but Redis can't connect, the server
+  now **aborts startup in production** rather than silently falling back to the
+  in-memory adapter (dev still warns + falls back). With `REDIS_URL` unset in
+  production it runs single-instance and logs a warning.
+- On boot / connect the server emits structured log events: `redis_adapter_enabled`,
+  `redis_adapter_disabled_dev`, `redis_adapter_disabled_prod`,
+  `redis_adapter_connect_failed`.
+
+## Production Readiness (status)
+
+Snapshot of the scale/reliability work and what remains.
+
+**Production-ready now**
+
+- **Redis realtime adapter** — multi-instance fan-out via `REDIS_URL`; fails
+  loudly in production on connect failure; clear adapter logs. (`realtime.ts`)
+- **DB index tuning** — migration `0013_chat_index_tuning.sql`: a full
+  `messages (group_id, created_at desc)` index restores index-backed cursor
+  pagination (the prior partial index couldn't serve tombstone-inclusive paging),
+  and redundant indexes were dropped to cut write amplification.
+- **Async preview generation** — `sharp` work is off the request path. The
+  upload stores the original, creates the message, responds, then enqueues a job
+  (`jobs/previewQueue.ts` → idempotent core `jobs/preview.ts`) that generates the
+  preview, updates metadata, and emits `attachment:preview`. Bounded concurrency
+  + retries; dedup via `preview_path IS NULL`.
+- **Preview backfill** — `npm run backfill:previews` regenerates previews for
+  older images that lack them; batched, bounded concurrency, rerun-safe.
+- **Hot-path observability** — JSON-line logs: `http_request`
+  (method/route/status/durationMs/userId/groupId), `preview_job`
+  (status/durationMs), `socket_connect` / `socket_disconnect` (live count). No
+  message bodies, cookies, JWTs, or file contents are logged.
+
+**Still remaining**
+
+- **Durable background jobs** — the preview queue is in-process; jobs queued at
+  process exit are lost (recoverable via the backfill). `PREVIEW_QUEUE_DRIVER=redis`
+  is reserved for a BullMQ-backed durable queue: its worker would call the same
+  `runPreviewForAttachment(id)` (no buffer → re-fetches bytes from storage), so
+  only `jobs/previewQueue.ts` changes. Today `redis` warns and falls back.
+- **Observability depth** — ship logs to an aggregator + error monitoring
+  (Sentry) + basic metrics/alerts (p95 latencies, job failure rate).
+- **Attachment delivery** — currently every byte is streamed through the API
+  (membership-gated, immutable cache headers). At higher volume, move to
+  short-lived signed URLs or a CDN in front of the private bucket to offload
+  egress from the app instances.
+
+**Migration / index safety**
+
+- The migration runner wraps each file in a transaction, so migrations use plain
+  `CREATE INDEX` (a brief write lock). On an **already-large** production table,
+  build new indexes out of band with `CREATE INDEX CONCURRENTLY` (which cannot
+  run inside a transaction) and record the migration id manually — see the header
+  of `0013_chat_index_tuning.sql`. Do not run a blocking index build against a
+  large hot table without this step.
 
 ## Suggested Next Sprint
 

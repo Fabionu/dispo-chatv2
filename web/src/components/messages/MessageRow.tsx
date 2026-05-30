@@ -57,9 +57,11 @@ export default function MessageRow({
   onJumpToMessage,
 }: Props) {
   // Collapse the author line when the previous message is from the same
-  // author within a couple of minutes — keeps bursts readable.
+  // author within a couple of minutes — keeps bursts readable. A system
+  // activity row in between breaks the run, so the author chrome reappears.
   const sameAuthorAsPrev =
     prev !== undefined &&
+    prev.kind !== 'system' &&
     prev.authorId === message.authorId &&
     new Date(message.createdAt).getTime() - new Date(prev.createdAt).getTime() < 4 * 60 * 1000
 

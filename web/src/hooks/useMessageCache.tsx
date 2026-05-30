@@ -114,7 +114,10 @@ function normalize(list: LocalMessage[], currentUserId: string): LocalMessage[] 
   if (optimistic.length) {
     const folded = new Set<string>()
     out = out.map((m) => {
-      if (m.pending || m.authorId !== currentUserId) return m
+      // Never fold a system activity row into an optimistic user send — a
+      // system row authored by the current user has an empty body and could
+      // otherwise be mistaken for the echo of an attachment-only message.
+      if (m.pending || m.authorId !== currentUserId || m.kind === 'system') return m
       const opt = optimistic.find((o) => !folded.has(o.id) && o.body === m.body)
       if (!opt) return m
       folded.add(opt.id)
@@ -302,6 +305,13 @@ export function MessageCacheProvider({
     function onNew(msg: IncomingMessage) {
       upsertMessage(msg.groupId, msg as LocalMessage)
     }
+    // Persisted activity row (pin/unpin). Folded into the thread like a normal
+    // message so it survives refresh and renders in chronological order, but on
+    // its OWN event so it doesn't run through the sidebar's unread/bump logic
+    // (which only listens to message:new).
+    function onSystem(msg: IncomingMessage) {
+      upsertMessage(msg.groupId, msg as LocalMessage)
+    }
     function onEdited(p: { id: string; groupId: string; body: string; editedAt: string }) {
       patchMessage(p.groupId, p.id, { body: p.body, editedAt: p.editedAt })
     }
@@ -332,21 +342,54 @@ export function MessageCacheProvider({
     function onUnpinned(p: { groupId: string; id: string }) {
       patchMessage(p.groupId, p.id, { pinnedAt: null, pinnedBy: null })
     }
+    // An attachment's preview finished generating in the background — fold the
+    // metadata into the cached message so the bubble (and later revisits) use
+    // the lightweight preview. No-op if the message/attachment isn't loaded.
+    function onAttachmentPreview(p: {
+      groupId: string
+      messageId: string
+      attachmentId: string
+      previewUrl: string
+      width?: number
+      height?: number
+    }) {
+      update(p.groupId, (t) => {
+        const idx = t.messages.findIndex((m) => m.id === p.messageId)
+        if (idx === -1) return t
+        const m = t.messages[idx]
+        if (!m.attachments?.some((a) => a.id === p.attachmentId)) return t
+        const attachments = m.attachments.map((a) =>
+          a.id === p.attachmentId
+            ? {
+                ...a,
+                previewUrl: p.previewUrl,
+                ...(p.width && p.height ? { width: p.width, height: p.height } : {}),
+              }
+            : a,
+        )
+        const messages = t.messages.map((mm, i) => (i === idx ? { ...m, attachments } : mm))
+        return { ...t, messages }
+      })
+    }
     socket.on('message:new', onNew)
+    socket.on('message:system', onSystem)
     socket.on('message:edited', onEdited)
     socket.on('message:deleted', onDeleted)
     socket.on('message:hidden', onHidden)
     socket.on('message:pinned', onPinned)
     socket.on('message:unpinned', onUnpinned)
+    socket.on('attachment:preview', onAttachmentPreview)
     return () => {
       socket.off('message:new', onNew)
+      socket.off('message:system', onSystem)
       socket.off('message:edited', onEdited)
       socket.off('message:deleted', onDeleted)
       socket.off('message:hidden', onHidden)
       socket.off('message:pinned', onPinned)
       socket.off('message:unpinned', onUnpinned)
+      socket.off('attachment:preview', onAttachmentPreview)
     }
-  }, [upsertMessage, patchMessage, removeMessage])
+  }, [update, upsertMessage, patchMessage, removeMessage])
 
   const value = useMemo<MessageCache>(
     () => ({

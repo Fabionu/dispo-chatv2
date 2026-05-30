@@ -4,11 +4,10 @@ import {
   ChevronDown,
   CircleUser,
   LogOut,
-  MessageSquare,
   Plus,
   Search,
   Settings,
-  Truck,
+  Users,
 } from 'lucide-react'
 import type { User, Workspace as WorkspaceT } from '../auth/AuthContext'
 import type {
@@ -19,13 +18,14 @@ import type {
   IncomingMessage,
   ReplyToPreview,
 } from '../lib/types'
-import { groupHasUnread, groupLabel } from '../lib/types'
+import { groupHasUnread, groupLabel, tractorPlate } from '../lib/types'
 import { api } from '../lib/api'
 import { getSocket } from '../lib/socket'
 import { useMessageCache } from '../hooks/useMessageCache'
 import ChatView from '../components/ChatView'
 import ConnectionRequestView from '../components/connections/ConnectionRequestView'
 import ConnectionRequestsSection from '../components/connections/ConnectionRequestsSection'
+import AppMark from '../components/AppMark'
 import CreateVehicleGroupModal from '../components/CreateVehicleGroupModal'
 import NewMessageModal from '../components/NewMessageModal'
 
@@ -340,7 +340,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 role="menu"
                 className="absolute right-0 top-[calc(100%+6px)] w-[200px] rounded-card border border-white/[0.08] bg-surface overflow-hidden z-20 py-1"
               >
-                <CreateMenuItem label="Vehicle group" onClick={() => startCreate('vehicle')} />
+                <CreateMenuItem label="Vehicle chat" onClick={() => startCreate('vehicle')} />
                 <CreateMenuItem label="Search for a connection" onClick={() => startCreate('direct')} />
               </div>
             )}
@@ -359,9 +359,11 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 onSelect={(id) => setSelection({ kind: 'request', id })}
               />
 
-              <ChannelGroup label="Vehicles & trips">
+              <ChannelGroup label="Vehicles">
                 {vehicleGroups.length === 0 ? (
-                  <EmptyHint>No trips yet.</EmptyHint>
+                  <EmptyHint>
+                    Create a vehicle chat to coordinate loads, documents, and updates over time.
+                  </EmptyHint>
                 ) : (
                   vehicleGroups.map((g) => (
                     <GroupRow
@@ -488,7 +490,7 @@ function EmptyState({
       </header>
       <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
         <div className="h-12 w-12 rounded-card border border-white/[0.08] bg-white/[0.015] flex items-center justify-center mb-5">
-          <MessageSquare size={18} strokeWidth={1.4} className="text-muted" />
+          <AppMark size={30} />
         </div>
         <h2 className="text-[18px] font-semibold tracking-[-0.2px] mb-2">Welcome, {firstName}.</h2>
         <p className="text-muted text-[13px] max-w-[420px] mb-6 leading-[1.55]">
@@ -522,9 +524,10 @@ function GroupRow({
   const hasCount = typeof group.unreadCount === 'number'
   const unreadCount = selected ? 0 : group.unreadCount ?? 0
   const unread = selected ? false : hasCount ? unreadCount > 0 : groupHasUnread(group)
-  // Leading type glyph: a single contact for DMs, a truck for vehicle/trip
-  // groups. Kept subtle (faint) so the conversation name stays the focus.
-  const TypeIcon = group.type === 'direct' ? CircleUser : Truck
+  // Leading type glyph: a single contact for DMs, a multi-contact group glyph
+  // for vehicle conversations. Kept subtle (faint) so the conversation name
+  // stays the focus.
+  const TypeIcon = group.type === 'direct' ? CircleUser : Users
   return (
     <button
       onClick={onClick}
@@ -538,15 +541,15 @@ function GroupRow({
         className={`h-1.5 w-1.5 rounded-full shrink-0 ${unread ? 'bg-active' : 'bg-transparent'}`}
       />
       <TypeIcon
-        size={14}
+        size={17}
         strokeWidth={1.6}
         className={`shrink-0 ${unread ? 'text-muted' : 'text-faint'}`}
       />
       <span className={`flex-1 truncate text-[13px] ${unread ? 'text-text font-medium' : ''}`}>
         {groupLabel(group)}
       </span>
-      {group.type === 'vehicle' && group.meta.plate && (
-        <span className="font-mono text-[10px] text-faint shrink-0">{group.meta.plate}</span>
+      {group.type === 'vehicle' && tractorPlate(group) && (
+        <span className="font-mono text-[10px] text-faint shrink-0">{tractorPlate(group)}</span>
       )}
       {unread && hasCount && unreadCount > 0 && (
         <span

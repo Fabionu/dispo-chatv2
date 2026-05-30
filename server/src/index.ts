@@ -14,6 +14,7 @@ import { directoryRouter } from './routes/directory.js'
 import { attachmentsRouter } from './routes/attachments.js'
 import { initRealtime } from './realtime.js'
 import { errorHandler } from './http.js'
+import { requestLog } from './middleware/requestLog.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -28,6 +29,11 @@ app.use(cookieParser())
 if (!isProd) {
   app.use(cors({ origin: 'http://localhost:5173', credentials: true }))
 }
+
+// Structured access log for the API surface (route/status/duration/userId/
+// groupId). Mounted before the routers so it wraps them; reads req.session on
+// finish, by which point requireAuth has populated it. Logs no bodies/headers.
+app.use(requestLog)
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
 app.use('/api/auth', authRouter)

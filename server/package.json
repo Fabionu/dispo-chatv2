@@ -9,9 +9,11 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "migrate": "tsx src/db/migrate.ts",
-    "seed": "tsx src/db/seed.ts"
+    "seed": "tsx src/db/seed.ts",
+    "backfill:previews": "tsx src/jobs/backfillPreviews.ts"
   },
   "dependencies": {
+    "@socket.io/redis-adapter": "^8.3.0",
     "@supabase/supabase-js": "^2.106.2",
     "bcryptjs": "^2.4.3",
     "cookie": "^1.0.2",
@@ -23,6 +25,7 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "pg": "^8.13.1",
+    "redis": "^6.0.0",
     "sharp": "^0.34.5",
     "socket.io": "^4.8.3",
     "zod": "^3.23.8"

@@ -51,8 +51,8 @@ export const api = {
     createVehicle: (input: {
       name: string
       description?: string
-      plate?: string
-      trip?: string
+      tractorPlate?: string
+      trailerPlate?: string
       memberIds?: string[]
     }) =>
       request<{ group: { id: string; type: 'vehicle' } }>('/groups', {

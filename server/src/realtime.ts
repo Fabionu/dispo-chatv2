@@ -2,8 +2,11 @@ import type { Server as HttpServer } from 'node:http'
 import { parse as parseCookie } from 'cookie'
 import jwt from 'jsonwebtoken'
 import { Server as IOServer } from 'socket.io'
-import { env } from './env.js'
+import { createAdapter } from '@socket.io/redis-adapter'
+import { createClient } from 'redis'
+import { env, isProd } from './env.js'
 import { pool } from './db/pool.js'
+import { log } from './util/log.js'
 
 const COOKIE = 'dispo_session'
 
@@ -23,6 +26,14 @@ let io: IOServer | null = null
 
 export function getIO(): IOServer {
   if (!io) throw new Error('Socket.IO not initialised')
+  return io
+}
+
+// Like getIO but returns null instead of throwing when realtime isn't running
+// (e.g. inside a one-off maintenance script such as the preview backfill, which
+// imports the preview core but never starts the HTTP/Socket.IO server). Lets
+// shared code emit "if a server is up" without crashing in script contexts.
+export function getIOIfReady(): IOServer | null {
   return io
 }
 
@@ -50,6 +61,18 @@ export async function initRealtime(httpServer: HttpServer) {
     maxHttpBufferSize: 256 * 1024, // 256 KB ceiling for any single ws frame
   })
 
+  // ── Horizontal scaling ────────────────────────────────────────────────────
+  // With more than one API instance behind a load balancer, a client's socket
+  // lives on whichever instance it happened to connect to. The default in-
+  // memory adapter only knows about sockets on the local process, so an event
+  // emitted from instance A (e.g. message:new broadcast to a group room) would
+  // never reach a member whose socket is on instance B. The Redis adapter fixes
+  // this by pub/sub-ing every cross-room operation between instances, so
+  // `io.to(room).emit(...)` AND `io.in(room).socketsJoin/Leave(...)` all behave
+  // as if there were a single process. Opt-in via REDIS_URL; unset = single
+  // -instance in-memory adapter (correct for local dev).
+  await attachRedisAdapter(io)
+
   // ── Auth ────────────────────────────────────────────────────────────────
   // The handshake carries the same httpOnly JWT cookie that REST uses.
   // Verify it here; reject the connection cleanly if invalid. We attach
@@ -73,6 +96,8 @@ export async function initRealtime(httpServer: HttpServer) {
   // ── Connection lifecycle ────────────────────────────────────────────────
   io.on('connection', async (socket) => {
     const { userId } = socket.data
+
+    log.info('socket_connect', { userId, connections: io?.engine.clientsCount })
 
     // Every socket joins its user room. We use this for targeted events
     // like "you've been added to a group" (server emits to user room, all
@@ -131,16 +156,77 @@ export async function initRealtime(httpServer: HttpServer) {
 
     socket.on('disconnect', () => {
       // Socket.IO leaves rooms automatically on disconnect — nothing to do.
+      log.info('socket_disconnect', { userId, connections: io?.engine.clientsCount })
     })
   })
 
   return io
 }
 
+// Wire the Socket.IO Redis adapter when REDIS_URL is configured.
+//
+// Behaviour by environment:
+//   • REDIS_URL unset, dev  → in-memory adapter (local dev needs no Redis).
+//   • REDIS_URL unset, prod → in-memory adapter, but log a WARNING: this is
+//     single-instance only; multi-instance realtime requires REDIS_URL.
+//   • REDIS_URL set, connects → Redis adapter (multi-instance ready).
+//   • REDIS_URL set, connect FAILS in prod → throw and abort startup. We never
+//     silently degrade to in-memory in production: a partial fan-out is worse
+//     than a hard failure the orchestrator can surface/restart.
+//   • REDIS_URL set, connect FAILS in dev → warn and fall back (don't block
+//     local work on a flaky local Redis).
+//
+// 'error' listeners are attached so a transient post-connect blip can't crash
+// the process with an unhandled error event (node-redis reconnects on its own).
+async function attachRedisAdapter(server: IOServer): Promise<void> {
+  if (!env.REDIS_URL) {
+    if (isProd) {
+      log.warn('redis_adapter_disabled_prod', {
+        note: 'REDIS_URL unset — single-instance only; set REDIS_URL for multi-instance realtime',
+      })
+    } else {
+      log.info('redis_adapter_disabled_dev', {
+        note: 'REDIS_URL unset — in-memory adapter (local dev)',
+      })
+    }
+    return
+  }
+  try {
+    const pubClient = createClient({ url: env.REDIS_URL })
+    const subClient = pubClient.duplicate()
+    pubClient.on('error', (err) =>
+      log.error('redis_pub_error', { message: String((err as Error)?.message ?? err) }),
+    )
+    subClient.on('error', (err) =>
+      log.error('redis_sub_error', { message: String((err as Error)?.message ?? err) }),
+    )
+    await Promise.all([pubClient.connect(), subClient.connect()])
+    server.adapter(createAdapter(pubClient, subClient))
+    log.info('redis_adapter_enabled', { multiInstance: true })
+  } catch (err) {
+    log.error('redis_adapter_connect_failed', {
+      message: String((err as Error)?.message ?? err),
+    })
+    if (isProd) {
+      // Fail loudly — do not run production realtime on a degraded adapter.
+      throw new Error(
+        'REDIS_URL is set but the Redis adapter failed to connect; aborting startup ' +
+          '(refusing to fall back to the in-memory adapter in production).',
+      )
+    }
+    log.warn('redis_adapter_fallback_dev', {
+      note: 'continuing with in-memory adapter (dev only)',
+    })
+  }
+}
+
 /**
  * Add a socket's user to a group room across all their open connections,
  * so live updates start reaching every tab/device. Call after a new
  * group_members row is inserted.
+ *
+ * Multi-instance safe with the Redis adapter: socketsJoin is fanned out to
+ * every node, so the user's sockets are joined wherever they're connected.
  */
 export function subscribeUserToGroup(userId: string, groupId: string) {
   if (!io) return

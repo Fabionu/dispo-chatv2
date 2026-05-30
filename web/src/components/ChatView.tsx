@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowDown } from 'lucide-react'
 import type { Attachment, Group, IncomingMessage, ReplyToPreview } from '../lib/types'
-import { groupLabel } from '../lib/types'
+import { groupLabel, tractorPlate, trailerPlate } from '../lib/types'
 import { api, ApiError } from '../lib/api'
 import { getSocket } from '../lib/socket'
 import ImagePreviewModal from './attachments/ImagePreviewModal'
 import InlinePdfPreview from './attachments/InlinePdfPreview'
 import ChatComposer, { type ChatComposerHandle, type EditContext } from './composer/ChatComposer'
 import MessageRow from './messages/MessageRow'
+import SystemMessageRow from './messages/SystemMessageRow'
 import PinnedBar from './messages/PinnedBar'
 import TypingIndicator, { type TypingUser } from './messages/TypingIndicator'
 import ForwardModal from './messages/ForwardModal'
@@ -666,10 +667,15 @@ export default function ChatView({
   }
 
   // ── Header subtitle ────────────────────────────────────────────────────
+  // Vehicle groups are permanent threads, so the subtitle describes the channel
+  // (member count) rather than any single trip. Registration numbers render as
+  // badges on the right.
   const subtitle =
     group.type === 'vehicle'
-      ? group.meta.trip ?? `${group.memberCount} member${group.memberCount === 1 ? '' : 's'}`
+      ? `${group.memberCount} member${group.memberCount === 1 ? '' : 's'}`
       : (group.directPeer?.workspace ?? 'Direct message')
+  const tractor = group.type === 'vehicle' ? tractorPlate(group) : undefined
+  const trailer = group.type === 'vehicle' ? trailerPlate(group) : undefined
 
   return (
     <>
@@ -686,10 +692,25 @@ export default function ChatView({
             <div className="text-[11px] text-muted truncate">{subtitle}</div>
           </div>
         </div>
-        {group.type === 'vehicle' && group.meta.plate && (
-          <span className="font-mono text-[11px] text-muted border border-white/[0.08] rounded-chip px-2 py-0.5 shrink-0">
-            {group.meta.plate}
-          </span>
+        {group.type === 'vehicle' && (tractor || trailer) && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            {tractor && (
+              <span
+                title="Tractor registration"
+                className="font-mono text-[11px] text-muted border border-white/[0.08] rounded-chip px-2 py-0.5"
+              >
+                {tractor}
+              </span>
+            )}
+            {trailer && (
+              <span
+                title="Trailer registration"
+                className="font-mono text-[11px] text-muted border border-white/[0.08] rounded-chip px-2 py-0.5"
+              >
+                {trailer}
+              </span>
+            )}
+          </div>
         )}
       </header>
 
@@ -731,13 +752,27 @@ export default function ChatView({
                       </div>
                     )}
                     {messages.map((m, i) => {
+                      // Persisted activity rows (pin/unpin) render as compact
+                      // centered lines, never as bubbles or with an actions menu.
+                      if (m.kind === 'system') {
+                        return (
+                          <SystemMessageRow
+                            key={m.id}
+                            message={m}
+                            prev={messages[i - 1]}
+                            onJumpToMessage={jumpToMessage}
+                          />
+                        )
+                      }
                       const next = messages[i + 1]
                       // Hide the timestamp on any message that's immediately
                       // followed by another from the same sender within the
                       // same calendar minute. Only the last message of such a
-                      // run keeps its timestamp, like WhatsApp.
+                      // run keeps its timestamp, like WhatsApp. A system row
+                      // following us is a boundary (keep our timestamp).
                       const lastInMinuteGroup =
                         !next ||
+                        next.kind === 'system' ||
                         next.authorId !== m.authorId ||
                         minuteKey(next.createdAt) !== minuteKey(m.createdAt)
                       return (

@@ -12,6 +12,15 @@ export const env = {
   PORT: Number(process.env.PORT ?? 3001),
   NODE_ENV: process.env.NODE_ENV ?? 'development',
   PUBLIC_ORIGIN: process.env.PUBLIC_ORIGIN ?? '',
+  // Optional. When set, Socket.IO uses the Redis adapter so realtime events
+  // (and room joins/leaves) propagate across every API instance — required for
+  // running more than one instance behind a load balancer. Unset = single
+  // -instance in-memory adapter, which is correct for local dev.
+  REDIS_URL: process.env.REDIS_URL ?? '',
+  // Preview job backend. 'memory' = in-process queue (default; durable only for
+  // the life of the process). 'redis' is the documented durable extension point
+  // (BullMQ) — not yet shipped, so it currently warns and falls back to memory.
+  PREVIEW_QUEUE_DRIVER: process.env.PREVIEW_QUEUE_DRIVER ?? 'memory',
   // Supabase Storage backs attachment files (durable + shared across
   // environments, unlike the old per-instance local disk which Railway wipes
   // on every redeploy). The service-role key is server-only — the bucket is
