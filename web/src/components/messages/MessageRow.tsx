@@ -18,7 +18,9 @@ type Props = {
   // This row is among the newest in the thread — load its image attachments
   // eagerly so recent pictures appear together with the conversation.
   imagePriority: boolean
-  onActivateAttachment: (attachment: Attachment) => void
+  // Opens a preview with the parent message as context, so the preview's
+  // Reply/Forward act on the whole message (not just the raw file).
+  onActivateAttachment: (message: LocalMessage, attachment: Attachment) => void
   onImageLoad: () => void
   onCopy: (m: LocalMessage) => void
   onPin: (m: LocalMessage) => void
@@ -207,7 +209,7 @@ export default function MessageRow({
                       attachment={a}
                       uploading={pending}
                       priority={imagePriority}
-                      onActivate={onActivateAttachment}
+                      onActivate={(a) => onActivateAttachment(message, a)}
                       onImageLoad={onImageLoad}
                     />
                   ))}

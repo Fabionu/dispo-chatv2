@@ -1,16 +1,26 @@
 import { useEffect } from 'react'
-import { Download, ExternalLink, X } from 'lucide-react'
 import type { Attachment } from '../../lib/types'
+import type { LocalMessage } from '../messages/types'
+import PreviewActionBar from './PreviewActionBar'
 
 type Props = {
   attachment: Attachment
+  message: LocalMessage
+  onReply: (m: LocalMessage) => void
+  onForward: (m: LocalMessage) => void
   onClose: () => void
 }
 
 // PDF preview rendered INLINE inside the chat pane — fills the area that
 // would normally hold the message list + composer, leaving the conversation
 // header (and the sidebar) untouched. Esc returns to messages.
-export default function InlinePdfPreview({ attachment, onClose }: Props) {
+export default function InlinePdfPreview({
+  attachment,
+  message,
+  onReply,
+  onForward,
+  onClose,
+}: Props) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()
@@ -27,32 +37,13 @@ export default function InlinePdfPreview({ attachment, onClose }: Props) {
         <div className="text-[12px] text-muted truncate flex-1 min-w-0">
           {attachment.originalName}
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <a
-            href={attachment.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-btn border border-white/[0.14] text-text hover:bg-white/[0.04] text-[11.5px] transition-colors no-underline"
-          >
-            <ExternalLink size={13} strokeWidth={1.6} />
-            Open
-          </a>
-          <a
-            href={attachment.url}
-            download={attachment.originalName}
-            className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-btn border border-white/[0.14] text-text hover:bg-white/[0.04] text-[11.5px] transition-colors no-underline"
-          >
-            <Download size={13} strokeWidth={1.6} />
-            Download
-          </a>
-          <button
-            onClick={onClose}
-            aria-label="Close preview"
-            className="h-7 w-7 inline-flex items-center justify-center rounded-btn border border-white/[0.14] text-text hover:bg-white/[0.04] transition-colors"
-          >
-            <X size={13} strokeWidth={1.8} />
-          </button>
-        </div>
+        <PreviewActionBar
+          attachment={attachment}
+          message={message}
+          onReply={onReply}
+          onForward={onForward}
+          onClose={onClose}
+        />
       </div>
 
       <div className="flex-1 min-h-0 bg-bg">

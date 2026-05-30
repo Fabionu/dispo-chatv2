@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Download, Maximize, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { Maximize, ZoomIn, ZoomOut } from 'lucide-react'
 import type { Attachment } from '../../lib/types'
+import type { LocalMessage } from '../messages/types'
+import PreviewActionBar from './PreviewActionBar'
 
 type Props = {
   attachment: Attachment
+  message: LocalMessage
+  onReply: (m: LocalMessage) => void
+  onForward: (m: LocalMessage) => void
   onClose: () => void
 }
 
@@ -20,7 +25,13 @@ const FIT: View = { scale: 1, tx: 0, ty: 0 }
 // at scale=1; users can zoom (buttons / wheel / double-click) and pan once
 // zoomed. Pan is clamped so the image can never be dragged past its own
 // edges into the empty area.
-export default function ImagePreviewModal({ attachment, onClose }: Props) {
+export default function ImagePreviewModal({
+  attachment,
+  message,
+  onReply,
+  onForward,
+  onClose,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [naturalSize, setNaturalSize] = useState({ w: 0, h: 0 })
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 })
@@ -201,23 +212,13 @@ export default function ImagePreviewModal({ attachment, onClose }: Props) {
         <div className="text-[12.5px] text-text truncate flex-1 min-w-0">
           {attachment.originalName}
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <a
-            href={attachment.url}
-            download={attachment.originalName}
-            className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-btn border border-white/[0.14] text-text hover:bg-white/[0.04] text-[12px] transition-colors no-underline"
-          >
-            <Download size={14} strokeWidth={1.6} />
-            Download
-          </a>
-          <button
-            onClick={onClose}
-            aria-label="Close preview"
-            className="h-8 w-8 inline-flex items-center justify-center rounded-btn border border-white/[0.14] text-text hover:bg-white/[0.04] transition-colors"
-          >
-            <X size={14} strokeWidth={1.8} />
-          </button>
-        </div>
+        <PreviewActionBar
+          attachment={attachment}
+          message={message}
+          onReply={onReply}
+          onForward={onForward}
+          onClose={onClose}
+        />
       </div>
 
       <div

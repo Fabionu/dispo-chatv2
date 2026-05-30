@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useMemo, useRef, useEffect } from 'react'
+import { forwardRef, useImperativeHandle, useRef } from 'react'
 import { ArrowUp } from 'lucide-react'
 import type { ReplyToPreview } from '../../lib/types'
 import {
@@ -7,7 +7,6 @@ import {
   MAX_DOC_BYTES,
   MAX_IMAGE_BYTES,
 } from '../attachments/attachmentUtils'
-import ComposerAttachmentPreview from '../attachments/ComposerAttachmentPreview'
 import ComposerContextRow from '../messages/ComposerContextRow'
 import { useComposerAutosize } from '../../hooks/useComposerAutosize'
 import AttachMenu from './AttachMenu'
@@ -24,8 +23,9 @@ type Props = {
   text: string
   onTextChange: (v: string) => void
 
-  file: File | null
-  onFileChange: (file: File | null) => void
+  // A picked file is not staged inline anymore — it's handed straight to the
+  // parent, which opens the pre-send preview modal.
+  onFilePicked: (file: File) => void
 
   replyContext: ReplyToPreview | null
   onCancelReply: () => void
@@ -49,8 +49,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
     placeholder,
     text,
     onTextChange,
-    file,
-    onFileChange,
+    onFilePicked,
     replyContext,
     onCancelReply,
     editContext,
@@ -65,17 +64,6 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useComposerAutosize(textareaRef, text)
-
-  // Image preview URL for the staged file. Memoized + revoked on cleanup
-  // so we don't leak blobs.
-  const filePreviewUrl = useMemo(() => {
-    if (!file || !file.type.startsWith('image/')) return null
-    return URL.createObjectURL(file)
-  }, [file])
-  useEffect(() => {
-    if (!filePreviewUrl) return
-    return () => URL.revokeObjectURL(filePreviewUrl)
-  }, [filePreviewUrl])
 
   useImperativeHandle(ref, () => ({
     focus() {
@@ -92,21 +80,18 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
 
   function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const picked = e.target.files?.[0]
+    // Reset the input immediately so picking the same file again still fires
+    // a change event (the staged file now lives in the preview modal).
+    e.target.value = ''
     if (!picked) return
     const isImage = picked.type.startsWith('image/')
     const cap = isImage ? MAX_IMAGE_BYTES : MAX_DOC_BYTES
     if (picked.size > cap) {
       onFileError(isImage ? 'Image too large (max 10MB).' : 'File too large (max 25MB).')
-      e.target.value = ''
       return
     }
-    onFileChange(picked)
     onClearError()
-  }
-
-  function removeFile() {
-    onFileChange(null)
-    if (fileInputRef.current) fileInputRef.current.value = ''
+    onFilePicked(picked)
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -118,7 +103,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
 
   const disabled = editContext
     ? !text.trim() || text.trim() === editContext.originalBody
-    : !text.trim() && !file
+    : !text.trim()
 
   return (
     <div className="rounded-card border border-white/[0.14] bg-white/[0.045] focus-within:border-white/[0.24] focus-within:bg-white/[0.06] transition-colors shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">
@@ -140,13 +125,6 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           label="Editing message"
           snippet={editContext.originalBody}
           onCancel={onCancelEdit}
-        />
-      )}
-      {file && !editContext && (
-        <ComposerAttachmentPreview
-          file={file}
-          previewUrl={filePreviewUrl}
-          onRemove={removeFile}
         />
       )}
       <div className="flex items-end gap-2 px-3.5 py-2.5">

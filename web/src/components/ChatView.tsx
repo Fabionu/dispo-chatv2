@@ -6,6 +6,8 @@ import { api, ApiError } from '../lib/api'
 import { getSocket } from '../lib/socket'
 import ImagePreviewModal from './attachments/ImagePreviewModal'
 import InlinePdfPreview from './attachments/InlinePdfPreview'
+import AttachmentSendPreviewModal from './attachments/AttachmentSendPreviewModal'
+import DocumentPreviewModal from './attachments/DocumentPreviewModal'
 import ChatComposer, { type ChatComposerHandle, type EditContext } from './composer/ChatComposer'
 import MessageRow from './messages/MessageRow'
 import SystemMessageRow from './messages/SystemMessageRow'
@@ -23,6 +25,10 @@ import { preloadImage } from '../lib/attachmentCache'
 // Stable empty list so a group with no cached thread doesn't hand a fresh
 // array to useChatScroll on every render.
 const NO_MESSAGES: LocalMessage[] = []
+
+// An attachment paired with the message it belongs to — the context every
+// preview surface needs so Reply/Forward operate on the message.
+type AttachmentContext = { attachment: Attachment; message: LocalMessage }
 
 // How many of the newest messages get their images treated as "recent": loaded
 // eagerly in-bubble and warmed in the browser cache when the thread opens.
@@ -88,9 +94,16 @@ export default function ChatView({
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [text, setText] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [file, setFile] = useState<File | null>(null)
-  const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null)
-  const [pdfAttachment, setPdfAttachment] = useState<Attachment | null>(null)
+  // A picked file awaiting confirmation in the pre-send preview modal. The file
+  // is not "staged" in the composer anymore — it lives here until the user
+  // sends or cancels from the overlay.
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  // Attachment previews carry their parent message so the in-preview
+  // Reply/Forward act on the whole message, not just the raw file. One slot
+  // per surface: image lightbox, inline PDF, and the document card modal.
+  const [imagePreview, setImagePreview] = useState<AttachmentContext | null>(null)
+  const [pdfPreview, setPdfPreview] = useState<AttachmentContext | null>(null)
+  const [docPreview, setDocPreview] = useState<AttachmentContext | null>(null)
   // Reply context: when set, the composer shows the quoted preview and the
   // next outbound message is sent with `replyToMessageId` filled in. Seeded
   // from `initialReplyContext` when this view was opened via "Reply privately".
@@ -372,24 +385,32 @@ export default function ChatView({
     }
   }
 
-  // ── Attachment activation (image lightbox / PDF inline / file download) ──
-  const activateAttachment = useCallback((a: Attachment) => {
+  // ── Attachment activation (image lightbox / PDF inline / document card) ──
+  // Each surface keeps the parent message so its Reply/Forward act on the
+  // message. Non-previewable docs now open a card modal (with a Download
+  // action) rather than downloading straight away.
+  const activateAttachment = useCallback((message: LocalMessage, a: Attachment) => {
     if (!a.url && !a.localPreviewUrl) return
     if (a.mimeType.startsWith('image/')) {
       // Prefer the already-decoded local blob so the lightbox is instant for a
       // just-sent image (falls back to the server URL after the blob is freed).
-      setPreviewAttachment(a.localPreviewUrl ? { ...a, url: a.localPreviewUrl } : a)
+      setImagePreview({
+        attachment: a.localPreviewUrl ? { ...a, url: a.localPreviewUrl } : a,
+        message,
+      })
     } else if (a.mimeType === 'application/pdf') {
-      setPdfAttachment(a)
+      setPdfPreview({ attachment: a, message })
     } else {
-      const link = document.createElement('a')
-      link.href = a.url
-      link.download = a.originalName
-      link.style.display = 'none'
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
+      setDocPreview({ attachment: a, message })
     }
+  }, [])
+
+  // Shared close so Reply/Forward from any preview dismiss whichever surface
+  // is open before handing off to the message-level handler.
+  const closeAllPreviews = useCallback(() => {
+    setImagePreview(null)
+    setPdfPreview(null)
+    setDocPreview(null)
   }, [])
 
   // ── Send / edit / retry ────────────────────────────────────────────────
@@ -478,20 +499,35 @@ export default function ChatView({
     }
   }
 
+  // Composer send: text-only (and edits). Files are sent from the pre-send
+  // preview modal via `sendPendingFile` instead.
   function send() {
     if (editContext) {
       void submitEdit(editContext.id, text.trim(), editContext.originalBody)
       return
     }
     const body = text.trim()
-    const f = file
-    if (!body && !f) return
+    if (!body) return
     const reply = replyContext
     setText('')
-    setFile(null)
     setReplyContext(null)
     setError(null)
-    void sendBody(body, f, reply)
+    void sendBody(body, null, reply)
+  }
+
+  // Confirm from the pre-send preview: send the staged file + caption, close
+  // the overlay, and clear the composer text (the caption supersedes it). The
+  // optimistic bubble appears immediately; a failure leaves the retryable
+  // failed bubble in place, same as a text send.
+  function sendPendingFile(caption: string) {
+    const f = pendingFile
+    if (!f) return
+    const reply = replyContext
+    setPendingFile(null)
+    setText('')
+    setReplyContext(null)
+    setError(null)
+    void sendBody(caption, f, reply)
   }
 
   function retry(localId: string, body: string, attachedFile: File | null) {
@@ -506,11 +542,24 @@ export default function ChatView({
     composerHandleRef.current?.focus()
   }
 
+  // Reply/Forward triggered from an attachment preview: dismiss the preview,
+  // then reuse the same message-level handlers the bubble menu uses. The
+  // forward carries the message's attachment along, exactly like the menu.
+  function replyFromPreview(m: LocalMessage) {
+    closeAllPreviews()
+    startReply(m)
+  }
+
+  function forwardFromPreview(m: LocalMessage) {
+    closeAllPreviews()
+    setForwardTarget(m)
+  }
+
   function startEdit(m: LocalMessage) {
     setReplyContext(null)
     setEditContext({ id: m.id, originalBody: m.body })
     setText(m.body)
-    setFile(null)
+    setPendingFile(null)
     // Defer focus until React applies the new text; without this the cursor
     // can land before the value is set.
     requestAnimationFrame(() => composerHandleRef.current?.focus())
@@ -714,10 +763,13 @@ export default function ChatView({
         )}
       </header>
 
-      {pdfAttachment ? (
+      {pdfPreview ? (
         <InlinePdfPreview
-          attachment={pdfAttachment}
-          onClose={() => setPdfAttachment(null)}
+          attachment={pdfPreview.attachment}
+          message={pdfPreview.message}
+          onReply={replyFromPreview}
+          onForward={forwardFromPreview}
+          onClose={() => setPdfPreview(null)}
         />
       ) : (
         <>
@@ -841,8 +893,7 @@ export default function ChatView({
                 placeholder={`Message ${groupLabel(group)}`}
                 text={text}
                 onTextChange={setText}
-                file={file}
-                onFileChange={setFile}
+                onFilePicked={setPendingFile}
                 replyContext={replyContext}
                 onCancelReply={() => setReplyContext(null)}
                 editContext={editContext}
@@ -856,10 +907,33 @@ export default function ChatView({
         </>
       )}
 
-      {previewAttachment && (
+      {pendingFile && (
+        <AttachmentSendPreviewModal
+          file={pendingFile}
+          initialCaption={text}
+          onReplace={setPendingFile}
+          onCancel={() => setPendingFile(null)}
+          onSend={sendPendingFile}
+        />
+      )}
+
+      {imagePreview && (
         <ImagePreviewModal
-          attachment={previewAttachment}
-          onClose={() => setPreviewAttachment(null)}
+          attachment={imagePreview.attachment}
+          message={imagePreview.message}
+          onReply={replyFromPreview}
+          onForward={forwardFromPreview}
+          onClose={() => setImagePreview(null)}
+        />
+      )}
+
+      {docPreview && (
+        <DocumentPreviewModal
+          attachment={docPreview.attachment}
+          message={docPreview.message}
+          onReply={replyFromPreview}
+          onForward={forwardFromPreview}
+          onClose={() => setDocPreview(null)}
         />
       )}
 

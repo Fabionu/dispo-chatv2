@@ -74,7 +74,14 @@
       "mcp__Claude_in_Chrome__tabs_context_mcp",
       "mcp__Claude_in_Chrome__tabs_create_mcp",
       "mcp__Claude_in_Chrome__navigate",
-      "mcp__Claude_in_Chrome__read_network_requests"
+      "mcp__Claude_in_Chrome__read_network_requests",
+      "Bash(cd /c/Users/Home/Desktop/dispo-chatv2/web && rm src/components/attachments/ComposerAttachmentPreview.tsx && echo \"removed\")",
+      "Bash(echo \"launched, pid $!\")",
+      "Read(//tmp/**)",
+      "Bash(break)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:5173/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3001/api/health)",
+      "Bash(command -v chromium-cli)"
     ]
   }
 }

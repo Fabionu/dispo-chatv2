@@ -27,20 +27,29 @@ export function formatBytes(bytes: number): string {
 }
 
 // Pick a sensible lucide icon for a document's mime type. Keeps the surface
-// modest — three buckets is enough until we add previewing.
-export function DocIcon({ mime }: { mime: string }) {
+// modest — three buckets is enough until we add previewing. `size`/`className`
+// let callers scale it up (e.g. the large pre-send document card).
+export function DocIcon({
+  mime,
+  size = 15,
+  className = 'text-muted',
+}: {
+  mime: string
+  size?: number
+  className?: string
+}) {
   if (mime === 'application/pdf' || mime === 'text/plain') {
-    return <FileText size={15} strokeWidth={1.6} className="text-muted" />
+    return <FileText size={size} strokeWidth={1.6} className={className} />
   }
   if (
     mime === 'text/csv' ||
     mime === 'application/vnd.ms-excel' ||
     mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
   ) {
-    return <FileSpreadsheet size={15} strokeWidth={1.6} className="text-muted" />
+    return <FileSpreadsheet size={size} strokeWidth={1.6} className={className} />
   }
   if (mime.startsWith('image/')) {
-    return <ImageIcon size={15} strokeWidth={1.6} className="text-muted" />
+    return <ImageIcon size={size} strokeWidth={1.6} className={className} />
   }
-  return <FileIcon size={15} strokeWidth={1.6} className="text-muted" />
+  return <FileIcon size={size} strokeWidth={1.6} className={className} />
 }
