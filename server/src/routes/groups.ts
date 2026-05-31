@@ -55,7 +55,16 @@ const MESSAGE_COLUMNS = `
     )
      from messages rm
      join users ru on ru.id = rm.author_id
-    where rm.id = m.reply_to_message_id) as reply_to`
+    where rm.id = m.reply_to_message_id) as reply_to,
+  (select coalesce(
+      jsonb_agg(jsonb_build_object(
+        'user_id',      mu.id,
+        'display_name', mu.display_name
+      ) order by mm.created_at asc),
+      '[]'::jsonb)
+     from message_mentions mm
+     join users mu on mu.id = mm.mentioned_user_id
+    where mm.message_id = m.id) as mentions`
 
 const MESSAGE_FROM = `from messages m join users u on u.id = m.author_id`
 
@@ -93,6 +102,7 @@ type MessageRow = {
     has_attachments: boolean
     deleted: boolean
   } | null
+  mentions: Array<{ user_id: string; display_name: string }> | null
 }
 
 // Map a DB row to the API message shape. Soft-deleted messages have their body
@@ -142,6 +152,12 @@ function mapMessageRow(m: MessageRow) {
           deleted: m.reply_to.deleted,
         }
       : null,
+    // Deleted messages drop their mentions too — there's no body left to
+    // highlight and the highlight would imply content that's gone.
+    mentions: isDeleted ? [] : (m.mentions ?? []).map((x) => ({
+      userId: x.user_id,
+      displayName: x.display_name,
+    })),
   }
 }
 
@@ -180,9 +196,11 @@ groupsRouter.get(
       last_read_at: string | null
       member_count: number
       unread_count: number
+      unread_mention_count: number
       peer_id: string | null
       peer_name: string | null
       peer_workspace: string | null
+      peer_availability: string | null
     }>(
       `select g.id, g.type, g.name, g.description, g.meta,
               g.last_message_at, g.created_at,
@@ -201,13 +219,29 @@ groupsRouter.get(
                     select 1 from message_deletions md
                      where md.message_id = msg.id and md.user_id = $1
                   )) as unread_count,
-              peer.peer_id, peer.peer_name, peer.peer_workspace
+              -- unread mentions = the subset of unread messages that @-mention
+              -- me. Same read boundary, so marking the group read clears it.
+              (select count(*)::int
+                 from message_mentions mm
+                 join messages msg on msg.id = mm.message_id
+                where mm.mentioned_user_id = $1
+                  and msg.group_id = g.id
+                  and msg.author_id <> $1
+                  and msg.deleted_at is null
+                  and msg.kind = 'user'
+                  and msg.created_at > coalesce(gm.last_read_at, 'epoch'::timestamptz)
+                  and not exists (
+                    select 1 from message_deletions md
+                     where md.message_id = msg.id and md.user_id = $1
+                  )) as unread_mention_count,
+              peer.peer_id, peer.peer_name, peer.peer_workspace, peer.peer_availability
          from groups g
          join group_members gm on gm.group_id = g.id and gm.user_id = $1
          left join lateral (
            select u.id as peer_id,
                   u.display_name as peer_name,
-                  w.name as peer_workspace
+                  w.name as peer_workspace,
+                  u.availability_status as peer_availability
              from group_members gm2
              join users u on u.id = gm2.user_id
              join workspaces w on w.id = u.workspace_id
@@ -232,9 +266,15 @@ groupsRouter.get(
         createdAt: r.created_at,
         memberCount: r.member_count,
         unreadCount: r.unread_count,
+        unreadMentionCount: r.unread_mention_count,
         directPeer:
           r.type === 'direct' && r.peer_id
-            ? { id: r.peer_id, name: r.peer_name, workspace: r.peer_workspace }
+            ? {
+                id: r.peer_id,
+                name: r.peer_name,
+                workspace: r.peer_workspace,
+                availabilityStatus: r.peer_availability,
+              }
             : null,
       })),
     })
@@ -392,6 +432,48 @@ groupsRouter.post(
   }),
 )
 
+// ── GET /api/groups/:id/members ──────────────────────────────────────────
+// The members of one conversation — drives the @-mention picker. Restricted
+// to members of the group (the caller must belong to it), so the picker only
+// ever offers people who are actually in the conversation. Returns each
+// member's id, display name, and home workspace (handy for cross-workspace
+// DMs where two people from different companies share a thread).
+groupsRouter.get(
+  '/:id/members',
+  asyncHandler(async (req, res) => {
+    const { userId } = req.session!
+    const groupId = req.params.id
+
+    const { rows: membership } = await pool.query(
+      'select 1 from group_members where group_id = $1 and user_id = $2 limit 1',
+      [groupId, userId],
+    )
+    if (membership.length === 0) return res.status(403).json({ error: 'not_a_member' })
+
+    const { rows } = await pool.query<{
+      id: string
+      display_name: string
+      workspace: string | null
+    }>(
+      `select u.id, u.display_name, w.name as workspace
+         from group_members gm
+         join users u on u.id = gm.user_id
+         left join workspaces w on w.id = u.workspace_id
+        where gm.group_id = $1
+        order by u.display_name asc`,
+      [groupId],
+    )
+
+    res.json({
+      members: rows.map((r) => ({
+        id: r.id,
+        displayName: r.display_name,
+        workspace: r.workspace,
+      })),
+    })
+  }),
+)
+
 // ── GET /api/groups/:id/messages ─────────────────────────────────────────
 // Cursor-based pagination. Default: latest 50. Pass ?before=<iso-timestamp>
 // (the createdAt of the oldest message you currently have) to load older.
@@ -493,6 +575,21 @@ const postMessageSchema = z.object({
   // "something must be sent" rule explicitly below.
   body: z.string().trim().max(8000).optional().default(''),
   replyToMessageId: z.string().uuid().optional(),
+  // Users @-mentioned in this message. JSON requests send a real array;
+  // multipart (attachment + caption) sends it as a JSON string field, so we
+  // coerce a string back into an array before validating. Invalid shapes
+  // degrade to "no mentions" rather than failing the whole send.
+  mentionUserIds: z
+    .preprocess((v) => {
+      if (typeof v !== 'string') return v
+      try {
+        return JSON.parse(v)
+      } catch {
+        return []
+      }
+    }, z.array(z.string().uuid()).max(50))
+    .optional()
+    .default([]),
 })
 
 groupsRouter.post(
@@ -506,6 +603,10 @@ groupsRouter.post(
     const file = req.file
     const body = parsed.data.body
     const replyToMessageId = parsed.data.replyToMessageId ?? null
+    // Dedupe requested mention ids up front; membership is validated against
+    // the DB after the message row exists (so we only store mentions for users
+    // who actually belong to this conversation).
+    const requestedMentionIds = [...new Set(parsed.data.mentionUserIds)]
 
     if (!body && !file) return res.status(400).json({ error: 'empty_message' })
 
@@ -625,6 +726,31 @@ groupsRouter.post(
       }
 
       const row = rows[0]
+
+      // Persist mentions. Only ids that are real members of this group are
+      // stored (a non-member id is silently dropped — safe, no error). We pull
+      // display names in the same validation query so the broadcast payload can
+      // carry them without a second round-trip.
+      let mentions: Array<{ userId: string; displayName: string }> = []
+      if (requestedMentionIds.length > 0) {
+        const { rows: validMembers } = await pool.query<{ id: string; display_name: string }>(
+          `select u.id, u.display_name
+             from group_members gm
+             join users u on u.id = gm.user_id
+            where gm.group_id = $1 and u.id = any($2::uuid[])`,
+          [groupId, requestedMentionIds],
+        )
+        if (validMembers.length > 0) {
+          await pool.query(
+            `insert into message_mentions (message_id, mentioned_user_id)
+             select $1, * from unnest($2::uuid[])
+             on conflict do nothing`,
+            [row.id, validMembers.map((m) => m.id)],
+          )
+          mentions = validMembers.map((m) => ({ userId: m.id, displayName: m.display_name }))
+        }
+      }
+
       // No previewUrl/width/height yet — the preview is generated after we
       // respond (see enqueuePreviewJob below) and delivered via the
       // `attachment:preview` socket event. Until then the bubble uses `url`.
@@ -661,6 +787,7 @@ groupsRouter.post(
                 deleted: row.reply_is_deleted ?? false,
               }
             : null,
+        mentions,
       }
 
       getIO().to(roomForGroup(groupId)).emit('message:new', payload)
@@ -1037,6 +1164,9 @@ groupsRouter.post(
           url: `/api/attachments/${a.id}`,
         })),
         replyTo: null,
+        // Forwarding never copies mentions — it must not re-notify the people
+        // mentioned in the original message.
+        mentions: [],
       }
       getIO().to(roomForGroup(toGroupId)).emit('message:new', payload)
       res.status(201).json({ message: payload })

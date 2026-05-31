@@ -1,11 +1,36 @@
 import type {
+  CompanyProfile,
   Connection,
   ConnectionsResponse,
   DirectoryUser,
   Group,
+  GroupMember,
   Message,
+  Profile,
   WorkspaceMember,
 } from './types'
+
+// Editable subsets sent to PATCH endpoints (all fields optional).
+export type ProfilePatch = Partial<{
+  displayName: string
+  jobTitle: string | null
+  workPhone: string | null
+  nativeLanguage: string | null
+  otherLanguages: string[]
+  availabilityStatus: Profile['availabilityStatus']
+}>
+
+export type CompanyProfilePatch = Partial<{
+  name: string
+  legalName: string | null
+  vatId: string | null
+  country: string | null
+  city: string | null
+  operationalAddress: string | null
+  dispatchEmail: string | null
+  dispatchPhone: string | null
+  website: string | null
+}>
 
 // Thin typed wrapper over fetch. Every call is same-origin and carries the
 // session cookie. Non-2xx responses throw ApiError with the server's machine
@@ -76,13 +101,18 @@ export const api = {
       body: string,
       file?: File | null,
       replyToMessageId?: string | null,
+      mentionUserIds?: string[],
     ) => {
+      const mentions = mentionUserIds ?? []
       // Multipart only when there's actually a file; JSON otherwise to keep
       // the wire format and server parsing path as simple as possible.
       if (file) {
         const form = new FormData()
         form.append('body', body)
         if (replyToMessageId) form.append('replyToMessageId', replyToMessageId)
+        // Form fields are strings — send the ids as a JSON string the server
+        // coerces back into an array.
+        if (mentions.length) form.append('mentionUserIds', JSON.stringify(mentions))
         form.append('file', file, file.name)
         return request<{ message: Message & { groupId: string } }>(
           `/groups/${groupId}/messages`,
@@ -96,10 +126,15 @@ export const api = {
           body: JSON.stringify({
             body,
             ...(replyToMessageId ? { replyToMessageId } : {}),
+            ...(mentions.length ? { mentionUserIds: mentions } : {}),
           }),
         },
       )
     },
+
+    // Members of one conversation — the source for the @-mention picker.
+    members: (groupId: string) =>
+      request<{ members: GroupMember[] }>(`/groups/${groupId}/members`),
 
     editMessage: (groupId: string, messageId: string, body: string) =>
       request<{ message: { id: string; groupId: string; body: string; editedAt: string } }>(
@@ -154,6 +189,39 @@ export const api = {
 
   workspace: {
     members: () => request<{ members: WorkspaceMember[] }>('/workspace/members'),
+  },
+
+  profile: {
+    get: () => request<{ profile: Profile }>('/profile'),
+    update: (patch: ProfilePatch) =>
+      request<{ profile: Profile }>('/profile', {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      }),
+    uploadAvatar: (file: File) => {
+      const form = new FormData()
+      form.append('file', file, file.name)
+      return request<{ profile: Profile }>('/profile/avatar', { method: 'POST', body: form })
+    },
+    removeAvatar: () => request<{ profile: Profile }>('/profile/avatar', { method: 'DELETE' }),
+  },
+
+  company: {
+    get: () => request<{ company: CompanyProfile }>('/company-profile'),
+    update: (patch: CompanyProfilePatch) =>
+      request<{ company: CompanyProfile }>('/company-profile', {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      }),
+    uploadLogo: (file: File) => {
+      const form = new FormData()
+      form.append('file', file, file.name)
+      return request<{ company: CompanyProfile }>('/company-profile/logo', {
+        method: 'POST',
+        body: form,
+      })
+    },
+    removeLogo: () => request<{ company: CompanyProfile }>('/company-profile/logo', { method: 'DELETE' }),
   },
 
   directory: {

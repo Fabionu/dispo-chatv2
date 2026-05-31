@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowDown } from 'lucide-react'
-import type { Attachment, Group, IncomingMessage, ReplyToPreview } from '../lib/types'
+import type { Attachment, Group, GroupMember, IncomingMessage, ReplyToPreview } from '../lib/types'
 import { groupLabel, tractorPlate, trailerPlate } from '../lib/types'
+import { resolveMentionIds } from '../lib/mentions'
 import { api, ApiError } from '../lib/api'
 import { getSocket } from '../lib/socket'
 import ImagePreviewModal from './attachments/ImagePreviewModal'
@@ -128,6 +129,9 @@ export default function ChatView({
   const [pinned, setPinned] = useState<LocalMessage[]>([])
   // Who else is currently typing in this conversation (excludes self).
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([])
+  // Members of this conversation — the source for the @-mention picker and for
+  // resolving typed @Names back to user ids at send time.
+  const [members, setMembers] = useState<GroupMember[]>([])
 
   const composerHandleRef = useRef<ChatComposerHandle>(null)
   const highlightTimer = useRef<number | undefined>(undefined)
@@ -179,6 +183,24 @@ export default function ChatView({
     window.clearTimeout(noticeTimer.current)
     noticeTimer.current = window.setTimeout(() => setNotice(null), 2200)
   }
+
+  // ── Conversation members (for @-mentions) ──────────────────────────────
+  // Fetched per group; used by the composer's mention picker and to resolve
+  // typed @Names to ids when sending. Cleared between groups so a stale list
+  // can't leak across conversations.
+  useEffect(() => {
+    let cancelled = false
+    setMembers([])
+    api.groups
+      .members(group.id)
+      .then((r) => {
+        if (!cancelled) setMembers(r.members)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [group.id])
 
   // ── Read receipts ──────────────────────────────────────────────────────
   const markRead = useCallback(() => {
@@ -418,9 +440,17 @@ export default function ChatView({
     body: string,
     attachedFile: File | null,
     replyTo: ReplyToPreview | null,
+    mentionUserIds: string[] = [],
   ) {
     if (!body && !attachedFile) return
     const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    // Optimistic mentions: highlight the typed @Names immediately, before the
+    // server echoes the canonical list back.
+    const optimisticMentions = mentionUserIds.length
+      ? members
+          .filter((m) => mentionUserIds.includes(m.id))
+          .map((m) => ({ userId: m.id, displayName: m.displayName }))
+      : undefined
 
     // For images, show the local blob URL on the optimistic bubble so the
     // user sees their picture immediately. For documents, we still preview
@@ -448,6 +478,7 @@ export default function ChatView({
       attachments: optimisticAttachment ? [optimisticAttachment] : undefined,
       pendingFile: attachedFile ?? undefined,
       replyTo: replyTo,
+      mentions: optimisticMentions,
     }
     cache.upsertMessage(group.id, optimistic)
     pinToBottomNext()
@@ -458,6 +489,7 @@ export default function ChatView({
         body,
         attachedFile,
         replyTo?.id ?? null,
+        mentionUserIds,
       )
       // replaceMessage swaps the optimistic for the real one (or drops it if
       // the socket already delivered the real message), carrying the local
@@ -509,10 +541,13 @@ export default function ChatView({
     const body = text.trim()
     if (!body) return
     const reply = replyContext
+    // Resolve @Names still present in the final text to member ids — edits or
+    // deletions of a mention token before send naturally drop it.
+    const mentionIds = resolveMentionIds(body, members)
     setText('')
     setReplyContext(null)
     setError(null)
-    void sendBody(body, null, reply)
+    void sendBody(body, null, reply, mentionIds)
   }
 
   // Confirm from the pre-send preview: send the staged file + caption, close
@@ -523,16 +558,18 @@ export default function ChatView({
     const f = pendingFile
     if (!f) return
     const reply = replyContext
+    // Captions support mentions too: resolve @Names typed into the caption.
+    const mentionIds = resolveMentionIds(caption, members)
     setPendingFile(null)
     setText('')
     setReplyContext(null)
     setError(null)
-    void sendBody(caption, f, reply)
+    void sendBody(caption, f, reply, mentionIds)
   }
 
   function retry(localId: string, body: string, attachedFile: File | null) {
     cache.removeMessage(group.id, localId)
-    void sendBody(body, attachedFile, null)
+    void sendBody(body, attachedFile, null, resolveMentionIds(body, members))
   }
 
   // ── Message action callbacks ───────────────────────────────────────────
@@ -835,6 +872,7 @@ export default function ChatView({
                           key={m.localId ?? m.id}
                           message={m}
                           mine={m.authorId === currentUserId}
+                          currentUserId={currentUserId}
                           prev={messages[i - 1]}
                           groupType={group.type}
                           highlighted={highlightedMessageId === m.id}
@@ -893,6 +931,7 @@ export default function ChatView({
                 placeholder={`Message ${groupLabel(group)}`}
                 text={text}
                 onTextChange={setText}
+                members={members}
                 onFilePicked={setPendingFile}
                 replyContext={replyContext}
                 onCancelReply={() => setReplyContext(null)}

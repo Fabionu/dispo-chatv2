@@ -3,10 +3,48 @@
 
 export type GroupType = 'vehicle' | 'direct'
 
+export type Role = 'admin' | 'dispatcher' | 'driver' | 'partner'
+export type AvailabilityStatus = 'available' | 'busy' | 'off_duty'
+
+// The current user's operational profile (own data only).
+export type Profile = {
+  id: string
+  email: string
+  displayName: string
+  role: Role
+  jobTitle: string | null
+  workPhone: string | null
+  nativeLanguage: string | null
+  otherLanguages: string[]
+  availabilityStatus: AvailabilityStatus
+  hasAvatar: boolean
+  company: string
+}
+
+// The company / workspace operational profile.
+export type CompanyProfile = {
+  id: string
+  name: string
+  legalName: string | null
+  vatId: string | null
+  country: string | null
+  city: string | null
+  operationalAddress: string | null
+  dispatchEmail: string | null
+  dispatchPhone: string | null
+  website: string | null
+  hasLogo: boolean
+  /** True when the caller is an admin and may edit these fields. */
+  canEdit: boolean
+}
+
 export type DirectPeer = {
   id: string
   name: string | null
   workspace: string | null
+  /** The peer's declared availability (manual status), for the DM row dot.
+   *  Optional: older responses / optimistic rows omit it. */
+  availabilityStatus?: AvailabilityStatus
 }
 
 export type Group = {
@@ -40,6 +78,9 @@ export type Group = {
    *  Optional: older API responses omit it — callers fall back to the
    *  timestamp-based `groupHasUnread`. */
   unreadCount?: number
+  /** How many of those unread messages @-mention me. Drives the sidebar's
+   *  separate "@" badge. Optional for forward-compat with older responses. */
+  unreadMentionCount?: number
   directPeer: DirectPeer | null
 }
 
@@ -138,6 +179,20 @@ export type Message = {
   systemEvent?: string | null
   /** For system rows: the message the activity refers to (clickable to jump). */
   systemTargetMessageId?: string | null
+  /** Users @-mentioned in this message. Drives the highlighted mention tokens
+   *  in the bubble. Absent/empty when the message mentions no one. */
+  mentions?: Mention[]
+}
+
+// One @-mention inside a message: the user id (for "is this me?" highlighting
+// and future notifications) plus the display name (the literal text rendered).
+export type Mention = { userId: string; displayName: string }
+
+// A member of a single conversation — the source for the @-mention picker.
+export type GroupMember = {
+  id: string
+  displayName: string
+  workspace: string | null
 }
 
 // Payload of the `message:new` socket event — same as Message plus groupId.

@@ -1,15 +1,48 @@
-import { useRef, useState } from 'react'
+import { Fragment, useRef, useState, type ReactNode } from 'react'
 import { ChevronDown, Pin } from 'lucide-react'
-import type { Attachment, GroupType } from '../../lib/types'
+import type { Attachment, GroupType, Mention } from '../../lib/types'
+import { splitBodyByMentions } from '../../lib/mentions'
 import AttachmentBlock from '../attachments/AttachmentBlock'
 import MessageActionsMenu, { type MessageAction } from './MessageActionsMenu'
 import ReplyQuote from './ReplyQuote'
-import { DELETE_WINDOW_MS, formatDay, formatTime, initials } from './messageUtils'
+import { DELETE_WINDOW_MS, formatDay, formatTime } from './messageUtils'
+import Avatar from '../Avatar'
 import type { LocalMessage } from './types'
+
+// Render a message body with @-mentions highlighted. Tokenized into plain-text
+// and mention segments (never HTML) so user input is always escaped by React.
+// A mention of the current user gets a stronger-but-subtle chip; others are a
+// quiet accent-coloured token.
+function renderBody(
+  body: string,
+  mentions: Mention[] | undefined,
+  currentUserId: string,
+): ReactNode {
+  const segments = splitBodyByMentions(body, mentions)
+  if (segments.length === 1 && !segments[0].mention) return body
+  return segments.map((seg, i) => {
+    if (!seg.mention) return <Fragment key={i}>{seg.text}</Fragment>
+    const isMe = seg.mention.userId === currentUserId
+    return (
+      <span
+        key={i}
+        className={
+          isMe
+            ? 'rounded px-0.5 font-semibold text-active bg-active/15'
+            : 'font-medium text-active'
+        }
+      >
+        {seg.text}
+      </span>
+    )
+  })
+}
 
 type Props = {
   message: LocalMessage
   mine: boolean
+  // The viewing user — used to highlight mentions of *me* more strongly.
+  currentUserId: string
   prev?: LocalMessage
   groupType: GroupType
   highlighted: boolean
@@ -38,6 +71,7 @@ type Props = {
 export default function MessageRow({
   message,
   mine,
+  currentUserId,
   prev,
   groupType,
   highlighted,
@@ -171,9 +205,7 @@ export default function MessageRow({
         {showAuthorChrome && (
           <div className="w-9 mr-2.5 shrink-0">
             {!sameAuthorAsPrev && (
-              <div className="h-9 w-9 rounded-full bg-active/30 border border-active/40 flex items-center justify-center text-[11.5px] font-semibold uppercase font-mono">
-                {initials(message.authorName)}
-              </div>
+              <Avatar userId={message.authorId} name={message.authorName} size={36} />
             )}
           </div>
         )}
@@ -221,7 +253,9 @@ export default function MessageRow({
                 </span>
               ) : (
                 message.body && (
-                  <span className="whitespace-pre-wrap break-words">{message.body}</span>
+                  <span className="whitespace-pre-wrap break-words">
+                    {renderBody(message.body, message.mentions, currentUserId)}
+                  </span>
                 )
               )}
               {(failed || showTimestamp) && !deleted && (

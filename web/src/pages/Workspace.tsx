@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Box,
   ChevronDown,
   CircleUser,
   LogOut,
@@ -8,6 +7,7 @@ import {
   Search,
   Settings,
   Users,
+  X,
 } from 'lucide-react'
 import type { User, Workspace as WorkspaceT } from '../auth/AuthContext'
 import type {
@@ -16,6 +16,7 @@ import type {
   ConnectionUser,
   Group,
   IncomingMessage,
+  Profile,
   ReplyToPreview,
 } from '../lib/types'
 import { groupHasUnread, groupLabel, tractorPlate } from '../lib/types'
@@ -26,8 +27,15 @@ import ChatView from '../components/ChatView'
 import ConnectionRequestView from '../components/connections/ConnectionRequestView'
 import ConnectionRequestsSection from '../components/connections/ConnectionRequestsSection'
 import AppMark from '../components/AppMark'
+import Avatar from '../components/Avatar'
+import CompanyLogo from '../components/CompanyLogo'
 import CreateVehicleGroupModal from '../components/CreateVehicleGroupModal'
 import NewMessageModal from '../components/NewMessageModal'
+import ProfileSidebarPanel from '../components/settings/ProfileSidebarPanel'
+import CompanySidebarPanel from '../components/settings/CompanySidebarPanel'
+import { useIdle } from '../hooks/useIdle'
+import { statusMeta, AWAY } from '../lib/availability'
+import { useAuth } from '../auth/AuthContext'
 
 type Props = {
   user: User
@@ -57,12 +65,31 @@ function byRecent(a: Group, b: Group): number {
 }
 
 export default function Workspace({ user, workspace, onSignOut }: Props) {
+  const { refresh } = useAuth()
+  // Auto-away presence: grey "Away" on the footer status dot when idle / tab
+  // hidden. Doesn't change the stored (manual) status — presence only.
+  const away = useIdle()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [newMenuOpen, setNewMenuOpen] = useState(false)
   const [modal, setModal] = useState<NewGroupKind | null>(null)
+  // "My profile" and "Workspace settings" both open as sidebar drawers that
+  // replace the conversation list (the chat stays visible on the right).
+  const [profilePanelOpen, setProfilePanelOpen] = useState(false)
+  const [companyPanelOpen, setCompanyPanelOpen] = useState(false)
+  // Prefetched once at mount so opening "My profile" is instant (the panel
+  // remounts each open, so without this it would refetch every time and flash
+  // a "Loading…" state). Kept fresh by the panel's onSaved.
+  const [cachedProfile, setCachedProfile] = useState<Profile | null>(null)
+  // Bumped after the current user / admin changes their avatar / logo, to bust
+  // the browser image cache in the rail.
+  const [avatarVersion, setAvatarVersion] = useState(0)
+  const [logoVersion, setLogoVersion] = useState(0)
   const [groups, setGroups] = useState<Group[]>([])
   const [loadingGroups, setLoadingGroups] = useState(true)
   const [selection, setSelection] = useState<Selection>(null)
+  // Sidebar quick-filter text. Filters the conversation lists by name (and a
+  // vehicle's tractor plate) so "Jump to…" actually narrows the rail.
+  const [query, setQuery] = useState('')
   const [connections, setConnections] = useState<ConnectionsResponse>(EMPTY_CONNECTIONS)
   // A quote to seed a DM's composer with, set when a DM is opened via "Reply
   // privately". Scoped to a group id so it only seeds that conversation.
@@ -81,6 +108,15 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   openGroupIdRef.current = openGroupId
 
   const { prefetch } = useMessageCache()
+
+  // Warm the profile cache in the background so the "My profile" drawer opens
+  // instantly the first time. Cheap, fire-and-forget.
+  useEffect(() => {
+    api.profile
+      .get()
+      .then(({ profile }) => setCachedProfile(profile))
+      .catch(() => {})
+  }, [])
 
   const refreshGroups = useCallback(async () => {
     const { groups } = await api.groups.list()
@@ -116,10 +152,14 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         // isn't the one currently open (the open one gets marked read).
         const bumpUnread =
           msg.authorId !== user.id && openGroupIdRef.current !== msg.groupId
+        // A separate bump for the @-badge: only when this message mentions me.
+        const bumpMention =
+          bumpUnread && (msg.mentions?.some((m) => m.userId === user.id) ?? false)
         const updated: Group = {
           ...prev[idx],
           lastMessageAt: msg.createdAt,
           unreadCount: (prev[idx].unreadCount ?? 0) + (bumpUnread ? 1 : 0),
+          unreadMentionCount: (prev[idx].unreadMentionCount ?? 0) + (bumpMention ? 1 : 0),
         }
         const next = prev.filter((_, i) => i !== idx)
         next.unshift(updated)
@@ -268,7 +308,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     setGroups((prev) =>
       prev.map((g) =>
         g.id === groupId
-          ? { ...g, lastReadAt: new Date().toISOString(), unreadCount: 0 }
+          ? { ...g, lastReadAt: new Date().toISOString(), unreadCount: 0, unreadMentionCount: 0 }
           : g,
       ),
     )
@@ -276,6 +316,29 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
 
   const vehicleGroups = useMemo(() => groups.filter((g) => g.type === 'vehicle'), [groups])
   const directGroups = useMemo(() => groups.filter((g) => g.type === 'direct'), [groups])
+
+  // Apply the quick-filter. Empty query → full lists. A vehicle also matches on
+  // its tractor plate so you can jump by registration number.
+  const q = query.trim().toLowerCase()
+  const matchesQuery = useCallback(
+    (g: Group) => {
+      if (!q) return true
+      if (groupLabel(g).toLowerCase().includes(q)) return true
+      const plate = tractorPlate(g)
+      return plate ? plate.toLowerCase().includes(q) : false
+    },
+    [q],
+  )
+  const filteredVehicles = useMemo(
+    () => vehicleGroups.filter(matchesQuery),
+    [vehicleGroups, matchesQuery],
+  )
+  const filteredDirects = useMemo(
+    () => directGroups.filter(matchesQuery),
+    [directGroups, matchesQuery],
+  )
+  const searching = q.length > 0
+
   const pendingReceived = connections.pendingReceived
 
   const selectedGroup = useMemo<Group | null>(() => {
@@ -292,19 +355,42 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     <div className="h-screen w-full flex bg-bg text-text overflow-hidden">
       {/* Left rail */}
       <aside className="w-[var(--sidebar-width)] shrink-0 bg-rail border-r border-white/[0.08] flex flex-col">
-        {/* Workspace switcher */}
-        <button className="h-[var(--header-height)] flex items-center gap-2.5 px-4 border-b border-white/[0.05] hover:bg-white/[0.02] transition-colors text-left">
-          <div className="h-7 w-7 rounded-chip border border-white/[0.1] bg-white/[0.03] flex items-center justify-center shrink-0">
-            <Box size={14} strokeWidth={1.6} />
-          </div>
+        {profilePanelOpen ? (
+          <ProfileSidebarPanel
+            initialProfile={cachedProfile}
+            away={away}
+            onBack={() => setProfilePanelOpen(false)}
+            onSaved={(p, v) => {
+              // Keep the cache fresh, and update the rail footer avatar + global
+              // user data immediately.
+              setCachedProfile(p)
+              setAvatarVersion((n) => Math.max(n, v) + 1)
+              void refresh()
+            }}
+          />
+        ) : companyPanelOpen ? (
+          <CompanySidebarPanel
+            onBack={() => setCompanyPanelOpen(false)}
+            onSaved={(_c, v) => {
+              setLogoVersion((n) => Math.max(n, v) + 1)
+              void refresh()
+            }}
+          />
+        ) : (
+          <>
+        {/* Workspace identity. Not a button: there's no second workspace to
+            switch to, and workspace actions live in the user menu below — so we
+            don't show a dropdown chevron that leads nowhere. Just the company
+            name — the slug was a near-duplicate of it (it's derived from the
+            name) and added no information here. */}
+        <div className="h-[var(--header-height)] flex items-center gap-2.5 px-4 border-b border-white/[0.05]">
+          <CompanyLogo size={28} version={logoVersion} />
           <div className="min-w-0 flex-1">
-            <div className="text-[13px] font-semibold truncate">{workspace.name}</div>
-            <div className="eyebrow truncate" style={{ fontSize: 9.5 }}>
-              {workspace.slug}
+            <div className="text-[15.5px] font-semibold tracking-[-0.2px] truncate">
+              {workspace.name}
             </div>
           </div>
-          <ChevronDown size={14} className="text-muted shrink-0" strokeWidth={1.6} />
-        </button>
+        </div>
 
         {/* Quick search + create */}
         <div className="px-3 pt-3 pb-2 flex items-center gap-1.5">
@@ -315,9 +401,23 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             <Search size={12} strokeWidth={1.6} className="text-faint shrink-0" />
             <input
               id="rail-search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setQuery('')
+              }}
               placeholder="Jump to…"
               className="bg-transparent text-[12.5px] flex-1 outline-none placeholder:text-faint min-w-0"
             />
+            {query && (
+              <button
+                onClick={() => setQuery('')}
+                aria-label="Clear search"
+                className="text-faint hover:text-text shrink-0 transition-colors"
+              >
+                <X size={12} strokeWidth={1.8} />
+              </button>
+            )}
           </label>
 
           <div className="relative shrink-0" ref={newMenuRef}>
@@ -351,6 +451,39 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         <nav className="flex-1 overflow-y-auto px-2 pt-2 pb-2 space-y-6">
           {loadingGroups ? (
             <div className="px-2 text-[11.5px] text-faint">Loading…</div>
+          ) : searching ? (
+            // While searching, show only matching conversations (no requests,
+            // no create hints) so the rail reads as pure search results.
+            filteredVehicles.length === 0 && filteredDirects.length === 0 ? (
+              <EmptyHint>No conversations match “{query.trim()}”.</EmptyHint>
+            ) : (
+              <>
+                {filteredVehicles.length > 0 && (
+                  <ChannelGroup label="Vehicles">
+                    {filteredVehicles.map((g) => (
+                      <GroupRow
+                        key={g.id}
+                        group={g}
+                        selected={selection?.kind === 'group' && selection.id === g.id}
+                        onClick={() => setSelection({ kind: 'group', id: g.id })}
+                      />
+                    ))}
+                  </ChannelGroup>
+                )}
+                {filteredDirects.length > 0 && (
+                  <ChannelGroup label="Direct messages">
+                    {filteredDirects.map((g) => (
+                      <GroupRow
+                        key={g.id}
+                        group={g}
+                        selected={selection?.kind === 'group' && selection.id === g.id}
+                        onClick={() => setSelection({ kind: 'group', id: g.id })}
+                      />
+                    ))}
+                  </ChannelGroup>
+                )}
+              </>
+            )
           ) : (
             <>
               <ConnectionRequestsSection
@@ -398,7 +531,22 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         <div className="relative border-t border-white/[0.05]" ref={userMenuRef}>
           {userMenuOpen && (
             <div className="absolute bottom-full left-2 right-2 mb-2 rounded-card border border-white/[0.08] bg-surface overflow-hidden">
-              <MenuItem icon={<Settings size={13} strokeWidth={1.6} />} onClick={() => {}}>
+              <MenuItem
+                icon={<CircleUser size={13} strokeWidth={1.6} />}
+                onClick={() => {
+                  setUserMenuOpen(false)
+                  setProfilePanelOpen(true)
+                }}
+              >
+                My profile
+              </MenuItem>
+              <MenuItem
+                icon={<Settings size={13} strokeWidth={1.6} />}
+                onClick={() => {
+                  setUserMenuOpen(false)
+                  setCompanyPanelOpen(true)
+                }}
+              >
                 Workspace settings
               </MenuItem>
               <MenuItem
@@ -417,8 +565,21 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             onClick={() => setUserMenuOpen((v) => !v)}
             className="w-full flex items-center gap-2.5 px-3 py-3 hover:bg-white/[0.02] transition-colors text-left"
           >
-            <div className="h-7 w-7 rounded-full bg-active/30 border border-active/40 flex items-center justify-center shrink-0 text-[11px] font-semibold uppercase font-mono">
-              {initials(user.displayName)}
+            <div className="relative shrink-0">
+              <Avatar userId={user.id} name={user.displayName} size={28} version={avatarVersion} />
+              {/* Live status dot: grey "Away" when idle, else the manual status
+                  colour. Drivers have no availability, so no dot. */}
+              {user.role !== 'driver' && cachedProfile && (
+                <span
+                  title={away ? AWAY.label : statusMeta(cachedProfile.availabilityStatus).label}
+                  className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-rail"
+                  style={{
+                    backgroundColor: away
+                      ? AWAY.color
+                      : statusMeta(cachedProfile.availabilityStatus).color,
+                  }}
+                />
+              )}
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-[12.5px] font-medium truncate">{user.displayName}</div>
@@ -431,6 +592,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             />
           </button>
         </div>
+          </>
+        )}
       </aside>
 
       {/* Main */}
@@ -524,6 +687,9 @@ function GroupRow({
   const hasCount = typeof group.unreadCount === 'number'
   const unreadCount = selected ? 0 : group.unreadCount ?? 0
   const unread = selected ? false : hasCount ? unreadCount > 0 : groupHasUnread(group)
+  // Unread @-mentions get their own compact badge, separate from the regular
+  // unread dot/count, so being mentioned stands out from ordinary traffic.
+  const hasUnreadMention = !selected && (group.unreadMentionCount ?? 0) > 0
   // Leading type glyph: a single contact for DMs, a multi-contact group glyph
   // for vehicle conversations. Kept subtle (faint) so the conversation name
   // stays the focus.
@@ -540,16 +706,36 @@ function GroupRow({
       <span
         className={`h-1.5 w-1.5 rounded-full shrink-0 ${unread ? 'bg-active' : 'bg-transparent'}`}
       />
-      <TypeIcon
-        size={17}
-        strokeWidth={1.6}
-        className={`shrink-0 ${unread ? 'text-muted' : 'text-faint'}`}
-      />
+      <span className="relative shrink-0 flex">
+        <TypeIcon
+          size={17}
+          strokeWidth={1.6}
+          className={`shrink-0 ${unread ? 'text-muted' : 'text-faint'}`}
+        />
+        {/* DM peer's declared availability, mirrored from the status the peer
+            set on their own profile. */}
+        {group.type === 'direct' && group.directPeer?.availabilityStatus && (
+          <span
+            title={statusMeta(group.directPeer.availabilityStatus).label}
+            className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-rail"
+            style={{ backgroundColor: statusMeta(group.directPeer.availabilityStatus).color }}
+          />
+        )}
+      </span>
       <span className={`flex-1 truncate text-[13px] ${unread ? 'text-text font-medium' : ''}`}>
         {groupLabel(group)}
       </span>
       {group.type === 'vehicle' && tractorPlate(group) && (
         <span className="font-mono text-[10px] text-faint shrink-0">{tractorPlate(group)}</span>
+      )}
+      {hasUnreadMention && (
+        <span
+          aria-label="You were mentioned"
+          title="You were mentioned"
+          className="shrink-0 h-[18px] w-[18px] rounded-full bg-active/20 text-active text-[11px] font-bold leading-none flex items-center justify-center"
+        >
+          @
+        </span>
       )}
       {unread && hasCount && unreadCount > 0 && (
         <span
@@ -628,11 +814,6 @@ function optimisticDirectGroup(id: string, other: ConnectionUser): Group {
     unreadCount: 0,
     directPeer: { id: other.id, name: other.displayName, workspace: other.workspace.name },
   }
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).slice(0, 2)
-  return parts.map((p) => p[0] ?? '').join('').toUpperCase() || '?'
 }
 
 function firstName(name: string): string {

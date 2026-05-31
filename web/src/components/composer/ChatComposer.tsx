@@ -1,6 +1,13 @@
-import { forwardRef, useImperativeHandle, useRef } from 'react'
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { ArrowUp } from 'lucide-react'
-import type { ReplyToPreview } from '../../lib/types'
+import type { GroupMember, ReplyToPreview } from '../../lib/types'
 import {
   DOC_ACCEPT,
   IMAGE_ACCEPT,
@@ -10,6 +17,7 @@ import {
 import ComposerContextRow from '../messages/ComposerContextRow'
 import { useComposerAutosize } from '../../hooks/useComposerAutosize'
 import AttachMenu from './AttachMenu'
+import MentionPicker from './MentionPicker'
 
 export type EditContext = { id: string; originalBody: string }
 
@@ -22,6 +30,9 @@ type Props = {
 
   text: string
   onTextChange: (v: string) => void
+
+  // Members of the current conversation — the source for the @-mention picker.
+  members: GroupMember[]
 
   // A picked file is not staged inline anymore — it's handed straight to the
   // parent, which opens the pre-send preview modal.
@@ -41,14 +52,39 @@ type Props = {
   onClearError: () => void
 }
 
-// The full composer block. Owns the textarea, attach menu, file input, and
-// the in-band reply/edit context rows. The parent (ChatView) owns the
-// underlying state and the send logic.
+// An active @-mention being typed: where the `@` sits and the text typed after
+// it (used to filter members).
+type MentionState = { anchor: number; query: string }
+
+const MAX_PICKER_RESULTS = 6
+
+// Find an active mention immediately left of the caret: an `@` at the start of
+// input or after whitespace, with no whitespace between it and the caret.
+function detectMention(value: string, caret: number): MentionState | null {
+  let i = caret - 1
+  while (i >= 0) {
+    const ch = value[i]
+    if (ch === '@') {
+      const before = i > 0 ? value[i - 1] : ''
+      if (i === 0 || /\s/.test(before)) return { anchor: i, query: value.slice(i + 1, caret) }
+      return null
+    }
+    // A mention token can't contain whitespace — bail once we hit some.
+    if (/\s/.test(ch)) return null
+    i--
+  }
+  return null
+}
+
+// The full composer block. Owns the textarea, attach menu, file input, the
+// in-band reply/edit context rows, and the @-mention picker. The parent
+// (ChatView) owns the underlying text state and the send logic.
 const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer(
   {
     placeholder,
     text,
     onTextChange,
+    members,
     onFilePicked,
     replyContext,
     onCancelReply,
@@ -62,8 +98,48 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
 ) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Caret position to restore after a programmatic insert (mention selection),
+  // applied once the controlled value has updated.
+  const pendingCaretRef = useRef<number | null>(null)
+
+  const [mention, setMention] = useState<MentionState | null>(null)
+  const [activeIndex, setActiveIndex] = useState(0)
 
   useComposerAutosize(textareaRef, text)
+
+  // Members matching the active query (case-insensitive substring), prefix
+  // matches first. Mentions are disabled while editing.
+  const matches = useMemo(() => {
+    if (!mention || editContext) return []
+    const q = mention.query.toLowerCase()
+    return members
+      .filter((m) => m.displayName.toLowerCase().includes(q))
+      .sort((a, b) => {
+        const ap = a.displayName.toLowerCase().startsWith(q) ? 0 : 1
+        const bp = b.displayName.toLowerCase().startsWith(q) ? 0 : 1
+        return ap - bp || a.displayName.localeCompare(b.displayName)
+      })
+      .slice(0, MAX_PICKER_RESULTS)
+  }, [mention, members, editContext])
+
+  const pickerOpen = mention !== null && matches.length > 0
+
+  // Restore the caret after a mention insert (the value is controlled, so we
+  // can only set selection once React has applied the new text).
+  useEffect(() => {
+    const pos = pendingCaretRef.current
+    if (pos == null) return
+    pendingCaretRef.current = null
+    const el = textareaRef.current
+    if (!el) return
+    el.focus()
+    el.setSelectionRange(pos, pos)
+  }, [text])
+
+  // Drop a stale picker when the textarea empties (e.g. after send).
+  useEffect(() => {
+    if (!text && mention) setMention(null)
+  }, [text, mention])
 
   useImperativeHandle(ref, () => ({
     focus() {
@@ -94,7 +170,50 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
     onFilePicked(picked)
   }
 
+  function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const value = e.target.value
+    onTextChange(value)
+    const caret = e.target.selectionStart ?? value.length
+    setMention(members.length ? detectMention(value, caret) : null)
+    setActiveIndex(0)
+  }
+
+  // Replace the `@query` span with `@Display Name ` and close the picker.
+  function selectMember(member: GroupMember) {
+    if (!mention) return
+    const el = textareaRef.current
+    const caret = el?.selectionStart ?? text.length
+    const insert = `@${member.displayName} `
+    const next = text.slice(0, mention.anchor) + insert + text.slice(caret)
+    onTextChange(next)
+    pendingCaretRef.current = mention.anchor + insert.length
+    setMention(null)
+  }
+
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    // While the picker is open, hijack navigation keys.
+    if (pickerOpen) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setActiveIndex((i) => (i + 1) % matches.length)
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setActiveIndex((i) => (i - 1 + matches.length) % matches.length)
+        return
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault()
+        selectMember(matches[activeIndex])
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setMention(null)
+        return
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       onSend()
@@ -106,7 +225,15 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
     : !text.trim()
 
   return (
-    <div className="rounded-card border border-white/[0.14] bg-white/[0.045] focus-within:border-white/[0.24] focus-within:bg-white/[0.06] transition-colors shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">
+    <div className="relative rounded-card border border-white/[0.14] bg-white/[0.045] focus-within:border-white/[0.24] focus-within:bg-white/[0.06] transition-colors shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">
+      {pickerOpen && (
+        <MentionPicker
+          members={matches}
+          activeIndex={activeIndex}
+          onHover={setActiveIndex}
+          onSelect={selectMember}
+        />
+      )}
       {replyContext && (
         <ComposerContextRow
           tone="reply"
@@ -139,7 +266,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
         <textarea
           ref={textareaRef}
           value={text}
-          onChange={(e) => onTextChange(e.target.value)}
+          onChange={handleChange}
           onKeyDown={onKeyDown}
           rows={1}
           placeholder={editContext ? 'Edit message…' : placeholder}

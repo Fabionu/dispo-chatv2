@@ -12,7 +12,12 @@ import { connectionsRouter } from './routes/connections.js'
 import { workspaceRouter } from './routes/workspace.js'
 import { directoryRouter } from './routes/directory.js'
 import { attachmentsRouter } from './routes/attachments.js'
+import { profileRouter, usersRouter } from './routes/profile.js'
+import { companyProfileRouter } from './routes/companyProfile.js'
 import { initRealtime } from './realtime.js'
+import { initRedis } from './redis.js'
+import { initPreviewQueue } from './jobs/previewQueue.js'
+import { initRateLimiters } from './middleware/rateLimit.js'
 import { errorHandler } from './http.js'
 import { requestLog } from './middleware/requestLog.js'
 
@@ -42,6 +47,9 @@ app.use('/api/connections', connectionsRouter)
 app.use('/api/workspace', workspaceRouter)
 app.use('/api/directory', directoryRouter)
 app.use('/api/attachments', attachmentsRouter)
+app.use('/api/profile', profileRouter)
+app.use('/api/company-profile', companyProfileRouter)
+app.use('/api/users', usersRouter)
 
 // In production, serve the built frontend from web/dist.
 if (isProd) {
@@ -59,6 +67,17 @@ if (isProd) {
 // Central error handler — must be registered last. asyncHandler funnels every
 // thrown error here: HttpError becomes its declared status, anything else 500.
 app.use(errorHandler)
+
+// Connect the shared Redis command client first (rate-limit store + preview
+// queue depend on it). In production this aborts startup if REDIS_URL is set
+// but unreachable — we never serve on a degraded distributed setup.
+await initRedis()
+// Build limiters now that Redis status is known — Redis store only when the
+// command client is actually connected, otherwise in-memory.
+initRateLimiters()
+// Resolve the preview-queue driver and start workers (redis) — also aborts in
+// production if PREVIEW_QUEUE_DRIVER=redis but Redis is unavailable.
+initPreviewQueue()
 
 // Wrap Express in a Node HTTP server so Socket.IO can attach to the same port.
 const httpServer = createServer(app)
