@@ -7,6 +7,7 @@ import { createClient } from 'redis'
 import { env, isProd } from './env.js'
 import { pool } from './db/pool.js'
 import { log } from './util/log.js'
+import { createPresenceStore, HEARTBEAT_MS, type PresenceStore } from './presence.js'
 
 const COOKIE = 'dispo_session'
 
@@ -25,17 +26,18 @@ declare module 'socket.io' {
 let io: IOServer | null = null
 
 // ── Presence (online/offline) ──────────────────────────────────────────────
-// In-memory online set: userId → number of live sockets (a user may have
-// several tabs/devices). A user is "online" while the count is > 0. This is
-// PER-INSTANCE — correct for the current single-instance deploy. For multi-
-// instance, the online set would need to live in Redis (pub/sub the deltas);
-// the broadcast below already fans out across instances via the Redis adapter,
-// but the snapshot only knows locally-connected users. TODO(prod multi-instance).
-const onlineCounts = new Map<string, number>()
-
-function isOnline(userId: string): boolean {
-  return (onlineCounts.get(userId) ?? 0) > 0
-}
+// Backed by Redis when configured (correct across instances) or an in-memory
+// set otherwise (single-instance / local dev). Chosen once at init. The
+// online/offline EVENTS already fan out across instances via the Socket.IO
+// Redis adapter; the store makes the underlying online STATE consistent too.
+let presence: PresenceStore = new (class {
+  // Placeholder until initRealtime picks the real backend — never used because
+  // sockets can't connect before initRealtime runs.
+  async connect() { return false }
+  async heartbeat() {}
+  async disconnect() { return false }
+  async filterOnline() { return [] as string[] }
+})()
 
 // Users who share at least one group (incl. DMs) with the given user — i.e.
 // everyone who should see their presence.
@@ -72,7 +74,7 @@ async function sendPresenceSnapshot(
 ): Promise<void> {
   try {
     const peers = await coMemberIds(userId)
-    emit(peers.filter(isOnline))
+    emit(await presence.filterOnline(peers))
   } catch (err) {
     log.error('presence_snapshot_failed', { userId, message: String((err as Error)?.message ?? err) })
   }
@@ -126,6 +128,22 @@ export async function initRealtime(httpServer: HttpServer) {
   // as if there were a single process. Opt-in via REDIS_URL; unset = single
   // -instance in-memory adapter (correct for local dev).
   await attachRedisAdapter(io)
+
+  // Presence backend: Redis (multi-instance correct) when the shared command
+  // client is connected, otherwise in-memory (single-instance / dev).
+  const chosen = createPresenceStore()
+  presence = chosen.store
+  if (chosen.backend === 'redis') {
+    log.info('presence_mode', { backend: 'redis', multiInstance: true })
+  } else if (isProd) {
+    log.warn('presence_mode', {
+      backend: 'memory',
+      multiInstance: false,
+      note: 'REDIS_URL unset — presence is PER-INSTANCE only; set REDIS_URL for multi-instance presence',
+    })
+  } else {
+    log.info('presence_mode', { backend: 'memory', multiInstance: false, note: 'local dev' })
+  }
 
   // ── Auth ────────────────────────────────────────────────────────────────
   // The handshake carries the same httpOnly JWT cookie that REST uses.
@@ -184,13 +202,23 @@ export async function initRealtime(httpServer: HttpServer) {
     socket.emit('ready', { userId })
 
     // ── Presence ────────────────────────────────────────────────────────────
-    // Bump this user's live-socket count. On the 0→1 transition they just came
-    // online — tell their peers. Either way, send THIS socket a snapshot of who
-    // among its peers is online right now.
-    const prevCount = onlineCounts.get(userId) ?? 0
-    onlineCounts.set(userId, prevCount + 1)
-    if (prevCount === 0) void broadcastPresence(userId, true)
+    // Record this socket. On the 0→1 transition the user just came online — tell
+    // their peers. Either way, send THIS socket a snapshot of who among its peers
+    // is online right now. A heartbeat refreshes the (Redis) liveness so a
+    // crashed instance's sockets expire instead of lingering online.
+    presence
+      .connect(userId, socket.id)
+      .then((cameOnline) => {
+        if (cameOnline) void broadcastPresence(userId, true)
+      })
+      .catch((err) =>
+        log.error('presence_connect_failed', { userId, message: String((err as Error)?.message ?? err) }),
+      )
     void sendPresenceSnapshot((online) => socket.emit('presence:snapshot', { online }), userId)
+
+    const heartbeat = setInterval(() => {
+      void presence.heartbeat(userId, socket.id).catch(() => {})
+    }, HEARTBEAT_MS)
 
     // Client asks for a fresh snapshot (on mount / after a reconnect) — the
     // snapshot it got on connect may have been missed if its listener wasn't
@@ -225,17 +253,18 @@ export async function initRealtime(httpServer: HttpServer) {
     socket.on('typing:stop', (p: unknown) => relayTyping(p, false))
 
     socket.on('disconnect', () => {
-      // Socket.IO leaves rooms automatically on disconnect. Decrement the
-      // live-socket count; on the 1→0 transition the user went fully offline —
-      // tell their peers.
-      const prev = onlineCounts.get(userId) ?? 1
-      const next = prev - 1
-      if (next <= 0) {
-        onlineCounts.delete(userId)
-        void broadcastPresence(userId, false)
-      } else {
-        onlineCounts.set(userId, next)
-      }
+      // Socket.IO leaves rooms automatically on disconnect. Remove this socket;
+      // on the 1→0 transition (no other tab/device left) the user went fully
+      // offline — tell their peers.
+      clearInterval(heartbeat)
+      presence
+        .disconnect(userId, socket.id)
+        .then((wentOffline) => {
+          if (wentOffline) void broadcastPresence(userId, false)
+        })
+        .catch((err) =>
+          log.error('presence_disconnect_failed', { userId, message: String((err as Error)?.message ?? err) }),
+        )
       log.info('socket_disconnect', { userId, connections: io?.engine.clientsCount })
     })
   })
