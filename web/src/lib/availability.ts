@@ -12,6 +12,10 @@ export const AVAILABILITY: { value: AvailabilityStatus; label: string; color: st
 // "Off duty" so the user can tell intent from presence.
 export const AWAY = { label: 'Away', color: '#9aa4b2' }
 
+// Shown for a peer who has no live socket connection (signed out / closed app).
+// Dim so it clearly reads as "not here" vs the vivid online status colours.
+export const OFFLINE = { label: 'Offline', color: '#4e4d5a' }
+
 export function statusMeta(s: AvailabilityStatus) {
   return AVAILABILITY.find((a) => a.value === s) ?? AVAILABILITY[0]
 }

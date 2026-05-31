@@ -114,7 +114,8 @@
       "Bash(node -e \"const {Client}=require\\('./server/node_modules/pg'\\);\\(async\\(\\)=>{const c=new Client\\({connectionString:require\\('fs'\\).readFileSync\\('server/.env','utf8'\\).match\\(/DATABASE_URL=\\(.*\\)/\\)[1].trim\\(\\)}\\);await c.connect\\(\\);const r=await c.query\\('select id from _migrations order by id'\\);console.log\\(r.rows.map\\(x=>x.id\\).join\\('\\\\n'\\)\\);await c.end\\(\\)}\\)\\(\\).catch\\(e=>console.log\\('ERR',e.message\\)\\)\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -X POST http://localhost:3001/api/auth/signin -H \"Content-Type: application/json\" -d '{\"email\":\"dispatcher@dispo-chat.local\",\"password\":\"devpassword\"}')",
       "Bash(curl -s -D - -o /dev/null -X POST http://localhost:3001/api/auth/signin -H \"Content-Type: application/json\" -d '{\"email\":\"x@y.z\",\"password\":\"bad\"}')",
-      "Bash(cd server *)"
+      "Bash(cd server *)",
+      "Bash(perl -0pi -e 's/\\(<GroupRow\\\\s*\\\\n\\\\s*key=\\\\{g\\\\.id\\\\}\\\\n\\\\s*group=\\\\{g\\\\}\\)/$1\\\\n                        online={onlineIds}/g' web/src/pages/Workspace.tsx)"
     ]
   }
 }

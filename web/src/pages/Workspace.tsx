@@ -34,7 +34,8 @@ import NewMessageModal from '../components/NewMessageModal'
 import ProfileSidebarPanel from '../components/settings/ProfileSidebarPanel'
 import CompanySidebarPanel from '../components/settings/CompanySidebarPanel'
 import { useIdle } from '../hooks/useIdle'
-import { statusMeta, AWAY } from '../lib/availability'
+import { usePresence } from '../hooks/usePresence'
+import { statusMeta, AWAY, OFFLINE } from '../lib/availability'
 import { useAuth } from '../auth/AuthContext'
 
 type Props = {
@@ -69,6 +70,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // Auto-away presence: grey "Away" on the footer status dot when idle / tab
   // hidden. Doesn't change the stored (manual) status — presence only.
   const away = useIdle()
+  // Live online/offline presence of peers (DM status dots).
+  const onlineIds = usePresence()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [newMenuOpen, setNewMenuOpen] = useState(false)
   const [modal, setModal] = useState<NewGroupKind | null>(null)
@@ -464,6 +467,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                       <GroupRow
                         key={g.id}
                         group={g}
+                        online={onlineIds}
                         selected={selection?.kind === 'group' && selection.id === g.id}
                         onClick={() => setSelection({ kind: 'group', id: g.id })}
                       />
@@ -476,6 +480,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                       <GroupRow
                         key={g.id}
                         group={g}
+                        online={onlineIds}
                         selected={selection?.kind === 'group' && selection.id === g.id}
                         onClick={() => setSelection({ kind: 'group', id: g.id })}
                       />
@@ -502,6 +507,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                     <GroupRow
                       key={g.id}
                       group={g}
+                        online={onlineIds}
                       selected={selection?.kind === 'group' && selection.id === g.id}
                       onClick={() => setSelection({ kind: 'group', id: g.id })}
                     />
@@ -517,6 +523,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                     <GroupRow
                       key={g.id}
                       group={g}
+                        online={onlineIds}
                       selected={selection?.kind === 'group' && selection.id === g.id}
                       onClick={() => setSelection({ kind: 'group', id: g.id })}
                     />
@@ -675,12 +682,24 @@ function EmptyState({
 function GroupRow({
   group,
   selected,
+  online,
   onClick,
 }: {
   group: Group
   selected: boolean
+  // Live online user-id set (presence). Drives the DM status dot.
+  online: Set<string>
   onClick: () => void
 }) {
+  // A DM peer's dot: their declared status colour when online, dim grey when
+  // offline (signed out / app closed). Live via socket presence.
+  const peer = group.type === 'direct' ? group.directPeer : null
+  const peerOnline = peer ? online.has(peer.id) : false
+  const peerDot = peer
+    ? peerOnline
+      ? statusMeta(peer.availabilityStatus ?? 'available')
+      : OFFLINE
+    : null
   // Selecting a group clears its indicator immediately (it's about to be read).
   // Prefer the precise server count; fall back to the timestamp-based flag when
   // the API didn't send a count (older server) so the dot never disappears.
@@ -712,13 +731,13 @@ function GroupRow({
           strokeWidth={1.6}
           className={`shrink-0 ${unread ? 'text-muted' : 'text-faint'}`}
         />
-        {/* DM peer's declared availability, mirrored from the status the peer
-            set on their own profile. */}
-        {group.type === 'direct' && group.directPeer?.availabilityStatus && (
+        {/* DM peer presence: live online/offline via socket, coloured by the
+            peer's declared status when online and dim grey when offline. */}
+        {peerDot && (
           <span
-            title={statusMeta(group.directPeer.availabilityStatus).label}
+            title={peerDot.label}
             className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-rail"
-            style={{ backgroundColor: statusMeta(group.directPeer.availabilityStatus).color }}
+            style={{ backgroundColor: peerDot.color }}
           />
         )}
       </span>

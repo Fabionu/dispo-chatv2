@@ -24,6 +24,60 @@ declare module 'socket.io' {
 
 let io: IOServer | null = null
 
+// ── Presence (online/offline) ──────────────────────────────────────────────
+// In-memory online set: userId → number of live sockets (a user may have
+// several tabs/devices). A user is "online" while the count is > 0. This is
+// PER-INSTANCE — correct for the current single-instance deploy. For multi-
+// instance, the online set would need to live in Redis (pub/sub the deltas);
+// the broadcast below already fans out across instances via the Redis adapter,
+// but the snapshot only knows locally-connected users. TODO(prod multi-instance).
+const onlineCounts = new Map<string, number>()
+
+function isOnline(userId: string): boolean {
+  return (onlineCounts.get(userId) ?? 0) > 0
+}
+
+// Users who share at least one group (incl. DMs) with the given user — i.e.
+// everyone who should see their presence.
+async function coMemberIds(userId: string): Promise<string[]> {
+  const { rows } = await pool.query<{ user_id: string }>(
+    `select distinct gm2.user_id
+       from group_members gm1
+       join group_members gm2 on gm2.group_id = gm1.group_id
+      where gm1.user_id = $1 and gm2.user_id <> $1`,
+    [userId],
+  )
+  return rows.map((r) => r.user_id)
+}
+
+// Tell a user's peers that their online state changed.
+async function broadcastPresence(userId: string, online: boolean): Promise<void> {
+  if (!io) return
+  try {
+    const peers = await coMemberIds(userId)
+    for (const peerId of peers) {
+      io.to(roomForUser(peerId)).emit('presence:update', { userId, online })
+    }
+  } catch (err) {
+    log.error('presence_broadcast_failed', { userId, message: String((err as Error)?.message ?? err) })
+  }
+}
+
+// Send a freshly-connected (or re-syncing) socket the current online state of
+// its peers, so it doesn't have to wait for the next transition to learn who's
+// online right now.
+async function sendPresenceSnapshot(
+  emit: (online: string[]) => void,
+  userId: string,
+): Promise<void> {
+  try {
+    const peers = await coMemberIds(userId)
+    emit(peers.filter(isOnline))
+  } catch (err) {
+    log.error('presence_snapshot_failed', { userId, message: String((err as Error)?.message ?? err) })
+  }
+}
+
 export function getIO(): IOServer {
   if (!io) throw new Error('Socket.IO not initialised')
   return io
@@ -129,6 +183,22 @@ export async function initRealtime(httpServer: HttpServer) {
 
     socket.emit('ready', { userId })
 
+    // ── Presence ────────────────────────────────────────────────────────────
+    // Bump this user's live-socket count. On the 0→1 transition they just came
+    // online — tell their peers. Either way, send THIS socket a snapshot of who
+    // among its peers is online right now.
+    const prevCount = onlineCounts.get(userId) ?? 0
+    onlineCounts.set(userId, prevCount + 1)
+    if (prevCount === 0) void broadcastPresence(userId, true)
+    void sendPresenceSnapshot((online) => socket.emit('presence:snapshot', { online }), userId)
+
+    // Client asks for a fresh snapshot (on mount / after a reconnect) — the
+    // snapshot it got on connect may have been missed if its listener wasn't
+    // attached yet.
+    socket.on('presence:sync', () => {
+      void sendPresenceSnapshot((online) => socket.emit('presence:snapshot', { online }), userId)
+    })
+
     // Heartbeat / liveness probe useful from the browser console.
     socket.on('ping:client', (cb?: (t: number) => void) => {
       if (typeof cb === 'function') cb(Date.now())
@@ -155,7 +225,17 @@ export async function initRealtime(httpServer: HttpServer) {
     socket.on('typing:stop', (p: unknown) => relayTyping(p, false))
 
     socket.on('disconnect', () => {
-      // Socket.IO leaves rooms automatically on disconnect — nothing to do.
+      // Socket.IO leaves rooms automatically on disconnect. Decrement the
+      // live-socket count; on the 1→0 transition the user went fully offline —
+      // tell their peers.
+      const prev = onlineCounts.get(userId) ?? 1
+      const next = prev - 1
+      if (next <= 0) {
+        onlineCounts.delete(userId)
+        void broadcastPresence(userId, false)
+      } else {
+        onlineCounts.set(userId, next)
+      }
       log.info('socket_disconnect', { userId, connections: io?.engine.clientsCount })
     })
   })
