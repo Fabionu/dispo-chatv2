@@ -10,6 +10,7 @@ import InlinePdfPreview from './attachments/InlinePdfPreview'
 import AttachmentSendPreviewModal from './attachments/AttachmentSendPreviewModal'
 import DocumentPreviewModal from './attachments/DocumentPreviewModal'
 import ChatComposer, { type ChatComposerHandle, type EditContext } from './composer/ChatComposer'
+import Avatar from './Avatar'
 import MessageRow from './messages/MessageRow'
 import SystemMessageRow from './messages/SystemMessageRow'
 import PinnedBar from './messages/PinnedBar'
@@ -17,9 +18,10 @@ import TypingIndicator, { type TypingUser } from './messages/TypingIndicator'
 import ForwardModal from './messages/ForwardModal'
 import ConfirmDialog from './ConfirmDialog'
 import Spinner from './Spinner'
-import { initials, minuteKey } from './messages/messageUtils'
+import { minuteKey } from './messages/messageUtils'
 import type { LocalMessage } from './messages/types'
 import { useChatScroll } from '../hooks/useChatScroll'
+import { devlog } from '../lib/devlog'
 import { useMessageCache } from '../hooks/useMessageCache'
 import { preloadImage } from '../lib/attachmentCache'
 
@@ -219,6 +221,7 @@ export default function ChatView({
   useEffect(() => {
     let cancelled = false
     const hadCache = cache.hasThread(group.id)
+    devlog('conversation open', { groupId: group.id, hadCache })
     cache.setRevalidating(group.id, true)
     api.groups
       .messages(group.id)
@@ -455,15 +458,20 @@ export default function ChatView({
     // For images, show the local blob URL on the optimistic bubble so the
     // user sees their picture immediately. For documents, we still preview
     // a card with name/size — no URL needed until the server returns one.
+    const isImg = attachedFile?.type.startsWith('image/') ?? false
+    // One decoded blob URL, used for BOTH the optimistic bubble (via
+    // localPreviewUrl) and carried onto the real message by foldOptimistic (via
+    // url). Same src string before/after the optimistic→real swap → the image
+    // never refetches from the server, so there's no post-upload reload flicker.
+    const blobUrl = attachedFile && isImg ? URL.createObjectURL(attachedFile) : ''
     const optimisticAttachment: Attachment | null = attachedFile
       ? {
           id: `${localId}-att`,
           originalName: attachedFile.name,
           mimeType: attachedFile.type,
           byteSize: attachedFile.size,
-          url: attachedFile.type.startsWith('image/')
-            ? URL.createObjectURL(attachedFile)
-            : '',
+          url: blobUrl,
+          ...(isImg ? { localPreviewUrl: blobUrl } : {}),
         }
       : null
 
@@ -480,10 +488,17 @@ export default function ChatView({
       replyTo: replyTo,
       mentions: optimisticMentions,
     }
-    cache.upsertMessage(group.id, optimistic)
+    // Pin BEFORE inserting so the layout effect for this very insert forces the
+    // viewport to the bottom — the user sees their own message (and an image's
+    // reserved box) immediately, not after the upload completes. The upsert is
+    // synchronous and the upload below is async (fetch), so React paints the
+    // optimistic bubble before any network work — no manual defer needed.
     pinToBottomNext()
+    cache.upsertMessage(group.id, optimistic)
+    devlog('optimistic insert', { localId, hasFile: Boolean(attachedFile) })
 
     try {
+      devlog('upload start', { localId, hasFile: Boolean(attachedFile) })
       const res = await api.groups.postMessage(
         group.id,
         body,
@@ -491,6 +506,7 @@ export default function ChatView({
         replyTo?.id ?? null,
         mentionUserIds,
       )
+      devlog('upload finished → replaceMessage', { localId })
       // replaceMessage swaps the optimistic for the real one (or drops it if
       // the socket already delivered the real message), carrying the local
       // blob preview onto the real attachment so the image doesn't flicker.
@@ -540,6 +556,7 @@ export default function ChatView({
     }
     const body = text.trim()
     if (!body) return
+    devlog('send clicked (text)')
     const reply = replyContext
     // Resolve @Names still present in the final text to member ids — edits or
     // deletions of a mention token before send naturally drop it.
@@ -557,6 +574,7 @@ export default function ChatView({
   function sendPendingFile(caption: string) {
     const f = pendingFile
     if (!f) return
+    devlog('send clicked (attachment)')
     const reply = replyContext
     // Captions support mentions too: resolve @Names typed into the caption.
     const mentionIds = resolveMentionIds(caption, members)
@@ -769,9 +787,11 @@ export default function ChatView({
       <header className="h-[var(--header-height)] flex items-center justify-between px-5 border-b border-white/[0.06] bg-rail shrink-0">
         <div className="min-w-0 flex items-center gap-2.5">
           {group.type === 'direct' && (
-            <div className="h-9 w-9 rounded-full bg-active/30 border border-active/40 flex items-center justify-center shrink-0 text-[11.5px] font-semibold uppercase font-mono">
-              {initials(groupLabel(group))}
-            </div>
+            <Avatar
+              userId={group.directPeer?.id ?? ''}
+              name={group.directPeer?.name ?? groupLabel(group)}
+              size={36}
+            />
           )}
           <div className="min-w-0">
             <div className="text-[13.5px] font-semibold truncate">{groupLabel(group)}</div>

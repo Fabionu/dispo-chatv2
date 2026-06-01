@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Download, Eye, Image as ImageIcon, ImageOff, Loader2, RotateCw } from 'lucide-react'
 import type { Attachment } from '../../lib/types'
 import { DocIcon, formatBytes } from './attachmentUtils'
@@ -26,6 +26,33 @@ type Props = {
 // to the unavailable card quickly rather than appearing to load forever. Real
 // 404s usually fire onError well before this; this only catches stalls.
 const LOAD_TIMEOUT_MS = 6000
+
+// WhatsApp-style thumbnail bounds. Every image attachment renders inside a
+// compact, fixed-bounded box rather than near-full size, so screenshots and
+// high-resolution photos all collapse to a controlled chat thumbnail. The box
+// is computed from the image's aspect ratio, clamped into [MIN, MAX] in both
+// axes; the <img> fills it with object-cover, cropping only the extreme aspect
+// ratios (very wide screenshots / very tall portraits) so they never turn into
+// thin slivers. The full image is always one tap away in the lightbox.
+const THUMB_MAX_W = 300
+const THUMB_MAX_H = 320
+const THUMB_MIN_W = 150
+const THUMB_MIN_H = 120
+// Box reserved before we know the image's dimensions (just-sent blobs, GIFs,
+// and legacy images without stored width/height). Recomputed on load.
+const THUMB_FALLBACK_W = 240
+const THUMB_FALLBACK_H = 180
+
+// Fit (w,h) into the max box preserving aspect ratio, then lift each axis to its
+// minimum so extreme aspect ratios become a sensible cropped box instead of a
+// sliver. Returns the px box the bubble reserves and the <img> covers.
+function thumbBox(w: number, h: number): { w: number; h: number } | null {
+  if (!w || !h) return null
+  const scale = Math.min(THUMB_MAX_W / w, THUMB_MAX_H / h, 1)
+  const dw = Math.min(Math.max(w * scale, THUMB_MIN_W), THUMB_MAX_W)
+  const dh = Math.min(Math.max(h * scale, THUMB_MIN_H), THUMB_MAX_H)
+  return { w: Math.round(dw), h: Math.round(dh) }
+}
 
 // In-bubble attachment renderer. Every attachment is a themed button — the
 // parent's `onActivate` callback decides what to do (image → lightbox,
@@ -98,9 +125,16 @@ export default function AttachmentBlock({
     !isBlobSrc && retryNonce > 0 && rawSrc
       ? `${rawSrc}${rawSrc.includes('?') ? '&' : '?'}retry=${retryNonce}`
       : rawSrc
-  // Intrinsic dimensions (when known) let the browser reserve the box from the
-  // image's aspect ratio, so the bubble doesn't reflow when the preview lands.
-  const hasDims = Boolean(attachment.width && attachment.height)
+  // Intrinsic dimensions drive the reserved thumbnail box. Prefer the server's
+  // stored dimensions (known before the image loads → zero reflow); otherwise
+  // capture the decoded image's natural size on load (blobs, GIFs, legacy
+  // images) and recompute the box once.
+  const [naturalDims, setNaturalDims] = useState<{ w: number; h: number } | null>(null)
+  const dims =
+    attachment.width && attachment.height
+      ? { w: attachment.width, h: attachment.height }
+      : naturalDims
+  const box = useMemo(() => (dims ? thumbBox(dims.w, dims.h) : null), [dims?.w, dims?.h])
 
   // Mark the image in-view once it (nearly) reaches the viewport. Eager/
   // uploading images are already considered in-view, so they skip the observer.
@@ -128,6 +162,17 @@ export default function AttachmentBlock({
     return () => window.clearTimeout(t)
   }, [isImage, loaded, imgFailed, inView, imageSrc])
 
+  // When the reserved box settles to its real size after load (the natural-dims
+  // path), the row height changes a frame later than onLoad — notify the parent
+  // again so a just-sent image stays pinned to the bottom across that shift.
+  // The parent only re-pins if the reader was already at the bottom, so this
+  // never yanks the view when scrolled up reading history.
+  useEffect(() => {
+    if (loaded) onImageLoad()
+    // onImageLoad is stable (useCallback in the hook).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [box?.w, box?.h, loaded])
+
   function retryImage() {
     clearImageFailed(attachment.id)
     setBlobFailed(false)
@@ -146,25 +191,36 @@ export default function AttachmentBlock({
           aria-label={`Open ${attachment.originalName}`}
           className="block p-0 border-0 bg-transparent cursor-zoom-in"
         >
-          {/* Reserved, never-empty frame. Holds a minimum box while the image
-              decodes so the bubble keeps its footprint; the cap lets the
-              decoded image settle to its own (bounded) size. */}
+          {/* Fixed-bounds thumbnail frame. The box is reserved from the image's
+              aspect ratio (known dims → zero reflow; unknown → a fallback box
+              that settles on load), capped to WhatsApp-style bounds. aspect-
+              ratio keeps it proportional when the bubble cap shrinks it on
+              narrow screens, so it never exceeds its column. */}
           <div
             ref={frameRef}
             className="relative overflow-hidden rounded-card border border-white/[0.08] bg-bg"
-            // With known dimensions the <img> reserves the box via its aspect
-            // ratio; without them, hold a minimum box until the image lands.
-            style={loaded || hasDims ? undefined : { minWidth: 200, minHeight: 150 }}
+            style={{
+              width: box ? box.w : THUMB_FALLBACK_W,
+              aspectRatio: box ? `${box.w} / ${box.h}` : `${THUMB_FALLBACK_W} / ${THUMB_FALLBACK_H}`,
+              maxWidth: '100%',
+            }}
           >
             <img
               src={imageSrc}
               alt={attachment.originalName}
-              {...(hasDims ? { width: attachment.width, height: attachment.height } : {})}
               // Recent/just-sent images load now; older ones defer until near
               // the viewport. async decode keeps the main thread responsive.
               loading={priority || uploading ? 'eager' : 'lazy'}
               decoding="async"
-              onLoad={() => {
+              onLoad={(e) => {
+                // Capture natural size for images without server-stored dims so
+                // the box settles to the right aspect ratio (and crop) once.
+                if (!attachment.width || !attachment.height) {
+                  const el = e.currentTarget
+                  if (el.naturalWidth && el.naturalHeight) {
+                    setNaturalDims({ w: el.naturalWidth, h: el.naturalHeight })
+                  }
+                }
                 setLoaded(true)
                 markImageLoaded(attachment.id)
                 onImageLoad()
@@ -179,7 +235,7 @@ export default function AttachmentBlock({
                   setImgFailed(true)
                 }
               }}
-              className={`max-w-full max-h-[320px] h-auto w-auto object-contain block bg-bg transition-opacity duration-300 ${
+              className={`w-full h-full object-cover block bg-bg transition-opacity duration-300 ${
                 loaded ? 'opacity-100' : 'opacity-0'
               }`}
             />
@@ -188,14 +244,21 @@ export default function AttachmentBlock({
                 <ImageIcon size={22} strokeWidth={1.5} className="text-faint" />
               </div>
             )}
+            {/* Pending overlay: a subtle dark gradient + centered spinner while
+                the upload is in flight, removed once the server message lands
+                (the thumbnail size is unchanged across that swap). */}
+            {uploading && (
+              <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/10 to-black/20" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/55 backdrop-blur-[1px]">
+                    <Loader2 size={16} strokeWidth={2} className="animate-spin text-white/90" />
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </button>
-        {uploading && (
-          <div className="absolute top-1.5 right-1.5 flex items-center gap-1 rounded-chip bg-black/55 px-1.5 py-0.5 text-[10px] text-text/90 pointer-events-none">
-            <Loader2 size={11} strokeWidth={2} className="animate-spin" />
-            Uploading…
-          </div>
-        )}
       </div>
     )
   }

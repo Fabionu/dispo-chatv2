@@ -4,6 +4,7 @@ import type { AvailabilityStatus, Profile, Role } from '../../lib/types'
 import { api } from '../../lib/api'
 import { AVAILABILITY, AWAY, statusMeta } from '../../lib/availability'
 import Avatar from '../Avatar'
+import AvatarCropModal from './AvatarCropModal'
 
 type Props = {
   // Prefetched profile (warmed at app mount) so the drawer renders instantly
@@ -45,6 +46,9 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [avatarVersion, setAvatarVersion] = useState(0)
+  // The picked image awaiting crop confirmation. Set on selection (no immediate
+  // upload); cleared on cancel or after a successful cropped upload.
+  const [cropFile, setCropFile] = useState<File | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -68,22 +72,31 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
     setAvailability(p.availabilityStatus)
   }
 
-  async function onPickAvatar(e: React.ChangeEvent<HTMLInputElement>) {
+  // Selecting an image no longer uploads immediately — it opens the crop step.
+  // The user positions/zooms inside a circular mask first (see AvatarCropModal),
+  // and only the confirmed crop is uploaded via uploadCroppedAvatar.
+  function onPickAvatar(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
     if (!file.type.startsWith('image/')) return setError('Please choose an image file.')
     if (file.size > MAX_IMAGE_BYTES) return setError('Image too large (max 10MB).')
     setError(null)
-    try {
-      const { profile: p } = await api.profile.uploadAvatar(file)
-      const v = avatarVersion + 1
-      setAvatarVersion(v)
-      setProfile(p)
-      onSaved(p, v)
-    } catch {
-      setError('Could not upload the image.')
-    }
+    setCropFile(file)
+  }
+
+  // Called by the crop modal with the rasterised square. Uploads it, then
+  // updates the profile panel avatar AND (via onSaved) the sidebar footer
+  // avatar immediately. Rethrows on failure so the modal keeps the crop open
+  // and shows a retryable error; resolves (and clears cropFile → closes) on
+  // success.
+  async function uploadCroppedAvatar(cropped: File) {
+    const { profile: p } = await api.profile.uploadAvatar(cropped)
+    const v = avatarVersion + 1
+    setAvatarVersion(v)
+    setProfile(p)
+    onSaved(p, v)
+    setCropFile(null)
   }
 
   async function removeAvatar() {
@@ -148,6 +161,7 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
   const isDriver = profile?.role === 'driver'
 
   return (
+    <>
     <div className="flex flex-col h-full">
       {/* Header — matches the rail's header height, with a back affordance. */}
       <div className="h-[var(--header-height)] flex items-center gap-2 px-3 border-b border-white/[0.05] shrink-0">
@@ -276,6 +290,15 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
         </>
       )}
     </div>
+
+    {cropFile && (
+      <AvatarCropModal
+        file={cropFile}
+        onCancel={() => setCropFile(null)}
+        onConfirm={uploadCroppedAvatar}
+      />
+    )}
+    </>
   )
 }
 

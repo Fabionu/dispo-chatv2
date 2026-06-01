@@ -115,7 +115,10 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -X POST http://localhost:3001/api/auth/signin -H \"Content-Type: application/json\" -d '{\"email\":\"dispatcher@dispo-chat.local\",\"password\":\"devpassword\"}')",
       "Bash(curl -s -D - -o /dev/null -X POST http://localhost:3001/api/auth/signin -H \"Content-Type: application/json\" -d '{\"email\":\"x@y.z\",\"password\":\"bad\"}')",
       "Bash(cd server *)",
-      "Bash(perl -0pi -e 's/\\(<GroupRow\\\\s*\\\\n\\\\s*key=\\\\{g\\\\.id\\\\}\\\\n\\\\s*group=\\\\{g\\\\}\\)/$1\\\\n                        online={onlineIds}/g' web/src/pages/Workspace.tsx)"
+      "Bash(perl -0pi -e 's/\\(<GroupRow\\\\s*\\\\n\\\\s*key=\\\\{g\\\\.id\\\\}\\\\n\\\\s*group=\\\\{g\\\\}\\)/$1\\\\n                        online={onlineIds}/g' web/src/pages/Workspace.tsx)",
+      "Bash(curl -s -o /dev/null -w \"web:%{http_code}\\\\n\" http://localhost:5173/)",
+      "Bash(curl -s -o /dev/null -w \"api:%{http_code}\\\\n\" http://localhost:3001/api/health)",
+      "Bash(echo \"started api pid $!\")"
     ]
   }
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { LocalMessage } from '../components/messages/types'
+import { devlog } from '../lib/devlog'
 
 // Keeps the message list scrolled the way users expect — WITHOUT scrolling
 // "whenever the messages array changes". Movement is event-driven: each change
@@ -24,6 +25,10 @@ export function useChatScroll(messages: LocalMessage[], loading: boolean) {
   // When prepending older messages we must keep the viewport anchored — we
   // record scrollHeight before the prepend and restore the delta after.
   const prependAnchorRef = useRef<number | null>(null)
+  // Set by pinToBottomNext() (own send): the very next render is FORCED to the
+  // bottom regardless of the append heuristic, so a just-sent message — and its
+  // image/doc bubble — is always visible. One-shot; cleared after it fires.
+  const forceBottomRef = useRef(false)
   // Change-classification state. These reset per conversation because ChatView
   // remounts this hook on group switch (so no stale anchors carry over).
   const didInitialRef = useRef(false)
@@ -69,19 +74,35 @@ export function useChatScroll(messages: LocalMessage[], loading: boolean) {
       didInitialRef.current = true
       el.scrollTop = el.scrollHeight
       nearBottomRef.current = true
+      devlog('initial scroll-to-bottom', { messages: len })
+      remember()
+      return
+    }
+
+    // forced bottom: our own just-sent message. Scroll unconditionally so the
+    // optimistic bubble (incl. an image whose reserved box is below the fold)
+    // is immediately visible — independent of the append heuristic below.
+    if (forceBottomRef.current) {
+      forceBottomRef.current = false
+      el.scrollTop = el.scrollHeight
+      nearBottomRef.current = true
+      devlog('force scroll-to-bottom (own send)', { messages: len })
       remember()
       return
     }
 
     // append-new: the tail id changed AND the list grew, with the head
-    // unchanged — i.e. new message(s) at the bottom (live arrival or our own
-    // optimistic send, which pins nearBottom first so it always follows).
+    // unchanged — i.e. new message(s) at the bottom (live arrival from another
+    // user). Follow only if the reader was already near the bottom.
     const appendedAtEnd =
       len > prevLenRef.current &&
       lastId !== prevLastIdRef.current &&
       firstId === prevFirstIdRef.current
     if (appendedAtEnd) {
-      if (nearBottomRef.current) el.scrollTop = el.scrollHeight
+      if (nearBottomRef.current) {
+        el.scrollTop = el.scrollHeight
+        devlog('append scroll-to-bottom (near bottom)', { messages: len })
+      }
       remember()
       return
     }
@@ -149,6 +170,7 @@ export function useChatScroll(messages: LocalMessage[], loading: boolean) {
     if (!el) return
     if (nearBottomRef.current) {
       el.scrollTop = el.scrollHeight
+      devlog('image load → re-pin bottom')
     }
   }, [])
 
@@ -159,9 +181,13 @@ export function useChatScroll(messages: LocalMessage[], loading: boolean) {
     prependAnchorRef.current = el ? el.scrollHeight : null
   }, [])
 
-  // Internal helper for send paths — pin the next render to bottom.
+  // Called by the send paths (text / attachment) right before inserting the
+  // optimistic message. Marks the reader as "at bottom" AND forces the next
+  // render to the bottom, so the user always sees their own just-sent message.
   const pinToBottomNext = useCallback(() => {
     nearBottomRef.current = true
+    forceBottomRef.current = true
+    devlog('pinToBottomNext()')
   }, [])
 
   return {
