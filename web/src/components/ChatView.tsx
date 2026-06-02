@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowDown, Info } from 'lucide-react'
+import { ArrowDown, Info, Upload } from 'lucide-react'
 import type { Attachment, Group, GroupMember, IncomingMessage, ReplyToPreview } from '../lib/types'
 import { groupLabel } from '../lib/types'
+import { fileError } from './attachments/attachmentUtils'
 import { resolveMentionIds } from '../lib/mentions'
 import { api, ApiError } from '../lib/api'
 import { getSocket } from '../lib/socket'
@@ -135,6 +136,10 @@ export default function ChatView({
   // Cache-buster for the group image, bumped after an upload/remove so the
   // header avatar and the panel both refetch immediately.
   const [groupAvatarVersion, setGroupAvatarVersion] = useState(0)
+  // Whether a file is being dragged over the conversation (drives the drop
+  // overlay). A depth counter keeps it stable across child enter/leave events.
+  const [dragActive, setDragActive] = useState(false)
+  const dragDepth = useRef(0)
   // Pending delete awaiting confirmation. `scope` picks which delete runs.
   const [pendingDelete, setPendingDelete] = useState<{
     message: LocalMessage
@@ -804,8 +809,85 @@ export default function ChatView({
   const myGroupRole = members.find((m) => m.id === currentUserId)?.role
   const canManageGroup = canInviteMembers || myGroupRole === 'admin'
 
+  // ── Drag-and-drop attachments ───────────────────────────────────────────
+  // Dropping an image/document anywhere over the conversation opens the same
+  // pre-send preview as the picker. Suppressed while another overlay is open
+  // (a preview/modal) or while editing a message (edits can't carry a file).
+  const dropBlocked = Boolean(
+    pendingFile ||
+      imagePreview ||
+      pdfPreview ||
+      docPreview ||
+      forwardTarget ||
+      inviteOpen ||
+      groupInfoOpen ||
+      pendingDelete ||
+      editContext,
+  )
+  // True only when the drag actually carries files (ignore text/element drags).
+  const dragHasFiles = (e: React.DragEvent) => e.dataTransfer.types.includes('Files')
+
+  function stageDroppedFile(file: File) {
+    const err = fileError(file)
+    if (err) {
+      setError(err)
+      return
+    }
+    setError(null)
+    setPendingFile(file)
+  }
+
+  function onDragEnter(e: React.DragEvent) {
+    if (dropBlocked || !dragHasFiles(e)) return
+    e.preventDefault()
+    dragDepth.current += 1
+    setDragActive(true)
+  }
+  function onDragOver(e: React.DragEvent) {
+    if (dropBlocked || !dragHasFiles(e)) return
+    // preventDefault is required for the drop event to fire.
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+  }
+  function onDragLeave(e: React.DragEvent) {
+    if (!dragHasFiles(e)) return
+    dragDepth.current -= 1
+    if (dragDepth.current <= 0) {
+      dragDepth.current = 0
+      setDragActive(false)
+    }
+  }
+  function onDrop(e: React.DragEvent) {
+    if (!dragHasFiles(e)) return
+    e.preventDefault()
+    dragDepth.current = 0
+    setDragActive(false)
+    if (dropBlocked) return
+    // One attachment per message — take the first dropped file.
+    const file = e.dataTransfer.files?.[0]
+    if (file) stageDroppedFile(file)
+  }
+
   return (
-    <>
+    <div
+      className="relative flex-1 flex flex-col min-h-0"
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      {/* Drag-and-drop overlay. pointer-events-none so the drop still lands on
+          the underlying drop zone; purely a visual affordance. */}
+      {dragActive && !dropBlocked && (
+        <div className="absolute inset-0 z-30 pointer-events-none flex items-center justify-center bg-bg/80 backdrop-blur-[2px]">
+          <div className="flex flex-col items-center gap-2.5 rounded-card border-2 border-dashed border-white/20 px-10 py-8 text-center">
+            <Upload size={26} strokeWidth={1.6} className="text-muted" />
+            <div className="text-[14px] font-semibold text-text">Drop to send</div>
+            <div className="text-[11.5px] text-faint">Images up to 10MB · files up to 25MB</div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="h-[var(--header-height)] flex items-center justify-between px-5 border-b border-white/[0.06] bg-rail shrink-0">
         <div className="min-w-0 flex items-center gap-2.5">
@@ -1067,6 +1149,6 @@ export default function ChatView({
           onCancel={() => setPendingDelete(null)}
         />
       )}
-    </>
+    </div>
   )
 }

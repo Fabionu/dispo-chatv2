@@ -8,12 +8,7 @@ import {
 } from 'react'
 import { ArrowUp } from 'lucide-react'
 import type { GroupMember, ReplyToPreview } from '../../lib/types'
-import {
-  DOC_ACCEPT,
-  IMAGE_ACCEPT,
-  MAX_DOC_BYTES,
-  MAX_IMAGE_BYTES,
-} from '../attachments/attachmentUtils'
+import { DOC_ACCEPT, IMAGE_ACCEPT, fileError } from '../attachments/attachmentUtils'
 import ComposerContextRow from '../messages/ComposerContextRow'
 import { useComposerAutosize } from '../../hooks/useComposerAutosize'
 import AttachMenu from './AttachMenu'
@@ -160,14 +155,37 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
     // a change event (the staged file now lives in the preview modal).
     e.target.value = ''
     if (!picked) return
-    const isImage = picked.type.startsWith('image/')
-    const cap = isImage ? MAX_IMAGE_BYTES : MAX_DOC_BYTES
-    if (picked.size > cap) {
-      onFileError(isImage ? 'Image too large (max 10MB).' : 'File too large (max 25MB).')
+    const err = fileError(picked)
+    if (err) {
+      onFileError(err)
       return
     }
     onClearError()
     onFilePicked(picked)
+  }
+
+  // Paste an image straight into the composer (e.g. a screenshot from the
+  // clipboard). We only intercept image files — text paste falls through to the
+  // textarea untouched. The pasted image goes through the same pre-send preview
+  // as a picked/dropped one. Documents are not paste-able (drag-and-drop those).
+  function onPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const items = e.clipboardData?.items
+    if (!items) return
+    for (const item of items) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const file = item.getAsFile()
+        if (!file) continue
+        e.preventDefault()
+        const err = fileError(file)
+        if (err) {
+          onFileError(err)
+          return
+        }
+        onClearError()
+        onFilePicked(file)
+        return
+      }
+    }
   }
 
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
@@ -268,6 +286,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           value={text}
           onChange={handleChange}
           onKeyDown={onKeyDown}
+          onPaste={onPaste}
           rows={1}
           placeholder={editContext ? 'Edit message…' : placeholder}
           className="flex-1 bg-transparent text-[length:var(--chat-msg-font-size)] leading-[1.5] outline-none resize-none placeholder:text-faint overflow-y-auto max-h-[9em] py-1"

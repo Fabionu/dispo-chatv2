@@ -20,6 +20,25 @@ export const DOC_ACCEPT =
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 export const MAX_DOC_BYTES = 25 * 1024 * 1024
 
+// The full set of mime types the composer accepts (union of the two pickers),
+// used to validate files that arrive WITHOUT the OS picker's filter — i.e. via
+// drag-and-drop or paste. The server enforces the same allowlist.
+const ACCEPTED_MIMES = new Set([...IMAGE_ACCEPT.split(','), ...DOC_ACCEPT.split(',')])
+
+// Validate a single file against the type allowlist and the per-kind size cap.
+// Returns a user-facing error string, or null when the file is acceptable.
+// Shared by the file picker, drag-and-drop, and image paste so all three apply
+// exactly the same policy.
+export function fileError(file: File): string | null {
+  if (!ACCEPTED_MIMES.has(file.type)) return 'That file type isn’t supported.'
+  const isImage = file.type.startsWith('image/')
+  const cap = isImage ? MAX_IMAGE_BYTES : MAX_DOC_BYTES
+  if (file.size > cap) {
+    return isImage ? 'Image too large (max 10MB).' : 'File too large (max 25MB).'
+  }
+  return null
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
