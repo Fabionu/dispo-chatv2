@@ -8,6 +8,7 @@ import {
 } from './attachmentUtils'
 import { useComposerAutosize } from '../../hooks/useComposerAutosize'
 import DocumentCard from './DocumentCard'
+import { PdfPagePreview } from './PdfRender'
 import { IconButton } from './IconAction'
 
 type Props = {
@@ -44,6 +45,7 @@ export default function AttachmentSendPreviewModal({
   useComposerAutosize(textareaRef, caption)
 
   const isImage = file.type.startsWith('image/')
+  const isPdf = file.type === 'application/pdf'
 
   // Local object URL for instant image preview only. Revoked when the file
   // changes (replace) or the modal unmounts so we never leak blobs. Documents
@@ -129,15 +131,28 @@ export default function AttachmentSendPreviewModal({
         </div>
       </div>
 
-      {/* Preview area. Images render large; documents/PDFs use a themed card
-          instead of the browser's default file/PDF viewer. */}
-      <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden">
+      {/* Preview area. Images render large; PDFs rasterise page 1 with pdf.js so
+          the actual document content shows (no browser PDF chrome), falling back
+          to the themed card only on a render failure; other documents use the
+          card directly. */}
+      <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden py-2">
         {isImage && objectUrl ? (
           <img
             src={objectUrl}
             alt={file.name}
             className="max-w-full max-h-full object-contain rounded-card"
           />
+        ) : isPdf ? (
+          <div className="w-full h-full max-w-[820px] mx-auto">
+            <PdfPagePreview
+              file={file}
+              fallback={
+                <div className="w-full h-full flex items-center justify-center">
+                  <DocumentCard name={file.name} mimeType={file.type} byteSize={file.size} />
+                </div>
+              }
+            />
+          </div>
         ) : (
           <DocumentCard name={file.name} mimeType={file.type} byteSize={file.size} />
         )}

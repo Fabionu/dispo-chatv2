@@ -2,12 +2,9 @@ import { useEffect } from 'react'
 import { FileText } from 'lucide-react'
 import type { Attachment } from '../../lib/types'
 import type { LocalMessage } from '../messages/types'
+import DocumentCard from './DocumentCard'
 import PreviewActionBar from './PreviewActionBar'
-
-// Hash params understood by Chrome/Edge's built-in PDF viewer to suppress its
-// Google-style toolbar, side panel, and scrollbar chrome — so only the page
-// content shows inside our themed shell. Other engines ignore them gracefully.
-const HIDE_NATIVE_CHROME = '#toolbar=0&navpanes=0&scrollbar=0&view=FitH'
+import { PdfDocumentView } from './PdfRender'
 
 type Props = {
   attachment: Attachment
@@ -56,14 +53,20 @@ export default function InlinePdfPreview({
         />
       </div>
 
-      {/* Page content in a themed, padded surface so the rendered PDF sits on
-          our dark canvas rather than a raw full-bleed browser pane. */}
+      {/* Page content rendered by pdf.js into a themed, scrollable surface — our
+          own canvas + scrollbar, never the browser's PDF toolbar. Falls back to
+          the themed document card only if rendering fails. */}
       <div className="flex-1 min-h-0 bg-bg p-3">
         <div className="mx-auto h-full w-full max-w-[900px] rounded-card border border-white/[0.08] overflow-hidden bg-bg">
-          <iframe
-            src={`${attachment.url}${HIDE_NATIVE_CHROME}`}
-            title={attachment.originalName}
-            className="w-full h-full border-0 bg-bg"
+          <PdfDocumentView
+            url={attachment.url}
+            fallback={
+              <DocumentCard
+                name={attachment.originalName}
+                mimeType={attachment.mimeType}
+                byteSize={attachment.byteSize}
+              />
+            }
           />
         </div>
       </div>

@@ -118,7 +118,8 @@
       "Bash(perl -0pi -e 's/\\(<GroupRow\\\\s*\\\\n\\\\s*key=\\\\{g\\\\.id\\\\}\\\\n\\\\s*group=\\\\{g\\\\}\\)/$1\\\\n                        online={onlineIds}/g' web/src/pages/Workspace.tsx)",
       "Bash(curl -s -o /dev/null -w \"web:%{http_code}\\\\n\" http://localhost:5173/)",
       "Bash(curl -s -o /dev/null -w \"api:%{http_code}\\\\n\" http://localhost:3001/api/health)",
-      "Bash(echo \"started api pid $!\")"
+      "Bash(echo \"started api pid $!\")",
+      "Bash(node -e \"const p=require\\('./web/node_modules/pdfjs-dist/package.json'\\); console.log\\('version', p.version\\)\")"
     ]
   }
 }
