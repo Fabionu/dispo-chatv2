@@ -211,7 +211,7 @@ export default function MessageRow({
         )}
         <div className={`flex-1 min-w-0 flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
           {showAuthorChrome && !sameAuthorAsPrev && (
-            <div className="text-[11px] text-muted mb-1 px-1">{message.authorName}</div>
+            <div className="text-[11px] text-muted mb-1 px-1 leading-none">{message.authorName}</div>
           )}
           {/* Group wrapper for hover-reveal of the actions chevron. Width
               is capped here so the trigger hugs the bubble's edge. */}

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeft, Check, ChevronDown, Trash2, Upload } from 'lucide-react'
 import type { AvailabilityStatus, Profile, Role } from '../../lib/types'
-import { api } from '../../lib/api'
+import { api, type ProfilePatch } from '../../lib/api'
 import { AVAILABILITY, AWAY, statusMeta } from '../../lib/availability'
 import Avatar from '../Avatar'
+import EditableRow from '../EditableRow'
 import AvatarCropModal from './AvatarCropModal'
 
 type Props = {
@@ -28,22 +29,18 @@ const ROLE_LABEL: Record<Role, string> = {
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 // "My profile" rendered as a sidebar drawer (replaces the conversation list)
-// rather than a floating modal — the chat stays visible on the right. Native to
-// the rail: same header height, borders, spacing, and dark inputs as the rest
-// of the sidebar. Operational profile only (no social fields).
+// rather than a floating modal — the chat stays visible on the right.
+//
+// Reads as clean information by default: work details, languages and company
+// are label/value rows, not form boxes. Each editable field is changed
+// INDIVIDUALLY — its own pencil → inline input → Save/Cancel — so there's no
+// single all-or-nothing form mode. Role and work email are identity/permission
+// fields: always read-only, never inputs.
 export default function ProfileSidebarPanel({ initialProfile, away = false, onBack, onSaved }: Props) {
   const [profile, setProfile] = useState<Profile | null>(initialProfile ?? null)
-  const [displayName, setDisplayName] = useState(initialProfile?.displayName ?? '')
-  const [jobTitle, setJobTitle] = useState(initialProfile?.jobTitle ?? '')
-  const [workPhone, setWorkPhone] = useState(initialProfile?.workPhone ?? '')
-  const [nativeLanguage, setNativeLanguage] = useState(initialProfile?.nativeLanguage ?? '')
-  const [otherLanguages, setOtherLanguages] = useState(
-    (initialProfile?.otherLanguages ?? []).join(', '),
-  )
   const [availability, setAvailability] = useState<AvailabilityStatus>(
     initialProfile?.availabilityStatus ?? 'available',
   )
-  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [avatarVersion, setAvatarVersion] = useState(0)
   // The picked image awaiting crop confirmation. Set on selection (no immediate
@@ -64,17 +61,21 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
 
   function hydrate(p: Profile) {
     setProfile(p)
-    setDisplayName(p.displayName)
-    setJobTitle(p.jobTitle ?? '')
-    setWorkPhone(p.workPhone ?? '')
-    setNativeLanguage(p.nativeLanguage ?? '')
-    setOtherLanguages(p.otherLanguages.join(', '))
     setAvailability(p.availabilityStatus)
   }
 
-  // Selecting an image no longer uploads immediately — it opens the crop step.
-  // The user positions/zooms inside a circular mask first (see AvatarCropModal),
-  // and only the confirmed crop is uploaded via uploadCroppedAvatar.
+  const isDriver = profile?.role === 'driver'
+
+  // Persist a single profile field. Throws on failure so the calling row keeps
+  // its editor open and surfaces a retryable error.
+  async function savePatch(patch: ProfilePatch) {
+    const { profile: p } = await api.profile.update(patch)
+    setProfile(p)
+    onSaved(p, avatarVersion)
+  }
+
+  // Selecting an image opens the crop step (no immediate upload). The confirmed
+  // crop is uploaded via uploadCroppedAvatar.
   function onPickAvatar(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     e.target.value = ''
@@ -85,11 +86,6 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
     setCropFile(file)
   }
 
-  // Called by the crop modal with the rasterised square. Uploads it, then
-  // updates the profile panel avatar AND (via onSaved) the sidebar footer
-  // avatar immediately. Rethrows on failure so the modal keeps the crop open
-  // and shows a retryable error; resolves (and clears cropFile → closes) on
-  // success.
   async function uploadCroppedAvatar(cropped: File) {
     const { profile: p } = await api.profile.uploadAvatar(cropped)
     const v = avatarVersion + 1
@@ -112,40 +108,7 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
     }
   }
 
-  async function save() {
-    if (!displayName.trim()) return setError('Display name is required.')
-    setSaving(true)
-    setError(null)
-    try {
-      const { profile: p } = await api.profile.update({
-        displayName: displayName.trim(),
-        jobTitle: jobTitle.trim() || null,
-        workPhone: workPhone.trim() || null,
-        // Drivers keep a simple profile: no languages, no availability.
-        // Availability is its own instant control (see setStatus), not part of
-        // this form save.
-        ...(isDriver
-          ? {}
-          : {
-              nativeLanguage: nativeLanguage.trim() || null,
-              otherLanguages: otherLanguages
-                .split(',')
-                .map((s) => s.trim())
-                .filter(Boolean)
-                .slice(0, 15),
-            }),
-      })
-      setProfile(p)
-      onSaved(p, avatarVersion)
-    } catch {
-      setError('Could not save your profile.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  // Availability changes apply immediately (a quick toggle, not part of the
-  // form save). The manual choice is the user's intent; auto-away is presence.
+  // Availability changes apply immediately (a quick toggle, not a form field).
   async function setStatus(s: AvailabilityStatus) {
     setAvailability(s)
     setError(null)
@@ -158,29 +121,28 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
     }
   }
 
-  const isDriver = profile?.role === 'driver'
+  const languagesValue = profile && profile.otherLanguages.length ? profile.otherLanguages.join(', ') : ''
 
   return (
     <>
-    <div className="flex flex-col h-full">
-      {/* Header — matches the rail's header height, with a back affordance. */}
-      <div className="h-[var(--header-height)] flex items-center gap-2 px-3 border-b border-white/[0.05] shrink-0">
-        <button
-          onClick={onBack}
-          aria-label="Back to inbox"
-          className="h-8 w-8 flex items-center justify-center rounded-chip text-muted hover:text-text hover:bg-white/[0.04] transition-colors shrink-0"
-        >
-          <ArrowLeft size={16} strokeWidth={1.8} />
-        </button>
-        <span className="text-[13px] font-semibold">Profile</span>
-      </div>
-
-      {!profile ? (
-        <div className="flex-1 flex items-center justify-center text-[12px] text-faint">
-          {error ?? 'Loading…'}
+      <div className="flex flex-col h-full">
+        {/* Header — matches the rail's header height, with a back affordance. */}
+        <div className="h-[var(--header-height)] flex items-center gap-2 px-3 border-b border-white/[0.05] shrink-0">
+          <button
+            onClick={onBack}
+            aria-label="Back to inbox"
+            className="h-8 w-8 flex items-center justify-center rounded-chip text-muted hover:text-text hover:bg-white/[0.04] transition-colors shrink-0"
+          >
+            <ArrowLeft size={16} strokeWidth={1.8} />
+          </button>
+          <span className="text-[13px] font-semibold">Profile</span>
         </div>
-      ) : (
-        <>
+
+        {!profile ? (
+          <div className="flex-1 flex items-center justify-center text-[12px] text-faint">
+            {error ?? 'Loading…'}
+          </div>
+        ) : (
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
             {/* Identity */}
             <div className="flex flex-col items-center text-center">
@@ -192,9 +154,8 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
                 {ROLE_LABEL[profile.role]}
                 {profile.jobTitle ? ` · ${profile.jobTitle}` : ''}
               </div>
-              {!isDriver && (
-                <StatusSelect value={availability} away={away} onChange={setStatus} />
-              )}
+              {!isDriver && <StatusSelect value={availability} away={away} onChange={setStatus} />}
+              {/* Image controls — your own profile, so always available. */}
               <div className="mt-3 flex items-center gap-1.5">
                 <input
                   ref={fileRef}
@@ -205,7 +166,7 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
                 />
                 <SmallButton onClick={() => fileRef.current?.click()}>
                   <Upload size={12} strokeWidth={1.8} />
-                  {profile.hasAvatar ? 'Change' : 'Upload'}
+                  {profile.hasAvatar ? 'Change photo' : 'Upload photo'}
                 </SmallButton>
                 {profile.hasAvatar && (
                   <SmallButton onClick={removeAvatar} tone="danger">
@@ -214,97 +175,89 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
                   </SmallButton>
                 )}
               </div>
+              {error && <div className="text-[11.5px] text-alert mt-2">{error}</div>}
             </div>
 
-            {/* Work details */}
+            {/* Work details — each editable row changes on its own. */}
             <Section label="Work details">
-              <Field label="Display name" required>
-                <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="modal-input" />
-              </Field>
-              <Field label="Role">
-                <ReadOnly value={ROLE_LABEL[profile.role]} hint="Set by an admin" />
-              </Field>
-              <Field label="Job title / function">
-                <input
-                  value={jobTitle}
-                  onChange={(e) => setJobTitle(e.target.value)}
-                  placeholder="e.g. Fleet Manager"
-                  className="modal-input"
-                />
-              </Field>
-              <Field label="Work phone">
-                <input
-                  value={workPhone}
-                  onChange={(e) => setWorkPhone(e.target.value)}
-                  placeholder="+40…"
-                  className="modal-input"
-                />
-              </Field>
-              <Field label="Work email">
-                <ReadOnly value={profile.email} hint="Used to sign in" />
-              </Field>
+              <EditableRow
+                label="Display name"
+                value={profile.displayName}
+                editable
+                required
+                onSave={(v) => savePatch({ displayName: v })}
+              />
+              {/* Role is permission-based — read-only. */}
+              <EditableRow label="Role" value={ROLE_LABEL[profile.role]} hint="Set by an admin" />
+              <EditableRow
+                label="Job title / function"
+                value={profile.jobTitle}
+                editable
+                placeholder="e.g. Fleet Manager"
+                onSave={(v) => savePatch({ jobTitle: v || null })}
+              />
+              <EditableRow
+                label="Work phone"
+                value={profile.workPhone}
+                editable
+                placeholder="+40…"
+                onSave={(v) => savePatch({ workPhone: v || null })}
+              />
+              {/* Email is identity — read-only. */}
+              <EditableRow label="Work email" value={profile.email} hint="Used to sign in" />
             </Section>
 
-            {/* Languages (not shown for drivers). Availability moved up to the
-                status selector under the name. */}
+            {/* Languages (not shown for drivers). */}
             {!isDriver && (
               <Section label="Languages">
-                <Field label="Native language">
-                  <input
-                    value={nativeLanguage}
-                    onChange={(e) => setNativeLanguage(e.target.value)}
-                    placeholder="e.g. Romanian"
-                    className="modal-input"
-                  />
-                </Field>
-                <Field label="Other spoken languages" hint="Comma-separated">
-                  <input
-                    value={otherLanguages}
-                    onChange={(e) => setOtherLanguages(e.target.value)}
-                    placeholder="e.g. English, German"
-                    className="modal-input"
-                  />
-                </Field>
+                <EditableRow
+                  label="Native language"
+                  value={profile.nativeLanguage}
+                  editable
+                  placeholder="e.g. Romanian"
+                  onSave={(v) => savePatch({ nativeLanguage: v || null })}
+                />
+                <EditableRow
+                  label="Other spoken languages"
+                  value={languagesValue}
+                  editable
+                  hint="Comma-separated"
+                  placeholder="e.g. English, German"
+                  onSave={(v) =>
+                    savePatch({
+                      otherLanguages: v
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter(Boolean)
+                        .slice(0, 15),
+                    })
+                  }
+                />
               </Section>
             )}
 
             {/* Company (read-only context) */}
             <Section label="Company">
-              <Field label="Workspace">
-                <ReadOnly value={profile.company} />
-              </Field>
+              <EditableRow label="Workspace" value={profile.company} />
             </Section>
           </div>
+        )}
+      </div>
 
-          {/* Sticky save bar — stays visible like the composer action bar. */}
-          <div className="shrink-0 border-t border-white/[0.05] px-4 py-3">
-            {error && <div className="text-[11.5px] text-alert text-center mb-2">{error}</div>}
-            <button
-              onClick={() => void save()}
-              disabled={saving}
-              className="w-full h-9 rounded-btn bg-text text-bg text-[12.5px] font-semibold hover:bg-text/90 disabled:opacity-60 transition-colors"
-            >
-              {saving ? 'Saving…' : 'Save changes'}
-            </button>
-          </div>
-        </>
+      {cropFile && (
+        <AvatarCropModal
+          file={cropFile}
+          onCancel={() => setCropFile(null)}
+          onConfirm={uploadCroppedAvatar}
+        />
       )}
-    </div>
-
-    {cropFile && (
-      <AvatarCropModal
-        file={cropFile}
-        onCancel={() => setCropFile(null)}
-        onConfirm={uploadCroppedAvatar}
-      />
-    )}
     </>
   )
 }
 
-// Status selector — sits under the name (where the pill used to be). The chip
-// reflects the current status (or "Away" when auto-away is active) and opens a
-// small colour-coded menu. Selecting applies instantly.
+// Status selector — sits under the name. The chip reflects the current status
+// (or "Away" when auto-away is active) and opens a small colour-coded menu.
+// Selecting applies instantly.
 function StatusSelect({
   value,
   away,
@@ -365,46 +318,12 @@ function StatusSelect({
   )
 }
 
-// ── Compact, sidebar-native form bits ───────────────────────────────────────
+// ── Compact, sidebar-native bits ────────────────────────────────────────────
 function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
       <div className="eyebrow mb-2">{label}</div>
-      <div className="space-y-2.5">{children}</div>
-    </div>
-  )
-}
-
-function Field({
-  label,
-  hint,
-  required,
-  children,
-}: {
-  label: string
-  hint?: string
-  required?: boolean
-  children: ReactNode
-}) {
-  return (
-    <div>
-      <label className="flex items-baseline justify-between text-[11.5px] text-muted mb-1">
-        <span>
-          {label}
-          {required && <span className="text-faint"> *</span>}
-        </span>
-        {hint && <span className="text-[10px] text-faint">{hint}</span>}
-      </label>
       {children}
-    </div>
-  )
-}
-
-function ReadOnly({ value, hint }: { value: string; hint?: string }) {
-  return (
-    <div className="modal-input flex items-center justify-between text-muted cursor-default select-text">
-      <span className="truncate">{value || '—'}</span>
-      {hint && <span className="text-[10px] text-faint shrink-0 ml-2">{hint}</span>}
     </div>
   )
 }

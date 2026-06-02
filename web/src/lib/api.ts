@@ -4,7 +4,9 @@ import type {
   ConnectionsResponse,
   DirectoryUser,
   Group,
+  GroupInvite,
   GroupMember,
+  GroupPendingInvitee,
   Message,
   Profile,
   WorkspaceMember,
@@ -136,6 +138,51 @@ export const api = {
     members: (groupId: string) =>
       request<{ members: GroupMember[] }>(`/groups/${groupId}/members`),
 
+    // Pending invitees for a vehicle group (drives the invite picker's state).
+    pendingInvites: (groupId: string) =>
+      request<{ invites: GroupPendingInvitee[] }>(`/groups/${groupId}/invites`),
+
+    // Invite one or more workspace users into a vehicle group. Returns the ids
+    // actually invited plus per-user skip reasons (already member / invited).
+    invite: (groupId: string, userIds: string[]) =>
+      request<{ invited: string[]; skipped: Array<{ userId: string; reason: string }> }>(
+        `/groups/${groupId}/invites`,
+        { method: 'POST', body: JSON.stringify({ userIds }) },
+      ),
+
+    // Edit a vehicle group's operational details. Server enforces the manage
+    // permission (group admin / workspace admin|dispatcher).
+    update: (
+      groupId: string,
+      patch: Partial<{
+        name: string
+        description: string | null
+        tractorPlate: string | null
+        trailerPlate: string | null
+      }>,
+    ) =>
+      request<{
+        group: {
+          id: string
+          name: string | null
+          description: string | null
+          meta: Group['meta']
+          hasAvatar: boolean
+        }
+      }>(`/groups/${groupId}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+
+    uploadAvatar: (groupId: string, file: File) => {
+      const form = new FormData()
+      form.append('file', file, file.name)
+      return request<{ ok: true; hasAvatar: true }>(`/groups/${groupId}/avatar`, {
+        method: 'POST',
+        body: form,
+      })
+    },
+
+    removeAvatar: (groupId: string) =>
+      request<{ ok: true; hasAvatar: false }>(`/groups/${groupId}/avatar`, { method: 'DELETE' }),
+
     editMessage: (groupId: string, messageId: string, body: string) =>
       request<{ message: { id: string; groupId: string; body: string; editedAt: string } }>(
         `/groups/${groupId}/messages/${messageId}`,
@@ -243,5 +290,19 @@ export const api = {
 
     decline: (id: string) =>
       request<{ ok: true }>(`/connections/${id}/decline`, { method: 'POST' }),
+  },
+
+  // Vehicle-group invitations (intra-workspace). Separate from connections.
+  groupInvites: {
+    list: () => request<{ invites: GroupInvite[] }>('/group-invites'),
+
+    accept: (id: string) =>
+      request<{ ok: true; groupId: string }>(`/group-invites/${id}/accept`, { method: 'POST' }),
+
+    decline: (id: string) =>
+      request<{ ok: true }>(`/group-invites/${id}/decline`, { method: 'POST' }),
+
+    cancel: (id: string) =>
+      request<{ ok: true }>(`/group-invites/${id}/cancel`, { method: 'POST' }),
   },
 }

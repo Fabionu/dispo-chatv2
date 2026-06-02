@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowDown } from 'lucide-react'
+import { ArrowDown, Info } from 'lucide-react'
 import type { Attachment, Group, GroupMember, IncomingMessage, ReplyToPreview } from '../lib/types'
-import { groupLabel, tractorPlate, trailerPlate } from '../lib/types'
+import { groupLabel } from '../lib/types'
 import { resolveMentionIds } from '../lib/mentions'
 import { api, ApiError } from '../lib/api'
 import { getSocket } from '../lib/socket'
@@ -11,11 +11,14 @@ import AttachmentSendPreviewModal from './attachments/AttachmentSendPreviewModal
 import DocumentPreviewModal from './attachments/DocumentPreviewModal'
 import ChatComposer, { type ChatComposerHandle, type EditContext } from './composer/ChatComposer'
 import Avatar from './Avatar'
+import GroupAvatar from './GroupAvatar'
+import GroupInfoPanel from './GroupInfoPanel'
 import MessageRow from './messages/MessageRow'
 import SystemMessageRow from './messages/SystemMessageRow'
 import PinnedBar from './messages/PinnedBar'
 import TypingIndicator, { type TypingUser } from './messages/TypingIndicator'
 import ForwardModal from './messages/ForwardModal'
+import InviteMembersModal from './invites/InviteMembersModal'
 import ConfirmDialog from './ConfirmDialog'
 import Spinner from './Spinner'
 import { minuteKey } from './messages/messageUtils'
@@ -63,6 +66,13 @@ type Props = {
   // Called once after the seeded reply context has been consumed, so the
   // parent can drop it (and not re-seed on a later remount of this group).
   onConsumeInitialReply?: () => void
+  // Whether the current user may invite members to a vehicle group (admin /
+  // dispatcher). Combined with the caller's group-admin role to gate the
+  // group-info edit/image/invite controls; the server re-enforces it.
+  canInviteMembers?: boolean
+  // Patch the parent group's record after an in-panel edit (name / plates /
+  // image) so the header and rail reflect the change without a refetch.
+  onGroupUpdated?: (groupId: string, partial: Partial<Group>) => void
 }
 
 // Build the compact reply snapshot the composer + bubble render from a message.
@@ -83,6 +93,8 @@ export default function ChatView({
   onOpenDirectMessage,
   initialReplyContext = null,
   onConsumeInitialReply,
+  canInviteMembers = false,
+  onGroupUpdated,
 }: Props) {
   // ── Cached thread (session-level, instant on revisit) ──────────────────
   const cache = useMessageCache()
@@ -116,6 +128,13 @@ export default function ChatView({
   const [editContext, setEditContext] = useState<EditContext | null>(null)
   // Message currently being forwarded (drives the picker modal).
   const [forwardTarget, setForwardTarget] = useState<LocalMessage | null>(null)
+  // Whether the "Invite members" picker is open (vehicle groups only).
+  const [inviteOpen, setInviteOpen] = useState(false)
+  // Whether the group-info drawer is open (vehicle groups only).
+  const [groupInfoOpen, setGroupInfoOpen] = useState(false)
+  // Cache-buster for the group image, bumped after an upload/remove so the
+  // header avatar and the panel both refetch immediately.
+  const [groupAvatarVersion, setGroupAvatarVersion] = useState(0)
   // Pending delete awaiting confirmation. `scope` picks which delete runs.
   const [pendingDelete, setPendingDelete] = useState<{
     message: LocalMessage
@@ -778,44 +797,44 @@ export default function ChatView({
     group.type === 'vehicle'
       ? `${group.memberCount} member${group.memberCount === 1 ? '' : 's'}`
       : (group.directPeer?.workspace ?? 'Direct message')
-  const tractor = group.type === 'vehicle' ? tractorPlate(group) : undefined
-  const trailer = group.type === 'vehicle' ? trailerPlate(group) : undefined
+
+  // Group-info management gate: workspace admins/dispatchers, or the caller's
+  // own group-admin role (resolved from the loaded members). The server
+  // re-enforces the full rule on every mutating endpoint.
+  const myGroupRole = members.find((m) => m.id === currentUserId)?.role
+  const canManageGroup = canInviteMembers || myGroupRole === 'admin'
 
   return (
     <>
       {/* Header */}
       <header className="h-[var(--header-height)] flex items-center justify-between px-5 border-b border-white/[0.06] bg-rail shrink-0">
         <div className="min-w-0 flex items-center gap-2.5">
-          {group.type === 'direct' && (
+          {group.type === 'direct' ? (
             <Avatar
               userId={group.directPeer?.id ?? ''}
               name={group.directPeer?.name ?? groupLabel(group)}
-              size={36}
+              size={40}
             />
+          ) : (
+            // Vehicle group image — same footprint as the DM avatar, falls back
+            // to a themed multi-user icon when no image is set.
+            <GroupAvatar groupId={group.id} size={40} version={groupAvatarVersion} />
           )}
           <div className="min-w-0">
-            <div className="text-[13.5px] font-semibold truncate">{groupLabel(group)}</div>
-            <div className="text-[11px] text-muted truncate">{subtitle}</div>
+            <div className="text-[15px] font-semibold truncate leading-tight">{groupLabel(group)}</div>
+            <div className="text-[12px] text-muted truncate leading-tight">{subtitle}</div>
           </div>
         </div>
-        {group.type === 'vehicle' && (tractor || trailer) && (
+        {group.type === 'vehicle' && (
           <div className="flex items-center gap-1.5 shrink-0">
-            {tractor && (
-              <span
-                title="Tractor registration"
-                className="font-mono text-[11px] text-muted border border-white/[0.08] rounded-chip px-2 py-0.5"
-              >
-                {tractor}
-              </span>
-            )}
-            {trailer && (
-              <span
-                title="Trailer registration"
-                className="font-mono text-[11px] text-muted border border-white/[0.08] rounded-chip px-2 py-0.5"
-              >
-                {trailer}
-              </span>
-            )}
+            <button
+              onClick={() => setGroupInfoOpen(true)}
+              aria-label="Group info"
+              title="Group info"
+              className="h-8 w-8 flex items-center justify-center rounded-chip border border-white/[0.08] text-muted hover:text-text hover:border-white/[0.16] transition-colors"
+            >
+              <Info size={15} strokeWidth={1.8} />
+            </button>
           </div>
         )}
       </header>
@@ -840,7 +859,7 @@ export default function ChatView({
               onScroll={onScroll}
               className="flex-1 overflow-y-auto px-5 py-4"
             >
-              <div className="mx-auto w-full xl:max-w-[1280px] 2xl:max-w-[1440px] min-[1700px]:max-w-[1560px]">
+              <div className="mx-auto w-full max-w-[var(--chat-max-width)]">
                 {loading ? (
                   <Spinner label="Loading" className="h-full" />
                 ) : messages.length === 0 ? (
@@ -1002,6 +1021,33 @@ export default function ChatView({
           message={forwardTarget}
           onClose={() => setForwardTarget(null)}
           onForwarded={() => flashNotice('Message forwarded.')}
+        />
+      )}
+
+      {group.type === 'vehicle' && groupInfoOpen && (
+        <GroupInfoPanel
+          group={group}
+          currentUserId={currentUserId}
+          members={members}
+          membersLoading={members.length === 0}
+          canManage={canManageGroup}
+          avatarVersion={groupAvatarVersion}
+          onClose={() => setGroupInfoOpen(false)}
+          onInvite={() => setInviteOpen(true)}
+          onAvatarChanged={(hasAvatar) => {
+            setGroupAvatarVersion((v) => v + 1)
+            onGroupUpdated?.(group.id, { hasAvatar })
+          }}
+          onGroupUpdated={(partial) => onGroupUpdated?.(group.id, partial)}
+        />
+      )}
+
+      {inviteOpen && (
+        <InviteMembersModal
+          groupId={group.id}
+          groupName={groupLabel(group)}
+          existingMemberIds={members.map((m) => m.id)}
+          onClose={() => setInviteOpen(false)}
         />
       )}
 

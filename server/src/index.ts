@@ -9,6 +9,7 @@ import { env, isProd } from './env.js'
 import { authRouter } from './routes/auth.js'
 import { groupsRouter } from './routes/groups.js'
 import { connectionsRouter } from './routes/connections.js'
+import { groupInvitesRouter } from './routes/groupInvites.js'
 import { workspaceRouter } from './routes/workspace.js'
 import { directoryRouter } from './routes/directory.js'
 import { attachmentsRouter } from './routes/attachments.js'
@@ -44,6 +45,7 @@ app.get('/api/health', (_req, res) => res.json({ ok: true }))
 app.use('/api/auth', authRouter)
 app.use('/api/groups', groupsRouter)
 app.use('/api/connections', connectionsRouter)
+app.use('/api/group-invites', groupInvitesRouter)
 app.use('/api/workspace', workspaceRouter)
 app.use('/api/directory', directoryRouter)
 app.use('/api/attachments', attachmentsRouter)

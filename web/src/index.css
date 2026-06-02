@@ -5,36 +5,81 @@
 :root {
   color-scheme: dark;
 
-  /* App scale tokens. Only a handful of surfaces grow with monitor size —
-     just enough to keep the same visual density on a 2K/4K display as on a
-     14" laptop, without making the UI feel "big". Everything else stays at
-     its compact, hand-picked size. */
+  /* ── Display density tokens ──────────────────────────────────────────────
+     The UI scales by swapping a small set of variables — NOT by transform:
+     scale() or fluid vw units — so layout stays crisp and predictable. Three
+     discrete tiers (compact / default / comfortable) are applied via a
+     `data-density` attribute on <html> (lib/density.ts), auto-selected by
+     viewport width and overridable. `:root` carries the `default` tier so the
+     app is correct even before the density script runs.
+
+       --app-font-size      base body text
+       --chat-msg-font-size message bubble + composer text
+       --header-height      main-pane header & sidebar switcher seam (aligned)
+       --sidebar-width      left rail
+       --composer-size      composer send control size
+       --chat-max-width     centred message-column cap */
+  --app-font-size: 15px;
+  --chat-msg-font-size: 14px;
+  --header-height: 60px;
+  --sidebar-width: 420px;
+  --composer-size: 28px;
+  --chat-max-width: 1560px;
+}
+
+/* compact — small laptops / dense preference (the previous base scale). */
+[data-density='compact'] {
   --app-font-size: 14px;
   --chat-msg-font-size: 13px;
-  /* The main-pane header and the sidebar's workspace switcher are both
-     pinned to this so they line up exactly across the seam. */
   --header-height: 56px;
   --sidebar-width: 380px;
+  --composer-size: 26px;
+  --chat-max-width: 1280px;
 }
 
-/* 2xl: subtle step up — common QHD monitor territory. */
-@media (min-width: 1536px) {
-  :root {
-    --app-font-size: 14.5px;
-    --chat-msg-font-size: 13.5px;
-    --header-height: 58px;
-    --sidebar-width: 400px;
+/* default — desktop / 1080p (current hand-tuned scale; matches :root). */
+[data-density='default'] {
+  --app-font-size: 15px;
+  --chat-msg-font-size: 14px;
+  --header-height: 60px;
+  --sidebar-width: 420px;
+  --composer-size: 28px;
+  --chat-max-width: 1560px;
+}
+
+/* comfortable — 2K/QHD and larger: a touch more air so the UI doesn't read as
+   a miniature, while staying dense enough for dispatch work. */
+[data-density='comfortable'] {
+  --app-font-size: 16.5px;
+  --chat-msg-font-size: 15px;
+  --header-height: 66px;
+  --sidebar-width: 460px;
+  --composer-size: 30px;
+  --chat-max-width: 1840px;
+}
+
+/* No-JS / pre-hydration fallback: follow the display size when no explicit
+   density is set on the root. lib/density.ts normally sets it before first
+   paint; these keep things correct if that script is unavailable. The
+   1536–2199px range falls through to the :root (default) values. */
+@media (max-width: 1535px) {
+  :root:not([data-density]) {
+    --app-font-size: 14px;
+    --chat-msg-font-size: 13px;
+    --header-height: 56px;
+    --sidebar-width: 380px;
+    --composer-size: 26px;
+    --chat-max-width: 1280px;
   }
 }
-
-/* Full-HD ultrawide / 4K — one more nudge so the chat doesn't read as a
-   miniature on a large desk display. */
-@media (min-width: 1920px) {
-  :root {
-    --app-font-size: 15px;
-    --chat-msg-font-size: 14px;
-    --header-height: 60px;
-    --sidebar-width: 420px;
+@media (min-width: 2200px) {
+  :root:not([data-density]) {
+    --app-font-size: 16.5px;
+    --chat-msg-font-size: 15px;
+    --header-height: 66px;
+    --sidebar-width: 460px;
+    --composer-size: 30px;
+    --chat-max-width: 1840px;
   }
 }
 

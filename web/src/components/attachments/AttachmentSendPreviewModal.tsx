@@ -2,13 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUp, RefreshCw, X } from 'lucide-react'
 import {
   DOC_ACCEPT,
-  DocIcon,
   IMAGE_ACCEPT,
   MAX_DOC_BYTES,
   MAX_IMAGE_BYTES,
-  formatBytes,
 } from './attachmentUtils'
 import { useComposerAutosize } from '../../hooks/useComposerAutosize'
+import DocumentCard from './DocumentCard'
+import { IconButton } from './IconAction'
 
 type Props = {
   /** The staged file awaiting confirmation. */
@@ -44,14 +44,14 @@ export default function AttachmentSendPreviewModal({
   useComposerAutosize(textareaRef, caption)
 
   const isImage = file.type.startsWith('image/')
-  const isPdf = file.type === 'application/pdf'
 
-  // Local object URL for instant preview (images + inline PDFs). Revoked when
-  // the file changes (replace) or the modal unmounts so we never leak blobs.
+  // Local object URL for instant image preview only. Revoked when the file
+  // changes (replace) or the modal unmounts so we never leak blobs. Documents
+  // and PDFs render as a themed card (no in-modal viewer), so they need no URL.
   const objectUrl = useMemo(() => {
-    if (!isImage && !isPdf) return null
+    if (!isImage) return null
     return URL.createObjectURL(file)
-  }, [file, isImage, isPdf])
+  }, [file, isImage])
   useEffect(() => {
     if (!objectUrl) return
     return () => URL.revokeObjectURL(objectUrl)
@@ -116,28 +116,21 @@ export default function AttachmentSendPreviewModal({
         className="hidden"
       />
 
-      {/* Top bar: filename + replace/close. */}
+      {/* Top bar: filename + icon-only replace/close (themed tooltips). */}
       <div className="flex items-center justify-between gap-3 px-2 py-1.5 shrink-0">
         <div className="text-[12.5px] text-text truncate flex-1 min-w-0">{file.name}</div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            onClick={pickReplace}
-            className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-btn border border-white/[0.14] text-text hover:bg-white/[0.04] text-[12px] transition-colors"
-          >
-            <RefreshCw size={13} strokeWidth={1.6} />
-            Replace
-          </button>
-          <button
-            onClick={onCancel}
-            aria-label="Cancel"
-            className="h-8 w-8 inline-flex items-center justify-center rounded-btn border border-white/[0.14] text-text hover:bg-white/[0.04] transition-colors"
-          >
-            <X size={14} strokeWidth={1.8} />
-          </button>
+          <IconButton label="Replace" onClick={pickReplace}>
+            <RefreshCw size={15} strokeWidth={1.6} />
+          </IconButton>
+          <IconButton label="Close" onClick={onCancel}>
+            <X size={15} strokeWidth={1.8} />
+          </IconButton>
         </div>
       </div>
 
-      {/* Preview area. */}
+      {/* Preview area. Images render large; documents/PDFs use a themed card
+          instead of the browser's default file/PDF viewer. */}
       <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden">
         {isImage && objectUrl ? (
           <img
@@ -145,14 +138,8 @@ export default function AttachmentSendPreviewModal({
             alt={file.name}
             className="max-w-full max-h-full object-contain rounded-card"
           />
-        ) : isPdf && objectUrl ? (
-          <iframe
-            src={objectUrl}
-            title={file.name}
-            className="w-full h-full max-w-[820px] border-0 rounded-card bg-bg"
-          />
         ) : (
-          <DocCard file={file} />
+          <DocumentCard name={file.name} mimeType={file.type} byteSize={file.size} />
         )}
       </div>
 
@@ -179,25 +166,6 @@ export default function AttachmentSendPreviewModal({
             <ArrowUp size={15} strokeWidth={2.2} />
           </button>
         </div>
-      </div>
-    </div>
-  )
-}
-
-// Large document card for non-previewable files: prominent icon, filename,
-// extension + size. Mirrors the post-send attachment styling but bigger.
-function DocCard({ file }: { file: File }) {
-  const ext = file.name.includes('.')
-    ? file.name.split('.').pop()!.toUpperCase()
-    : 'FILE'
-  return (
-    <div className="w-full max-w-[360px] rounded-card border border-white/[0.10] bg-surface px-6 py-8 flex flex-col items-center text-center">
-      <div className="h-16 w-16 rounded-card border border-white/[0.10] bg-white/[0.03] flex items-center justify-center mb-4">
-        <DocIcon mime={file.type} size={30} className="text-muted" />
-      </div>
-      <div className="text-[13px] text-text font-medium truncate max-w-full">{file.name}</div>
-      <div className="text-[11.5px] text-muted mt-1">
-        {ext} · {formatBytes(file.size)}
       </div>
     </div>
   )

@@ -276,7 +276,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           onClick={onSend}
           disabled={disabled}
           aria-label={editContext ? 'Save edit' : 'Send message'}
-          className="h-7 w-7 shrink-0 flex items-center justify-center rounded-chip bg-text text-bg transition-opacity disabled:opacity-30"
+          className="h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 flex items-center justify-center rounded-chip bg-text text-bg transition-opacity disabled:opacity-30"
         >
           <ArrowUp size={15} strokeWidth={2.2} />
         </button>

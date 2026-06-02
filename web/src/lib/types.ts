@@ -70,6 +70,11 @@ export type Group = {
     /** @deprecated legacy one-trip label — kept for old groups, not shown. */
     trip?: string
   } & Record<string, unknown>
+  /** True when the vehicle group has an uploaded image. Drives whether the
+   *  group-info panel shows a "Remove" control; the header avatar attempts the
+   *  image regardless and falls back to the icon on 404. Optional for
+   *  forward-compat with older responses / optimistic rows. */
+  hasAvatar?: boolean
   lastMessageAt: string | null
   lastReadAt: string | null
   createdAt: string
@@ -175,10 +180,18 @@ export type Message = {
    * compact centered timeline row, not a bubble.
    */
   kind?: 'user' | 'system'
-  /** For system rows: which activity this is. */
+  /** For system rows: which activity this is (e.g. group_joined,
+   *  group_member_added, message_pinned, message_unpinned, trip_created). */
   systemEvent?: string | null
   /** For system rows: the message the activity refers to (clickable to jump). */
   systemTargetMessageId?: string | null
+  /** For system rows: structured detail for rendering (e.g. the added user's
+   *  name, or a trip label). Shape varies by event. */
+  systemPayload?: {
+    userId?: string
+    userName?: string
+    tripLabel?: string
+  } | null
   /** Users @-mentioned in this message. Drives the highlighted mention tokens
    *  in the bubble. Absent/empty when the message mentions no one. */
   mentions?: Mention[]
@@ -188,11 +201,22 @@ export type Message = {
 // and future notifications) plus the display name (the literal text rendered).
 export type Mention = { userId: string; displayName: string }
 
-// A member of a single conversation — the source for the @-mention picker.
+// A member of a single conversation — the source for the @-mention picker and
+// the group-info panel's member list. The mention picker only needs id +
+// displayName; the panel reads the rest (all optional for that reason).
 export type GroupMember = {
   id: string
   displayName: string
   workspace: string | null
+  /** Membership role within this group ('admin' | 'member'). */
+  role?: 'admin' | 'member'
+  /** The member's workspace role (admin/dispatcher/driver/partner). */
+  userRole?: Role
+  /** Declared availability — drives the member-row status dot. Drivers have
+   *  no meaningful availability. */
+  availabilityStatus?: AvailabilityStatus
+  /** Whether this member has an avatar image (lets the row skip a 404). */
+  hasAvatar?: boolean
 }
 
 // Payload of the `message:new` socket event — same as Message plus groupId.
@@ -239,4 +263,25 @@ export type ConnectionsResponse = {
   accepted: Connection[]
   pendingReceived: Connection[]
   pendingSent: Connection[]
+}
+
+// A pending invitation for the current user to join a permanent vehicle group.
+// Intra-workspace only — distinct from cross-company connection requests.
+export type GroupInvite = {
+  id: string
+  groupId: string
+  groupName: string | null
+  tractorPlate?: string
+  trailerPlate?: string
+  invitedByName: string
+  invitedByUserId: string
+  createdAt: string
+}
+
+// A user already invited to a group (pending) — used by the invite picker to
+// show "Invited" state alongside "Member".
+export type GroupPendingInvitee = {
+  id: string
+  userId: string
+  displayName: string
 }

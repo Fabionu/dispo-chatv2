@@ -15,6 +15,7 @@ import type {
   ConnectionsResponse,
   ConnectionUser,
   Group,
+  GroupInvite,
   IncomingMessage,
   Profile,
   ReplyToPreview,
@@ -26,8 +27,11 @@ import { useMessageCache } from '../hooks/useMessageCache'
 import ChatView from '../components/ChatView'
 import ConnectionRequestView from '../components/connections/ConnectionRequestView'
 import ConnectionRequestsSection from '../components/connections/ConnectionRequestsSection'
+import GroupInvitesSection from '../components/invites/GroupInvitesSection'
+import GroupInviteView from '../components/invites/GroupInviteView'
 import AppMark from '../components/AppMark'
 import Avatar from '../components/Avatar'
+import Spinner from '../components/Spinner'
 import CompanyLogo from '../components/CompanyLogo'
 import CreateVehicleGroupModal from '../components/CreateVehicleGroupModal'
 import NewMessageModal from '../components/NewMessageModal'
@@ -51,6 +55,7 @@ type NewGroupKind = 'vehicle' | 'direct'
 type Selection =
   | { kind: 'group'; id: string }
   | { kind: 'request'; id: string }
+  | { kind: 'invite'; id: string }
   | null
 
 const EMPTY_CONNECTIONS: ConnectionsResponse = {
@@ -70,8 +75,10 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // Auto-away presence: grey "Away" on the footer status dot when idle / tab
   // hidden. Doesn't change the stored (manual) status — presence only.
   const away = useIdle()
-  // Live online/offline presence of peers (DM status dots).
-  const onlineIds = usePresence()
+  // Live online/offline presence of peers (DM status dots). `resyncPresence`
+  // re-requests the server snapshot; we call it whenever the group set changes
+  // (below), since a new co-member who's already online won't emit a transition.
+  const { online: onlineIds, resync: resyncPresence } = usePresence()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [newMenuOpen, setNewMenuOpen] = useState(false)
   const [modal, setModal] = useState<NewGroupKind | null>(null)
@@ -94,6 +101,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // vehicle's tractor plate) so "Jump to…" actually narrows the rail.
   const [query, setQuery] = useState('')
   const [connections, setConnections] = useState<ConnectionsResponse>(EMPTY_CONNECTIONS)
+  // Pending vehicle-group invitations addressed to the current user.
+  const [groupInvites, setGroupInvites] = useState<GroupInvite[]>([])
   // A quote to seed a DM's composer with, set when a DM is opened via "Reply
   // privately". Scoped to a group id so it only seeds that conversation.
   const [pendingReply, setPendingReply] = useState<{
@@ -137,6 +146,21 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     if (loadingGroups) return
     for (const g of groups.slice(0, 3)) prefetch(g.id)
   }, [loadingGroups, groups, prefetch])
+
+  // Re-sync presence whenever the set of conversations changes. A new DM or an
+  // accepted connection makes a new co-member visible to the presence snapshot;
+  // if that peer is already online they never emit a `presence:update`, so a
+  // fresh snapshot is the only way to light their dot without a page refresh.
+  // Keyed on the sorted group-id signature so it fires on add/remove (initial
+  // load, refreshGroups, optimistic DM open) — not on every unrelated re-render.
+  const groupIdsKey = useMemo(
+    () => groups.map((g) => g.id).sort().join(','),
+    [groups],
+  )
+  useEffect(() => {
+    if (loadingGroups) return
+    resyncPresence()
+  }, [groupIdsKey, loadingGroups, resyncPresence])
 
   // Socket: keep the rail in sync. A new message bumps its group to the top
   // (and marks it unread unless it's the open one). A new group prompts a
@@ -203,6 +227,34 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
       socket.off('connection:declined', onChange)
     }
   }, [refreshConnections])
+
+  // Group invitations: load once, then refetch on any invite lifecycle event.
+  // Refetching keeps the pending list authoritative (same approach as
+  // connections). On accept, the server also emits `group:added`, so the group
+  // itself appears via the message/group socket handler above.
+  const refreshGroupInvites = useCallback(async () => {
+    const { invites } = await api.groupInvites.list()
+    setGroupInvites(invites)
+  }, [])
+
+  useEffect(() => {
+    void refreshGroupInvites()
+  }, [refreshGroupInvites])
+
+  useEffect(() => {
+    const socket = getSocket()
+    const onChange = () => void refreshGroupInvites()
+    socket.on('group_invite:created', onChange)
+    socket.on('group_invite:accepted', onChange)
+    socket.on('group_invite:declined', onChange)
+    socket.on('group_invite:cancelled', onChange)
+    return () => {
+      socket.off('group_invite:created', onChange)
+      socket.off('group_invite:accepted', onChange)
+      socket.off('group_invite:declined', onChange)
+      socket.off('group_invite:cancelled', onChange)
+    }
+  }, [refreshGroupInvites])
 
   // Close menus on outside click / Esc.
   useEffect(() => {
@@ -305,6 +357,27 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     setSelection(null)
   }
 
+  // Accepting a group invite: the server added us to group_members and emitted
+  // group:added, but we also refresh explicitly so the Vehicles list is
+  // up-to-date, drop the pending invite, then open the group immediately.
+  async function handleInviteAccepted(groupId: string) {
+    await refreshGroups()
+    await refreshGroupInvites()
+    setSelection({ kind: 'group', id: groupId })
+  }
+
+  async function handleInviteDeclined() {
+    await refreshGroupInvites()
+    setSelection(null)
+  }
+
+  // Merge a partial update into a single group's record (name / plates / image
+  // flag), so an in-chat group-info edit reflects in the header and rail
+  // immediately without a refetch.
+  const patchGroup = useCallback((groupId: string, partial: Partial<Group>) => {
+    setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, ...partial } : g)))
+  }, [])
+
   // Patch a single group's lastReadAt + clear its unread counter locally so the
   // badge clears without a full refetch.
   const markGroupRead = useCallback((groupId: string) => {
@@ -353,6 +426,16 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     if (selection?.kind !== 'request') return null
     return pendingReceived.find((c) => c.id === selection.id) ?? null
   }, [pendingReceived, selection])
+
+  const selectedInvite = useMemo<GroupInvite | null>(() => {
+    if (selection?.kind !== 'invite') return null
+    return groupInvites.find((i) => i.id === selection.id) ?? null
+  }, [groupInvites, selection])
+
+  // Who may invite members from the vehicle chat header. Group admins are also
+  // allowed server-side; the header button gates on workspace role for
+  // simplicity (the server enforces the full rule on POST).
+  const canInviteMembers = user.role === 'admin' || user.role === 'dispatcher'
 
   return (
     <div className="h-screen w-full flex bg-bg text-text overflow-hidden">
@@ -453,7 +536,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         {/* Group + requests list */}
         <nav className="flex-1 overflow-y-auto px-2 pt-2 pb-2 space-y-6">
           {loadingGroups ? (
-            <div className="px-2 text-[11.5px] text-faint">Loading…</div>
+            <div className="flex justify-center py-8">
+              <Spinner size={18} />
+            </div>
           ) : searching ? (
             // While searching, show only matching conversations (no requests,
             // no create hints) so the rail reads as pure search results.
@@ -495,6 +580,12 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 pendingReceived={pendingReceived}
                 selectedId={selection?.kind === 'request' ? selection.id : null}
                 onSelect={(id) => setSelection({ kind: 'request', id })}
+              />
+
+              <GroupInvitesSection
+                invites={groupInvites}
+                selectedId={selection?.kind === 'invite' ? selection.id : null}
+                onSelect={(id) => setSelection({ kind: 'invite', id })}
               />
 
               <ChannelGroup label="Vehicles">
@@ -616,6 +707,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               pendingReply?.groupId === selectedGroup.id ? pendingReply.reply : null
             }
             onConsumeInitialReply={() => setPendingReply(null)}
+            canInviteMembers={canInviteMembers}
+            onGroupUpdated={patchGroup}
           />
         ) : selectedRequest ? (
           <ConnectionRequestView
@@ -623,6 +716,13 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             connection={selectedRequest}
             onAccepted={handleAccepted}
             onDeclined={handleDeclined}
+          />
+        ) : selectedInvite ? (
+          <GroupInviteView
+            key={selectedInvite.id}
+            invite={selectedInvite}
+            onAccepted={handleInviteAccepted}
+            onDeclined={handleInviteDeclined}
           />
         ) : (
           <EmptyState
@@ -744,9 +844,6 @@ function GroupRow({
       <span className={`flex-1 truncate text-[13px] ${unread ? 'text-text font-medium' : ''}`}>
         {groupLabel(group)}
       </span>
-      {group.type === 'vehicle' && tractorPlate(group) && (
-        <span className="font-mono text-[10px] text-faint shrink-0">{tractorPlate(group)}</span>
-      )}
       {hasUnreadMention && (
         <span
           aria-label="You were mentioned"

@@ -286,34 +286,52 @@ export default function AttachmentBlock({
     )
   }
 
+  // Document / PDF thumbnail-card. A controlled, themed card (not a generic file
+  // row): a compact preview band with the type glyph + a corner type badge, and
+  // a footer with the filename and type · size. Kept to a bounded width like the
+  // image thumbnails so documents never dominate the conversation. Clicking
+  // opens the in-app preview (PDF shell / document modal) via onActivate.
+  const docExt = attachment.originalName.includes('.')
+    ? attachment.originalName.split('.').pop()!.toUpperCase()
+    : isPdf
+      ? 'PDF'
+      : 'FILE'
   return (
     <button
       type="button"
       onClick={() => onActivate(attachment)}
       disabled={uploading || !hasUrl}
-      aria-label={isPdf ? `Preview ${attachment.originalName}` : `Download ${attachment.originalName}`}
-      className="flex items-center gap-2.5 rounded-card border border-white/[0.08] bg-white/[0.02] px-2.5 py-2 max-w-[360px] hover:bg-white/[0.04] disabled:cursor-default transition-colors text-left"
+      aria-label={isPdf ? `Preview ${attachment.originalName}` : `Open ${attachment.originalName}`}
+      className="block w-[240px] max-w-full overflow-hidden rounded-card border border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.04] disabled:cursor-default transition-colors text-left"
     >
-      <div className="h-9 w-9 rounded-chip border border-white/[0.10] bg-white/[0.03] flex items-center justify-center shrink-0">
-        <DocIcon mime={attachment.mimeType} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-[12px] text-text truncate">{attachment.originalName}</div>
-        <div className="text-[10.5px] text-muted">{formatBytes(attachment.byteSize)}</div>
-      </div>
-      {uploading ? (
-        <span className="flex items-center gap-1 text-[10.5px] text-muted shrink-0">
-          <Loader2 size={12} strokeWidth={2} className="animate-spin" />
-          Uploading…
+      {/* Preview band */}
+      <div className="relative h-[104px] bg-bg border-b border-white/[0.06] flex items-center justify-center">
+        <div className="absolute inset-0 opacity-[0.04] bg-gradient-to-b from-white to-transparent pointer-events-none" />
+        <div className="h-12 w-12 rounded-card border border-white/[0.10] bg-white/[0.03] flex items-center justify-center">
+          <DocIcon mime={attachment.mimeType} size={24} />
+        </div>
+        <span className="absolute top-2 left-2 rounded-chip border border-white/[0.10] bg-black/40 px-1.5 py-0.5 text-[9.5px] font-semibold tracking-wide text-muted">
+          {docExt}
         </span>
-      ) : (
-        hasUrl &&
-        (isPdf ? (
-          <Eye size={14} strokeWidth={1.6} className="text-muted shrink-0" />
-        ) : (
-          <Download size={14} strokeWidth={1.6} className="text-muted shrink-0" />
-        ))
-      )}
+        {uploading && (
+          <span className="absolute top-2 right-2 flex items-center gap-1 rounded-chip bg-black/55 px-1.5 py-0.5 text-[10px] text-text/90">
+            <Loader2 size={11} strokeWidth={2} className="animate-spin" />
+            Uploading…
+          </span>
+        )}
+        {!uploading && hasUrl && (
+          <span className="absolute bottom-2 right-2 text-muted">
+            {isPdf ? <Eye size={14} strokeWidth={1.6} /> : <Download size={14} strokeWidth={1.6} />}
+          </span>
+        )}
+      </div>
+      {/* Footer */}
+      <div className="px-2.5 py-2">
+        <div className="text-[12px] text-text truncate">{attachment.originalName}</div>
+        <div className="text-[10.5px] text-muted mt-0.5">
+          {docExt} · {formatBytes(attachment.byteSize)}
+        </div>
+      </div>
     </button>
   )
 }

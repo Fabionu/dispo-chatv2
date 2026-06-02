@@ -12,164 +12,24 @@ import {
   uploadSingle,
 } from '../middleware/upload.js'
 import { saveBuffer, readBuffer, deleteFile } from '../storage.js'
+import { serveImageObject } from '../util/serveImage.js'
 import { enqueuePreviewJob } from '../jobs/previewQueue.js'
 import { directPairKey, sortPair } from '../util/pair.js'
 import { asyncHandler, HttpError, withTransaction } from '../http.js'
+import {
+  MESSAGE_COLUMNS,
+  MESSAGE_FROM,
+  type MessageRow,
+  mapMessageRow,
+  loadMessage,
+  insertSystemMessage,
+  emitSystemMessage,
+} from '../util/messages.js'
 
 export const groupsRouter = Router()
 
 // All routes require a valid session.
 groupsRouter.use(requireAuth)
-
-// ── Shared message projection ────────────────────────────────────────────
-// One column list + row type + mapper so every endpoint that returns a fully
-// rendered message (the thread page, the pins list, a freshly pinned message)
-// produces the exact same client shape. Selects from `messages m join users u
-// on u.id = m.author_id`; subqueries reference `m`, so no extra params.
-const MESSAGE_COLUMNS = `
-  m.id, m.author_id, u.display_name as author_name,
-  m.body, m.created_at, m.edited_at,
-  m.deleted_at, m.deleted_by, m.forwarded,
-  m.pinned_at, m.pinned_by,
-  m.kind, m.system_event, m.system_target_message_id,
-  (select coalesce(
-      jsonb_agg(jsonb_build_object(
-        'id',            a.id,
-        'original_name', a.original_name,
-        'mime_type',     a.mime_type,
-        'byte_size',     a.byte_size,
-        'preview_path',  a.preview_path,
-        'width',         a.width,
-        'height',        a.height,
-        'missing',       a.missing
-      ) order by a.created_at asc),
-      '[]'::jsonb)
-     from attachments a
-    where a.message_id = m.id) as attachments,
-  (select jsonb_build_object(
-      'id',              rm.id,
-      'author_name',     ru.display_name,
-      'body',            case when rm.deleted_at is not null then '' else rm.body end,
-      'has_attachments', exists (select 1 from attachments ra where ra.message_id = rm.id),
-      'deleted',         rm.deleted_at is not null
-    )
-     from messages rm
-     join users ru on ru.id = rm.author_id
-    where rm.id = m.reply_to_message_id) as reply_to,
-  (select coalesce(
-      jsonb_agg(jsonb_build_object(
-        'user_id',      mu.id,
-        'display_name', mu.display_name
-      ) order by mm.created_at asc),
-      '[]'::jsonb)
-     from message_mentions mm
-     join users mu on mu.id = mm.mentioned_user_id
-    where mm.message_id = m.id) as mentions`
-
-const MESSAGE_FROM = `from messages m join users u on u.id = m.author_id`
-
-type MessageRow = {
-  id: string
-  author_id: string
-  author_name: string
-  body: string
-  created_at: string
-  edited_at: string | null
-  deleted_at: string | null
-  deleted_by: string | null
-  forwarded: boolean
-  pinned_at: string | null
-  pinned_by: string | null
-  kind: 'user' | 'system'
-  system_event: string | null
-  system_target_message_id: string | null
-  attachments:
-    | Array<{
-        id: string
-        original_name: string
-        mime_type: string
-        byte_size: number
-        preview_path: string | null
-        width: number | null
-        height: number | null
-        missing: boolean
-      }>
-    | null
-  reply_to: {
-    id: string
-    author_name: string
-    body: string
-    has_attachments: boolean
-    deleted: boolean
-  } | null
-  mentions: Array<{ user_id: string; display_name: string }> | null
-}
-
-// Map a DB row to the API message shape. Soft-deleted messages have their body
-// and attachments cleared server-side so the original content never leaks.
-function mapMessageRow(m: MessageRow) {
-  const isDeleted = m.deleted_at !== null
-  return {
-    id: m.id,
-    authorId: m.author_id,
-    authorName: m.author_name,
-    body: isDeleted ? '' : m.body,
-    createdAt: m.created_at,
-    editedAt: m.edited_at,
-    deletedAt: m.deleted_at,
-    deletedBy: m.deleted_by,
-    forwarded: m.forwarded,
-    pinnedAt: m.pinned_at,
-    pinnedBy: m.pinned_by,
-    // Activity rows. 'user' is the default; system rows carry the event +
-    // target so the client can render a compact, structured timeline entry.
-    kind: m.kind,
-    ...(m.kind === 'system'
-      ? { systemEvent: m.system_event, systemTargetMessageId: m.system_target_message_id }
-      : {}),
-    attachments: isDeleted
-      ? []
-      : (m.attachments ?? []).map((a) => ({
-          id: a.id,
-          originalName: a.original_name,
-          mimeType: a.mime_type,
-          byteSize: Number(a.byte_size),
-          url: `/api/attachments/${a.id}`,
-          // Small preview for chat bubbles; only when one was generated
-          // (GIFs / pre-migration images fall back to the original).
-          ...(a.preview_path
-            ? { previewUrl: `/api/attachments/${a.id}?variant=preview` }
-            : {}),
-          ...(a.width && a.height ? { width: a.width, height: a.height } : {}),
-          ...(a.missing ? { missing: true } : {}),
-        })),
-    replyTo: m.reply_to
-      ? {
-          id: m.reply_to.id,
-          authorName: m.reply_to.author_name,
-          body: m.reply_to.body,
-          hasAttachments: m.reply_to.has_attachments,
-          deleted: m.reply_to.deleted,
-        }
-      : null,
-    // Deleted messages drop their mentions too — there's no body left to
-    // highlight and the highlight would imply content that's gone.
-    mentions: isDeleted ? [] : (m.mentions ?? []).map((x) => ({
-      userId: x.user_id,
-      displayName: x.display_name,
-    })),
-  }
-}
-
-// Fetch a single fully-rendered message by id (same shape as the thread list).
-// Used to build broadcast/response payloads for pin/unpin + their system rows.
-async function loadMessage(id: string) {
-  const { rows } = await pool.query<MessageRow>(
-    `select ${MESSAGE_COLUMNS} ${MESSAGE_FROM} where m.id = $1`,
-    [id],
-  )
-  return rows.length ? mapMessageRow(rows[0]) : null
-}
 
 // ── GET /api/groups ──────────────────────────────────────────────────────
 // Lists every group the current user belongs to, ordered by recent activity.
@@ -191,6 +51,7 @@ groupsRouter.get(
       name: string | null
       description: string | null
       meta: Record<string, unknown>
+      avatar_path: string | null
       last_message_at: string | null
       created_at: string
       last_read_at: string | null
@@ -202,7 +63,7 @@ groupsRouter.get(
       peer_workspace: string | null
       peer_availability: string | null
     }>(
-      `select g.id, g.type, g.name, g.description, g.meta,
+      `select g.id, g.type, g.name, g.description, g.meta, g.avatar_path,
               g.last_message_at, g.created_at,
               gm.last_read_at,
               (select count(*)::int from group_members where group_id = g.id) as member_count,
@@ -261,6 +122,7 @@ groupsRouter.get(
         name: r.name,
         description: r.description,
         meta: r.meta,
+        hasAvatar: r.avatar_path !== null,
         lastMessageAt: r.last_message_at,
         lastReadAt: r.last_read_at,
         createdAt: r.created_at,
@@ -421,13 +283,36 @@ groupsRouter.post(
          select * from unnest($1::uuid[], $2::uuid[], $3::text[])`,
         [memberRows.map((r) => r[0]), memberRows.map((r) => r[1]), memberRows.map((r) => r[2])],
       )
-      return { groupId, allMembers }
+
+      // Activity timeline: the creator directly added each extra member at
+      // creation → a persisted "X added Y" system row per added member. The
+      // creator's own membership isn't logged (they made the group).
+      const systemIds: string[] = []
+      if (memberIds.length > 0) {
+        const { rows: added } = await client.query<{ id: string; display_name: string }>(
+          `select id, display_name from users where id = any($1::uuid[])`,
+          [memberIds],
+        )
+        for (const a of added) {
+          systemIds.push(
+            await insertSystemMessage(client, {
+              groupId,
+              actorId: userId,
+              event: 'group_member_added',
+              payload: { userId: a.id, userName: a.display_name },
+            }),
+          )
+        }
+      }
+      return { groupId, allMembers, systemIds }
     })
 
     for (const uid of result.allMembers) subscribeUserToGroup(uid, result.groupId)
     for (const uid of memberIds) {
       getIO().to(`user:${uid}`).emit('group:added', { groupId: result.groupId, type: 'vehicle' })
     }
+    // Broadcast the "added" activity rows now that members are subscribed.
+    for (const id of result.systemIds) await emitSystemMessage(id, result.groupId)
     res.status(201).json({ group: { id: result.groupId, type: 'vehicle' } })
   }),
 )
@@ -450,17 +335,28 @@ groupsRouter.get(
     )
     if (membership.length === 0) return res.status(403).json({ error: 'not_a_member' })
 
+    // Enriched for the group-info panel: group role (admin/member), the user's
+    // workspace role (admin/dispatcher/driver/partner), declared availability
+    // and whether they have an avatar. The @-mention picker only reads id +
+    // display_name, so the extra columns are harmless to existing callers.
+    // Admins first, then alphabetical — the panel renders membership cleanly.
     const { rows } = await pool.query<{
       id: string
       display_name: string
       workspace: string | null
+      group_role: string
+      user_role: string
+      availability_status: string
+      avatar_path: string | null
     }>(
-      `select u.id, u.display_name, w.name as workspace
+      `select u.id, u.display_name, w.name as workspace,
+              gm.role as group_role, u.role as user_role,
+              u.availability_status, u.avatar_path
          from group_members gm
          join users u on u.id = gm.user_id
          left join workspaces w on w.id = u.workspace_id
         where gm.group_id = $1
-        order by u.display_name asc`,
+        order by (gm.role = 'admin') desc, u.display_name asc`,
       [groupId],
     )
 
@@ -469,10 +365,355 @@ groupsRouter.get(
         id: r.id,
         displayName: r.display_name,
         workspace: r.workspace,
+        role: r.group_role,
+        userRole: r.user_role,
+        availabilityStatus: r.availability_status,
+        hasAvatar: r.avatar_path !== null,
       })),
     })
   }),
 )
+
+// ── Invite authorization ─────────────────────────────────────────────────
+// Who may invite into a vehicle group: a member who is either a group admin OR
+// a workspace admin/dispatcher. Returns the group's workspace_id (for the
+// same-workspace check on invitees) or throws the right HttpError.
+async function authorizeInviter(
+  client: DbClient,
+  groupId: string,
+  userId: string,
+): Promise<{ workspaceId: string | null }> {
+  const { rows } = await client.query<{
+    group_role: string
+    user_role: string
+    workspace_id: string | null
+    type: 'vehicle' | 'direct'
+  }>(
+    `select gm.role as group_role, u.role as user_role, g.workspace_id, g.type
+       from group_members gm
+       join users u on u.id = gm.user_id
+       join groups g on g.id = gm.group_id
+      where gm.group_id = $1 and gm.user_id = $2`,
+    [groupId, userId],
+  )
+  const row = rows[0]
+  if (!row) throw new HttpError(403, 'not_a_member')
+  // Invitations are a vehicle-group concept — DMs are a fixed pair.
+  if (row.type !== 'vehicle') throw new HttpError(400, 'not_a_vehicle_group')
+  const allowed =
+    row.group_role === 'admin' || row.user_role === 'admin' || row.user_role === 'dispatcher'
+  if (!allowed) throw new HttpError(403, 'forbidden')
+  return { workspaceId: row.workspace_id }
+}
+
+// ── GET /api/groups/:id/invites ──────────────────────────────────────────
+// Pending invitees for a vehicle group, so the invite picker can show who's
+// already been invited. Authorized to invite-capable members only.
+groupsRouter.get(
+  '/:id/invites',
+  asyncHandler(async (req, res) => {
+    const { userId } = req.session!
+    const groupId = req.params.id
+
+    const { rows } = await withTransaction(async (client) => {
+      await authorizeInviter(client, groupId, userId)
+      return client.query<{ id: string; invited_user_id: string; display_name: string }>(
+        `select gi.id, gi.invited_user_id, u.display_name
+           from group_invitations gi
+           join users u on u.id = gi.invited_user_id
+          where gi.group_id = $1 and gi.status = 'pending'
+          order by gi.created_at desc`,
+        [groupId],
+      )
+    })
+
+    res.json({
+      invites: rows.map((r) => ({
+        id: r.id,
+        userId: r.invited_user_id,
+        displayName: r.display_name,
+      })),
+    })
+  }),
+)
+
+// ── POST /api/groups/:id/invites ─────────────────────────────────────────
+// Invite one or more workspace users into a vehicle group. Only invite-capable
+// members may call. Invitees must share the group's workspace, must not already
+// be members, and must not already have a pending invite (returned as a skip
+// reason rather than an error so a bulk invite is partially-successful-safe).
+const inviteSchema = z.object({
+  userIds: z.array(z.string().uuid()).min(1).max(50),
+})
+
+groupsRouter.post(
+  '/:id/invites',
+  asyncHandler(async (req, res) => {
+    const parsed = inviteSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'invalid_input' })
+
+    const { userId } = req.session!
+    const groupId = req.params.id
+    const requested = [...new Set(parsed.data.userIds)]
+
+    const result = await withTransaction(async (client) => {
+      const { workspaceId } = await authorizeInviter(client, groupId, userId)
+
+      // Resolve which requested users are valid invitees. They must exist,
+      // not be the caller, and EITHER share the group's workspace OR be an
+      // accepted connection of the inviter (cross-company colleagues the caller
+      // is already linked to). Connections use the canonical least/greatest
+      // pair ordering, matching how they're stored.
+      const { rows: candidates } = await client.query<{ id: string }>(
+        `select u.id
+           from users u
+          where u.id = any($1::uuid[])
+            and u.id <> $3
+            and (
+              u.workspace_id = $2
+              or exists (
+                select 1 from connections c
+                 where c.status = 'accepted'
+                   and c.user_a_id = least($3::uuid, u.id)
+                   and c.user_b_id = greatest($3::uuid, u.id)
+              )
+            )`,
+        [requested, workspaceId, userId],
+      )
+      const validIds = new Set(candidates.map((c) => c.id))
+
+      // Already-members and already-pending are skipped (not errors).
+      const { rows: members } = await client.query<{ user_id: string }>(
+        `select user_id from group_members where group_id = $1 and user_id = any($2::uuid[])`,
+        [groupId, requested],
+      )
+      const memberIds = new Set(members.map((m) => m.user_id))
+      const { rows: pendings } = await client.query<{ invited_user_id: string }>(
+        `select invited_user_id from group_invitations
+          where group_id = $1 and status = 'pending' and invited_user_id = any($2::uuid[])`,
+        [groupId, requested],
+      )
+      const pendingIds = new Set(pendings.map((p) => p.invited_user_id))
+
+      const created: string[] = []
+      const skipped: Array<{ userId: string; reason: string }> = []
+      for (const uid of requested) {
+        if (!validIds.has(uid)) {
+          skipped.push({ userId: uid, reason: 'not_invitable' })
+          continue
+        }
+        if (memberIds.has(uid)) {
+          skipped.push({ userId: uid, reason: 'already_member' })
+          continue
+        }
+        if (pendingIds.has(uid)) {
+          skipped.push({ userId: uid, reason: 'already_invited' })
+          continue
+        }
+        const { rows: ins } = await client.query<{ id: string }>(
+          `insert into group_invitations (group_id, invited_user_id, invited_by_user_id)
+           values ($1, $2, $3)
+           on conflict (group_id, invited_user_id) where status = 'pending' do nothing
+           returning id`,
+          [groupId, uid, userId],
+        )
+        if (ins[0]) created.push(uid)
+        else skipped.push({ userId: uid, reason: 'already_invited' })
+      }
+      return { created, skipped }
+    })
+
+    // Notify each freshly-invited user across their tabs/devices. The client
+    // refetches its pending invites on this signal (same pattern as connections).
+    const io = getIO()
+    for (const uid of result.created) {
+      io.to(roomForUser(uid)).emit('group_invite:created', { groupId })
+    }
+
+    res.status(201).json({ invited: result.created, skipped: result.skipped })
+  }),
+)
+
+// ── PATCH /api/groups/:id ────────────────────────────────────────────────
+// Edit a vehicle group's operational details (name, description, tractor /
+// trailer registration). Authorised to invite-capable members only (group
+// admin OR workspace admin/dispatcher) — the same boundary as inviting, since
+// both are "manage this group" actions. Plates live in `meta`; we merge rather
+// than replace so unrelated legacy keys (e.g. an old `trip`) are preserved.
+const updateGroupSchema = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
+  description: z.string().trim().max(400).nullable().optional(),
+  tractorPlate: z.string().trim().max(20).nullable().optional(),
+  trailerPlate: z.string().trim().max(20).nullable().optional(),
+})
+
+groupsRouter.patch(
+  '/:id',
+  asyncHandler(async (req, res) => {
+    const parsed = updateGroupSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'invalid_input' })
+
+    const { userId } = req.session!
+    const groupId = req.params.id
+    const data = parsed.data
+
+    const group = await withTransaction(async (client) => {
+      await authorizeInviter(client, groupId, userId)
+
+      const sets: string[] = []
+      const values: unknown[] = []
+      if (data.name !== undefined) {
+        values.push(data.name)
+        sets.push(`name = $${values.length}`)
+      }
+      if (data.description !== undefined) {
+        // Empty string clears the field.
+        values.push(data.description && data.description.trim() ? data.description : null)
+        sets.push(`description = $${values.length}`)
+      }
+      // Merge plate edits into meta. A null/empty plate removes its key.
+      if (data.tractorPlate !== undefined || data.trailerPlate !== undefined) {
+        const patch: Record<string, string | null> = {}
+        if (data.tractorPlate !== undefined) {
+          patch.tractorPlate = data.tractorPlate && data.tractorPlate.trim() ? data.tractorPlate : null
+        }
+        if (data.trailerPlate !== undefined) {
+          patch.trailerPlate = data.trailerPlate && data.trailerPlate.trim() ? data.trailerPlate : null
+        }
+        // jsonb || sets/overwrites keys; '- key' strips keys we cleared.
+        const stripKeys = Object.entries(patch)
+          .filter(([, v]) => v === null)
+          .map(([k]) => k)
+        const setObj = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== null))
+        values.push(JSON.stringify(setObj))
+        let metaExpr = `meta || $${values.length}::jsonb`
+        for (const k of stripKeys) {
+          values.push(k)
+          metaExpr = `(${metaExpr}) - $${values.length}`
+        }
+        sets.push(`meta = ${metaExpr}`)
+      }
+
+      if (sets.length > 0) {
+        values.push(groupId)
+        await client.query(`update groups set ${sets.join(', ')} where id = $${values.length}`, values)
+      }
+
+      const { rows } = await client.query<{
+        id: string
+        name: string | null
+        description: string | null
+        meta: Record<string, unknown>
+        avatar_path: string | null
+      }>('select id, name, description, meta, avatar_path from groups where id = $1', [groupId])
+      return rows[0]
+    })
+
+    res.json({
+      group: {
+        id: group.id,
+        name: group.name,
+        description: group.description,
+        meta: group.meta,
+        hasAvatar: group.avatar_path !== null,
+      },
+    })
+  }),
+)
+
+// ── GET /api/groups/:id/avatar ───────────────────────────────────────────
+// Streams a vehicle group's image, any member may read it. 404 → the client
+// renders the themed multi-user fallback icon. Mirrors the user-avatar serve.
+groupsRouter.get(
+  '/:id/avatar',
+  asyncHandler(async (req, res) => {
+    const { userId } = req.session!
+    const groupId = req.params.id
+
+    const { rows: membership } = await pool.query(
+      'select 1 from group_members where group_id = $1 and user_id = $2 limit 1',
+      [groupId, userId],
+    )
+    if (membership.length === 0) return res.status(403).json({ error: 'not_a_member' })
+
+    const { rows } = await pool.query<{ avatar_path: string | null }>(
+      'select avatar_path from groups where id = $1 limit 1',
+      [groupId],
+    )
+    const path = rows[0]?.avatar_path
+    if (!path) return res.status(404).json({ error: 'no_avatar' })
+    const ok = await serveImageObject(res, path, guessImageType(path))
+    if (!ok) return res.status(404).json({ error: 'no_avatar' })
+  }),
+)
+
+// ── POST /api/groups/:id/avatar ──────────────────────────────────────────
+// Upload / replace a vehicle group's image. Image-only, size-capped (same caps
+// as profile avatars). Authorised to invite-capable members only. The old
+// object is deleted after the new path commits so a failure never strands the
+// group without an image.
+groupsRouter.post(
+  '/:id/avatar',
+  uploadSingle,
+  asyncHandler(async (req, res) => {
+    const file = req.file
+    if (!file) return res.status(400).json({ error: 'no_file' })
+    if (!isImage(file.mimetype)) return res.status(415).json({ error: 'not_an_image' })
+    if (file.size > MAX_IMAGE_BYTES) return res.status(413).json({ error: 'image_too_large' })
+
+    const { userId } = req.session!
+    const groupId = req.params.id
+
+    const oldPath = await withTransaction(async (client) => {
+      await authorizeInviter(client, groupId, userId)
+      const { rows } = await client.query<{ avatar_path: string | null }>(
+        'select avatar_path from groups where id = $1',
+        [groupId],
+      )
+      return rows[0]?.avatar_path ?? null
+    })
+
+    const id = `group_${groupId}_${randomUUID().slice(0, 8)}`
+    const saved = await saveBuffer(id, file.originalname, file.buffer, file.mimetype)
+    await pool.query('update groups set avatar_path = $1 where id = $2', [saved.storagePath, groupId])
+    if (oldPath && oldPath !== saved.storagePath) await deleteFile(oldPath)
+
+    res.json({ ok: true, hasAvatar: true })
+  }),
+)
+
+// ── DELETE /api/groups/:id/avatar ────────────────────────────────────────
+// Remove a vehicle group's image. Authorised to invite-capable members only.
+groupsRouter.delete(
+  '/:id/avatar',
+  asyncHandler(async (req, res) => {
+    const { userId } = req.session!
+    const groupId = req.params.id
+
+    const oldPath = await withTransaction(async (client) => {
+      await authorizeInviter(client, groupId, userId)
+      const { rows } = await client.query<{ avatar_path: string | null }>(
+        'select avatar_path from groups where id = $1',
+        [groupId],
+      )
+      const prev = rows[0]?.avatar_path ?? null
+      await client.query('update groups set avatar_path = null where id = $1', [groupId])
+      return prev
+    })
+
+    if (oldPath) await deleteFile(oldPath)
+    res.json({ ok: true, hasAvatar: false })
+  }),
+)
+
+// Storage keeps the original extension; infer a content type for the response.
+function guessImageType(path: string): string {
+  const lower = path.toLowerCase()
+  if (lower.endsWith('.png')) return 'image/png'
+  if (lower.endsWith('.webp')) return 'image/webp'
+  if (lower.endsWith('.gif')) return 'image/gif'
+  return 'image/jpeg'
+}
 
 // ── GET /api/groups/:id/messages ─────────────────────────────────────────
 // Cursor-based pagination. Default: latest 50. Pass ?before=<iso-timestamp>
@@ -907,27 +1148,6 @@ groupsRouter.post(
   }),
 )
 
-// Insert a persisted activity row in a group's timeline. Stored as a normal
-// message with kind='system' (author_id = actor, so the existing users join
-// yields the actor name), so it flows through the list/cache/socket plumbing
-// and only differs at render time. Returns the new system message id.
-async function insertSystemMessage(
-  client: DbClient,
-  groupId: string,
-  actorId: string,
-  event: 'message_pinned' | 'message_unpinned',
-  targetMessageId: string,
-): Promise<string> {
-  const { rows } = await client.query<{ id: string }>(
-    `insert into messages
-       (group_id, author_id, body, kind, system_event, system_actor_id, system_target_message_id)
-     values ($1, $2, '', 'system', $3, $2, $4)
-     returning id`,
-    [groupId, actorId, event, targetMessageId],
-  )
-  return rows[0].id
-}
-
 // ── POST /api/groups/:id/messages/:messageId/pin ─────────────────────────
 // Pin a message for the whole group. Any member may pin a real (user) message.
 // Idempotent — re-pinning an already-pinned message just refreshes the stamp
@@ -964,7 +1184,12 @@ groupsRouter.post(
       if (rows.length === 0) return { ok: false as const }
       const transitioned = rows[0].was_pinned_at === null
       const systemId = transitioned
-        ? await insertSystemMessage(client, groupId, userId, 'message_pinned', messageId)
+        ? await insertSystemMessage(client, {
+            groupId,
+            actorId: userId,
+            event: 'message_pinned',
+            targetMessageId: messageId,
+          })
         : null
       return { ok: true as const, systemId }
     })
@@ -972,14 +1197,8 @@ groupsRouter.post(
 
     const message = await loadMessage(messageId)
     if (!message) return res.status(404).json({ error: 'not_found' })
-    const io = getIO()
-    io.to(roomForGroup(groupId)).emit('message:pinned', { groupId, message })
-    if (result.systemId) {
-      const systemMessage = await loadMessage(result.systemId)
-      if (systemMessage) {
-        io.to(roomForGroup(groupId)).emit('message:system', { ...systemMessage, groupId })
-      }
-    }
+    getIO().to(roomForGroup(groupId)).emit('message:pinned', { groupId, message })
+    if (result.systemId) await emitSystemMessage(result.systemId, groupId)
     res.json({ message })
   }),
 )
@@ -1013,20 +1232,19 @@ groupsRouter.post(
       if (rows.length === 0) return { ok: false as const }
       const transitioned = rows[0].was_pinned_at !== null
       const systemId = transitioned
-        ? await insertSystemMessage(client, groupId, userId, 'message_unpinned', messageId)
+        ? await insertSystemMessage(client, {
+            groupId,
+            actorId: userId,
+            event: 'message_unpinned',
+            targetMessageId: messageId,
+          })
         : null
       return { ok: true as const, systemId }
     })
     if (!result.ok) return res.status(403).json({ error: 'cannot_unpin' })
 
-    const io = getIO()
-    io.to(roomForGroup(groupId)).emit('message:unpinned', { groupId, id: messageId })
-    if (result.systemId) {
-      const systemMessage = await loadMessage(result.systemId)
-      if (systemMessage) {
-        io.to(roomForGroup(groupId)).emit('message:system', { ...systemMessage, groupId })
-      }
-    }
+    getIO().to(roomForGroup(groupId)).emit('message:unpinned', { groupId, id: messageId })
+    if (result.systemId) await emitSystemMessage(result.systemId, groupId)
     res.json({ ok: true, id: messageId })
   }),
 )

@@ -3,6 +3,7 @@ import { Maximize, ZoomIn, ZoomOut } from 'lucide-react'
 import type { Attachment } from '../../lib/types'
 import type { LocalMessage } from '../messages/types'
 import PreviewActionBar from './PreviewActionBar'
+import { IconButton } from './IconAction'
 
 type Props = {
   attachment: Attachment
@@ -248,55 +249,33 @@ export default function ImagePreviewModal({
           className="max-w-full max-h-full object-contain rounded-card"
         />
 
-        {/* Floating zoom controls — clicks here mustn't close the modal. */}
+        {/* Floating zoom controls — icon-only, themed tooltips. Clicks here
+            mustn't close the modal. */}
         <div
           onClick={stop}
-          className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-px rounded-btn border border-white/[0.14] bg-surface/90 backdrop-blur overflow-hidden"
+          className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5"
         >
-          <ToolButton
+          <IconButton
             label="Zoom out"
+            tooltipSide="top"
             disabled={view.scale <= MIN_SCALE}
             onClick={() => applyZoom(1 / BUTTON_STEP)}
           >
-            <ZoomOut size={14} strokeWidth={1.6} />
-          </ToolButton>
-          <ToolButton label="Fit to screen" onClick={() => setView(FIT)}>
-            <Maximize size={14} strokeWidth={1.6} />
-          </ToolButton>
-          <ToolButton
+            <ZoomOut size={15} strokeWidth={1.6} />
+          </IconButton>
+          <IconButton label="Fit to screen" tooltipSide="top" onClick={() => setView(FIT)}>
+            <Maximize size={15} strokeWidth={1.6} />
+          </IconButton>
+          <IconButton
             label="Zoom in"
+            tooltipSide="top"
             disabled={view.scale >= MAX_SCALE}
             onClick={() => applyZoom(BUTTON_STEP)}
           >
-            <ZoomIn size={14} strokeWidth={1.6} />
-          </ToolButton>
+            <ZoomIn size={15} strokeWidth={1.6} />
+          </IconButton>
         </div>
       </div>
     </div>
-  )
-}
-
-function ToolButton({
-  children,
-  label,
-  onClick,
-  disabled,
-}: {
-  children: React.ReactNode
-  label: string
-  onClick: () => void
-  disabled?: boolean
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={label}
-      title={label}
-      className="h-8 w-9 inline-flex items-center justify-center text-text hover:bg-white/[0.06] disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
-    >
-      {children}
-    </button>
   )
 }

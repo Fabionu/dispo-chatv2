@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import type { Attachment } from '../../lib/types'
 import type { LocalMessage } from '../messages/types'
-import { DocIcon, formatBytes } from './attachmentUtils'
+import DocumentCard from './DocumentCard'
 import PreviewActionBar from './PreviewActionBar'
 
 type Props = {
@@ -31,10 +31,6 @@ export default function DocumentPreviewModal({
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const ext = attachment.originalName.includes('.')
-    ? attachment.originalName.split('.').pop()!.toUpperCase()
-    : 'FILE'
-
   return (
     <div
       role="dialog"
@@ -57,19 +53,12 @@ export default function DocumentPreviewModal({
       </div>
 
       <div className="flex-1 min-h-0 flex items-center justify-center">
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-[360px] rounded-card border border-white/[0.10] bg-surface px-6 py-8 flex flex-col items-center text-center"
-        >
-          <div className="h-16 w-16 rounded-card border border-white/[0.10] bg-white/[0.03] flex items-center justify-center mb-4">
-            <DocIcon mime={attachment.mimeType} size={30} className="text-muted" />
-          </div>
-          <div className="text-[13px] text-text font-medium truncate max-w-full">
-            {attachment.originalName}
-          </div>
-          <div className="text-[11.5px] text-muted mt-1">
-            {ext} · {formatBytes(attachment.byteSize)}
-          </div>
+        <div onClick={(e) => e.stopPropagation()}>
+          <DocumentCard
+            name={attachment.originalName}
+            mimeType={attachment.mimeType}
+            byteSize={attachment.byteSize}
+          />
         </div>
       </div>
     </div>
