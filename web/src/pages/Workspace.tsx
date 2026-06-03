@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Building2,
   ChevronDown,
   CircleUser,
   LogOut,
@@ -681,11 +682,17 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 My profile
               </MenuItem>
               <MenuItem
-                icon={<Settings size={13} strokeWidth={1.6} />}
+                icon={<Building2 size={13} strokeWidth={1.6} />}
                 onClick={() => {
                   setUserMenuOpen(false)
                   setCompanyPanelOpen(true)
                 }}
+              >
+                Company profile
+              </MenuItem>
+              <MenuItem
+                icon={<Settings size={13} strokeWidth={1.6} />}
+                onClick={() => setUserMenuOpen(false)}
               >
                 Workspace settings
               </MenuItem>
