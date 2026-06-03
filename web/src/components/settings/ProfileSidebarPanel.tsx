@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeft, Check, ChevronDown, Trash2, Upload } from 'lucide-react'
 import type { AvailabilityStatus, Profile, Role } from '../../lib/types'
 import { api, type ProfilePatch } from '../../lib/api'
+import { clearAvatarCache } from '../../lib/avatarCache'
 import { AVAILABILITY, AWAY, statusMeta } from '../../lib/availability'
 import Avatar from '../Avatar'
 import EditableRow from '../EditableRow'
@@ -88,6 +89,10 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
 
   async function uploadCroppedAvatar(cropped: File) {
     const { profile: p } = await api.profile.uploadAvatar(cropped)
+    // Purge every cached state for this user's old image (incl. the no-version
+    // key used by message rows) so the new picture shows everywhere; the bumped
+    // version below busts any browser/HTTP cache too.
+    clearAvatarCache('user', p.id)
     const v = avatarVersion + 1
     setAvatarVersion(v)
     setProfile(p)
@@ -99,6 +104,7 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
     setError(null)
     try {
       const { profile: p } = await api.profile.removeAvatar()
+      clearAvatarCache('user', p.id)
       const v = avatarVersion + 1
       setAvatarVersion(v)
       setProfile(p)

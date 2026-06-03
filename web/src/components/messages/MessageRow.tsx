@@ -47,7 +47,6 @@ type Props = {
   groupType: GroupType
   highlighted: boolean
   onRetry: (localId: string, body: string, file: File | null) => void
-  showTimestamp: boolean
   // This row is among the newest in the thread — load its image attachments
   // eagerly so recent pictures appear together with the conversation.
   imagePriority: boolean
@@ -76,7 +75,6 @@ export default function MessageRow({
   groupType,
   highlighted,
   onRetry,
-  showTimestamp,
   imagePriority,
   onActivateAttachment,
   onImageLoad,
@@ -113,8 +111,9 @@ export default function MessageRow({
   const pinned = Boolean(message.pinnedAt) && !deleted
   // Copy lifts the text body; disabled for attachment-only messages.
   const canCopy = !deleted && Boolean(message.body)
-  const hasImageAttachment =
-    !deleted && Boolean(message.attachments?.some((a) => a.mimeType.startsWith('image/')))
+  // Any attachment (image OR document) means the chevron can sit over media,
+  // so it needs the readability patch behind it.
+  const hasAttachment = !deleted && (message.attachments?.length ?? 0) > 0
   // Optimistic + failed bubbles aren't real messages yet, so they shouldn't
   // expose the menu. Deleted placeholders shouldn't either.
   const canShowActions = !deleted && !pending && !failed
@@ -130,7 +129,11 @@ export default function MessageRow({
   // incoming bubbles sit flush to the left.
   const showAuthorChrome = !mine && groupType === 'vehicle'
 
-  const [menuOpen, setMenuOpen] = useState(false)
+  // The actions menu is opened two ways: from the chevron (anchored under it)
+  // or by right-clicking the bubble (anchored at the cursor). One state covers
+  // both — 'chevron' or a {x,y} cursor point, else null (closed).
+  const [menu, setMenu] = useState<'chevron' | { x: number; y: number } | null>(null)
+  const menuOpen = menu !== null
   const triggerRef = useRef<HTMLButtonElement>(null)
 
   // 78% keeps bubbles narrower than the column on small screens; the absolute
@@ -167,7 +170,7 @@ export default function MessageRow({
     ...(canMessagePrivately
       ? [
           { label: 'Reply privately', onClick: () => onReplyPrivately(message) },
-          { label: 'Send message in private', onClick: () => onSendPrivate(message) },
+          { label: 'Send private message', onClick: () => onSendPrivate(message) },
         ]
       : []),
     ...(mine ? [{ label: 'Edit', onClick: () => onEdit(message), disabled: !canEdit }] : []),
@@ -188,6 +191,17 @@ export default function MessageRow({
         ]
       : []),
   ]
+
+  // Subtle bubble-corner meta: optional `edited` tag then the time (or a
+  // `Failed` marker). Rendered two ways below — tucked into the last line of a
+  // text bubble (WhatsApp-style float), or on its own right-aligned line under
+  // an attachment-only bubble.
+  const meta = (
+    <>
+      {edited && <span className="italic">edited</span>}
+      {failed ? <span className="not-italic text-alert">Failed</span> : formatTime(message.createdAt)}
+    </>
+  )
 
   return (
     <>
@@ -214,8 +228,16 @@ export default function MessageRow({
             <div className="text-[11px] text-muted mb-1 px-1 leading-none">{message.authorName}</div>
           )}
           {/* Group wrapper for hover-reveal of the actions chevron. Width
-              is capped here so the trigger hugs the bubble's edge. */}
-          <div className={`group relative ${rowMaxW}`}>
+              is capped here so the trigger hugs the bubble's edge. Right-click
+              anywhere on the bubble opens the same actions menu at the cursor. */}
+          <div
+            className={`group relative ${rowMaxW}`}
+            onContextMenu={(e) => {
+              if (!canShowActions) return
+              e.preventDefault()
+              setMenu({ x: e.clientX, y: e.clientY })
+            }}
+          >
             <div className={`${bubbleBase} ${bubbleSkin} ${highlightSkin}`}>
               {pinned && (
                 <span className="flex items-center gap-1 text-[10.5px] text-active mb-1 leading-none">
@@ -252,50 +274,59 @@ export default function MessageRow({
                   {mine ? 'You deleted this message' : 'This message was deleted'}
                 </span>
               ) : (
-                message.body && (
-                  <span className="whitespace-pre-wrap break-words">
-                    {renderBody(message.body, message.mentions, currentUserId)}
+                <>
+                  {message.body && (
+                    // pr-5 reserves the top-right corner for the actions chevron
+                    // so wrapping text never runs underneath it. The timestamp is
+                    // NOT inline — it lives on its own footer row below.
+                    <span
+                      className={`whitespace-pre-wrap break-words ${canShowActions ? 'pr-5' : ''}`}
+                    >
+                      {renderBody(message.body, message.mentions, currentUserId)}
+                    </span>
+                  )}
+                  {/* Subtle footer row: the time (and `edited`) on their own line,
+                      aligned to the bubble's bottom-right corner — below the
+                      text/caption (or the media in an attachment-only bubble) and
+                      diagonally clear of the top-right chevron. */}
+                  <span className="self-end inline-flex items-center gap-1 whitespace-nowrap text-[10.5px] leading-none text-muted select-none mt-0.5">
+                    {meta}
                   </span>
-                )
-              )}
-              {(failed || showTimestamp) && !deleted && (
-                <span className="text-[10.5px] text-muted leading-none mt-1 self-end flex items-center gap-1">
-                  {edited && <span className="italic">edited</span>}
-                  {failed ? 'Failed' : formatTime(message.createdAt)}
-                </span>
+                </>
               )}
             </div>
 
-            {/* Faint corner glow behind the chevron. A radial gradient
-                anchored at the top-right corner fades out in every direction
-                with no visible bounding box — unlike a linear gradient,
-                which leaves its leading edges visible as a square. */}
-            {canShowActions && (
+            {/* Readability patch behind the chevron — a bubble-coloured (not
+                black) radial wash anchored in the top-right corner. It's nearly
+                solid right under the chevron and fades to transparent toward the
+                centre, so it reads as part of the bubble rather than a harsh
+                overlay. Colour matches the bubble: my darker bubble (#222225)
+                vs others' surface (#141416). Rounded to follow the bubble's
+                top-right corner. Only over media (image/document) for legibility. */}
+            {canShowActions && hasAttachment && (
               <div
                 style={{
-                  background: hasImageAttachment
-                    ? 'radial-gradient(circle at top right, rgba(0,0,0,0.55), transparent 65%)'
-                    : 'radial-gradient(circle at top right, rgba(0,0,0,0.35), transparent 70%)',
+                  background: mine
+                    ? 'radial-gradient(circle at top right, rgba(34,34,37,0.96), rgba(34,34,37,0.72) 38%, rgba(34,34,37,0) 76%)'
+                    : 'radial-gradient(circle at top right, rgba(20,20,22,0.96), rgba(20,20,22,0.72) 38%, rgba(20,20,22,0) 76%)',
                 }}
-                className={`absolute top-0 right-0 h-14 w-20 pointer-events-none transition-opacity ${
-                  menuOpen
-                    ? 'opacity-100'
-                    : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'
+                className={`absolute top-0 right-0 h-11 w-14 rounded-tr-[7px] pointer-events-none transition-opacity duration-200 ${
+                  menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'
                 }`}
               />
             )}
 
-            {/* Minimal hover-revealed actions trigger — just the chevron,
-                no border or fill. The gradient above carries the legibility. */}
+            {/* Minimal hover-revealed actions trigger — just the chevron, a
+                quiet muted glyph with no background or strong colour jump. */}
             {canShowActions && (
               <button
                 ref={triggerRef}
                 type="button"
-                onClick={() => setMenuOpen((v) => !v)}
+                onClick={() => setMenu((m) => (m === 'chevron' ? null : 'chevron'))}
                 aria-label="Message actions"
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
-                className={`absolute top-1 right-1.5 h-5 w-5 flex items-center justify-center text-muted hover:text-text transition-opacity ${
+                className={`absolute top-1 right-1 h-5 w-5 flex items-center justify-center text-text transition-opacity duration-200 ${
                   menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'
                 }`}
               >
@@ -303,11 +334,12 @@ export default function MessageRow({
               </button>
             )}
 
-            {menuOpen && triggerRef.current && (
+            {menuOpen && (menu !== 'chevron' || triggerRef.current) && (
               <MessageActionsMenu
-                anchorEl={triggerRef.current}
+                anchorEl={menu === 'chevron' ? triggerRef.current : undefined}
+                anchorPoint={menu !== 'chevron' && menu ? menu : undefined}
                 actions={actions}
-                onClose={() => setMenuOpen(false)}
+                onClose={() => setMenu(null)}
               />
             )}
           </div>

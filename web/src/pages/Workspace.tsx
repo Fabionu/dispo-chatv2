@@ -39,6 +39,8 @@ import ProfileSidebarPanel from '../components/settings/ProfileSidebarPanel'
 import CompanySidebarPanel from '../components/settings/CompanySidebarPanel'
 import { useIdle } from '../hooks/useIdle'
 import { usePresence } from '../hooks/usePresence'
+import { useDensity, SIDEBAR_AVATAR_SIZE } from '../lib/density'
+import { preloadAvatar } from '../lib/avatarCache'
 import { statusMeta, AWAY, OFFLINE } from '../lib/availability'
 import { useAuth } from '../auth/AuthContext'
 
@@ -72,6 +74,10 @@ function byRecent(a: Group, b: Group): number {
 
 export default function Workspace({ user, workspace, onSignOut }: Props) {
   const { refresh } = useAuth()
+  // Sidebar avatar/logo diameter tracks the display density (these components
+  // take a numeric size, so they can't read the CSS density tokens directly).
+  const density = useDensity()
+  const sidebarAvatar = SIDEBAR_AVATAR_SIZE[density]
   // Auto-away presence: grey "Away" on the footer status dot when idle / tab
   // hidden. Doesn't change the stored (manual) status — presence only.
   const away = useIdle()
@@ -147,6 +153,24 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     for (const g of groups.slice(0, 3)) prefetch(g.id)
   }, [loadingGroups, groups, prefetch])
 
+  // Warm avatars for the most-recent conversations so the chat header shows the
+  // peer/group image instantly on open. Bounded to the recent 20 (the list is
+  // ordered by recency) so we never fan out to hundreds of requests; the session
+  // cache (lib/avatarCache) dedupes in-flight warms and remembers loaded/missing
+  // so revisits and 404s never re-request. DM peers warm unconditionally; a
+  // vehicle group only warms when it actually has an image (avoids needless
+  // 404s for the many groups without one).
+  useEffect(() => {
+    if (loadingGroups) return
+    for (const g of groups.slice(0, 20)) {
+      if (g.type === 'direct') {
+        if (g.directPeer?.id) void preloadAvatar('user', g.directPeer.id)
+      } else if (g.hasAvatar) {
+        void preloadAvatar('group', g.id)
+      }
+    }
+  }, [loadingGroups, groups])
+
   // Re-sync presence whenever the set of conversations changes. A new DM or an
   // accepted connection makes a new co-member visible to the presence snapshot;
   // if that peer is already online they never emit a `presence:update`, so a
@@ -196,12 +220,21 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     function onGroupAdded() {
       void refreshGroups()
     }
+    // Removed from a group (kicked by an admin): refresh the rail and, if that
+    // group is the one currently open, drop the selection so we don't keep
+    // showing a conversation we can no longer access.
+    function onGroupRemoved(p: { groupId: string }) {
+      if (openGroupIdRef.current === p.groupId) setSelection(null)
+      void refreshGroups()
+    }
 
     socket.on('message:new', onMessageNew)
     socket.on('group:added', onGroupAdded)
+    socket.on('group:removed', onGroupRemoved)
     return () => {
       socket.off('message:new', onMessageNew)
       socket.off('group:added', onGroupAdded)
+      socket.off('group:removed', onGroupRemoved)
     }
   }, [refreshGroups, user.id])
 
@@ -470,9 +503,12 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             name — the slug was a near-duplicate of it (it's derived from the
             name) and added no information here. */}
         <div className="h-[var(--header-height)] flex items-center gap-2.5 px-4 border-b border-white/[0.05]">
-          <CompanyLogo size={28} version={logoVersion} />
+          <CompanyLogo size={sidebarAvatar} version={logoVersion} />
           <div className="min-w-0 flex-1">
-            <div className="text-[15.5px] font-semibold tracking-[-0.2px] truncate">
+            <div
+              className="font-semibold tracking-[-0.2px] truncate"
+              style={{ fontSize: 'var(--sidebar-title-font-size)' }}
+            >
               {workspace.name}
             </div>
           </div>
@@ -482,7 +518,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         <div className="px-3 pt-3 pb-2 flex items-center gap-1.5">
           <label
             htmlFor="rail-search"
-            className="flex-1 h-8 flex items-center gap-2 px-2.5 rounded-chip border border-white/[0.06] bg-white/[0.02] focus-within:border-white/[0.16] hover:border-white/[0.10] transition-colors cursor-text"
+            className="flex-1 h-[var(--sidebar-search-height)] flex items-center gap-2 px-2.5 rounded-chip border border-white/[0.06] bg-white/[0.02] focus-within:border-white/[0.16] hover:border-white/[0.10] transition-colors cursor-text"
           >
             <Search size={12} strokeWidth={1.6} className="text-faint shrink-0" />
             <input
@@ -493,7 +529,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 if (e.key === 'Escape') setQuery('')
               }}
               placeholder="Jump to…"
-              className="bg-transparent text-[12.5px] flex-1 outline-none placeholder:text-faint min-w-0"
+              style={{ fontSize: 'var(--sidebar-row-font-size)' }}
+              className="bg-transparent flex-1 outline-none placeholder:text-faint min-w-0"
             />
             {query && (
               <button
@@ -512,7 +549,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               aria-label="Create a new conversation"
               aria-haspopup="menu"
               aria-expanded={newMenuOpen}
-              className={`h-8 w-8 flex items-center justify-center rounded-chip border transition-colors ${
+              className={`h-[var(--sidebar-search-height)] w-[var(--sidebar-search-height)] flex items-center justify-center rounded-chip border transition-colors ${
                 newMenuOpen
                   ? 'border-white/[0.16] bg-white/[0.05] text-text'
                   : 'border-white/[0.06] bg-white/[0.02] text-muted hover:text-text hover:border-white/[0.10]'
@@ -534,10 +571,15 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         </div>
 
         {/* Group + requests list */}
-        <nav className="flex-1 overflow-y-auto px-2 pt-2 pb-2 space-y-6">
+        <nav
+          className="flex-1 overflow-y-auto px-2 pt-2 pb-2 flex flex-col"
+          style={{ gap: 'var(--sidebar-section-gap)' }}
+        >
           {loadingGroups ? (
-            <div className="flex justify-center py-8">
-              <Spinner size={18} />
+            // Centre the loader in the available list area (consistent with the
+            // chat pane, one size down) rather than a small top row.
+            <div className="h-full flex items-center justify-center">
+              <Spinner variant="md" />
             </div>
           ) : searching ? (
             // While searching, show only matching conversations (no requests,
@@ -664,7 +706,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             className="w-full flex items-center gap-2.5 px-3 py-3 hover:bg-white/[0.02] transition-colors text-left"
           >
             <div className="relative shrink-0">
-              <Avatar userId={user.id} name={user.displayName} size={28} version={avatarVersion} />
+              <Avatar userId={user.id} name={user.displayName} size={sidebarAvatar} version={avatarVersion} />
               {/* Live status dot: grey "Away" when idle, else the manual status
                   colour. Drivers have no availability, so no dot. */}
               {user.role !== 'driver' && cachedProfile && (
@@ -680,8 +722,18 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-[12.5px] font-medium truncate">{user.displayName}</div>
-              <div className="text-[11px] text-muted truncate capitalize">{user.role}</div>
+              <div
+                className="font-medium truncate"
+                style={{ fontSize: 'var(--sidebar-row-font-size)' }}
+              >
+                {user.displayName}
+              </div>
+              <div
+                className="text-muted truncate capitalize"
+                style={{ fontSize: 'var(--sidebar-meta-font-size)' }}
+              >
+                {user.role}
+              </div>
             </div>
             <ChevronDown
               size={13}
@@ -816,7 +868,15 @@ function GroupRow({
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-2 pl-2 pr-2 py-1.5 rounded-chip text-left transition-colors ${
+      style={{
+        minHeight: 'var(--sidebar-row-height)',
+        gap: 'var(--sidebar-row-gap)',
+        paddingLeft: 'var(--sidebar-row-pad-x)',
+        paddingRight: 'var(--sidebar-row-pad-x)',
+        paddingTop: 'var(--sidebar-row-pad-y)',
+        paddingBottom: 'var(--sidebar-row-pad-y)',
+      }}
+      className={`w-full flex items-center rounded-chip text-left transition-colors ${
         selected
           ? 'bg-white/[0.06] text-text'
           : 'text-muted hover:bg-white/[0.025] hover:text-text'
@@ -827,8 +887,8 @@ function GroupRow({
       />
       <span className="relative shrink-0 flex">
         <TypeIcon
-          size={17}
           strokeWidth={1.6}
+          style={{ width: 'var(--sidebar-icon-size)', height: 'var(--sidebar-icon-size)' }}
           className={`shrink-0 ${unread ? 'text-muted' : 'text-faint'}`}
         />
         {/* DM peer presence: live online/offline via socket, coloured by the
@@ -841,14 +901,22 @@ function GroupRow({
           />
         )}
       </span>
-      <span className={`flex-1 truncate text-[13px] ${unread ? 'text-text font-medium' : ''}`}>
+      <span
+        className={`flex-1 truncate ${unread ? 'text-text font-medium' : ''}`}
+        style={{ fontSize: 'var(--sidebar-row-font-size)' }}
+      >
         {groupLabel(group)}
       </span>
       {hasUnreadMention && (
         <span
           aria-label="You were mentioned"
           title="You were mentioned"
-          className="shrink-0 h-[18px] w-[18px] rounded-full bg-active/20 text-active text-[11px] font-bold leading-none flex items-center justify-center"
+          style={{
+            height: 'var(--sidebar-badge-size)',
+            width: 'var(--sidebar-badge-size)',
+            fontSize: 'var(--sidebar-meta-font-size)',
+          }}
+          className="shrink-0 rounded-full bg-active/20 text-active font-bold leading-none flex items-center justify-center"
         >
           @
         </span>
@@ -856,7 +924,12 @@ function GroupRow({
       {unread && hasCount && unreadCount > 0 && (
         <span
           aria-label={`${unreadCount} unread`}
-          className="shrink-0 min-w-[18px] h-[18px] px-1.5 rounded-full bg-active text-bg text-[10.5px] font-semibold leading-none flex items-center justify-center"
+          style={{
+            minWidth: 'var(--sidebar-badge-size)',
+            height: 'var(--sidebar-badge-size)',
+            fontSize: 'var(--sidebar-meta-font-size)',
+          }}
+          className="shrink-0 px-1.5 rounded-full bg-active text-bg font-semibold leading-none flex items-center justify-center"
         >
           {unreadCount > 99 ? '99+' : unreadCount}
         </span>
@@ -869,7 +942,9 @@ function ChannelGroup({ label, children }: { label: string; children: React.Reac
   return (
     <div>
       <div className="px-2 mb-1.5">
-        <span className="eyebrow">{label}</span>
+        <span className="eyebrow" style={{ fontSize: 'var(--sidebar-section-font-size)' }}>
+          {label}
+        </span>
       </div>
       <div className="space-y-0.5">{children}</div>
     </div>
@@ -877,7 +952,14 @@ function ChannelGroup({ label, children }: { label: string; children: React.Reac
 }
 
 function EmptyHint({ children }: { children: React.ReactNode }) {
-  return <div className="text-[11.5px] text-faint px-2 py-1 leading-[1.45]">{children}</div>
+  return (
+    <div
+      className="text-faint px-2 py-1 leading-[1.45]"
+      style={{ fontSize: 'var(--sidebar-meta-font-size)' }}
+    >
+      {children}
+    </div>
+  )
 }
 
 function MenuItem({

@@ -3,7 +3,13 @@ import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { pool, type DbClient } from '../db/pool.js'
 import { requireAuth } from '../auth.js'
-import { getIO, roomForGroup, roomForUser, subscribeUserToGroup } from '../realtime.js'
+import {
+  getIO,
+  roomForGroup,
+  roomForUser,
+  subscribeUserToGroup,
+  unsubscribeUserFromGroup,
+} from '../realtime.js'
 import { groupCreateLimiter, messageLimiter } from '../middleware/rateLimit.js'
 import {
   MAX_DOC_BYTES,
@@ -317,12 +323,47 @@ groupsRouter.post(
   }),
 )
 
+// Load + shape a group's members for the API. Enriched for the group-info
+// panel: group role (admin/member), the user's workspace role (admin/dispatcher
+// /driver/partner), availability and avatar flag. Admins first, then alphabetical.
+// The @-mention picker only reads id + display_name, so the extra fields are
+// harmless to existing callers. Shared by the members GET and the role PATCH so
+// both return the exact same shape.
+async function fetchGroupMembers(groupId: string) {
+  const { rows } = await pool.query<{
+    id: string
+    display_name: string
+    workspace: string | null
+    group_role: string
+    user_role: string
+    availability_status: string
+    avatar_path: string | null
+  }>(
+    `select u.id, u.display_name, w.name as workspace,
+            gm.role as group_role, u.role as user_role,
+            u.availability_status, u.avatar_path
+       from group_members gm
+       join users u on u.id = gm.user_id
+       left join workspaces w on w.id = u.workspace_id
+      where gm.group_id = $1
+      order by (gm.role = 'admin') desc, u.display_name asc`,
+    [groupId],
+  )
+  return rows.map((r) => ({
+    id: r.id,
+    displayName: r.display_name,
+    workspace: r.workspace,
+    role: r.group_role,
+    userRole: r.user_role,
+    availabilityStatus: r.availability_status,
+    hasAvatar: r.avatar_path !== null,
+  }))
+}
+
 // ── GET /api/groups/:id/members ──────────────────────────────────────────
-// The members of one conversation — drives the @-mention picker. Restricted
-// to members of the group (the caller must belong to it), so the picker only
-// ever offers people who are actually in the conversation. Returns each
-// member's id, display name, and home workspace (handy for cross-workspace
-// DMs where two people from different companies share a thread).
+// The members of one conversation — drives the @-mention picker AND the
+// group-info members list. Restricted to members of the group (the caller must
+// belong to it), so the picker only ever offers people actually in the chat.
 groupsRouter.get(
   '/:id/members',
   asyncHandler(async (req, res) => {
@@ -335,42 +376,7 @@ groupsRouter.get(
     )
     if (membership.length === 0) return res.status(403).json({ error: 'not_a_member' })
 
-    // Enriched for the group-info panel: group role (admin/member), the user's
-    // workspace role (admin/dispatcher/driver/partner), declared availability
-    // and whether they have an avatar. The @-mention picker only reads id +
-    // display_name, so the extra columns are harmless to existing callers.
-    // Admins first, then alphabetical — the panel renders membership cleanly.
-    const { rows } = await pool.query<{
-      id: string
-      display_name: string
-      workspace: string | null
-      group_role: string
-      user_role: string
-      availability_status: string
-      avatar_path: string | null
-    }>(
-      `select u.id, u.display_name, w.name as workspace,
-              gm.role as group_role, u.role as user_role,
-              u.availability_status, u.avatar_path
-         from group_members gm
-         join users u on u.id = gm.user_id
-         left join workspaces w on w.id = u.workspace_id
-        where gm.group_id = $1
-        order by (gm.role = 'admin') desc, u.display_name asc`,
-      [groupId],
-    )
-
-    res.json({
-      members: rows.map((r) => ({
-        id: r.id,
-        displayName: r.display_name,
-        workspace: r.workspace,
-        role: r.group_role,
-        userRole: r.user_role,
-        availabilityStatus: r.availability_status,
-        hasAvatar: r.avatar_path !== null,
-      })),
-    })
+    res.json({ members: await fetchGroupMembers(groupId) })
   }),
 )
 
@@ -531,6 +537,149 @@ groupsRouter.post(
     }
 
     res.status(201).json({ invited: result.created, skipped: result.skipped })
+  }),
+)
+
+// ── Role-management authorization ─────────────────────────────────────────
+// Who may change a vehicle group's member roles: a GROUP admin OR a WORKSPACE
+// admin. Note this is STRICTER than inviting (which also allows dispatchers) —
+// promoting/demoting admins is a privileged action. Throws the right HttpError;
+// returns nothing on success.
+async function authorizeRoleManager(
+  client: DbClient,
+  groupId: string,
+  userId: string,
+): Promise<void> {
+  const { rows } = await client.query<{
+    group_role: string
+    user_role: string
+    type: 'vehicle' | 'direct'
+  }>(
+    `select gm.role as group_role, u.role as user_role, g.type
+       from group_members gm
+       join users u on u.id = gm.user_id
+       join groups g on g.id = gm.group_id
+      where gm.group_id = $1 and gm.user_id = $2`,
+    [groupId, userId],
+  )
+  const row = rows[0]
+  if (!row) throw new HttpError(403, 'not_a_member')
+  // Group roles are a vehicle-group concept — DMs are a fixed pair.
+  if (row.type !== 'vehicle') throw new HttpError(400, 'not_a_vehicle_group')
+  if (row.group_role !== 'admin' && row.user_role !== 'admin') {
+    throw new HttpError(403, 'forbidden')
+  }
+}
+
+// ── PATCH /api/groups/:id/members/:userId ────────────────────────────────
+// Change a member's GROUP role (admin | member). Authorised to group admins /
+// workspace admins only. The target must already be a member of THIS group, and
+// the last remaining admin can never be demoted (which would orphan the group's
+// management). Group role is distinct from the user's workspace role and is the
+// only thing this endpoint touches. Returns the refreshed member list.
+const memberRoleSchema = z.object({
+  role: z.enum(['admin', 'member']),
+})
+
+groupsRouter.patch(
+  '/:id/members/:userId',
+  asyncHandler(async (req, res) => {
+    const parsed = memberRoleSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'invalid_input' })
+
+    const { userId } = req.session!
+    const groupId = req.params.id
+    const targetId = req.params.userId
+    const nextRole = parsed.data.role
+
+    await withTransaction(async (client) => {
+      await authorizeRoleManager(client, groupId, userId)
+
+      // Lock the target's membership row + read the current admin count in one
+      // consistent snapshot so concurrent demotions can't both slip past the
+      // last-admin guard.
+      const { rows: target } = await client.query<{ role: string }>(
+        `select role from group_members where group_id = $1 and user_id = $2 for update`,
+        [groupId, targetId],
+      )
+      if (target.length === 0) throw new HttpError(404, 'not_a_member')
+      const currentRole = target[0].role
+
+      // No-op (already the requested role) — succeed without a write.
+      if (currentRole === nextRole) return
+
+      // Demotion: never drop below one admin.
+      if (currentRole === 'admin' && nextRole === 'member') {
+        const { rows: adminRows } = await client.query<{ count: string }>(
+          `select count(*)::int as count from group_members
+            where group_id = $1 and role = 'admin'`,
+          [groupId],
+        )
+        if (Number(adminRows[0].count) <= 1) throw new HttpError(409, 'last_admin')
+      }
+
+      await client.query(
+        `update group_members set role = $1 where group_id = $2 and user_id = $3`,
+        [nextRole, groupId, targetId],
+      )
+    })
+
+    // Tell every open client on this group to refresh its member list (badges,
+    // action menus). No chat/system message — role changes aren't timeline events.
+    getIO().to(roomForGroup(groupId)).emit('group:members_changed', { groupId })
+
+    res.json({ members: await fetchGroupMembers(groupId) })
+  }),
+)
+
+// ── DELETE /api/groups/:id/members/:userId ───────────────────────────────
+// Remove a member from a vehicle group. Authorised to group admins / workspace
+// admins only (the same boundary as role changes — both are privileged "manage
+// membership" actions). The last remaining admin can never be removed — this
+// also blocks a sole admin from removing themselves, which would orphan the
+// group's management. Returns the refreshed member list.
+groupsRouter.delete(
+  '/:id/members/:userId',
+  asyncHandler(async (req, res) => {
+    const { userId } = req.session!
+    const groupId = req.params.id
+    const targetId = req.params.userId
+
+    await withTransaction(async (client) => {
+      await authorizeRoleManager(client, groupId, userId)
+
+      // Lock the target's membership row + count admins in one snapshot so a
+      // concurrent removal/demotion can't slip the last admin out.
+      const { rows: target } = await client.query<{ role: string }>(
+        `select role from group_members where group_id = $1 and user_id = $2 for update`,
+        [groupId, targetId],
+      )
+      if (target.length === 0) throw new HttpError(404, 'not_a_member')
+
+      // Never remove the last remaining admin (covers self-removal too).
+      if (target[0].role === 'admin') {
+        const { rows: adminRows } = await client.query<{ count: string }>(
+          `select count(*)::int as count from group_members
+            where group_id = $1 and role = 'admin'`,
+          [groupId],
+        )
+        if (Number(adminRows[0].count) <= 1) throw new HttpError(409, 'last_admin')
+      }
+
+      await client.query(
+        `delete from group_members where group_id = $1 and user_id = $2`,
+        [groupId, targetId],
+      )
+    })
+
+    // Drop the removed user's live room subscription, tell remaining members to
+    // refresh the roster (badges/menus), and notify the removed user's own tabs
+    // so their group list/selection updates.
+    unsubscribeUserFromGroup(targetId, groupId)
+    getIO().to(roomForGroup(groupId)).emit('group:members_changed', { groupId })
+    getIO().to(roomForUser(targetId)).emit('group:removed', { groupId })
+
+    res.json({ members: await fetchGroupMembers(groupId) })
   }),
 )
 

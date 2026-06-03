@@ -46,13 +46,13 @@ export default function AttachMenu({ disabled, onPickKind }: Props) {
         aria-label="Attach"
         aria-haspopup="menu"
         aria-expanded={open}
-        className={`h-7 w-7 flex items-center justify-center rounded-chip transition-colors disabled:opacity-30 disabled:cursor-default ${
+        className={`h-[var(--composer-size)] w-[var(--composer-size)] flex items-center justify-center rounded-full transition-colors disabled:opacity-30 disabled:cursor-default ${
           open
             ? 'text-text bg-white/[0.06]'
             : 'text-muted hover:text-text hover:bg-white/[0.04]'
         }`}
       >
-        <Paperclip size={15} strokeWidth={1.8} />
+        <Paperclip size={16} strokeWidth={1.8} />
       </button>
       {open && (
         <div

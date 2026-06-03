@@ -44,7 +44,12 @@ export default function ConnectionRequestsSection({
           strokeWidth={2}
           className={`text-faint shrink-0 transition-transform ${open ? '' : '-rotate-90'}`}
         />
-        <span className="eyebrow flex-1 text-left">Connection requests</span>
+        <span
+          className="eyebrow flex-1 text-left"
+          style={{ fontSize: 'var(--sidebar-section-font-size)' }}
+        >
+          Connection requests
+        </span>
         {count > 0 && (
           <span className="font-mono text-[10px] font-semibold bg-active text-bg rounded-full min-w-[16px] h-[16px] px-1 flex items-center justify-center shrink-0">
             {count}

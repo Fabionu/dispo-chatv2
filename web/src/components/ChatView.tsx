@@ -22,7 +22,6 @@ import ForwardModal from './messages/ForwardModal'
 import InviteMembersModal from './invites/InviteMembersModal'
 import ConfirmDialog from './ConfirmDialog'
 import Spinner from './Spinner'
-import { minuteKey } from './messages/messageUtils'
 import type { LocalMessage } from './messages/types'
 import { useChatScroll } from '../hooks/useChatScroll'
 import { devlog } from '../lib/devlog'
@@ -210,10 +209,17 @@ export default function ChatView({
     noticeTimer.current = window.setTimeout(() => setNotice(null), 2200)
   }
 
-  // ── Conversation members (for @-mentions) ──────────────────────────────
-  // Fetched per group; used by the composer's mention picker and to resolve
-  // typed @Names to ids when sending. Cleared between groups so a stale list
-  // can't leak across conversations.
+  // ── Conversation members (for @-mentions + the group-info panel) ────────
+  // Fetched per group; used by the composer's mention picker, @Name resolution
+  // on send, and the group-info members list. Cleared between groups so a stale
+  // list can't leak across conversations.
+  const refetchMembers = useCallback(() => {
+    api.groups
+      .members(group.id)
+      .then((r) => setMembers(r.members))
+      .catch(() => {})
+  }, [group.id])
+
   useEffect(() => {
     let cancelled = false
     setMembers([])
@@ -227,6 +233,19 @@ export default function ChatView({
       cancelled = true
     }
   }, [group.id])
+
+  // Keep the members list fresh when roles change (here or on another client):
+  // the server emits `group:members_changed` to the group room after a PATCH.
+  useEffect(() => {
+    const socket = getSocket()
+    function onMembersChanged(p: { groupId: string }) {
+      if (p.groupId === group.id) refetchMembers()
+    }
+    socket.on('group:members_changed', onMembersChanged)
+    return () => {
+      socket.off('group:members_changed', onMembersChanged)
+    }
+  }, [group.id, refetchMembers])
 
   // ── Read receipts ──────────────────────────────────────────────────────
   const markRead = useCallback(() => {
@@ -721,6 +740,18 @@ export default function ChatView({
     void openPrivate(m)
   }
 
+  // Open (or reuse) a DM with a group member from the Group-info panel's
+  // "Send private message" action. Reuses the same createDirect + navigate flow
+  // as the message-level private actions. Rethrows so the panel can show its own
+  // themed error (e.g. a missing cross-workspace connection).
+  const messageMember = useCallback(
+    async (m: GroupMember) => {
+      const { group: dm } = await api.groups.createDirect(m.id)
+      onOpenDirectMessage({ groupId: dm.id, peerId: m.id, peerName: m.displayName })
+    },
+    [onOpenDirectMessage],
+  )
+
   // Scroll to (and briefly pulse) the original message a reply points at, if
   // it's currently loaded. Otherwise show a subtle, transient hint.
   const jumpToMessage = useCallback(
@@ -899,8 +930,10 @@ export default function ChatView({
             />
           ) : (
             // Vehicle group image — same footprint as the DM avatar, falls back
-            // to a themed multi-user icon when no image is set.
-            <GroupAvatar groupId={group.id} size={40} version={groupAvatarVersion} />
+            // to a themed multi-user icon when no image is set. `|| undefined`
+            // so the un-edited default has no ?v (matching the sidebar preload's
+            // cache key); an upload bumps the version to bust it.
+            <GroupAvatar groupId={group.id} size={40} version={groupAvatarVersion || undefined} />
           )}
           <div className="min-w-0">
             <div className="text-[15px] font-semibold truncate leading-tight">{groupLabel(group)}</div>
@@ -939,12 +972,17 @@ export default function ChatView({
             <div
               ref={scrollRef}
               onScroll={onScroll}
-              className="flex-1 overflow-y-auto px-5 py-4"
+              className="flex-1 overflow-y-auto pt-4 pb-1 [scrollbar-gutter:stable]"
             >
-              <div className="mx-auto w-full max-w-[var(--chat-max-width)]">
-                {loading ? (
-                  <Spinner label="Loading" className="h-full" />
-                ) : messages.length === 0 ? (
+              {loading ? (
+                // Centre the loader in the FULL chat pane (the scroller has a
+                // definite flex height), so it never reads as a tiny top row.
+                <div className="h-full flex items-center justify-center">
+                  <Spinner variant="lg" />
+                </div>
+              ) : (
+                <div className="chat-column">
+                {messages.length === 0 ? (
                   <div className="h-full flex items-center justify-center">
                     <p className="text-[12.5px] text-faint">No messages yet. Say something.</p>
                   </div>
@@ -974,17 +1012,6 @@ export default function ChatView({
                           />
                         )
                       }
-                      const next = messages[i + 1]
-                      // Hide the timestamp on any message that's immediately
-                      // followed by another from the same sender within the
-                      // same calendar minute. Only the last message of such a
-                      // run keeps its timestamp, like WhatsApp. A system row
-                      // following us is a boundary (keep our timestamp).
-                      const lastInMinuteGroup =
-                        !next ||
-                        next.kind === 'system' ||
-                        next.authorId !== m.authorId ||
-                        minuteKey(next.createdAt) !== minuteKey(m.createdAt)
                       return (
                         <MessageRow
                           // Stable across the optimistic→real reconcile (localId
@@ -998,7 +1025,6 @@ export default function ChatView({
                           groupType={group.type}
                           highlighted={highlightedMessageId === m.id}
                           onRetry={retry}
-                          showTimestamp={lastInMinuteGroup}
                           imagePriority={i >= messages.length - RECENT_IMAGE_WINDOW}
                           onActivateAttachment={activateAttachment}
                           onImageLoad={handleImageLoaded}
@@ -1020,7 +1046,8 @@ export default function ChatView({
                     })}
                   </div>
                 )}
-              </div>
+                </div>
+              )}
             </div>
             {showScrollDown && (
               <button
@@ -1038,9 +1065,16 @@ export default function ChatView({
             )}
           </div>
 
-          {/* Composer */}
-          <div ref={composerRef} className="px-5 pb-4 pt-1 shrink-0">
-            <div className="mx-auto w-full xl:max-w-[1280px] 2xl:max-w-[1440px] min-[1700px]:max-w-[1560px]">
+          {/* Composer — a normal solid footer (in flex flow, below the message
+              list, never overlapping it). No top border — the minimal input bar
+              carries its own edge. The right pad matches the scroller's reserved
+              scrollbar gutter so the composer's centred column lines up exactly
+              with the messages. */}
+          <div
+            ref={composerRef}
+            className="shrink-0 pb-3 pt-1.5 pr-[var(--chat-scrollbar-gutter)] bg-bg"
+          >
+            <div className="chat-column">
               {typingUsers.length > 0 && (
                 <div className="mb-1 px-1">
                   <TypingIndicator users={typingUsers} />
@@ -1116,6 +1150,8 @@ export default function ChatView({
           avatarVersion={groupAvatarVersion}
           onClose={() => setGroupInfoOpen(false)}
           onInvite={() => setInviteOpen(true)}
+          onMembersChanged={refetchMembers}
+          onMessageMember={messageMember}
           onAvatarChanged={(hasAvatar) => {
             setGroupAvatarVersion((v) => v + 1)
             onGroupUpdated?.(group.id, { hasAvatar })

@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { ArrowUp } from 'lucide-react'
+import { ArrowUp, Smile } from 'lucide-react'
 import type { GroupMember, ReplyToPreview } from '../../lib/types'
 import { DOC_ACCEPT, IMAGE_ACCEPT, fileError } from '../attachments/attachmentUtils'
 import ComposerContextRow from '../messages/ComposerContextRow'
@@ -243,7 +243,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
     : !text.trim()
 
   return (
-    <div className="relative rounded-card border border-white/[0.14] bg-white/[0.045] focus-within:border-white/[0.24] focus-within:bg-white/[0.06] transition-colors shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">
+    <div className="relative rounded-[14px] border border-white/[0.12] bg-white/[0.04] focus-within:border-white/[0.20] focus-within:bg-white/[0.05] transition-colors">
       {pickerOpen && (
         <MentionPicker
           members={matches}
@@ -272,7 +272,10 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           onCancel={onCancelEdit}
         />
       )}
-      <div className="flex items-end gap-2 px-3.5 py-2.5">
+      {/* Minimal input bar: paperclip · textarea · emoji · send. All controls
+          share --composer-size and bottom-align so the bar stays tidy as the
+          textarea autogrows. */}
+      <div className="flex items-end gap-1 px-2 py-1.5">
         <input
           ref={fileInputRef}
           type="file"
@@ -289,13 +292,24 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           onPaste={onPaste}
           rows={1}
           placeholder={editContext ? 'Edit message…' : placeholder}
-          className="flex-1 bg-transparent text-[length:var(--chat-msg-font-size)] leading-[1.5] outline-none resize-none placeholder:text-faint overflow-y-auto max-h-[9em] py-1"
+          className="flex-1 bg-transparent text-[length:var(--chat-msg-font-size)] leading-[1.5] outline-none resize-none placeholder:text-faint overflow-y-auto max-h-[9em] px-1.5 py-1.5"
         />
+        {/* Emoji — not wired up yet; shown disabled so the bar matches the
+            minimal layout without faking behaviour. */}
+        <button
+          type="button"
+          disabled
+          aria-label="Emoji (coming soon)"
+          title="Emoji (coming soon)"
+          className="h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 flex items-center justify-center rounded-full text-faint cursor-default"
+        >
+          <Smile size={16} strokeWidth={1.8} />
+        </button>
         <button
           onClick={onSend}
           disabled={disabled}
           aria-label={editContext ? 'Save edit' : 'Send message'}
-          className="h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 flex items-center justify-center rounded-chip bg-text text-bg transition-opacity disabled:opacity-30"
+          className="h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 flex items-center justify-center rounded-full bg-text text-bg hover:bg-text/90 transition-colors disabled:opacity-30 disabled:cursor-default disabled:hover:bg-text"
         >
           <ArrowUp size={15} strokeWidth={2.2} />
         </button>

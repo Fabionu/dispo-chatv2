@@ -7,7 +7,19 @@
 // choice (future settings UI) is persisted in localStorage and always wins; the
 // auto-follow listener stands down once an override exists.
 
+import { useEffect, useState } from 'react'
+
 export type Density = 'compact' | 'default' | 'comfortable'
+
+// Sidebar avatar / company-logo diameter per tier. Components that take a
+// numeric `size` (Avatar, CompanyLogo) can't read the CSS density tokens, so
+// they read this map via useDensity() instead. Kept in lockstep with the
+// --sidebar-user-avatar-size token in index.css.
+export const SIDEBAR_AVATAR_SIZE: Record<Density, number> = {
+  compact: 28,
+  default: 30,
+  comfortable: 34,
+}
 
 const STORAGE_KEY = 'dispo:density'
 // 2K/QHD (2560-wide) and up → comfortable. Below 1536 → compact (laptops).
@@ -58,6 +70,27 @@ export function clearDensityOverride() {
     /* ignore */
   }
   apply(autoDensity())
+}
+
+// React hook: the live density tier. Reads the attribute lib/density.ts writes
+// on <html> and re-renders when it changes (viewport crosses a tier boundary,
+// or a manual override is set), so size-prop components track density too.
+export function useDensity(): Density {
+  const [d, setD] = useState<Density>(() => {
+    if (typeof document === 'undefined') return 'default'
+    const v = document.documentElement.dataset.density
+    return isDensity(v) ? v : autoDensity()
+  })
+  useEffect(() => {
+    const el = document.documentElement
+    const obs = new MutationObserver(() => {
+      const v = el.dataset.density
+      if (isDensity(v)) setD(v)
+    })
+    obs.observe(el, { attributes: true, attributeFilter: ['data-density'] })
+    return () => obs.disconnect()
+  }, [])
+  return d
 }
 
 // Call once at startup (before React renders) so the attribute is present on

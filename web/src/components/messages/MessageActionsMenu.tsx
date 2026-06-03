@@ -12,15 +12,20 @@ export type MessageAction = {
 }
 
 type Props = {
-  anchorEl: HTMLElement
+  // Either anchor the menu to the chevron trigger (right-aligned under it) …
+  anchorEl?: HTMLElement | null
+  // … or open it at a cursor point (right-click). Exactly one is provided.
+  anchorPoint?: { x: number; y: number }
   actions: MessageAction[]
   onClose: () => void
 }
 
-// Floating dropdown anchored to a bubble's chevron trigger. Rendered through
-// a portal so it can sit above scroll containers and use `fixed` coords for
-// viewport-aware placement (flips above when there's no room below).
-export default function MessageActionsMenu({ anchorEl, actions, onClose }: Props) {
+// Floating dropdown for a message's actions. Rendered through a portal so it can
+// sit above scroll containers and use `fixed` coords for viewport-aware
+// placement (flips above when there's no room below). Opens either anchored to
+// the bubble's chevron trigger, or at the cursor for a right-click — both are
+// clamped inside the chat pane (never under the sidebar) and the viewport.
+export default function MessageActionsMenu({ anchorEl, anchorPoint, actions, onClose }: Props) {
   const menuRef = useRef<HTMLDivElement>(null)
   // Start invisible: we don't know the menu's height until it renders once,
   // and we don't want a frame at (0, 0) before that.
@@ -31,28 +36,42 @@ export default function MessageActionsMenu({ anchorEl, actions, onClose }: Props
   })
 
   useLayoutEffect(() => {
-    const a = anchorEl.getBoundingClientRect()
     const m = menuRef.current
     if (!m) return
     const mRect = m.getBoundingClientRect()
-    // Right-align with the trigger; flip up if we'd overflow the viewport.
-    let left = a.right - mRect.width
-    let top = a.bottom + 4
-    if (top + mRect.height > window.innerHeight - 8) {
-      top = a.top - mRect.height - 4
+
+    // Never extend left of the chat pane (i.e. under the sidebar).
+    const sidebarW =
+      parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width')) || 0
+    const minLeft = Math.max(8, sidebarW + 8)
+
+    let left: number
+    let top: number
+    if (anchorPoint) {
+      // Open at the cursor, opening downward then flipping up if needed.
+      left = anchorPoint.x
+      top = anchorPoint.y + 4
+      if (top + mRect.height > window.innerHeight - 8) top = anchorPoint.y - mRect.height - 4
+    } else if (anchorEl) {
+      const a = anchorEl.getBoundingClientRect()
+      left = a.right - mRect.width
+      top = a.bottom + 4
+      if (top + mRect.height > window.innerHeight - 8) top = a.top - mRect.height - 4
+    } else {
+      return
     }
-    if (left < 8) left = 8
-    if (left + mRect.width > window.innerWidth - 8) {
-      left = window.innerWidth - mRect.width - 8
-    }
+
+    if (left + mRect.width > window.innerWidth - 8) left = window.innerWidth - mRect.width - 8
+    if (left < minLeft) left = minLeft
+    if (top < 8) top = 8
     setPos({ top, left, visible: true })
-  }, [anchorEl])
+  }, [anchorEl, anchorPoint?.x, anchorPoint?.y])
 
   useEffect(() => {
     function onDown(e: MouseEvent) {
       const t = e.target as Node
       if (menuRef.current?.contains(t)) return
-      if (anchorEl.contains(t)) return
+      if (anchorEl?.contains(t)) return
       onClose()
     }
     function onKey(e: KeyboardEvent) {

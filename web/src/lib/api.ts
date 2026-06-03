@@ -134,9 +134,26 @@ export const api = {
       )
     },
 
-    // Members of one conversation — the source for the @-mention picker.
+    // Members of one conversation — the source for the @-mention picker and the
+    // group-info members list.
     members: (groupId: string) =>
       request<{ members: GroupMember[] }>(`/groups/${groupId}/members`),
+
+    // Change a member's GROUP role (admin | member). Server enforces the
+    // manager permission and the last-admin guard. Returns the refreshed list.
+    setMemberRole: (groupId: string, userId: string, role: 'admin' | 'member') =>
+      request<{ members: GroupMember[] }>(`/groups/${groupId}/members/${userId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ role }),
+      }),
+
+    // Remove a member from a vehicle group. Server enforces the manager
+    // permission and refuses to remove the last remaining admin. Returns the
+    // refreshed member list so the panel can update immediately.
+    removeMember: (groupId: string, userId: string) =>
+      request<{ members: GroupMember[] }>(`/groups/${groupId}/members/${userId}`, {
+        method: 'DELETE',
+      }),
 
     // Pending invitees for a vehicle group (drives the invite picker's state).
     pendingInvites: (groupId: string) =>
