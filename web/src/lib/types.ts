@@ -217,6 +217,11 @@ export type GroupMember = {
   availabilityStatus?: AvailabilityStatus
   /** Whether this member has an avatar image (lets the row skip a 404). */
   hasAvatar?: boolean
+  /** This member's "read up to" timestamp for the conversation. Per-message
+   *  read receipts are derived from it: a message is seen by this member iff
+   *  lastReadAt >= the message's createdAt. Kept fresh live via `group:read`.
+   *  Absent for the @-mention picker's lightweight callers. */
+  lastReadAt?: string | null
 }
 
 // Payload of the `message:new` socket event — same as Message plus groupId.

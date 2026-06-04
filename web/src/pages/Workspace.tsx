@@ -529,7 +529,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               onKeyDown={(e) => {
                 if (e.key === 'Escape') setQuery('')
               }}
-              placeholder="Jump to…"
+              placeholder="Search…"
               style={{ fontSize: 'var(--sidebar-row-font-size)' }}
               className="bg-transparent flex-1 outline-none placeholder:text-faint min-w-0"
             />

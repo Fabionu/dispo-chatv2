@@ -1,9 +1,22 @@
 import { Fragment, useRef, useState, type ReactNode } from 'react'
-import { ChevronDown, Pin } from 'lucide-react'
-import type { Attachment, GroupType, Mention } from '../../lib/types'
+import {
+  ChevronDown,
+  Copy,
+  Download,
+  Forward,
+  MessageCircle,
+  Pencil,
+  Pin,
+  PinOff,
+  Reply,
+  Trash2,
+} from 'lucide-react'
+import type { Attachment, GroupMember, GroupType, Mention } from '../../lib/types'
 import { splitBodyByMentions } from '../../lib/mentions'
 import AttachmentBlock from '../attachments/AttachmentBlock'
+import { downloadAttachment } from '../attachments/attachmentUtils'
 import MessageActionsMenu, { type MessageAction } from './MessageActionsMenu'
+import ReadReceipts from './ReadReceipts'
 import ReplyQuote from './ReplyQuote'
 import { DELETE_WINDOW_MS, formatDay, formatTime } from './messageUtils'
 import Avatar from '../Avatar'
@@ -43,6 +56,9 @@ type Props = {
   mine: boolean
   // The viewing user — used to highlight mentions of *me* more strongly.
   currentUserId: string
+  // Conversation members — the source for my-message read receipts (each
+  // member's lastReadAt vs this message's createdAt).
+  members: GroupMember[]
   prev?: LocalMessage
   groupType: GroupType
   highlighted: boolean
@@ -71,6 +87,7 @@ export default function MessageRow({
   message,
   mine,
   currentUserId,
+  members,
   prev,
   groupType,
   highlighted,
@@ -117,6 +134,14 @@ export default function MessageRow({
   // Optimistic + failed bubbles aren't real messages yet, so they shouldn't
   // expose the menu. Deleted placeholders shouldn't either.
   const canShowActions = !deleted && !pending && !failed
+  // Attachments with a real, fetchable URL — excludes just-sent blob: previews
+  // (optimistic sends) and known-missing objects, so Download is never offered
+  // before a downloadable file actually exists on the server.
+  const downloadable = canShowActions
+    ? (message.attachments ?? []).filter(
+        (a) => a.url && !a.url.startsWith('blob:') && !a.missing,
+      )
+    : []
   const canEdit = mine && !deleted && !pending && !failed
   const withinDeleteWindow =
     Date.now() - new Date(message.createdAt).getTime() < DELETE_WINDOW_MS
@@ -128,6 +153,21 @@ export default function MessageRow({
   // per-message avatars and author labels are redundant — drop them and let
   // incoming bubbles sit flush to the left.
   const showAuthorChrome = !mine && groupType === 'vehicle'
+
+  // Read-receipt readers: everyone in the conversation except me (the author).
+  // Drives the sent-message checkmarks — fully read when ALL of them have seen
+  // it (a single peer in a DM, all members in a group). Only computed for my
+  // own messages; empty otherwise.
+  const readers = mine
+    ? members
+        .filter((m) => m.id !== currentUserId)
+        .map((m) => ({
+          id: m.id,
+          displayName: m.displayName,
+          hasAvatar: m.hasAvatar,
+          lastReadAt: m.lastReadAt,
+        }))
+    : []
 
   // The actions menu is opened two ways: from the chevron (anchored under it)
   // or by right-clicking the bubble (anchored at the cursor). One state covers
@@ -142,43 +182,92 @@ export default function MessageRow({
   // Font size comes from --chat-msg-font-size so it scales with the display.
   // max-w lives on the row so the trigger overlay can hug the bubble without
   // breaking the alignment math.
-  const rowMaxW = 'max-w-[min(78%,640px)]'
-  const bubbleBase =
-    'px-3 pt-1.5 pb-1 text-[length:var(--chat-msg-font-size)] leading-[1.5] flex flex-col text-text transition-shadow duration-500'
+  const rowMaxW = 'max-w-[min(78%,660px)]'
+  // Media (image/doc) messages use a tight 4px frame so the attachment nearly
+  // fills the bubble instead of floating inside a thick coloured margin; text-
+  // only messages keep a comfortable-but-compact padding. Caption text and the
+  // meta footer re-add a small inset on media bubbles (see below).
+  const bubblePad = hasAttachment ? 'p-1' : 'px-3 pt-1.5 pb-1'
+  const bubbleBase = `${bubblePad} text-[length:var(--chat-msg-font-size)] leading-[1.45] flex flex-col text-[#F4F1EC] transition-[box-shadow,border-color] duration-500`
   const deletedSkin = mine
-    ? 'bg-white/[0.02] border border-white/[0.06] text-muted italic rounded-[7px] rounded-br-[2px]'
-    : 'bg-white/[0.02] border border-white/[0.06] text-muted italic rounded-[7px] rounded-bl-[2px]'
+    ? 'bg-white/[0.02] border border-white/[0.04] text-muted italic rounded-[8px] rounded-br-[3px]'
+    : 'bg-white/[0.02] border border-white/[0.04] text-muted italic rounded-[8px] rounded-bl-[3px]'
+  // Minimal flat skins: darker neutral greys — incoming a touch darker than my
+  // own so the two read apart without any colour tint. A faint matching border,
+  // no shadow. The bubble itself never changes on hover; only the actions
+  // affordance reveals.
   const bubbleSkin = deleted
     ? deletedSkin
     : mine
       ? failed
-        ? 'bg-[#222225] border border-alert/50 rounded-[7px] rounded-br-[2px]'
-        : 'bg-[#222225] border border-white/[0.06] rounded-[7px] rounded-br-[2px]'
-      : 'bg-surface border border-white/[0.08] rounded-[7px] rounded-bl-[2px]'
+        ? 'bg-[#1C1C1F] border border-alert/50 rounded-[8px] rounded-br-[3px]'
+        : 'bg-[#1C1C1F] border border-[#2A2A2E] rounded-[8px] rounded-br-[3px]'
+      : 'bg-[#141416] border border-[#1F1F22] rounded-[8px] rounded-bl-[3px]'
   // Subtle, theme-warm pulse applied when this row is the target of a
   // jump-to-original. Clears after ~1.8s back in ChatView.
   const highlightSkin = highlighted ? 'ring-2 ring-active/60' : ''
 
+  const iconSize = 14
   const actions: MessageAction[] = [
-    { label: 'Reply', onClick: () => onReply(message) },
+    { label: 'Reply', onClick: () => onReply(message), icon: <Reply size={iconSize} strokeWidth={1.8} /> },
     {
       label: pinned ? 'Unpin message' : 'Pin message',
       onClick: () => (pinned ? onUnpin(message) : onPin(message)),
+      icon: pinned ? (
+        <PinOff size={iconSize} strokeWidth={1.8} />
+      ) : (
+        <Pin size={iconSize} strokeWidth={1.8} />
+      ),
     },
-    { label: 'Copy', onClick: () => onCopy(message), disabled: !canCopy },
-    { label: 'Forward', onClick: () => onForward(message) },
-    ...(canMessagePrivately
+    {
+      label: 'Copy',
+      onClick: () => onCopy(message),
+      disabled: !canCopy,
+      icon: <Copy size={iconSize} strokeWidth={1.8} />,
+    },
+    { label: 'Forward', onClick: () => onForward(message), icon: <Forward size={iconSize} strokeWidth={1.8} /> },
+    // Download sits with Copy/Forward, before the delete group. Only present
+    // when the message has at least one server-backed attachment. One file →
+    // direct download; multiple → each is downloaded in turn.
+    ...(downloadable.length > 0
       ? [
-          { label: 'Reply privately', onClick: () => onReplyPrivately(message) },
-          { label: 'Send private message', onClick: () => onSendPrivate(message) },
+          {
+            label: 'Download',
+            onClick: () => downloadable.forEach((a) => downloadAttachment(a)),
+            icon: <Download size={iconSize} strokeWidth={1.8} />,
+          },
         ]
       : []),
-    ...(mine ? [{ label: 'Edit', onClick: () => onEdit(message), disabled: !canEdit }] : []),
+    ...(canMessagePrivately
+      ? [
+          {
+            label: 'Reply privately',
+            onClick: () => onReplyPrivately(message),
+            icon: <Reply size={iconSize} strokeWidth={1.8} />,
+          },
+          {
+            label: 'Send private message',
+            onClick: () => onSendPrivate(message),
+            icon: <MessageCircle size={iconSize} strokeWidth={1.8} />,
+          },
+        ]
+      : []),
+    ...(mine
+      ? [
+          {
+            label: 'Edit',
+            onClick: () => onEdit(message),
+            disabled: !canEdit,
+            icon: <Pencil size={iconSize} strokeWidth={1.8} />,
+          },
+        ]
+      : []),
     {
       label: 'Delete for me',
       onClick: () => onDeleteForMe(message),
       tone: 'alert' as const,
       separator: true,
+      icon: <Trash2 size={iconSize} strokeWidth={1.8} />,
     },
     ...(mine
       ? [
@@ -187,6 +276,7 @@ export default function MessageRow({
             onClick: () => onDeleteForEveryone(message),
             disabled: !canDeleteForEveryone,
             tone: 'alert' as const,
+            icon: <Trash2 size={iconSize} strokeWidth={1.8} />,
           },
         ]
       : []),
@@ -254,7 +344,7 @@ export default function MessageRow({
                 <ReplyQuote replyTo={message.replyTo} onJump={onJumpToMessage} />
               )}
               {!deleted && message.attachments && message.attachments.length > 0 && (
-                <div className="flex flex-col gap-1.5 mb-1">
+                <div className="flex flex-col gap-1 mb-0.5">
                   {message.attachments.map((a, i) => (
                     <AttachmentBlock
                       // Index key keeps the block (and its <img>) mounted across
@@ -263,6 +353,10 @@ export default function MessageRow({
                       attachment={a}
                       uploading={pending}
                       priority={imagePriority}
+                      // Captioned: this image is sent with a text body, so it
+                      // gets wider thumbnail bounds to sit visually with the
+                      // caption instead of floating narrow above wide text.
+                      captioned={Boolean(message.body)}
                       onActivate={(a) => onActivateAttachment(message, a)}
                       onImageLoad={onImageLoad}
                     />
@@ -276,11 +370,16 @@ export default function MessageRow({
               ) : (
                 <>
                   {message.body && (
-                    // pr-5 reserves the top-right corner for the actions chevron
-                    // so wrapping text never runs underneath it. The timestamp is
-                    // NOT inline — it lives on its own footer row below.
+                    // On text-only bubbles pr-7 reserves the top-right corner for
+                    // the actions chevron so wrapping text never runs under it. On
+                    // media bubbles the chevron sits over the image (not the
+                    // caption), so the caption just gets a small inset back from
+                    // the tight media frame. Timestamp is NOT inline — it's the
+                    // footer row below.
                     <span
-                      className={`whitespace-pre-wrap break-words ${canShowActions ? 'pr-5' : ''}`}
+                      className={`whitespace-pre-wrap break-words font-medium tracking-normal ${
+                        hasAttachment ? 'px-1.5 pt-0.5' : canShowActions ? 'pr-7' : ''
+                      }`}
                     >
                       {renderBody(message.body, message.mentions, currentUserId)}
                     </span>
@@ -289,35 +388,32 @@ export default function MessageRow({
                       aligned to the bubble's bottom-right corner — below the
                       text/caption (or the media in an attachment-only bubble) and
                       diagonally clear of the top-right chevron. */}
-                  <span className="self-end inline-flex items-center gap-1 whitespace-nowrap text-[10.5px] leading-none text-muted select-none mt-0.5">
+                  <span
+                    className={`self-end inline-flex items-center gap-1 whitespace-nowrap text-[10.5px] leading-none text-[#8F8A98] select-none mt-0.5 -mb-0.5 ${
+                      hasAttachment ? '-mr-0.5' : '-mr-1.5'
+                    }`}
+                  >
                     {meta}
+                    {/* Read checkmarks — only on my own sent messages. Clicking
+                        opens the receipts popover (who's seen it + when). Hidden
+                        for failed sends (the "Failed" marker stands in). */}
+                    {mine && !failed && (
+                      <ReadReceipts
+                        others={readers}
+                        createdAt={message.createdAt}
+                        pending={pending}
+                      />
+                    )}
                   </span>
                 </>
               )}
             </div>
 
-            {/* Readability patch behind the chevron — a bubble-coloured (not
-                black) radial wash anchored in the top-right corner. It's nearly
-                solid right under the chevron and fades to transparent toward the
-                centre, so it reads as part of the bubble rather than a harsh
-                overlay. Colour matches the bubble: my darker bubble (#222225)
-                vs others' surface (#141416). Rounded to follow the bubble's
-                top-right corner. Only over media (image/document) for legibility. */}
-            {canShowActions && hasAttachment && (
-              <div
-                style={{
-                  background: mine
-                    ? 'radial-gradient(circle at top right, rgba(34,34,37,0.96), rgba(34,34,37,0.72) 38%, rgba(34,34,37,0) 76%)'
-                    : 'radial-gradient(circle at top right, rgba(20,20,22,0.96), rgba(20,20,22,0.72) 38%, rgba(20,20,22,0) 76%)',
-                }}
-                className={`absolute top-0 right-0 h-11 w-14 rounded-tr-[7px] pointer-events-none transition-opacity duration-200 ${
-                  menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'
-                }`}
-              />
-            )}
-
-            {/* Minimal hover-revealed actions trigger — just the chevron, a
-                quiet muted glyph with no background or strong colour jump. */}
+            {/* Minimal hover-revealed actions trigger. On text bubbles it's a
+                bare muted chevron. On media/document bubbles it becomes a small
+                circular, translucent-dark button (like a native media control)
+                so the glyph stays legible on bright or dark images — no
+                rectangular patch or gradient edge. */}
             {canShowActions && (
               <button
                 ref={triggerRef}
@@ -326,9 +422,13 @@ export default function MessageRow({
                 aria-label="Message actions"
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
-                className={`absolute top-1 right-1 h-5 w-5 flex items-center justify-center text-text transition-opacity duration-200 ${
-                  menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'
-                }`}
+                className={`absolute top-1 right-1 z-10 flex items-center justify-center transition duration-200 ${
+                  hasAttachment
+                    ? `h-6 w-6 rounded-full border border-white/[0.08] backdrop-blur-sm text-white ${
+                        menuOpen ? 'bg-black/[0.55]' : 'bg-black/[0.38] hover:bg-black/[0.55]'
+                      }`
+                    : 'h-5 w-5 text-text'
+                } ${menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
               >
                 <ChevronDown size={14} strokeWidth={1.8} />
               </button>

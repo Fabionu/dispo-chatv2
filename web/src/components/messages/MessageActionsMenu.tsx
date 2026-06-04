@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
 export type MessageAction = {
@@ -6,6 +6,9 @@ export type MessageAction = {
   onClick: () => void
   disabled?: boolean
   tone?: 'default' | 'alert'
+  // Small leading Lucide icon. Inherits the item's text colour (muted by
+  // default, brightening with the label on hover).
+  icon?: ReactNode
   // Render a faint divider above this item — used to set the destructive
   // (delete) actions apart from the rest.
   separator?: boolean
@@ -96,7 +99,7 @@ export default function MessageActionsMenu({ anchorEl, anchorPoint, actions, onC
         zIndex: 60,
         visibility: pos.visible ? 'visible' : 'hidden',
       }}
-      className="min-w-[136px] rounded-card border border-white/[0.08] bg-surface overflow-hidden py-1 shadow-[0_12px_32px_rgba(0,0,0,0.55)]"
+      className="min-w-[152px] rounded-card border border-white/[0.08] bg-surface overflow-hidden py-1 shadow-[0_12px_32px_rgba(0,0,0,0.55)]"
     >
       {actions.map((a, i) => (
         <div key={i}>
@@ -110,13 +113,14 @@ export default function MessageActionsMenu({ anchorEl, anchorPoint, actions, onC
               a.onClick()
               onClose()
             }}
-            className={`w-full text-left px-2.5 py-1.5 text-[12.5px] whitespace-nowrap transition-colors disabled:opacity-30 disabled:cursor-default ${
+            className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 text-[12.5px] whitespace-nowrap transition-colors disabled:opacity-30 disabled:cursor-default ${
               a.tone === 'alert'
                 ? 'text-alert hover:bg-alert/10'
-                : 'text-text hover:bg-white/[0.04]'
+                : 'text-muted hover:text-text hover:bg-white/[0.04]'
             }`}
           >
-            {a.label}
+            {a.icon && <span className="shrink-0 inline-flex">{a.icon}</span>}
+            <span className="flex-1 text-left">{a.label}</span>
           </button>
         </div>
       ))}

@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { MoreVertical, Trash2, Upload, UserPlus, X } from 'lucide-react'
+import { MoreVertical, UserPlus, X } from 'lucide-react'
 import type { Group, GroupMember, GroupPendingInvitee, Role } from '../lib/types'
 import { groupLabel, tractorPlate, trailerPlate } from '../lib/types'
 import { api, ApiError } from '../lib/api'
-import { clearAvatarCache } from '../lib/avatarCache'
+import { avatarUrl, clearAvatarCache } from '../lib/avatarCache'
 import { statusMeta } from '../lib/availability'
 import Avatar from './Avatar'
 import GroupAvatar from './GroupAvatar'
+import AvatarPhotoEditor from './AvatarPhotoEditor'
 import EditableRow from './EditableRow'
 import Spinner from './Spinner'
 import AvatarCropModal from './settings/AvatarCropModal'
@@ -37,8 +38,6 @@ type Props = {
   onGroupUpdated: (partial: Partial<Group>) => void
 }
 
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024
-
 const ROLE_LABEL: Record<Role, string> = {
   admin: 'Admin',
   dispatcher: 'Dispatcher',
@@ -46,15 +45,17 @@ const ROLE_LABEL: Record<Role, string> = {
   partner: 'Partner',
 }
 
-// Right-side drawer with a vehicle group's operational details and membership.
-// Native to the chat UI (same surface/border/spacing tokens), not a browser
-// modal: it slides in over the right edge with a transparent click-away so the
-// conversation stays visible behind it.
+// Right-side panel with a vehicle group's operational details and membership.
+// Native to the chat UI (same rail background/border/spacing as the workspace
+// sidebar), not a browser modal. On desktop (xl+) it's a real in-flow column
+// beside the chat, so the conversation reflows narrower and stays fully usable;
+// below xl it falls back to an overlay drawer with a transparent click-away.
 //
 // Reads as clean information by default — each detail is a label/value row, not
 // a form box. Managers (admins / dispatchers) edit fields INDIVIDUALLY: each row
 // has its own pencil → inline input → Save/Cancel, so changes are made one field
-// at a time. Image upload/remove sit under the avatar for managers.
+// at a time. The group image is the header hero: managers change/remove it via
+// the image itself + a small More menu (see AvatarPhotoEditor).
 export default function GroupInfoPanel({
   group,
   currentUserId,
@@ -72,7 +73,6 @@ export default function GroupInfoPanel({
   const [error, setError] = useState<string | null>(null)
   const [hasAvatar, setHasAvatar] = useState(group.hasAvatar ?? false)
   const [cropFile, setCropFile] = useState<File | null>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
   // The member whose role is currently being changed (drives the row spinner).
   const [roleBusyId, setRoleBusyId] = useState<string | null>(null)
 
@@ -83,6 +83,15 @@ export default function GroupInfoPanel({
   const canManageRoles = me?.role === 'admin' || me?.userRole === 'admin'
   // How many group admins exist — used to block demoting the last one.
   const adminCount = members.filter((m) => m.role === 'admin').length
+
+  // Compact vehicle line under the member count: "Tractor … · Trailer …",
+  // dropping whichever plate isn't set (empty when neither exists).
+  const vehicleMeta = [
+    tractorPlate(group) && `Tractor ${tractorPlate(group)}`,
+    trailerPlate(group) && `Trailer ${trailerPlate(group)}`,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
   async function setMemberRole(targetId: string, role: 'admin' | 'member') {
     setRoleBusyId(targetId)
@@ -179,16 +188,6 @@ export default function GroupInfoPanel({
     onGroupUpdated({ name: updated.name, description: updated.description, meta: updated.meta })
   }
 
-  function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
-    if (!file.type.startsWith('image/')) return setError('Please choose an image file.')
-    if (file.size > MAX_IMAGE_BYTES) return setError('Image too large (max 10MB).')
-    setError(null)
-    setCropFile(file)
-  }
-
   async function uploadCropped(cropped: File) {
     await api.groups.uploadAvatar(group.id, cropped)
     // Drop every cached state for this group's old image (any version, incl. the
@@ -224,14 +223,20 @@ export default function GroupInfoPanel({
 
   return (
     <>
-      {/* Transparent click-away — keeps the chat visible behind the drawer. */}
-      <div className="fixed inset-0 z-40" onClick={onClose} aria-hidden />
+      {/* Click-away — only as an overlay drawer on narrow screens (< xl). On
+          desktop the panel is a real in-flow column, so there's no backdrop and
+          the chat behind it stays fully clickable. */}
+      <div className="fixed inset-0 z-40 xl:hidden" onClick={onClose} aria-hidden />
 
       <aside
         role="dialog"
         aria-label="Group info"
-        className="fixed top-0 right-0 bottom-0 z-40 w-[360px] max-w-full bg-surface border-l border-white/[0.08] flex flex-col"
-        style={{ boxShadow: '-16px 0 48px rgba(0,0,0,0.4)' }}
+        // Narrow screens: a fixed right-edge drawer (overlay) up to full width.
+        // xl+ : a static, in-flow right column (`shrink-0`, clamped width) that
+        // sits beside the chat pane so the conversation reflows instead of being
+        // covered. Same rail background/border as the workspace sidebar.
+        className="fixed top-0 right-0 bottom-0 z-40 w-full max-w-[400px] shadow-[-16px_0_48px_rgba(0,0,0,0.4)] bg-rail border-l border-white/[0.08] flex flex-col
+                   xl:static xl:z-auto xl:w-[clamp(360px,26vw,420px)] xl:max-w-none xl:shrink-0 xl:shadow-none"
       >
         {/* Header — same height as the chat header so the two line up. */}
         <div className="h-[var(--header-height)] flex items-center justify-between px-4 border-b border-white/[0.06] shrink-0">
@@ -246,35 +251,33 @@ export default function GroupInfoPanel({
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
-          {/* Image + name */}
-          <div className="flex flex-col items-center text-center">
-            <GroupAvatar groupId={group.id} size={80} version={avatarVersion || undefined} />
-            <div className="mt-2.5 text-[16px] font-semibold tracking-[-0.2px]">
+          {/* Identity — the group image is the hero. Managers change/remove it
+              via the image overlay + the More menu (top-right). */}
+          <div className="relative flex flex-col items-center text-center pt-1">
+            <AvatarPhotoEditor
+              size={120}
+              hasImage={hasAvatar}
+              canEdit={canManage}
+              noun="group photo"
+              viewSrc={hasAvatar ? avatarUrl('group', group.id, avatarVersion || undefined) : undefined}
+              viewTitle={groupLabel(group)}
+              onFile={(file) => {
+                setError(null)
+                setCropFile(file)
+              }}
+              onRemove={removeImage}
+              onError={setError}
+            >
+              <GroupAvatar groupId={group.id} size={120} version={avatarVersion || undefined} />
+            </AvatarPhotoEditor>
+            <div className="mt-3 text-[16px] font-semibold tracking-[-0.2px]">
               {groupLabel(group)}
             </div>
             <div className="mt-0.5 text-[12px] text-muted">
               {members.length} member{members.length === 1 ? '' : 's'}
             </div>
-            {canManage && (
-              <div className="mt-3 flex items-center gap-1.5">
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/gif"
-                  onChange={onPickImage}
-                  className="hidden"
-                />
-                <SmallButton onClick={() => fileRef.current?.click()}>
-                  <Upload size={12} strokeWidth={1.8} />
-                  {hasAvatar ? 'Change photo' : 'Upload photo'}
-                </SmallButton>
-                {hasAvatar && (
-                  <SmallButton onClick={removeImage} tone="danger">
-                    <Trash2 size={12} strokeWidth={1.8} />
-                    Remove
-                  </SmallButton>
-                )}
-              </div>
+            {vehicleMeta && (
+              <div className="mt-1 text-[11.5px] text-faint">{vehicleMeta}</div>
             )}
             {error && <div className="text-[11.5px] text-alert mt-2">{error}</div>}
           </div>
@@ -312,9 +315,10 @@ export default function GroupInfoPanel({
             />
           </Section>
 
-          {/* Members */}
+          {/* Members — count already shown under the group name, so the section
+              title stays plain (no duplicate "· N"). */}
           <Section
-            label={`Members${members.length ? ` · ${members.length}` : ''}`}
+            label="Members"
             action={
               canManage ? (
                 <button
@@ -500,7 +504,7 @@ function MemberRow({
         {showDot && dot && (
           <span
             title={dot.label}
-            className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-surface"
+            className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-rail"
             style={{ backgroundColor: dot.color }}
           />
         )}
@@ -597,28 +601,5 @@ function Section({
       </div>
       {children}
     </div>
-  )
-}
-
-function SmallButton({
-  children,
-  onClick,
-  tone = 'default',
-}: {
-  children: ReactNode
-  onClick: () => void
-  tone?: 'default' | 'danger'
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`h-7 px-2.5 inline-flex items-center gap-1.5 rounded-btn border text-[11.5px] transition-colors ${
-        tone === 'danger'
-          ? 'border-white/[0.12] text-muted hover:text-alert hover:border-alert/40'
-          : 'border-white/[0.14] text-text hover:bg-white/[0.04]'
-      }`}
-    >
-      {children}
-    </button>
   )
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Check, Loader2, RefreshCw, RotateCw, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { Check, Loader2, Minus, Plus, RefreshCw, RotateCw, X } from 'lucide-react'
 
 type Props = {
   /** The image the user just picked (validated by the caller as an image). */
@@ -15,25 +15,28 @@ type Props = {
   onConfirm: (cropped: File) => Promise<void>
 }
 
-// Side of the square crop stage, in CSS px. The crop region IS this square; the
-// circle drawn on top is the display mask (what other users see when the avatar
-// renders round). Kept constant so the crop math is exact and reflow-free; the
-// panel width is sized to hold it with padding on small screens.
-const STAGE = 288
 // Output is a square raster — stored square, displayed round (matches WhatsApp
 // and our <Avatar>, which masks with rounded-full). 512px keeps it crisp on
 // retina at every place we render an avatar.
 const OUTPUT = 512
+// zoom=1 is the "fit/cover" boundary (image just covers the circular crop with
+// no transparent gaps); the user can zoom in for a tighter crop up to MAX_ZOOM.
 const MIN_ZOOM = 1
-const MAX_ZOOM = 4
+const MAX_ZOOM = 5
+// Largest stage edge in CSS px (desktop). The stage shrinks responsively to the
+// modal width on smaller screens; the crop math reads its MEASURED size, so the
+// output is identical regardless of the rendered size.
+const STAGE_MAX = 380
+const WHEEL_STEP = 1.12
 
 // WhatsApp-style avatar cropper. After picking an image the user repositions
-// (drag), zooms (slider / buttons) and optionally rotates it inside a circular
-// mask; only on confirm do we rasterise the selected square and upload it. A
-// custom canvas cropper (no dependency): the live preview is a GPU-transformed
-// <img> (smooth even for large photos — drag mutates the transform imperatively,
-// never through React state), and the final crop is drawn once to an offscreen
-// canvas.
+// (drag), zooms (slider / buttons / mouse wheel) and optionally rotates it
+// inside a circular mask; only on confirm do we rasterise the selected square
+// and upload it. A custom canvas cropper (no dependency): the live preview is a
+// GPU-transformed <img> (smooth even for large photos — drag mutates the
+// transform imperatively, never through React state), and the final crop is
+// drawn once to an offscreen canvas. The stage is responsive: its pixel size is
+// measured, so zoom/pan/clamp/output all stay exact at any size.
 export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
   // Object-URL ownership. `baseUrl` is the picked (or replaced) file; `working`
   // is what we actually display — the same as base, or a rotated derivative we
@@ -48,6 +51,8 @@ export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
   const [zoom, setZoom] = useState(MIN_ZOOM)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Measured stage edge in CSS px (square). 0 until the first layout measure.
+  const [stage, setStage] = useState(0)
 
   const imgRef = useRef<HTMLImageElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
@@ -57,9 +62,23 @@ export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
   const offsetRef = useRef({ x: 0, y: 0 })
   const dragRef = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null)
 
-  // Smallest scale that still covers the square (no gaps at any rotation). zoom
-  // multiplies this, so zoom=1 is "cover" and the image can only get larger.
-  const baseScale = natural ? Math.max(STAGE / natural.w, STAGE / natural.h) : 1
+  // Refs mirroring state so the (stably-bound) wheel handler reads live values
+  // without re-binding the native listener on every change.
+  const zoomRef = useRef(zoom)
+  zoomRef.current = zoom
+  const naturalRef = useRef(natural)
+  naturalRef.current = natural
+  const stageRef2 = useRef(stage)
+  stageRef2.current = stage
+  const busyRef = useRef(busy)
+  busyRef.current = busy
+  // Always-current `save`, so the Enter-to-confirm listener (bound once) never
+  // captures a stale zoom/offset.
+  const saveRef = useRef<() => void>(() => {})
+
+  // Smallest scale that still covers the square/circle (no gaps). zoom multiplies
+  // this, so zoom=1 is "cover" and the image can only get larger from there.
+  const baseScale = natural && stage ? Math.max(stage / natural.w, stage / natural.h) : 1
 
   // Build the base object URL for the current file; revoke it (and any rotated
   // derivative) when the file changes or on unmount.
@@ -88,32 +107,54 @@ export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
   // Clamp an offset so the (cover-or-larger) image always fills the stage —
   // never reveals a gap at the edges of the circle.
   const clamp = useCallback(
-    (o: { x: number; y: number }, dw: number, dh: number) => ({
-      x: Math.min(0, Math.max(STAGE - dw, o.x)),
-      y: Math.min(0, Math.max(STAGE - dh, o.y)),
+    (o: { x: number; y: number }, dw: number, dh: number, s: number) => ({
+      x: Math.min(0, Math.max(s - dw, o.x)),
+      y: Math.min(0, Math.max(s - dh, o.y)),
     }),
     [],
   )
 
   // Push the current offset + scale onto the <img> imperatively. Called on load,
-  // on zoom, and on every drag frame — drag never goes through setState.
+  // on zoom, on resize, and on every drag frame — drag never goes through state.
   const applyTransform = useCallback(() => {
     const img = imgRef.current
-    if (!img || !natural) return
+    if (!img || !natural || !stage) return
     const scale = baseScale * zoom
     const dw = natural.w * scale
     const dh = natural.h * scale
-    offsetRef.current = clamp(offsetRef.current, dw, dh)
+    offsetRef.current = clamp(offsetRef.current, dw, dh, stage)
     img.style.width = `${dw}px`
     img.style.height = `${dh}px`
     img.style.transform = `translate(${offsetRef.current.x}px, ${offsetRef.current.y}px)`
-  }, [natural, baseScale, zoom, clamp])
+  }, [natural, baseScale, zoom, stage, clamp])
 
-  // Re-apply whenever scale changes (zoom slider/buttons, or a fresh image after
-  // load/rotate/replace). useLayoutEffect → no flash of the un-positioned image.
+  // Re-apply whenever scale/stage changes. useLayoutEffect → no flash of the
+  // un-positioned image.
   useLayoutEffect(() => {
     applyTransform()
   }, [applyTransform])
+
+  // Measure the responsive stage and keep it in sync with the modal width. On a
+  // size change we re-center the current view so the image still covers.
+  useLayoutEffect(() => {
+    const el = stageRef.current
+    if (!el) return
+    const measure = () => {
+      const s = Math.round(el.clientWidth)
+      if (!s || s === stageRef2.current) return
+      stageRef2.current = s
+      const nat = naturalRef.current
+      if (nat) {
+        const sc = Math.max(s / nat.w, s / nat.h) * zoomRef.current
+        offsetRef.current = { x: (s - nat.w * sc) / 2, y: (s - nat.h * sc) / 2 }
+      }
+      setStage(s)
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   function onImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
     const el = e.currentTarget
@@ -121,9 +162,10 @@ export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
     const h = el.naturalHeight
     if (!w || !h) return
     // Center the freshly loaded image and reset zoom — applyTransform runs via
-    // the layout effect once `natural`/`zoom` settle.
-    const scale = Math.max(STAGE / w, STAGE / h)
-    offsetRef.current = { x: (STAGE - w * scale) / 2, y: (STAGE - h * scale) / 2 }
+    // the layout effect once `natural`/`zoom` settle. Use the measured stage.
+    const s = stageRef2.current || STAGE_MAX
+    const scale = Math.max(s / w, s / h)
+    offsetRef.current = { x: (s - w * scale) / 2, y: (s - h * scale) / 2 }
     setNatural({ w, h })
     setZoom(MIN_ZOOM)
   }
@@ -137,12 +179,13 @@ export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
   }
   function onPointerMove(e: React.PointerEvent) {
     const d = dragRef.current
-    if (!d || !natural) return
+    if (!d || !natural || !stage) return
     const scale = baseScale * zoom
     offsetRef.current = clamp(
       { x: d.ox + (e.clientX - d.px), y: d.oy + (e.clientY - d.py) },
       natural.w * scale,
       natural.h * scale,
+      stage,
     )
     const img = imgRef.current
     if (img) img.style.transform = `translate(${offsetRef.current.x}px, ${offsetRef.current.y}px)`
@@ -152,23 +195,76 @@ export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
     ;(e.target as Element).releasePointerCapture?.(e.pointerId)
   }
 
-  // ── Zoom (anchored to the stage center so the crop stays put) ──────────────
-  function handleZoom(next: number) {
-    if (!natural) return setZoom(next)
-    const nz = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next))
-    const s0 = baseScale * zoom
-    const s1 = baseScale * nz
-    const c = STAGE / 2
-    // Natural-space point currently under the stage center stays under it.
-    const nx = (c - offsetRef.current.x) / s0
-    const ny = (c - offsetRef.current.y) / s0
-    offsetRef.current = clamp(
-      { x: c - nx * s1, y: c - ny * s1 },
-      natural.w * s1,
-      natural.h * s1,
-    )
+  // ── Zoom, anchored to a focal point (stage-px). Slider/buttons anchor to the
+  // centre; the wheel anchors to the cursor so the point under it stays put. ──
+  const zoomToward = useCallback((nextZoom: number, fx: number, fy: number) => {
+    const nat = naturalRef.current
+    const s = stageRef2.current
+    const nz = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextZoom))
+    if (!nat || !s) {
+      zoomRef.current = nz
+      setZoom(nz)
+      return
+    }
+    const bs = Math.max(s / nat.w, s / nat.h)
+    const s0 = bs * zoomRef.current
+    const s1 = bs * nz
+    const nx = (fx - offsetRef.current.x) / s0
+    const ny = (fy - offsetRef.current.y) / s0
+    offsetRef.current = {
+      x: Math.min(0, Math.max(s - nat.w * s1, fx - nx * s1)),
+      y: Math.min(0, Math.max(s - nat.h * s1, fy - ny * s1)),
+    }
+    zoomRef.current = nz
     setZoom(nz)
-  }
+  }, [])
+
+  // Slider / +/- buttons: zoom about the stage centre.
+  const handleZoom = useCallback(
+    (next: number) => {
+      const s = stageRef2.current || 0
+      zoomToward(next, s / 2, s / 2)
+    },
+    [zoomToward],
+  )
+
+  // Mouse-wheel zoom over the stage. Non-passive so we can preventDefault and
+  // stop the page/modal from scrolling while zooming. Bound once; reads live
+  // values from refs. Up = zoom in, down = zoom out.
+  useEffect(() => {
+    const el = stageRef.current
+    if (!el) return
+    function onWheel(e: WheelEvent) {
+      if (busyRef.current) return
+      e.preventDefault()
+      const rect = el!.getBoundingClientRect()
+      const fx = e.clientX - rect.left
+      const fy = e.clientY - rect.top
+      const factor = e.deltaY < 0 ? WHEEL_STEP : 1 / WHEEL_STEP
+      zoomToward(zoomRef.current * factor, fx, fy)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [zoomToward])
+
+  // Enter confirms (when an image is ready and we're idle) — unless focus is on
+  // a button, where Enter should activate that control instead. Bound once;
+  // reads live values from refs.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (
+        e.key === 'Enter' &&
+        !busyRef.current &&
+        naturalRef.current &&
+        !(e.target instanceof HTMLButtonElement)
+      ) {
+        e.preventDefault()
+        void saveRef.current()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
 
   // ── Rotate 90° CW (optional; baked losslessly to a new PNG blob) ───────────
   async function rotate() {
@@ -214,13 +310,13 @@ export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
   // ── Confirm: rasterise the circle's bounding square and hand it up ─────────
   async function save() {
     const img = imgRef.current
-    if (!img || !natural || busy) return
+    if (!img || !natural || !stage || busy) return
     setBusy(true)
     setError(null)
     try {
       const scale = baseScale * zoom
       // Source rectangle (in the image's natural pixels) under the stage square.
-      const srcSize = STAGE / scale
+      const srcSize = stage / scale
       const srcX = -offsetRef.current.x / scale
       const srcY = -offsetRef.current.y / scale
 
@@ -242,30 +338,39 @@ export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
       setBusy(false)
     }
   }
+  saveRef.current = save
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70" onClick={() => !busy && onCancel()} aria-hidden />
+      <div className="absolute inset-0 bg-black/75" onClick={() => !busy && onCancel()} aria-hidden />
 
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Crop profile photo"
-        className="relative w-full max-w-[360px] rounded-modal border border-white/[0.08] bg-surface"
+        aria-label="Crop photo"
+        className="relative w-full max-w-[460px] rounded-modal border border-white/[0.08] bg-surface overflow-hidden"
         style={{ boxShadow: '0 32px 80px rgba(0,0,0,0.65)' }}
       >
-        <header className="flex items-start justify-between px-5 pt-4 pb-3 border-b border-white/[0.06]">
-          <div className="min-w-0">
-            <h2 className="text-[15px] font-semibold tracking-[-0.2px]">Crop photo</h2>
-            <p className="text-[12px] text-muted mt-0.5">Drag to reposition · zoom to fit</p>
+        {/* Header: close (left) · helper title (centre) · replace + rotate
+            (right). Slim, no separator. */}
+        <header className="flex items-center gap-2 px-2.5 py-2">
+          <IconBtn label="Close" side="bottom" onClick={() => !busy && onCancel()}>
+            <X size={17} strokeWidth={1.8} />
+          </IconBtn>
+          <div className="flex-1 min-w-0 text-center">
+            <span className="text-[12.5px] text-muted">Drag image to adjust</span>
           </div>
-          <button
-            onClick={() => !busy && onCancel()}
-            aria-label="Close"
-            className="text-muted hover:text-text transition-colors -mr-1 mt-0.5"
+          <IconBtn label="Rotate" side="bottom" onClick={() => void rotate()} disabled={busy}>
+            <RotateCw size={16} strokeWidth={1.7} />
+          </IconBtn>
+          <IconBtn
+            label="Replace photo"
+            side="bottom"
+            onClick={() => replaceInputRef.current?.click()}
+            disabled={busy}
           >
-            <X size={16} strokeWidth={1.8} />
-          </button>
+            <RefreshCw size={16} strokeWidth={1.7} />
+          </IconBtn>
         </header>
 
         <input
@@ -276,58 +381,85 @@ export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
           className="hidden"
         />
 
-        <div className="px-5 py-4">
-          {/* Crop stage: the image fills it, a circular mask darkens the corners
-              (what gets cut off when shown round), and a faint ring marks the
-              final avatar edge. */}
-          <div className="flex justify-center">
-            <div
-              ref={stageRef}
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp}
-              onPointerCancel={onPointerUp}
-              className="relative overflow-hidden rounded-card bg-bg select-none touch-none cursor-grab active:cursor-grabbing"
-              style={{ width: STAGE, height: STAGE }}
-            >
-              {workingUrl && (
-                <img
-                  ref={imgRef}
-                  src={workingUrl}
-                  alt="Crop preview"
-                  onLoad={onImageLoad}
-                  draggable={false}
-                  className="absolute left-0 top-0 max-w-none origin-top-left pointer-events-none"
-                />
-              )}
-
-              {/* Circular mask: a circle with a huge spread shadow darkens
-                  everything outside it, plus a 1px ring for the avatar edge. */}
-              <div
-                className="absolute inset-0 rounded-full pointer-events-none"
-                style={{ boxShadow: '0 0 0 9999px rgba(0,0,0,0.55)' }}
+        {/* Editor stage — the dominant element. The image fills it; a soft dim +
+            subtle ring mark the circular crop. Zoom controls and the confirm
+            button float over it. On a near-black bed so the photo reads clean. */}
+        <div className="relative bg-bg">
+          <div
+            ref={stageRef}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
+            className="relative w-full mx-auto overflow-hidden select-none touch-none cursor-grab active:cursor-grabbing"
+            style={{ maxWidth: STAGE_MAX, aspectRatio: '1 / 1', maxHeight: '70vh' }}
+          >
+            {workingUrl && (
+              <img
+                ref={imgRef}
+                src={workingUrl}
+                alt="Crop preview"
+                onLoad={onImageLoad}
+                draggable={false}
+                className="absolute left-0 top-0 max-w-none origin-top-left pointer-events-none"
               />
-              <div className="absolute inset-0 rounded-full ring-1 ring-white/20 pointer-events-none" />
+            )}
 
-              {busy && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none">
-                  <Loader2 size={22} strokeWidth={2} className="animate-spin text-white/90" />
-                </div>
-              )}
-            </div>
-          </div>
+            {/* Circular guide: soft dim outside + subtle edge ring. */}
+            <div
+              className="absolute inset-0 rounded-full pointer-events-none"
+              style={{ boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)' }}
+            />
+            <div className="absolute inset-0 rounded-full ring-1 ring-white/15 pointer-events-none" />
 
-          {/* Zoom control: themed slider flanked by icon steppers (no native
-              range chrome). */}
-          <div className="mt-4 flex items-center gap-2.5">
-            <button
-              onClick={() => handleZoom(zoom - 0.25)}
-              aria-label="Zoom out"
-              disabled={busy}
-              className="h-7 w-7 shrink-0 flex items-center justify-center rounded-btn border border-white/[0.14] text-muted hover:text-text hover:bg-white/[0.04] disabled:opacity-50 transition-colors"
+            {/* Floating vertical zoom controls (right). stopPropagation so using
+                them never starts an image drag. */}
+            <div
+              className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-1.5"
+              onPointerDown={(e) => e.stopPropagation()}
             >
-              <ZoomOut size={14} strokeWidth={1.8} />
-            </button>
+              <IconBtn
+                label="Zoom in"
+                side="left"
+                variant="float"
+                onClick={() => handleZoom(zoom + 0.25)}
+                disabled={busy}
+              >
+                <Plus size={16} strokeWidth={2} />
+              </IconBtn>
+              <IconBtn
+                label="Zoom out"
+                side="left"
+                variant="float"
+                onClick={() => handleZoom(zoom - 0.25)}
+                disabled={busy}
+              >
+                <Minus size={16} strokeWidth={2} />
+              </IconBtn>
+            </div>
+
+            {/* Floating primary confirm (bottom-right), warm accent. */}
+            <div
+              className="absolute bottom-3 right-3"
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <IconBtn
+                label="Use photo"
+                side="top"
+                variant="accent"
+                onClick={() => void save()}
+                disabled={busy || !natural}
+              >
+                {busy ? (
+                  <Loader2 size={20} strokeWidth={2.2} className="animate-spin" />
+                ) : (
+                  <Check size={20} strokeWidth={2.4} />
+                )}
+              </IconBtn>
+            </div>
+
+            {/* Hidden range kept for assistive tech / sliders, synced with the
+                buttons + wheel; visually replaced by the floating controls. */}
             <input
               type="range"
               min={MIN_ZOOM}
@@ -337,68 +469,70 @@ export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
               disabled={busy}
               onChange={(e) => handleZoom(Number(e.target.value))}
               aria-label="Zoom"
-              className="flex-1 h-1 cursor-pointer appearance-none bg-transparent disabled:opacity-50
-                [&::-webkit-slider-runnable-track]:h-1 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-white/[0.14]
-                [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:-mt-1.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-text [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-black/20
-                [&::-moz-range-track]:h-1 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-white/[0.14]
-                [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-text"
+              className="sr-only"
             />
-            <button
-              onClick={() => handleZoom(zoom + 0.25)}
-              aria-label="Zoom in"
-              disabled={busy}
-              className="h-7 w-7 shrink-0 flex items-center justify-center rounded-btn border border-white/[0.14] text-muted hover:text-text hover:bg-white/[0.04] disabled:opacity-50 transition-colors"
-            >
-              <ZoomIn size={14} strokeWidth={1.8} />
-            </button>
           </div>
-
-          {/* Secondary actions: rotate + replace. */}
-          <div className="mt-3 flex items-center justify-center gap-1.5">
-            <button
-              onClick={() => void rotate()}
-              disabled={busy}
-              className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-btn border border-white/[0.14] text-[11.5px] text-text hover:bg-white/[0.04] disabled:opacity-50 transition-colors"
-            >
-              <RotateCw size={12} strokeWidth={1.8} />
-              Rotate
-            </button>
-            <button
-              onClick={() => replaceInputRef.current?.click()}
-              disabled={busy}
-              className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-btn border border-white/[0.14] text-[11.5px] text-text hover:bg-white/[0.04] disabled:opacity-50 transition-colors"
-            >
-              <RefreshCw size={12} strokeWidth={1.8} />
-              Replace
-            </button>
-          </div>
-
-          {error && <div className="text-[11.5px] text-alert text-center mt-3">{error}</div>}
         </div>
 
-        {/* Footer actions. */}
-        <div className="px-5 py-3 border-t border-white/[0.06] flex items-center justify-end gap-2">
-          <button
-            onClick={() => !busy && onCancel()}
-            disabled={busy}
-            className="h-9 px-3.5 rounded-btn border border-white/[0.14] text-[12.5px] text-text hover:bg-white/[0.04] disabled:opacity-50 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => void save()}
-            disabled={busy || !natural}
-            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-btn bg-text text-bg text-[12.5px] font-semibold hover:bg-text/90 disabled:opacity-60 transition-colors"
-          >
-            {busy ? (
-              <Loader2 size={14} strokeWidth={2.2} className="animate-spin" />
-            ) : (
-              <Check size={14} strokeWidth={2.2} />
-            )}
-            Use photo
-          </button>
-        </div>
+        {error && (
+          <div className="text-[11.5px] text-alert text-center px-4 py-2 bg-bg">{error}</div>
+        )}
       </div>
     </div>
+  )
+}
+
+// Icon-only button with a themed (non-native) hover/focus tooltip. Variants:
+//   ghost  — quiet header control
+//   float  — translucent dark pill floating over the image (zoom)
+//   accent — warm-accent primary confirm
+function IconBtn({
+  label,
+  onClick,
+  disabled,
+  side = 'bottom',
+  variant = 'ghost',
+  children,
+}: {
+  label: string
+  onClick: () => void
+  disabled?: boolean
+  side?: 'top' | 'bottom' | 'left'
+  variant?: 'ghost' | 'float' | 'accent'
+  children: React.ReactNode
+}) {
+  const styles =
+    variant === 'accent'
+      ? 'h-12 w-12 rounded-full bg-active text-bg shadow-[0_8px_24px_rgba(0,0,0,0.45)] hover:bg-active/90 focus-visible:ring-2 focus-visible:ring-active/60 disabled:opacity-60'
+      : variant === 'float'
+        ? 'h-9 w-9 rounded-full bg-black/45 backdrop-blur border border-white/[0.1] text-white hover:bg-black/65 focus-visible:ring-2 focus-visible:ring-white/40 disabled:opacity-40'
+        : 'h-8 w-8 rounded-btn text-muted hover:text-text hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-white/30 disabled:opacity-40 disabled:hover:bg-transparent'
+
+  const tip =
+    side === 'top'
+      ? 'bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2'
+      : side === 'left'
+        ? 'right-[calc(100%+6px)] top-1/2 -translate-y-1/2'
+        : 'top-[calc(100%+6px)] left-1/2 -translate-x-1/2'
+
+  return (
+    <span className="group relative inline-flex shrink-0">
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        aria-label={label}
+        className={`inline-flex items-center justify-center transition-colors focus:outline-none ${styles}`}
+      >
+        {children}
+      </button>
+      <span
+        role="tooltip"
+        className={`pointer-events-none absolute z-10 whitespace-nowrap rounded-chip border border-white/[0.10] bg-surface px-2 py-1 text-[11px] text-text opacity-0 transition-opacity duration-100 group-hover:opacity-100 ${tip}`}
+        style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.55)' }}
+      >
+        {label}
+      </span>
+    </span>
   )
 }

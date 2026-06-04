@@ -17,6 +17,9 @@ type Props = {
   // This attachment belongs to a recent/near-bottom message: load its image
   // eagerly (and skip lazy deferral) so newest pictures appear with the text.
   priority?: boolean
+  // The owning message also has a text body: widen image thumbnails so the
+  // picture aligns with the caption rather than floating narrow above it.
+  captioned?: boolean
   onActivate: (a: Attachment) => void
   onImageLoad: () => void
 }
@@ -34,23 +37,35 @@ const LOAD_TIMEOUT_MS = 6000
 // axes; the <img> fills it with object-cover, cropping only the extreme aspect
 // ratios (very wide screenshots / very tall portraits) so they never turn into
 // thin slivers. The full image is always one tap away in the lightbox.
-const THUMB_MAX_W = 300
-const THUMB_MAX_H = 320
-const THUMB_MIN_W = 150
-const THUMB_MIN_H = 120
+//
+// Two profiles:
+//   • plain   — image sent on its own: stays compact.
+//   • caption — image sent WITH a text body: larger maxes so the picture widens
+//     to sit visually with the caption below it (no narrow-image / wide-text
+//     mismatch). Still aspect-preserving and bounded — never full-width, and
+//     portraits stay reined in by the height cap.
+const BOUNDS = {
+  plain: { maxW: 300, maxH: 320, minW: 150, minH: 120 },
+  caption: { maxW: 480, maxH: 360, minW: 200, minH: 140 },
+} as const
+
 // Box reserved before we know the image's dimensions (just-sent blobs, GIFs,
-// and legacy images without stored width/height). Recomputed on load.
-const THUMB_FALLBACK_W = 240
-const THUMB_FALLBACK_H = 180
+// and legacy images without stored width/height). Recomputed on load. Wider in
+// caption mode so a just-sent captioned image reflows less when it decodes.
+const FALLBACK = {
+  plain: { w: 240, h: 180 },
+  caption: { w: 360, h: 240 },
+} as const
 
 // Fit (w,h) into the max box preserving aspect ratio, then lift each axis to its
 // minimum so extreme aspect ratios become a sensible cropped box instead of a
 // sliver. Returns the px box the bubble reserves and the <img> covers.
-function thumbBox(w: number, h: number): { w: number; h: number } | null {
+function thumbBox(w: number, h: number, captioned: boolean): { w: number; h: number } | null {
   if (!w || !h) return null
-  const scale = Math.min(THUMB_MAX_W / w, THUMB_MAX_H / h, 1)
-  const dw = Math.min(Math.max(w * scale, THUMB_MIN_W), THUMB_MAX_W)
-  const dh = Math.min(Math.max(h * scale, THUMB_MIN_H), THUMB_MAX_H)
+  const b = captioned ? BOUNDS.caption : BOUNDS.plain
+  const scale = Math.min(b.maxW / w, b.maxH / h, 1)
+  const dw = Math.min(Math.max(w * scale, b.minW), b.maxW)
+  const dh = Math.min(Math.max(h * scale, b.minH), b.maxH)
   return { w: Math.round(dw), h: Math.round(dh) }
 }
 
@@ -80,6 +95,7 @@ export default function AttachmentBlock({
   attachment,
   uploading = false,
   priority = false,
+  captioned = false,
   onActivate,
   onImageLoad,
 }: Props) {
@@ -134,7 +150,11 @@ export default function AttachmentBlock({
     attachment.width && attachment.height
       ? { w: attachment.width, h: attachment.height }
       : naturalDims
-  const box = useMemo(() => (dims ? thumbBox(dims.w, dims.h) : null), [dims?.w, dims?.h])
+  const box = useMemo(
+    () => (dims ? thumbBox(dims.w, dims.h, captioned) : null),
+    [dims?.w, dims?.h, captioned],
+  )
+  const fallback = captioned ? FALLBACK.caption : FALLBACK.plain
 
   // Mark the image in-view once it (nearly) reaches the viewport. Eager/
   // uploading images are already considered in-view, so they skip the observer.
@@ -198,10 +218,10 @@ export default function AttachmentBlock({
               narrow screens, so it never exceeds its column. */}
           <div
             ref={frameRef}
-            className="relative overflow-hidden rounded-card border border-white/[0.08] bg-bg"
+            className="relative overflow-hidden rounded-card border border-white/[0.06] bg-bg"
             style={{
-              width: box ? box.w : THUMB_FALLBACK_W,
-              aspectRatio: box ? `${box.w} / ${box.h}` : `${THUMB_FALLBACK_W} / ${THUMB_FALLBACK_H}`,
+              width: box ? box.w : fallback.w,
+              aspectRatio: box ? `${box.w} / ${box.h}` : `${fallback.w} / ${fallback.h}`,
               maxWidth: '100%',
             }}
           >
@@ -302,7 +322,7 @@ export default function AttachmentBlock({
       onClick={() => onActivate(attachment)}
       disabled={uploading || !hasUrl}
       aria-label={isPdf ? `Preview ${attachment.originalName}` : `Open ${attachment.originalName}`}
-      className="block w-[240px] max-w-full overflow-hidden rounded-card border border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.04] disabled:cursor-default transition-colors text-left"
+      className="block w-[240px] max-w-full overflow-hidden rounded-card border border-white/[0.05] bg-white/[0.02] hover:bg-white/[0.03] disabled:cursor-default transition-colors text-left"
     >
       {/* Preview band */}
       <div className="relative h-[104px] bg-bg border-b border-white/[0.06] flex items-center justify-center">

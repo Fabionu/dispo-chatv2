@@ -154,9 +154,11 @@ export default function ChatView({
   const [pinned, setPinned] = useState<LocalMessage[]>([])
   // Who else is currently typing in this conversation (excludes self).
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([])
-  // Members of this conversation — the source for the @-mention picker and for
-  // resolving typed @Names back to user ids at send time.
-  const [members, setMembers] = useState<GroupMember[]>([])
+  // Members of this conversation — the source for the @-mention picker, @Name
+  // resolution at send time, and the sent-message read receipts. Read from the
+  // session cache (not local state) so it's preserved across conversation
+  // switches: reopening renders read-state instantly with no recolor flash.
+  const members = cache.membersFor(group.id)
 
   const composerHandleRef = useRef<ChatComposerHandle>(null)
   const highlightTimer = useRef<number | undefined>(undefined)
@@ -216,22 +218,29 @@ export default function ChatView({
   const refetchMembers = useCallback(() => {
     api.groups
       .members(group.id)
-      .then((r) => setMembers(r.members))
+      .then((r) => cache.setGroupMembers(group.id, r.members))
       .catch(() => {})
+    // cache is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [group.id])
 
+  // Revalidate members on open. We do NOT clear the cached roster first — the
+  // cached members (with lastReadAt) render immediately, and the fetch merges
+  // in place (lastReadAt only ever moves forward), so read receipts never flash
+  // from coloured back to gray.
   useEffect(() => {
     let cancelled = false
-    setMembers([])
     api.groups
       .members(group.id)
       .then((r) => {
-        if (!cancelled) setMembers(r.members)
+        if (!cancelled) cache.setGroupMembers(group.id, r.members)
       })
       .catch(() => {})
     return () => {
       cancelled = true
     }
+    // cache is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [group.id])
 
   // Keep the members list fresh when roles change (here or on another client):
@@ -246,6 +255,12 @@ export default function ChatView({
       socket.off('group:members_changed', onMembersChanged)
     }
   }, [group.id, refetchMembers])
+
+  // Live read receipts: a peer advancing their "read up to" marker is handled
+  // GLOBALLY by the message cache's `group:read` listener (it updates the
+  // cached roster for any group), so the checkmarks here recompute live without
+  // a per-ChatView listener — and stay correct even for conversations that
+  // aren't currently open.
 
   // ── Read receipts ──────────────────────────────────────────────────────
   const markRead = useCallback(() => {
@@ -900,8 +915,16 @@ export default function ChatView({
   }
 
   return (
-    <div
-      className="relative flex-1 flex flex-col min-h-0"
+    // Root is a horizontal row: [chat pane | group info panel]. The chat pane
+    // takes the remaining width and reflows when the panel opens beside it on
+    // desktop; the left workspace sidebar lives one level up in Workspace.tsx.
+    <div className="relative flex-1 flex min-h-0">
+      {/* Chat pane — the whole conversation column (header, pinned bar,
+          messages, composer). `flex-1 min-w-0` lets it shrink naturally to the
+          remaining width when the Group info column is open, and keeps the
+          drag-drop overlay scoped to the chat (never over the panel). */}
+      <div
+      className="relative flex-1 min-w-0 flex flex-col"
       onDragEnter={onDragEnter}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -1021,6 +1044,7 @@ export default function ChatView({
                           message={m}
                           mine={m.authorId === currentUserId}
                           currentUserId={currentUserId}
+                          members={members}
                           prev={messages[i - 1]}
                           groupType={group.type}
                           highlighted={highlightedMessageId === m.id}
@@ -1072,6 +1096,7 @@ export default function ChatView({
               with the messages. */}
           <div
             ref={composerRef}
+            data-composer
             className="shrink-0 pb-3 pt-1.5 pr-[var(--chat-scrollbar-gutter)] bg-bg"
           >
             <div className="chat-column">
@@ -1100,6 +1125,8 @@ export default function ChatView({
           </div>
         </>
       )}
+      </div>
+      {/* end chat pane */}
 
       {pendingFile && (
         <AttachmentSendPreviewModal

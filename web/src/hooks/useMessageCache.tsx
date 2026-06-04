@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { IncomingMessage, Message } from '../lib/types'
+import type { GroupMember, IncomingMessage, Message } from '../lib/types'
 import type { LocalMessage } from '../components/messages/types'
 import { api } from '../lib/api'
 import { getSocket } from '../lib/socket'
@@ -52,6 +52,15 @@ export type MessageCache = {
   clearThreadPreviews: (groupId: string) => void
   // Background-load a group's latest page if it isn't already cached/loading.
   prefetch: (groupId: string) => void
+
+  // ── Members + read receipts (session cache) ──────────────────────────────
+  // A conversation's members, INCLUDING each one's lastReadAt. Cached per group
+  // and preserved across conversation switches so reopening renders read-state
+  // (the sent-message checkmarks) instantly — no gray-then-recolor flash.
+  membersFor: (groupId: string) => GroupMember[]
+  // Seed / revalidate a group's members. Merges so a fresh roster never
+  // downgrades a known lastReadAt to null/older (it only ever moves forward).
+  setGroupMembers: (groupId: string, members: GroupMember[]) => void
 }
 
 const EMPTY_THREAD: Thread = {
@@ -59,6 +68,32 @@ const EMPTY_THREAD: Thread = {
   nextCursor: null,
   loaded: false,
   revalidating: false,
+}
+
+// Stable empty members list so a group without a cached roster always returns
+// the same reference (no needless re-renders / effect churn downstream).
+const EMPTY_MEMBERS: GroupMember[] = []
+
+// Later of two read markers, tolerant of null/undefined. ISO-8601 timestamps
+// (all UTC 'Z') compare correctly lexicographically, so no Date parsing needed.
+function maxIso(a: string | null | undefined, b: string | null | undefined): string | null {
+  if (!a) return b ?? null
+  if (!b) return a
+  return a >= b ? a : b
+}
+
+// Merge a freshly-fetched roster over the cached one. The incoming list is the
+// authoritative roster (membership/roles), but lastReadAt is monotonic: keep
+// whichever marker is more advanced so a stale/partial response (or one that
+// omits lastReadAt) can never roll a known "read" back to gray.
+function mergeMembers(prev: GroupMember[] | undefined, next: GroupMember[]): GroupMember[] {
+  if (!prev || prev.length === 0) return next
+  const prevById = new Map(prev.map((m) => [m.id, m]))
+  return next.map((m) => {
+    const p = prevById.get(m.id)
+    if (!p) return m
+    return { ...m, lastReadAt: maxIso(p.lastReadAt, m.lastReadAt) }
+  })
 }
 
 // Merge two cached versions of the SAME message id (e.g. our folded local copy
@@ -148,6 +183,8 @@ export function MessageCacheProvider({
   children: ReactNode
 }) {
   const [threads, setThreads] = useState<Threads>({})
+  // Per-group members (with lastReadAt) — the source of read-receipt state.
+  const [members, setMembers] = useState<Record<string, GroupMember[]>>({})
 
   // Latest values mirrored into refs so the stable callbacks below can read
   // current state without being torn down/recreated on every change.
@@ -155,7 +192,10 @@ export function MessageCacheProvider({
   userIdRef.current = userId
   const threadsRef = useRef(threads)
   threadsRef.current = threads
+  const membersRef = useRef(members)
+  membersRef.current = members
   const prefetchingRef = useRef<Set<string>>(new Set())
+  const membersPrefetchingRef = useRef<Set<string>>(new Set())
 
   const update = useCallback((groupId: string, fn: (t: Thread) => Thread) => {
     setThreads((prev) => {
@@ -284,18 +324,60 @@ export function MessageCacheProvider({
 
   const hasThread = useCallback((groupId: string) => Boolean(threadsRef.current[groupId]?.loaded), [])
 
+  // ── Members + read receipts ───────────────────────────────────────────────
+  const membersFor = useCallback(
+    (groupId: string) => membersRef.current[groupId] ?? EMPTY_MEMBERS,
+    [],
+  )
+
+  const setGroupMembers = useCallback((groupId: string, incoming: GroupMember[]) => {
+    setMembers((prev) => ({ ...prev, [groupId]: mergeMembers(prev[groupId], incoming) }))
+  }, [])
+
+  // Advance one member's read marker in place (from a `group:read` socket
+  // event). No-op if we don't have that group's roster yet — the next members
+  // fetch will carry the current marker. Never moves a marker backwards.
+  const applyGroupRead = useCallback(
+    (groupId: string, memberId: string, lastReadAt: string) => {
+      setMembers((prev) => {
+        const cur = prev[groupId]
+        if (!cur) return prev
+        let changed = false
+        const next = cur.map((m) => {
+          if (m.id !== memberId) return m
+          const merged = maxIso(m.lastReadAt, lastReadAt)
+          if (merged === m.lastReadAt) return m
+          changed = true
+          return { ...m, lastReadAt: merged }
+        })
+        return changed ? { ...prev, [groupId]: next } : prev
+      })
+    },
+    [],
+  )
+
   const prefetch = useCallback(
     (groupId: string) => {
-      if (threadsRef.current[groupId]?.loaded) return
-      if (prefetchingRef.current.has(groupId)) return
-      prefetchingRef.current.add(groupId)
-      api.groups
-        .messages(groupId)
-        .then((res) => setThreadMessages(groupId, res.messages, res.nextCursor))
-        .catch(() => {})
-        .finally(() => prefetchingRef.current.delete(groupId))
+      if (!threadsRef.current[groupId]?.loaded && !prefetchingRef.current.has(groupId)) {
+        prefetchingRef.current.add(groupId)
+        api.groups
+          .messages(groupId)
+          .then((res) => setThreadMessages(groupId, res.messages, res.nextCursor))
+          .catch(() => {})
+          .finally(() => prefetchingRef.current.delete(groupId))
+      }
+      // Warm members (with lastReadAt) too, so a first open already knows the
+      // read state and renders the checkmarks coloured — no recolor flash.
+      if (!membersRef.current[groupId] && !membersPrefetchingRef.current.has(groupId)) {
+        membersPrefetchingRef.current.add(groupId)
+        api.groups
+          .members(groupId)
+          .then((r) => setGroupMembers(groupId, r.members))
+          .catch(() => {})
+          .finally(() => membersPrefetchingRef.current.delete(groupId))
+      }
     },
-    [setThreadMessages],
+    [setThreadMessages, setGroupMembers],
   )
 
   // Global live updates. Mounted once for the session, so the cache stays
@@ -371,6 +453,12 @@ export function MessageCacheProvider({
         return { ...t, messages }
       })
     }
+    // A member advanced their read marker. Update the cached roster GLOBALLY
+    // (any group, not just the open one) so read receipts stay live and are
+    // already correct when you switch to that conversation.
+    function onGroupRead(p: { groupId: string; userId: string; lastReadAt: string }) {
+      applyGroupRead(p.groupId, p.userId, p.lastReadAt)
+    }
     socket.on('message:new', onNew)
     socket.on('message:system', onSystem)
     socket.on('message:edited', onEdited)
@@ -379,6 +467,7 @@ export function MessageCacheProvider({
     socket.on('message:pinned', onPinned)
     socket.on('message:unpinned', onUnpinned)
     socket.on('attachment:preview', onAttachmentPreview)
+    socket.on('group:read', onGroupRead)
     return () => {
       socket.off('message:new', onNew)
       socket.off('message:system', onSystem)
@@ -388,8 +477,9 @@ export function MessageCacheProvider({
       socket.off('message:pinned', onPinned)
       socket.off('message:unpinned', onUnpinned)
       socket.off('attachment:preview', onAttachmentPreview)
+      socket.off('group:read', onGroupRead)
     }
-  }, [update, upsertMessage, patchMessage, removeMessage])
+  }, [update, upsertMessage, patchMessage, removeMessage, applyGroupRead])
 
   const value = useMemo<MessageCache>(
     () => ({
@@ -405,9 +495,14 @@ export function MessageCacheProvider({
       setRevalidating,
       clearThreadPreviews,
       prefetch,
+      membersFor,
+      setGroupMembers,
     }),
     [
       threads,
+      // `members` is in deps so consumers re-render when any roster/lastReadAt
+      // changes (membersFor reads the live ref during that render).
+      members,
       hasThread,
       setThreadMessages,
       mergeThreadMessages,
@@ -419,6 +514,8 @@ export function MessageCacheProvider({
       setRevalidating,
       clearThreadPreviews,
       prefetch,
+      membersFor,
+      setGroupMembers,
     ],
   )
 

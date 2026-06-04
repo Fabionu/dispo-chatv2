@@ -39,6 +39,19 @@ export function fileError(file: File): string | null {
   return null
 }
 
+// Trigger a download of an authenticated attachment via a transient <a download>
+// (same-origin, so the session cookie authorises it) — never opens a new tab.
+// Mirrors the IconLink download used by the preview surfaces.
+export function downloadAttachment(a: { url: string; originalName: string }) {
+  const link = document.createElement('a')
+  link.href = a.url
+  link.download = a.originalName
+  link.rel = 'noopener'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`

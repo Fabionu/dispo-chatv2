@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeft, Check, ChevronDown, Trash2, Upload } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { ArrowLeft, Check, ChevronDown } from 'lucide-react'
 import type { AvailabilityStatus, Profile, Role } from '../../lib/types'
 import { api, type ProfilePatch } from '../../lib/api'
-import { clearAvatarCache } from '../../lib/avatarCache'
+import { avatarUrl, clearAvatarCache } from '../../lib/avatarCache'
 import { AVAILABILITY, AWAY, statusMeta } from '../../lib/availability'
 import Avatar from '../Avatar'
+import AvatarPhotoEditor from '../AvatarPhotoEditor'
 import EditableRow from '../EditableRow'
 import AvatarCropModal from './AvatarCropModal'
 
@@ -27,7 +28,6 @@ const ROLE_LABEL: Record<Role, string> = {
   driver: 'Driver',
   partner: 'Partner',
 }
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 // "My profile" rendered as a sidebar drawer (replaces the conversation list)
 // rather than a floating modal — the chat stays visible on the right.
@@ -47,7 +47,6 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
   // The picked image awaiting crop confirmation. Set on selection (no immediate
   // upload); cleared on cancel or after a successful cropped upload.
   const [cropFile, setCropFile] = useState<File | null>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     // Seeded from the cache → render instantly, no fetch. Only fetch when we
@@ -73,18 +72,6 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
     const { profile: p } = await api.profile.update(patch)
     setProfile(p)
     onSaved(p, avatarVersion)
-  }
-
-  // Selecting an image opens the crop step (no immediate upload). The confirmed
-  // crop is uploaded via uploadCroppedAvatar.
-  function onPickAvatar(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
-    if (!file.type.startsWith('image/')) return setError('Please choose an image file.')
-    if (file.size > MAX_IMAGE_BYTES) return setError('Image too large (max 10MB).')
-    setError(null)
-    setCropFile(file)
   }
 
   async function uploadCroppedAvatar(cropped: File) {
@@ -150,10 +137,31 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
-            {/* Identity */}
-            <div className="flex flex-col items-center text-center">
-              <Avatar userId={profile.id} name={profile.displayName} size={72} version={avatarVersion} />
-              <div className="mt-2.5 text-[16px] font-semibold tracking-[-0.2px]">
+            {/* Identity — the avatar is the hero. Change/remove via the image
+                overlay + the More menu (top-right); no form-style buttons. */}
+            <div className="relative flex flex-col items-center text-center pt-1">
+              <AvatarPhotoEditor
+                size={96}
+                hasImage={profile.hasAvatar}
+                canEdit
+                noun="profile photo"
+                viewSrc={profile.hasAvatar ? avatarUrl('user', profile.id, avatarVersion) : undefined}
+                viewTitle={profile.displayName}
+                onFile={(file) => {
+                  setError(null)
+                  setCropFile(file)
+                }}
+                onRemove={removeAvatar}
+                onError={setError}
+              >
+                <Avatar
+                  userId={profile.id}
+                  name={profile.displayName}
+                  size={96}
+                  version={avatarVersion}
+                />
+              </AvatarPhotoEditor>
+              <div className="mt-3 text-[16px] font-semibold tracking-[-0.2px]">
                 {profile.displayName}
               </div>
               <div className="mt-0.5 text-[12px] text-muted">
@@ -161,26 +169,6 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
                 {profile.jobTitle ? ` · ${profile.jobTitle}` : ''}
               </div>
               {!isDriver && <StatusSelect value={availability} away={away} onChange={setStatus} />}
-              {/* Image controls — your own profile, so always available. */}
-              <div className="mt-3 flex items-center gap-1.5">
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/gif"
-                  onChange={onPickAvatar}
-                  className="hidden"
-                />
-                <SmallButton onClick={() => fileRef.current?.click()}>
-                  <Upload size={12} strokeWidth={1.8} />
-                  {profile.hasAvatar ? 'Change photo' : 'Upload photo'}
-                </SmallButton>
-                {profile.hasAvatar && (
-                  <SmallButton onClick={removeAvatar} tone="danger">
-                    <Trash2 size={12} strokeWidth={1.8} />
-                    Remove
-                  </SmallButton>
-                )}
-              </div>
               {error && <div className="text-[11.5px] text-alert mt-2">{error}</div>}
             </div>
 
@@ -331,28 +319,5 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
       <div className="eyebrow mb-2">{label}</div>
       {children}
     </div>
-  )
-}
-
-function SmallButton({
-  children,
-  onClick,
-  tone = 'default',
-}: {
-  children: ReactNode
-  onClick: () => void
-  tone?: 'default' | 'danger'
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`h-7 px-2.5 inline-flex items-center gap-1.5 rounded-btn border text-[11.5px] transition-colors ${
-        tone === 'danger'
-          ? 'border-white/[0.12] text-muted hover:text-alert hover:border-alert/40'
-          : 'border-white/[0.14] text-text hover:bg-white/[0.04]'
-      }`}
-    >
-      {children}
-    </button>
   )
 }

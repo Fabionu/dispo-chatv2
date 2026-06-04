@@ -27,7 +27,7 @@ export default function ReplyQuote({
   )
 
   const base =
-    'mb-1.5 pl-2 border-l-2 border-active/60 bg-white/[0.025] rounded-[3px] px-2 py-1 max-w-full'
+    'mb-1 pl-2 border-l-2 border-active/60 bg-white/[0.025] rounded-[3px] px-2 py-1 max-w-full'
 
   if (!onJump) {
     return <div className={base}>{inner}</div>

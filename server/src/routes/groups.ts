@@ -338,10 +338,11 @@ async function fetchGroupMembers(groupId: string) {
     user_role: string
     availability_status: string
     avatar_path: string | null
+    last_read_at: string | null
   }>(
     `select u.id, u.display_name, w.name as workspace,
             gm.role as group_role, u.role as user_role,
-            u.availability_status, u.avatar_path
+            u.availability_status, u.avatar_path, gm.last_read_at
        from group_members gm
        join users u on u.id = gm.user_id
        left join workspaces w on w.id = u.workspace_id
@@ -357,6 +358,10 @@ async function fetchGroupMembers(groupId: string) {
     userRole: r.user_role,
     availabilityStatus: r.availability_status,
     hasAvatar: r.avatar_path !== null,
+    // "Read up to" marker. Per-message read receipts are DERIVED from this on
+    // the client (a message is seen by this member iff lastReadAt >= its
+    // createdAt) — no per-message rows, so it scales to large groups.
+    lastReadAt: r.last_read_at,
   }))
 }
 
@@ -1602,14 +1607,23 @@ groupsRouter.post(
 
     const { userId } = req.session!
     const at = parsed.data.upTo ?? new Date().toISOString()
+    const groupId = req.params.id
 
-    const { rowCount } = await pool.query(
+    const { rows } = await pool.query<{ last_read_at: string }>(
       `update group_members
           set last_read_at = greatest(coalesce(last_read_at, 'epoch'::timestamptz), $1)
-        where group_id = $2 and user_id = $3`,
-      [at, req.params.id, userId],
+        where group_id = $2 and user_id = $3
+        returning last_read_at`,
+      [at, groupId, userId],
     )
-    if (rowCount === 0) return res.status(403).json({ error: 'not_a_member' })
-    res.json({ ok: true, lastReadAt: at })
+    if (rows.length === 0) return res.status(403).json({ error: 'not_a_member' })
+
+    // Tell the rest of the group room that this member's read marker advanced,
+    // so their sent-message checkmarks update live without anyone refetching the
+    // conversation or the member list. One tiny event per read, not per message.
+    const lastReadAt = rows[0].last_read_at
+    getIO().to(roomForGroup(groupId)).emit('group:read', { groupId, userId, lastReadAt })
+
+    res.json({ ok: true, lastReadAt })
   }),
 )
