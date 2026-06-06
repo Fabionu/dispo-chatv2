@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { ArrowUp, Smile } from 'lucide-react'
+import { ArrowUp } from 'lucide-react'
 import type { GroupMember, ReplyToPreview } from '../../lib/types'
 import { DOC_ACCEPT, IMAGE_ACCEPT, fileError } from '../attachments/attachmentUtils'
 import ComposerContextRow from '../messages/ComposerContextRow'
@@ -242,8 +242,13 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
     ? !text.trim() || text.trim() === editContext.originalBody
     : !text.trim()
 
+  // Floating input bar: a SOLID, rounded, bordered bar so it's clearly where you
+  // type. It sits inside ChatView's transparent overlay (which lets messages
+  // scroll behind the surrounding area); the solid fill + soft shadow keep the
+  // input readable and distinct from any bubble passing behind it. `relative`
+  // anchors the mention picker.
   return (
-    <div className="relative rounded-[14px] border border-white/[0.12] bg-white/[0.04] focus-within:border-white/[0.20] focus-within:bg-white/[0.05] transition-colors">
+    <div className="relative rounded-[14px] border border-white/[0.12] bg-surface focus-within:border-white/[0.20] transition-colors shadow-[0_2px_16px_rgba(0,0,0,0.5)]">
       {pickerOpen && (
         <MentionPicker
           members={matches}
@@ -272,10 +277,11 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           onCancel={onCancelEdit}
         />
       )}
-      {/* Minimal input bar: paperclip · textarea · emoji · send. All controls
-          share --composer-size and bottom-align so the bar stays tidy as the
-          textarea autogrows. */}
-      <div className="flex items-end gap-1 px-2 py-1.5">
+      {/* Minimal input bar: paperclip · textarea · send. The controls share
+          --composer-size and are vertically centred against the textarea, so
+          they stay aligned with the middle of the input whether it's one line or
+          grown to several (items-center tracks the textarea's height). */}
+      <div className="flex items-center gap-1 px-2 py-1.5">
         <input
           ref={fileInputRef}
           type="file"
@@ -294,17 +300,6 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           placeholder={editContext ? 'Edit message…' : placeholder}
           className="flex-1 bg-transparent text-[length:var(--chat-msg-font-size)] leading-[1.5] outline-none resize-none placeholder:text-faint overflow-y-auto max-h-[9em] px-1.5 py-1.5"
         />
-        {/* Emoji — not wired up yet; shown disabled so the bar matches the
-            minimal layout without faking behaviour. */}
-        <button
-          type="button"
-          disabled
-          aria-label="Emoji (coming soon)"
-          title="Emoji (coming soon)"
-          className="h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 flex items-center justify-center rounded-full text-faint cursor-default"
-        >
-          <Smile size={16} strokeWidth={1.8} />
-        </button>
         <button
           onClick={onSend}
           disabled={disabled}

@@ -1,5 +1,7 @@
 import { Router } from 'express'
 import { randomUUID } from 'node:crypto'
+import { createReadStream } from 'node:fs'
+import { unlink } from 'node:fs/promises'
 import { z } from 'zod'
 import { pool, type DbClient } from '../db/pool.js'
 import { requireAuth } from '../auth.js'
@@ -16,8 +18,10 @@ import {
   MAX_IMAGE_BYTES,
   isImage,
   uploadSingle,
+  uploadAttachment,
 } from '../middleware/upload.js'
-import { saveBuffer, readBuffer, deleteFile } from '../storage.js'
+import { saveBuffer, saveStream, readBuffer, deleteFile } from '../storage.js'
+import { isLocationConfigured, deviceIdForGroup, getLatestPosition } from '../location.js'
 import { serveImageObject } from '../util/serveImage.js'
 import { enqueuePreviewJob } from '../jobs/previewQueue.js'
 import { directPairKey, sortPair } from '../util/pair.js'
@@ -41,6 +45,16 @@ groupsRouter.use(requireAuth)
 // Lists every group the current user belongs to, ordered by recent activity.
 // Driven by the group_members(user_id, group_id) index seek; the result set
 // (a single user's groups) is small enough that the final sort is free.
+//
+// Unread counters are DENORMALIZED (migration 0020): unread_count and
+// unread_mention_count are stored on group_members and maintained incrementally
+// on the write paths, so this read is a plain column fetch instead of two
+// correlated subqueries per group. last_read_at stays the source of truth for
+// per-message read receipts; these counters are only the sidebar badge numbers.
+// Maintenance lives in: POST /messages + forward (increment), POST /:id/read
+// (reset to 0), delete-for-everyone / delete-for-me (decrement), and
+// groupInvites accept (seed on join). member_count stays a subquery — it's a
+// cheap PK count and there's no safe stored value to read instead yet.
 groupsRouter.get(
   '/',
   asyncHandler(async (req, res) => {
@@ -73,34 +87,9 @@ groupsRouter.get(
               g.last_message_at, g.created_at,
               gm.last_read_at,
               (select count(*)::int from group_members where group_id = g.id) as member_count,
-              -- unread = messages by others, not deleted, after my last read,
-              -- excluding ones I've hidden ("delete for me").
-              (select count(*)::int
-                 from messages msg
-                where msg.group_id = g.id
-                  and msg.author_id <> $1
-                  and msg.deleted_at is null
-                  and msg.kind = 'user'
-                  and msg.created_at > coalesce(gm.last_read_at, 'epoch'::timestamptz)
-                  and not exists (
-                    select 1 from message_deletions md
-                     where md.message_id = msg.id and md.user_id = $1
-                  )) as unread_count,
-              -- unread mentions = the subset of unread messages that @-mention
-              -- me. Same read boundary, so marking the group read clears it.
-              (select count(*)::int
-                 from message_mentions mm
-                 join messages msg on msg.id = mm.message_id
-                where mm.mentioned_user_id = $1
-                  and msg.group_id = g.id
-                  and msg.author_id <> $1
-                  and msg.deleted_at is null
-                  and msg.kind = 'user'
-                  and msg.created_at > coalesce(gm.last_read_at, 'epoch'::timestamptz)
-                  and not exists (
-                    select 1 from message_deletions md
-                     where md.message_id = msg.id and md.user_id = $1
-                  )) as unread_mention_count,
+              -- Denormalized counters (migration 0020), maintained on write.
+              gm.unread_count,
+              gm.unread_mention_count,
               peer.peer_id, peer.peer_name, peer.peer_workspace, peer.peer_availability
          from groups g
          join group_members gm on gm.group_id = g.id and gm.user_id = $1
@@ -382,6 +371,41 @@ groupsRouter.get(
     if (membership.length === 0) return res.status(403).json({ error: 'not_a_member' })
 
     res.json({ members: await fetchGroupMembers(groupId) })
+  }),
+)
+
+// ── GET /api/groups/:id/location ─────────────────────────────────────────
+// Latest known vehicle position for a group, read from Amazon Location Service
+// on the SERVER (the browser never touches the tracker or AWS credentials).
+// Gated on membership. Vehicle groups only — DMs have no vehicle. Responses:
+//   { location: { latitude, longitude, timestamp, accuracy, deviceId } }
+//   { location: null }                  → no position recorded yet
+//   503 { error: 'location_not_configured' } → feature disabled (no AWS env)
+groupsRouter.get(
+  '/:id/location',
+  asyncHandler(async (req, res) => {
+    const { userId } = req.session!
+    const groupId = req.params.id
+
+    const { rows: membership } = await pool.query<{ type: 'vehicle' | 'direct' }>(
+      `select g.type
+         from group_members gm
+         join groups g on g.id = gm.group_id
+        where gm.group_id = $1 and gm.user_id = $2
+        limit 1`,
+      [groupId, userId],
+    )
+    if (membership.length === 0) return res.status(403).json({ error: 'not_a_member' })
+    // Location is a vehicle concept; a DM has no tracked device.
+    if (membership[0].type !== 'vehicle') {
+      return res.status(400).json({ error: 'not_a_vehicle_group' })
+    }
+    if (!isLocationConfigured()) {
+      return res.status(503).json({ error: 'location_not_configured' })
+    }
+
+    const location = await getLatestPosition(deviceIdForGroup(groupId))
+    res.json({ location })
   }),
 )
 
@@ -990,12 +1014,22 @@ const postMessageSchema = z.object({
 groupsRouter.post(
   '/:id/messages',
   messageLimiter,
-  uploadSingle,
+  uploadAttachment,
   asyncHandler(async (req, res) => {
+    const file = req.file
+    // multer streamed this upload to a temp file on disk (never buffered in the
+    // process heap — see uploadAttachment). The bytes we keep end up in storage,
+    // so the temp file is removed once the response is done. Registered up front
+    // so it fires on EVERY exit path — an early validation return, success, or a
+    // thrown error. Best-effort: a failed unlink just leaves an OS-temp file.
+    if (file?.path) {
+      const tempPath = file.path
+      res.on('close', () => void unlink(tempPath).catch(() => {}))
+    }
+
     const parsed = postMessageSchema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: 'invalid_input' })
 
-    const file = req.file
     const body = parsed.data.body
     const replyToMessageId = parsed.data.replyToMessageId ?? null
     // Dedupe requested mention ids up front; membership is validated against
@@ -1018,17 +1052,35 @@ groupsRouter.post(
     const groupId = req.params.id
 
     // We commit to the attachment id up front so we can persist the file to
-    // disk before the DB INSERT, and roll the file back on DB failure. This
+    // storage before the DB INSERT, and roll the file back on DB failure. This
     // keeps the storage layer ignorant of UUIDs handed out by Postgres.
     let storagePath: string | null = null
     let attachmentId: string | null = null
     if (file) {
+      // Authorize BEFORE spending storage bandwidth on the upload: confirm the
+      // sender belongs to the group. The message-insert CTE below still gates on
+      // membership too (defense-in-depth, and it closes the tiny window between
+      // this check and the insert), but pre-checking here avoids streaming a
+      // whole file to storage only to delete it again for a non-member. The temp
+      // file is still removed by the res.on('close') handler registered above.
+      const { rows: membership } = await pool.query(
+        'select 1 from group_members where group_id = $1 and user_id = $2 limit 1',
+        [groupId, userId],
+      )
+      if (membership.length === 0) return res.status(403).json({ error: 'not_a_member' })
+
       attachmentId = randomUUID()
-      // Store only the ORIGINAL in the request path. The (CPU-heavy) image
-      // preview is generated asynchronously after the response — see the
-      // enqueuePreviewJob call once the message + attachment row exist.
-      const saved = await saveBuffer(attachmentId, file.originalname, file.buffer, file.mimetype)
-      storagePath = saved.storagePath
+      // Stream the temp file straight to storage — bytes flow disk→bucket in
+      // chunks, so even a 25MB upload never lands in the heap. Only the ORIGINAL
+      // is stored here; the (CPU-heavy) image preview is generated asynchronously
+      // after the response (see the enqueuePreviewJob call once the message +
+      // attachment row exist).
+      storagePath = await saveStream(
+        attachmentId,
+        file.originalname,
+        createReadStream(file.path),
+        file.mimetype,
+      )
     }
 
     // Roll back the stored original on any early-exit / failure below. (No
@@ -1084,6 +1136,13 @@ groupsRouter.post(
          r as (
            update group_members set last_read_at = (select created_at from ins)
            where group_id = $1 and user_id = $2 and exists (select 1 from ins)
+         ),
+         bump as (
+           -- Denormalized unread counter (migration 0020): this new user message
+           -- is unread for everyone EXCEPT the author. Mention counts are bumped
+           -- separately, after mentions are validated against membership below.
+           update group_members set unread_count = unread_count + 1
+           where group_id = $1 and user_id <> $2 and exists (select 1 from ins)
          ),
          att as (
            insert into attachments (id, message_id, original_name, mime_type, byte_size, storage_path)
@@ -1143,6 +1202,21 @@ groupsRouter.post(
             [row.id, validMembers.map((m) => m.id)],
           )
           mentions = validMembers.map((m) => ({ userId: m.id, displayName: m.display_name }))
+
+          // Denormalized mention counter (migration 0020): bump only for the
+          // members we actually stored a mention for, excluding the author (a
+          // self-mention is never unread for the sender — their last_read_at was
+          // just advanced above). This runs after the unread_count bump in the
+          // insert CTE, so a mentioned member's mention count stays a subset of
+          // their unread count.
+          const mentionedIds = validMembers.map((m) => m.id).filter((id) => id !== userId)
+          if (mentionedIds.length > 0) {
+            await pool.query(
+              `update group_members set unread_mention_count = unread_mention_count + 1
+                where group_id = $1 and user_id = any($2::uuid[])`,
+              [groupId, mentionedIds],
+            )
+          }
         }
       }
 
@@ -1188,12 +1262,14 @@ groupsRouter.post(
       getIO().to(roomForGroup(groupId)).emit('message:new', payload)
       res.status(201).json({ message: payload })
 
-      // Out of the request path: generate the image preview in the background
-      // from the buffer we already have in memory, then patch the attachment +
-      // notify the room. Non-blocking (enqueue returns immediately); a failure
-      // here never affects the already-sent message.
+      // Out of the request path: generate the image preview in the background,
+      // then patch the attachment + notify the room. Non-blocking (enqueue
+      // returns immediately); a failure here never affects the already-sent
+      // message. The upload was STREAMED, so there's no in-memory buffer to
+      // hand off — the worker re-fetches the original from storage by id (same
+      // as the durable Redis queue path and the backfill script).
       if (file && attachmentId && isImage(file.mimetype)) {
-        enqueuePreviewJob({ attachmentId, buffer: file.buffer })
+        enqueuePreviewJob({ attachmentId })
       }
     } catch (err) {
       await cleanupFiles()
@@ -1269,35 +1345,103 @@ groupsRouter.post(
     const groupId = req.params.id
     const messageId = req.params.messageId
 
-    const { rows } = await pool.query<{
-      id: string
-      deleted_at: string
-      deleted_by: string
-    }>(
-      `update messages
-          set deleted_at = now(), deleted_by = $1
-        where id = $2
-          and group_id = $3
-          and author_id = $1
-          and deleted_at is null
-          and kind = 'user'
-          and created_at > now() - interval '${DELETE_WINDOW_MINUTES} minutes'
-       returning id, deleted_at, deleted_by`,
-      [userId, messageId, groupId],
-    )
+    // Soft-delete + adjust the denormalized unread counters of everyone who
+    // still had this message unread, atomically. last_read_at is untouched, so
+    // per-message read receipts are unaffected.
+    const result = await withTransaction(async (client) => {
+      const { rows } = await client.query<{
+        id: string
+        deleted_at: string
+        deleted_by: string
+        created_at: string
+      }>(
+        `update messages
+            set deleted_at = now(), deleted_by = $1
+          where id = $2
+            and group_id = $3
+            and author_id = $1
+            and deleted_at is null
+            and kind = 'user'
+            and created_at > now() - interval '${DELETE_WINDOW_MINUTES} minutes'
+         returning id, deleted_at, deleted_by, created_at`,
+        [userId, messageId, groupId],
+      )
+      if (rows.length === 0) return null
+      const msg = rows[0]
 
-    if (rows.length === 0) {
+      // Decrement unread_count for members for whom this message was still
+      // UNREAD at deletion time: not the author, their last_read_at is before
+      // the message, and they hadn't already hidden it (delete-for-me already
+      // decremented those). Floored at 0. RETURNING gives us the authoritative
+      // new counts to push to each affected member's sidebar.
+      const { rows: affected } = await client.query<{
+        user_id: string
+        unread_count: number
+        unread_mention_count: number
+      }>(
+        `update group_members gm
+            set unread_count = greatest(gm.unread_count - 1, 0)
+          where gm.group_id = $1
+            and gm.user_id <> $2
+            and coalesce(gm.last_read_at, 'epoch'::timestamptz) < $3
+            and not exists (
+              select 1 from message_deletions md
+               where md.message_id = $4 and md.user_id = gm.user_id
+            )
+         returning gm.user_id, gm.unread_count, gm.unread_mention_count`,
+        [groupId, userId, msg.created_at, messageId],
+      )
+
+      // Of those, also decrement unread_mention_count where this message
+      // mentioned them (mention count is always a subset of unread count).
+      if (affected.length > 0) {
+        const { rows: mentionDec } = await client.query<{
+          user_id: string
+          unread_mention_count: number
+        }>(
+          `update group_members gm
+              set unread_mention_count = greatest(gm.unread_mention_count - 1, 0)
+            where gm.group_id = $1
+              and gm.user_id = any($2::uuid[])
+              and exists (
+                select 1 from message_mentions mm
+                 where mm.message_id = $3 and mm.mentioned_user_id = gm.user_id
+              )
+           returning gm.user_id, gm.unread_mention_count`,
+          [groupId, affected.map((a) => a.user_id), messageId],
+        )
+        const updated = new Map(mentionDec.map((r) => [r.user_id, r.unread_mention_count]))
+        for (const a of affected) {
+          const v = updated.get(a.user_id)
+          if (v !== undefined) a.unread_mention_count = v
+        }
+      }
+
+      return { msg, affected }
+    })
+
+    if (!result) {
       return res.status(403).json({ error: 'cannot_delete' })
     }
 
-    const row = rows[0]
     const payload = {
-      id: row.id,
+      id: result.msg.id,
       groupId,
-      deletedAt: row.deleted_at,
-      deletedBy: row.deleted_by,
+      deletedAt: result.msg.deleted_at,
+      deletedBy: result.msg.deleted_by,
     }
-    getIO().to(roomForGroup(groupId)).emit('message:deleted', payload)
+    const io = getIO()
+    io.to(roomForGroup(groupId)).emit('message:deleted', payload)
+    // Push the authoritative new sidebar counters to each member whose unread
+    // dropped, so their rail badge updates live (the open conversation, if any,
+    // already reflects the deletion via message:deleted).
+    for (const a of result.affected) {
+      io.to(roomForUser(a.user_id)).emit('group:unread', {
+        groupId,
+        unreadCount: a.unread_count,
+        unreadMentionCount: a.unread_mention_count,
+      })
+    }
     res.json({ ok: true, message: payload })
   }),
 )
@@ -1501,6 +1645,13 @@ groupsRouter.post(
            r as (
              update group_members set last_read_at = (select created_at from ins)
               where group_id = $1 and user_id = $2
+           ),
+           bump as (
+             -- Denormalized unread counter (migration 0020): a forward is a new
+             -- user message, unread for every member except the author. Forwards
+             -- never carry mentions, so only unread_count moves.
+             update group_members set unread_count = unread_count + 1
+              where group_id = $1 and user_id <> $2
            )
            select ins.id, ins.created_at, u.display_name
              from ins join users u on u.id = $2`,
@@ -1570,25 +1721,72 @@ groupsRouter.post(
     const groupId = req.params.id
     const messageId = req.params.messageId
 
-    // Verify membership AND that the message belongs to this group in one go,
-    // so a non-member can't probe for message existence.
-    const { rows: check } = await pool.query(
-      `select 1
-         from messages m
-         join group_members gm on gm.group_id = m.group_id and gm.user_id = $1
-        where m.id = $2 and m.group_id = $3
-        limit 1`,
-      [userId, messageId, groupId],
-    )
-    if (check.length === 0) return res.status(403).json({ error: 'cannot_delete' })
+    // Hide the message and adjust ONLY my own denormalized counters, atomically.
+    // The membership join also enforces that the caller belongs to the group (so
+    // a non-member can't probe for message existence). last_read_at is untouched.
+    const result = await withTransaction(async (client) => {
+      const { rows } = await client.query<{
+        was_unread: boolean
+        mentioned: boolean
+        already_hidden: boolean
+      }>(
+        `select
+            (m.author_id <> $1 and m.deleted_at is null and m.kind = 'user'
+             and coalesce(gm.last_read_at, 'epoch'::timestamptz) < m.created_at) as was_unread,
+            exists (select 1 from message_mentions mm
+                     where mm.message_id = m.id and mm.mentioned_user_id = $1) as mentioned,
+            exists (select 1 from message_deletions md
+                     where md.message_id = m.id and md.user_id = $1) as already_hidden
+           from messages m
+           join group_members gm on gm.group_id = m.group_id and gm.user_id = $1
+          where m.id = $2 and m.group_id = $3
+          limit 1`,
+        [userId, messageId, groupId],
+      )
+      if (rows.length === 0) return { ok: false as const }
+      const f = rows[0]
 
-    await pool.query(
-      `insert into message_deletions (message_id, user_id)
-       values ($1, $2) on conflict do nothing`,
-      [messageId, userId],
-    )
+      await client.query(
+        `insert into message_deletions (message_id, user_id)
+         values ($1, $2) on conflict do nothing`,
+        [messageId, userId],
+      )
 
-    getIO().to(roomForUser(userId)).emit('message:hidden', { groupId, id: messageId })
+      // Decrement my counters only if this message was still counting as unread
+      // for me AND it wasn't already hidden (an already-hidden message was
+      // decremented when first hidden — never double-count). Floored at 0.
+      let counts: { unread_count: number; unread_mention_count: number } | null = null
+      if (f.was_unread && !f.already_hidden) {
+        const { rows: dec } = await client.query<{
+          unread_count: number
+          unread_mention_count: number
+        }>(
+          `update group_members
+              set unread_count = greatest(unread_count - 1, 0),
+                  unread_mention_count = case when $3
+                                              then greatest(unread_mention_count - 1, 0)
+                                              else unread_mention_count end
+            where group_id = $1 and user_id = $2
+            returning unread_count, unread_mention_count`,
+          [groupId, userId, f.mentioned],
+        )
+        counts = dec[0] ?? null
+      }
+      return { ok: true as const, counts }
+    })
+
+    if (!result.ok) return res.status(403).json({ error: 'cannot_delete' })
+
+    const io = getIO()
+    io.to(roomForUser(userId)).emit('message:hidden', { groupId, id: messageId })
+    // Push my authoritative new sidebar counters to my other tabs/devices.
+    if (result.counts) {
+      io.to(roomForUser(userId)).emit('group:unread', {
+        groupId,
+        unreadCount: result.counts.unread_count,
+        unreadMentionCount: result.counts.unread_mention_count,
+      })
+    }
     res.json({ ok: true })
   }),
 )
@@ -1611,7 +1809,13 @@ groupsRouter.post(
 
     const { rows } = await pool.query<{ last_read_at: string }>(
       `update group_members
-          set last_read_at = greatest(coalesce(last_read_at, 'epoch'::timestamptz), $1)
+          set last_read_at = greatest(coalesce(last_read_at, 'epoch'::timestamptz), $1),
+              -- Denormalized counters (migration 0020): the client marks read up
+              -- to the latest message, so clearing both to 0 matches the unread
+              -- definition (nothing after last_read_at remains). last_read_at is
+              -- still the source of truth for per-message read receipts.
+              unread_count = 0,
+              unread_mention_count = 0
         where group_id = $2 and user_id = $3
         returning last_read_at`,
       [at, groupId, userId],
@@ -1621,8 +1825,18 @@ groupsRouter.post(
     // Tell the rest of the group room that this member's read marker advanced,
     // so their sent-message checkmarks update live without anyone refetching the
     // conversation or the member list. One tiny event per read, not per message.
+    // (Unchanged — per-message read receipts depend on this event.)
     const lastReadAt = rows[0].last_read_at
-    getIO().to(roomForGroup(groupId)).emit('group:read', { groupId, userId, lastReadAt })
+    const io = getIO()
+    io.to(roomForGroup(groupId)).emit('group:read', { groupId, userId, lastReadAt })
+    // Clear the sidebar unread badge on this user's OTHER tabs/devices live: the
+    // acting tab already cleared via onRead, but the others only learn here. The
+    // counters were just reset to 0 above, so 0/0 is authoritative.
+    io.to(roomForUser(userId)).emit('group:unread', {
+      groupId,
+      unreadCount: 0,
+      unreadMentionCount: 0,
+    })
 
     res.json({ ok: true, lastReadAt })
   }),

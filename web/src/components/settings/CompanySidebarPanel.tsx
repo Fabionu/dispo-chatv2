@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeft, Trash2, Upload } from 'lucide-react'
 import type { CompanyProfile } from '../../lib/types'
-import { api } from '../../lib/api'
+import { api, type CompanyProfilePatch } from '../../lib/api'
 import CompanyLogo from '../CompanyLogo'
+import EditableRow from '../EditableRow'
 
 type Props = {
   onBack: () => void
@@ -13,25 +14,16 @@ type Props = {
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
-const FIELDS: { key: string; label: string; placeholder?: string; mono?: boolean }[] = [
-  { key: 'name', label: 'Company name' },
-  { key: 'legalName', label: 'Legal name' },
-  { key: 'vatId', label: 'VAT / tax ID', mono: true },
-  { key: 'website', label: 'Website', placeholder: 'https://…' },
-  { key: 'country', label: 'Country' },
-  { key: 'city', label: 'City' },
-  { key: 'operationalAddress', label: 'Operational address' },
-  { key: 'dispatchEmail', label: 'Dispatch email' },
-  { key: 'dispatchPhone', label: 'Dispatch phone' },
-]
-
 // Company / workspace profile as a sidebar drawer — consistent with "My
-// profile" (replaces the conversation list; the chat stays on the right).
-// Editable only by admins; shown read-only otherwise.
+// profile" (replaces the conversation list; the chat stays on the right) and
+// rendered inside the sidebar card, so it shares the same shell.
+//
+// Reads as clean information by default: every detail is a label/value row, not
+// a form box. Admins edit each field INDIVIDUALLY (its own pencil → inline input
+// → Save/Cancel, like the profile/group panels); non-admins simply see read-only
+// rows — never disabled-looking inputs.
 export default function CompanySidebarPanel({ onBack, onSaved }: Props) {
   const [company, setCompany] = useState<CompanyProfile | null>(null)
-  const [form, setForm] = useState<Record<string, string>>({})
-  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [logoVersion, setLogoVersion] = useState(0)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -39,28 +31,20 @@ export default function CompanySidebarPanel({ onBack, onSaved }: Props) {
   useEffect(() => {
     api.company
       .get()
-      .then(({ company }) => hydrate(company))
+      .then(({ company }) => setCompany(company))
       .catch(() => setError('Could not load the company profile.'))
   }, [])
 
-  function hydrate(c: CompanyProfile) {
-    setCompany(c)
-    setForm({
-      name: c.name ?? '',
-      legalName: c.legalName ?? '',
-      vatId: c.vatId ?? '',
-      website: c.website ?? '',
-      country: c.country ?? '',
-      city: c.city ?? '',
-      operationalAddress: c.operationalAddress ?? '',
-      dispatchEmail: c.dispatchEmail ?? '',
-      dispatchPhone: c.dispatchPhone ?? '',
-    })
-  }
-
   const canEdit = company?.canEdit ?? false
-  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setForm((f) => ({ ...f, [k]: e.target.value }))
+
+  // Persist a single field. Throws on failure so the EditableRow keeps its
+  // editor open and shows a retryable error (partial PATCH is supported server
+  // side, so only the changed column is written).
+  async function saveField(patch: CompanyProfilePatch) {
+    const { company: c } = await api.company.update(patch)
+    setCompany(c)
+    onSaved(c, logoVersion)
+  }
 
   async function onPickLogo(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -93,31 +77,6 @@ export default function CompanySidebarPanel({ onBack, onSaved }: Props) {
     }
   }
 
-  async function save() {
-    if (!form.name.trim()) return setError('Company name is required.')
-    setSaving(true)
-    setError(null)
-    try {
-      const { company: c } = await api.company.update({
-        name: form.name.trim(),
-        legalName: form.legalName.trim() || null,
-        vatId: form.vatId.trim() || null,
-        website: form.website.trim() || null,
-        country: form.country.trim() || null,
-        city: form.city.trim() || null,
-        operationalAddress: form.operationalAddress.trim() || null,
-        dispatchEmail: form.dispatchEmail.trim() || null,
-        dispatchPhone: form.dispatchPhone.trim() || null,
-      })
-      setCompany(c)
-      onSaved(c, logoVersion)
-    } catch {
-      setError('Could not save the company profile.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
   return (
     <div className="flex flex-col h-full">
       {/* Header — matches the rail's header height, with a back affordance. */}
@@ -137,105 +96,124 @@ export default function CompanySidebarPanel({ onBack, onSaved }: Props) {
           {error ?? 'Loading…'}
         </div>
       ) : (
-        <>
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
-            {!canEdit && (
-              <div className="text-[11px] text-muted bg-white/[0.03] border border-white/[0.06] rounded-btn px-3 py-2">
-                Only workspace admins can edit the company profile.
-              </div>
-            )}
-
-            {/* Logo + name */}
-            <div className="flex flex-col items-center text-center">
-              <CompanyLogo size={64} version={logoVersion} className="!rounded-card" />
-              <div className="mt-2.5 text-[16px] font-semibold tracking-[-0.2px]">{company.name}</div>
-              {canEdit && (
-                <div className="mt-3 flex items-center gap-1.5">
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp,image/gif"
-                    onChange={onPickLogo}
-                    className="hidden"
-                  />
-                  <SmallButton onClick={() => fileRef.current?.click()}>
-                    <Upload size={12} strokeWidth={1.8} />
-                    {company.hasLogo ? 'Change' : 'Upload'}
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+          {/* Logo + name — the logo is the hero, integrated into the card. */}
+          <div className="flex flex-col items-center text-center pt-1">
+            <CompanyLogo size={72} version={logoVersion} className="!rounded-card" />
+            <div className="mt-2.5 text-[16px] font-semibold tracking-[-0.2px]">{company.name}</div>
+            {canEdit ? (
+              <div className="mt-3 flex items-center gap-1.5">
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  onChange={onPickLogo}
+                  className="hidden"
+                />
+                <SmallButton onClick={() => fileRef.current?.click()}>
+                  <Upload size={12} strokeWidth={1.8} />
+                  {company.hasLogo ? 'Change' : 'Upload'}
+                </SmallButton>
+                {company.hasLogo && (
+                  <SmallButton onClick={removeLogo} tone="danger">
+                    <Trash2 size={12} strokeWidth={1.8} />
+                    Remove
                   </SmallButton>
-                  {company.hasLogo && (
-                    <SmallButton onClick={removeLogo} tone="danger">
-                      <Trash2 size={12} strokeWidth={1.8} />
-                      Remove
-                    </SmallButton>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <Section label="Registration">
-              {FIELDS.slice(0, 4).map((f) => (
-                <Field key={f.key} label={f.label}>
-                  <input
-                    value={form[f.key]}
-                    onChange={set(f.key)}
-                    disabled={!canEdit}
-                    placeholder={f.placeholder}
-                    className={`modal-input ${f.mono ? 'font-mono' : ''}`}
-                  />
-                </Field>
-              ))}
-            </Section>
-
-            <Section label="Location">
-              {FIELDS.slice(4, 7).map((f) => (
-                <Field key={f.key} label={f.label}>
-                  <input value={form[f.key]} onChange={set(f.key)} disabled={!canEdit} className="modal-input" />
-                </Field>
-              ))}
-            </Section>
-
-            <Section label="Dispatch">
-              {FIELDS.slice(7).map((f) => (
-                <Field key={f.key} label={f.label}>
-                  <input value={form[f.key]} onChange={set(f.key)} disabled={!canEdit} className="modal-input" />
-                </Field>
-              ))}
-            </Section>
+                )}
+              </div>
+            ) : (
+              <div className="mt-1 text-[11px] text-faint">Managed by a workspace admin</div>
+            )}
+            {error && <div className="text-[11.5px] text-alert mt-2">{error}</div>}
           </div>
 
-          {/* Sticky save bar (admins only). */}
-          {canEdit && (
-            <div className="shrink-0 border-t border-white/[0.05] px-4 py-3">
-              {error && <div className="text-[11.5px] text-alert text-center mb-2">{error}</div>}
-              <button
-                onClick={() => void save()}
-                disabled={saving}
-                className="w-full h-9 rounded-btn bg-text text-bg text-[12.5px] font-semibold hover:bg-text/90 disabled:opacity-60 transition-colors"
-              >
-                {saving ? 'Saving…' : 'Save changes'}
-              </button>
-            </div>
-          )}
-        </>
+          {/* Registration */}
+          <Section label="Registration">
+            <EditableRow
+              label="Company name"
+              value={company.name}
+              editable={canEdit}
+              required
+              onSave={(v) => saveField({ name: v })}
+            />
+            <EditableRow
+              label="Legal name"
+              value={company.legalName}
+              editable={canEdit}
+              placeholder="Registered legal entity"
+              onSave={(v) => saveField({ legalName: v || null })}
+            />
+            <EditableRow
+              label="VAT / tax ID"
+              value={company.vatId}
+              editable={canEdit}
+              placeholder="e.g. RO12345678"
+              onSave={(v) => saveField({ vatId: v || null })}
+            />
+            <EditableRow
+              label="Website"
+              value={company.website}
+              editable={canEdit}
+              placeholder="https://…"
+              onSave={(v) => saveField({ website: v || null })}
+            />
+          </Section>
+
+          {/* Location */}
+          <Section label="Location">
+            <EditableRow
+              label="Country"
+              value={company.country}
+              editable={canEdit}
+              placeholder="e.g. Romania"
+              onSave={(v) => saveField({ country: v || null })}
+            />
+            <EditableRow
+              label="City"
+              value={company.city}
+              editable={canEdit}
+              onSave={(v) => saveField({ city: v || null })}
+            />
+            <EditableRow
+              label="Operational address"
+              value={company.operationalAddress}
+              editable={canEdit}
+              multiline
+              placeholder="Street, number, postal code"
+              onSave={(v) => saveField({ operationalAddress: v || null })}
+            />
+          </Section>
+
+          {/* Dispatch */}
+          <Section label="Dispatch">
+            <EditableRow
+              label="Dispatch email"
+              value={company.dispatchEmail}
+              editable={canEdit}
+              placeholder="dispatch@…"
+              onSave={(v) => saveField({ dispatchEmail: v || null })}
+            />
+            <EditableRow
+              label="Dispatch phone"
+              value={company.dispatchPhone}
+              editable={canEdit}
+              placeholder="+40…"
+              onSave={(v) => saveField({ dispatchPhone: v || null })}
+            />
+          </Section>
+        </div>
       )}
     </div>
   )
 }
 
-// ── Compact, sidebar-native form bits ───────────────────────────────────────
+// ── Compact, sidebar-native bits ────────────────────────────────────────────
+// Matches the profile panel's Section: an eyebrow label over a stack of
+// EditableRows (each carries its own hairline divider), no boxy wrapper.
 function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
       <div className="eyebrow mb-2">{label}</div>
-      <div className="space-y-2.5">{children}</div>
-    </div>
-  )
-}
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div>
-      <label className="block text-[11.5px] text-muted mb-1">{label}</label>
       {children}
     </div>
   )

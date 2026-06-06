@@ -34,6 +34,16 @@ export type CompanyProfilePatch = Partial<{
   website: string | null
 }>
 
+// Latest vehicle position returned by GET /groups/:id/location (read server-side
+// from Amazon Location Service).
+export type VehiclePosition = {
+  latitude: number
+  longitude: number
+  timestamp: string | null
+  accuracy: number | null
+  deviceId: string
+}
+
 // Thin typed wrapper over fetch. Every call is same-origin and carries the
 // session cookie. Non-2xx responses throw ApiError with the server's machine
 // -readable `error` code so callers can branch on it.
@@ -249,6 +259,12 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(upTo ? { upTo } : {}),
       }),
+
+    // Latest known vehicle position for a group (read server-side from Amazon
+    // Location). `location` is null when no position has been received yet.
+    // Throws ApiError('location_not_configured') when the feature is disabled.
+    location: (groupId: string) =>
+      request<{ location: VehiclePosition | null }>(`/groups/${groupId}/location`),
   },
 
   workspace: {

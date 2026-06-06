@@ -30,7 +30,6 @@ import ConnectionRequestView from '../components/connections/ConnectionRequestVi
 import ConnectionRequestsSection from '../components/connections/ConnectionRequestsSection'
 import GroupInvitesSection from '../components/invites/GroupInvitesSection'
 import GroupInviteView from '../components/invites/GroupInviteView'
-import AppMark from '../components/AppMark'
 import Avatar from '../components/Avatar'
 import Spinner from '../components/Spinner'
 import CompanyLogo from '../components/CompanyLogo'
@@ -38,6 +37,7 @@ import CreateVehicleGroupModal from '../components/CreateVehicleGroupModal'
 import NewMessageModal from '../components/NewMessageModal'
 import ProfileSidebarPanel from '../components/settings/ProfileSidebarPanel'
 import CompanySidebarPanel from '../components/settings/CompanySidebarPanel'
+import InboxView from '../components/inbox/InboxView'
 import { useIdle } from '../hooks/useIdle'
 import { usePresence } from '../hooks/usePresence'
 import { useDensity, SIDEBAR_AVATAR_SIZE } from '../lib/density'
@@ -53,12 +53,14 @@ type Props = {
 
 type NewGroupKind = 'vehicle' | 'direct'
 
-// What the main pane is currently showing. A group chat, a pending request,
-// or nothing (the empty state).
+// What the main pane is currently showing. A group chat, a pending request, a
+// pending invite, or the Inbox / workspace-home tools area. `null` is treated
+// the same as `inbox` — both render the Inbox view (it's the default home).
 type Selection =
   | { kind: 'group'; id: string }
   | { kind: 'request'; id: string }
   | { kind: 'invite'; id: string }
+  | { kind: 'inbox' }
   | null
 
 const EMPTY_CONNECTIONS: ConnectionsResponse = {
@@ -218,6 +220,24 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         return next
       })
     }
+    // Authoritative unread counters pushed by the server when a delete changed
+    // them (delete-for-everyone decrements every member who still had the
+    // message unread; delete-for-me decrements just my own, across my devices).
+    // We set the exact server values rather than nudging, so the rail badge can
+    // never drift. The open conversation shows 0 regardless (selected → 0).
+    function onGroupUnread(p: {
+      groupId: string
+      unreadCount: number
+      unreadMentionCount: number
+    }) {
+      setGroups((prev) =>
+        prev.map((g) =>
+          g.id === p.groupId
+            ? { ...g, unreadCount: p.unreadCount, unreadMentionCount: p.unreadMentionCount }
+            : g,
+        ),
+      )
+    }
     function onGroupAdded() {
       void refreshGroups()
     }
@@ -230,10 +250,12 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     }
 
     socket.on('message:new', onMessageNew)
+    socket.on('group:unread', onGroupUnread)
     socket.on('group:added', onGroupAdded)
     socket.on('group:removed', onGroupRemoved)
     return () => {
       socket.off('message:new', onMessageNew)
+      socket.off('group:unread', onGroupUnread)
       socket.off('group:added', onGroupAdded)
       socket.off('group:removed', onGroupRemoved)
     }
@@ -466,15 +488,26 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     return groupInvites.find((i) => i.id === selection.id) ?? null
   }, [groupInvites, selection])
 
+  // The Inbox / workspace home is showing whenever nothing else is selected —
+  // i.e. selection is `inbox` or `null`. Drives the header's active state and
+  // the main-pane fallback below.
+  const inboxActive = !selectedGroup && !selectedRequest && !selectedInvite
+
   // Who may invite members from the vehicle chat header. Group admins are also
   // allowed server-side; the header button gates on workspace role for
   // simplicity (the server enforces the full rule on POST).
   const canInviteMembers = user.role === 'admin' || user.role === 'dispatcher'
 
+  // App shell: two subtle cards (sidebar + chat) on the very dark app
+  // background, with a consistent gap between them. Outer margin is small on
+  // laptops and a touch larger on big monitors (2xl) so large screens feel
+  // contained without wasting space.
   return (
-    <div className="h-screen w-full flex bg-bg text-text overflow-hidden">
-      {/* Left rail */}
-      <aside className="w-[var(--sidebar-width)] shrink-0 bg-rail border-r border-white/[0.08] flex flex-col">
+    <div className="h-screen w-full flex gap-3 p-2 2xl:p-3 bg-bg text-text overflow-hidden">
+      {/* Left rail — wrapped as a subtle card. overflow-hidden so the rounded
+          corners clip the header/list cleanly; full border replaces the old
+          right divider. */}
+      <aside className="w-[var(--sidebar-width)] shrink-0 bg-rail border border-white/[0.08] rounded-[11px] overflow-hidden flex flex-col">
         {profilePanelOpen ? (
           <ProfileSidebarPanel
             initialProfile={cachedProfile}
@@ -498,12 +531,18 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           />
         ) : (
           <>
-        {/* Workspace identity. Not a button: there's no second workspace to
-            switch to, and workspace actions live in the user menu below — so we
-            don't show a dropdown chevron that leads nowhere. Just the company
-            name — the slug was a near-duplicate of it (it's derived from the
-            name) and added no information here. */}
-        <div className="h-[var(--header-height)] flex items-center gap-2.5 px-4 border-b border-white/[0.05]">
+        {/* Workspace identity = the entry point to the Inbox / workspace home.
+            Clicking it deselects any chat/request/invite and opens the tools
+            area. Carries a subtle active state while the Inbox is showing. (No
+            workspace switcher — actions live in the user menu below.) */}
+        <button
+          onClick={() => setSelection({ kind: 'inbox' })}
+          title="Workspace home"
+          aria-current={inboxActive ? 'page' : undefined}
+          className={`h-[var(--header-height)] w-full flex items-center gap-2.5 px-4 border-b border-white/[0.05] text-left transition-colors ${
+            inboxActive ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'
+          }`}
+        >
           <CompanyLogo size={sidebarAvatar} version={logoVersion} />
           <div className="min-w-0 flex-1">
             <div
@@ -513,7 +552,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               {workspace.name}
             </div>
           </div>
-        </div>
+        </button>
 
         {/* Quick search + create */}
         <div className="px-3 pt-3 pb-2 flex items-center gap-1.5">
@@ -753,7 +792,10 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         )}
       </aside>
 
-      {/* Main */}
+      {/* Main — holds the right-side content region. NOT a card: it has no outer
+          border or radius, so the chat / inbox / route / request / invite views
+          read as open content on the app background (the sidebar keeps the card
+          treatment). Each view supplies its own header + internal dividers. */}
       <main className="flex-1 flex flex-col min-w-0">
         {selectedGroup ? (
           <ChatView
@@ -769,26 +811,26 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             canInviteMembers={canInviteMembers}
             onGroupUpdated={patchGroup}
           />
-        ) : selectedRequest ? (
-          <ConnectionRequestView
-            key={selectedRequest.id}
-            connection={selectedRequest}
-            onAccepted={handleAccepted}
-            onDeclined={handleDeclined}
-          />
-        ) : selectedInvite ? (
-          <GroupInviteView
-            key={selectedInvite.id}
-            invite={selectedInvite}
-            onAccepted={handleInviteAccepted}
-            onDeclined={handleInviteDeclined}
-          />
         ) : (
-          <EmptyState
-            firstName={firstName(user.displayName)}
-            workspaceName={workspace.name}
-            onCreate={() => startCreate('vehicle')}
-          />
+          <div className="flex-1 flex flex-col min-w-0 bg-bg">
+            {selectedRequest ? (
+              <ConnectionRequestView
+                key={selectedRequest.id}
+                connection={selectedRequest}
+                onAccepted={handleAccepted}
+                onDeclined={handleDeclined}
+              />
+            ) : selectedInvite ? (
+              <GroupInviteView
+                key={selectedInvite.id}
+                invite={selectedInvite}
+                onAccepted={handleInviteAccepted}
+                onDeclined={handleInviteDeclined}
+              />
+            ) : (
+              <InboxView workspaceName={workspace.name} />
+            )}
+          </div>
         )}
       </main>
 
@@ -800,41 +842,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         <NewMessageModal onClose={() => setModal(null)} onOpenGroup={handleCreated} />
       )}
     </div>
-  )
-}
-
-function EmptyState({
-  firstName,
-  workspaceName,
-  onCreate,
-}: {
-  firstName: string
-  workspaceName: string
-  onCreate: () => void
-}) {
-  return (
-    <>
-      <header className="h-[var(--header-height)] flex items-center px-5 border-b border-white/[0.06] bg-rail shrink-0">
-        <span className="eyebrow">Inbox</span>
-      </header>
-      <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
-        <div className="h-12 w-12 rounded-card border border-white/[0.08] bg-white/[0.015] flex items-center justify-center mb-5">
-          <AppMark size={30} />
-        </div>
-        <h2 className="text-[18px] font-semibold tracking-[-0.2px] mb-2">Welcome, {firstName}.</h2>
-        <p className="text-muted text-[13px] max-w-[420px] mb-6 leading-[1.55]">
-          This is your dispatcher workspace for {workspaceName}. Create a group for a vehicle on
-          the road, or start a direct message with a teammate.
-        </p>
-        <button
-          onClick={onCreate}
-          className="flex items-center gap-1.5 bg-text text-bg font-semibold text-[12.5px] rounded-btn px-3.5 py-2 hover:bg-text/90 transition-colors"
-        >
-          <Plus size={13} strokeWidth={2} />
-          Create your first group
-        </button>
-      </div>
-    </>
   )
 }
 
@@ -1019,8 +1026,4 @@ function optimisticDirectGroup(id: string, other: ConnectionUser): Group {
     unreadCount: 0,
     directPeer: { id: other.id, name: other.displayName, workspace: other.workspace.name },
   }
-}
-
-function firstName(name: string): string {
-  return name.trim().split(/\s+/)[0] ?? ''
 }

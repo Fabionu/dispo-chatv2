@@ -31,6 +31,17 @@ import { runPreviewForAttachment } from './preview.js'
 // Production safety: PREVIEW_QUEUE_DRIVER=redis NEVER silently falls back to
 // memory in production — if Redis is unavailable, initPreviewQueue throws and
 // aborts startup. In dev it warns and uses memory so local work isn't blocked.
+//
+// PRODUCTION TODO (separate the workers from the API): today the redis workers
+// run IN the API process (startRedis() is called from initPreviewQueue at API
+// startup). Preview work is CPU/memory heavy (Sharp decode → downscale → WebP
+// encode, plus PDF rasterization), so under load it competes with live request
+// handling on the same event loop / CPU. The durable redis driver is already
+// designed for this split — jobs carry only { attachmentId } and the worker
+// re-fetches bytes from storage — so the next step is to run the workers as a
+// SEPARATE process (a dedicated worker entrypoint that calls startRedis() but
+// mounts no HTTP server, scaled independently) and have the API only ENQUEUE
+// (never start workers). The memory driver stays in-process for local dev.
 
 const MAX_CONCURRENT = 2
 const MAX_ATTEMPTS = 2

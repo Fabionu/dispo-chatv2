@@ -4,7 +4,8 @@ import type { Group, GroupMember, GroupPendingInvitee, Role } from '../lib/types
 import { groupLabel, tractorPlate, trailerPlate } from '../lib/types'
 import { api, ApiError } from '../lib/api'
 import { avatarUrl, clearAvatarCache } from '../lib/avatarCache'
-import { statusMeta } from '../lib/availability'
+import { statusMeta, OFFLINE } from '../lib/availability'
+import { usePresence } from '../hooks/usePresence'
 import Avatar from './Avatar'
 import GroupAvatar from './GroupAvatar'
 import AvatarPhotoEditor from './AvatarPhotoEditor'
@@ -83,6 +84,14 @@ export default function GroupInfoPanel({
   const canManageRoles = me?.role === 'admin' || me?.userRole === 'admin'
   // How many group admins exist — used to block demoting the last one.
   const adminCount = members.filter((m) => m.role === 'admin').length
+
+  // Live online/offline presence — the SAME global socket source the sidebar DM
+  // dots use, so both reflect the same state at the same time. A member's
+  // availability colour shows only while they're online; offline members get the
+  // dim grey dot. This updates live while the panel is open (no refresh), and
+  // re-subscribes cleanly when the panel closes or the group changes (the hook
+  // unsubscribes on unmount; GroupInfoPanel mounts per open/per group).
+  const { online } = usePresence()
 
   // Compact vehicle line under the member count: "Tractor … · Trailer …",
   // dropping whichever plate isn't set (empty when neither exists).
@@ -232,11 +241,13 @@ export default function GroupInfoPanel({
         role="dialog"
         aria-label="Group info"
         // Narrow screens: a fixed right-edge drawer (overlay) up to full width.
-        // xl+ : a static, in-flow right column (`shrink-0`, clamped width) that
-        // sits beside the chat pane so the conversation reflows instead of being
-        // covered. Same rail background/border as the workspace sidebar.
+        // xl+ : a static, in-flow right column that sits beside the chat as its
+        // own subtle CARD — same rail bg + border + radius as the sidebar/chat
+        // cards, with a gap from the chat (the row's xl:gap-3) — so the chat
+        // reflows narrower and the panel matches the app's card shell.
         className="fixed top-0 right-0 bottom-0 z-40 w-full max-w-[400px] shadow-[-16px_0_48px_rgba(0,0,0,0.4)] bg-rail border-l border-white/[0.08] flex flex-col
-                   xl:static xl:z-auto xl:w-[clamp(360px,26vw,420px)] xl:max-w-none xl:shrink-0 xl:shadow-none"
+                   xl:static xl:z-auto xl:w-[clamp(360px,26vw,420px)] xl:max-w-none xl:shrink-0 xl:shadow-none
+                   xl:border xl:border-white/[0.08] xl:rounded-[11px] xl:overflow-hidden"
       >
         {/* Header — same height as the chat header so the two line up. */}
         <div className="h-[var(--header-height)] flex items-center justify-between px-4 border-b border-white/[0.06] shrink-0">
@@ -341,6 +352,7 @@ export default function GroupInfoPanel({
                   <MemberRow
                     key={m.id}
                     member={m}
+                    online={online.has(m.id)}
                     isSelf={m.id === currentUserId}
                     canManageRoles={canManageRoles}
                     isLastAdmin={m.role === 'admin' && adminCount <= 1}
@@ -412,6 +424,7 @@ type MemberAction = {
 
 function MemberRow({
   member,
+  online,
   isSelf,
   canManageRoles,
   isLastAdmin,
@@ -422,6 +435,9 @@ function MemberRow({
   onMessage,
 }: {
   member: GroupMember
+  // Live presence for this member (from the parent's usePresence). Drives the
+  // dot colour so it updates without a refetch.
+  online: boolean
   isSelf: boolean
   canManageRoles: boolean
   isLastAdmin: boolean
@@ -451,9 +467,11 @@ function MemberRow({
   }, [menuOpen])
 
   const isAdmin = member.role === 'admin'
-  // No availability dot for drivers (they have no meaningful status).
-  const showDot = member.userRole !== 'driver' && member.availabilityStatus
-  const dot = member.availabilityStatus ? statusMeta(member.availabilityStatus) : null
+  // Presence dot (drivers have no meaningful status, so no dot). Live: the
+  // member's availability colour shows only while online; offline → dim grey.
+  // Mirrors the sidebar DM dots so both reflect the same state simultaneously.
+  const showDot = member.userRole !== 'driver'
+  const dot = online ? statusMeta(member.availabilityStatus ?? 'available') : OFFLINE
   // Secondary line: the member's WORKSPACE role (distinct from the group role
   // badge on the right), so the two are never confused.
   const roleLabel = member.userRole ? ROLE_LABEL[member.userRole] : null

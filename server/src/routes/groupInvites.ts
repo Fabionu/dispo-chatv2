@@ -94,8 +94,16 @@ groupInvitesRouter.post(
         // Already accepted — make sure membership exists, then no-op succeed.
         // No system row here: re-accepting must not duplicate "X joined".
         await client.query(
-          `insert into group_members (group_id, user_id, role)
-           values ($1, $2, 'member') on conflict do nothing`,
+          // Seed unread_count to the group's existing visible backlog (migration
+          // 0020): a joiner with no last_read_at would otherwise show 0 unread
+          // instead of the history the old subquery counted. No mentions yet (a
+          // non-member can't have been mentioned), so unread_mention_count = 0.
+          `insert into group_members (group_id, user_id, role, unread_count)
+           select $1, $2, 'member',
+                  (select count(*) from messages msg
+                    where msg.group_id = $1 and msg.author_id <> $2
+                      and msg.deleted_at is null and msg.kind = 'user')
+           on conflict do nothing`,
           [row.group_id, userId],
         )
         return { groupId: row.group_id, invitedBy: row.invited_by_user_id, systemId: null }
@@ -107,8 +115,14 @@ groupInvitesRouter.post(
         [inviteId],
       )
       await client.query(
-        `insert into group_members (group_id, user_id, role)
-         values ($1, $2, 'member') on conflict do nothing`,
+        // Seed unread_count to the group's existing visible backlog (migration
+        // 0020) — see the matching insert in the re-accept branch above.
+        `insert into group_members (group_id, user_id, role, unread_count)
+         select $1, $2, 'member',
+                (select count(*) from messages msg
+                  where msg.group_id = $1 and msg.author_id <> $2
+                    and msg.deleted_at is null and msg.kind = 'user')
+         on conflict do nothing`,
         [row.group_id, userId],
       )
       // Activity timeline: the invited user joined. Actor = the joiner, so the

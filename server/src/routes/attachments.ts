@@ -23,6 +23,16 @@ attachmentsRouter.use(requireAuth)
 // check stays server-side and the bucket is never exposed, but a 25MB original
 // flows chunk-by-chunk rather than being buffered. The proxy URL is stable per
 // (id, variant), so the response stays immutably cacheable in the browser.
+//
+// PRODUCTION TODO (CDN / direct serving): every byte currently transits the API
+// process. That's the right default — it keeps the membership gate server-side
+// and the bucket private — and we keep it for now. As preview traffic grows,
+// offload the HOT, low-sensitivity path (chat-bubble PREVIEWS, ?variant=preview)
+// to a CDN or to short-lived Supabase signed URLs handed to the client, so the
+// API stops proxying thumbnails on every render. The full ORIGINAL download
+// path must STAY behind this membership/security check (either keep proxying it,
+// or only ever hand out per-request short-TTL signed URLs after the same auth
+// check — never make originals publicly addressable).
 attachmentsRouter.get(
   '/:id',
   asyncHandler(async (req, res) => {

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowDown, Info, Upload } from 'lucide-react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowDown, Info, MapPin, Upload } from 'lucide-react'
 import type { Attachment, Group, GroupMember, IncomingMessage, ReplyToPreview } from '../lib/types'
 import { groupLabel } from '../lib/types'
 import { fileError } from './attachments/attachmentUtils'
@@ -28,6 +28,10 @@ import { devlog } from '../lib/devlog'
 import { useMessageCache } from '../hooks/useMessageCache'
 import { preloadImage } from '../lib/attachmentCache'
 
+// Lazy-loaded so MapLibre GL (large) stays out of the main bundle — only fetched
+// when a user actually opens the vehicle location map.
+const VehicleLocationModal = lazy(() => import('./map/VehicleLocationModal'))
+
 // Stable empty list so a group with no cached thread doesn't hand a fresh
 // array to useChatScroll on every render.
 const NO_MESSAGES: LocalMessage[] = []
@@ -40,6 +44,13 @@ type AttachmentContext = { attachment: Attachment; message: LocalMessage }
 // eagerly in-bubble and warmed in the browser cache when the thread opens.
 // Older messages stay lazy so a huge backlog doesn't fetch everything at once.
 const RECENT_IMAGE_WINDOW = 15
+
+// Height (px) of the soft fadeout at the very BOTTOM EDGE of the chat window. It
+// overlays the bottom of the message list (painted ABOVE the bubbles) so the
+// content fades out at the end of the window instead of cutting off — while
+// sitting BELOW the floating composer + chips (z-10/z-20) so the input stays
+// sharp. Fades to the app background (#000).
+const CHAT_BOTTOM_FADE_HEIGHT = 56
 
 // Typing indicator cadence. We re-announce "still typing" at most once per
 // THROTTLE while keys are flowing, send a stop after STOP_IDLE of silence, and
@@ -132,6 +143,8 @@ export default function ChatView({
   const [inviteOpen, setInviteOpen] = useState(false)
   // Whether the group-info drawer is open (vehicle groups only).
   const [groupInfoOpen, setGroupInfoOpen] = useState(false)
+  // Whether the vehicle location map is open (vehicle groups only).
+  const [locationOpen, setLocationOpen] = useState(false)
   // Cache-buster for the group image, bumped after an upload/remove so the
   // header avatar and the panel both refetch immediately.
   const [groupAvatarVersion, setGroupAvatarVersion] = useState(0)
@@ -160,6 +173,24 @@ export default function ChatView({
   // switches: reopening renders read-state instantly with no recolor flash.
   const members = cache.membersFor(group.id)
 
+  // Read-receipt readers shared by all of MY sent rows: every member except me,
+  // each with their lastReadAt marker. Derived once here (not per row) so the
+  // reference stays stable across renders unless the roster actually changes —
+  // which lets memoized incoming rows skip re-rendering when a peer's read
+  // marker advances, while my own rows still update their checkmarks live.
+  const readers = useMemo(
+    () =>
+      members
+        .filter((m) => m.id !== currentUserId)
+        .map((m) => ({
+          id: m.id,
+          displayName: m.displayName,
+          hasAvatar: m.hasAvatar,
+          lastReadAt: m.lastReadAt,
+        })),
+    [members, currentUserId],
+  )
+
   const composerHandleRef = useRef<ChatComposerHandle>(null)
   const highlightTimer = useRef<number | undefined>(undefined)
   const noticeTimer = useRef<number | undefined>(undefined)
@@ -181,6 +212,31 @@ export default function ChatView({
     anchorBeforePrepend,
     pinToBottomNext,
   } = useChatScroll(messages, loading)
+
+  // Floating composer: it OVERLAYS the bottom of the message list (transparent,
+  // so bubbles scroll behind it). We measure its live height to (a) pad the
+  // bottom of the scroll area so the last message rests above it and (b) lift the
+  // scroll-down / notice chips above it. The same node still feeds useChatScroll's
+  // re-pin observer via `composerRef`.
+  const [composerHeight, setComposerHeight] = useState(0)
+  const composerRoRef = useRef<ResizeObserver | null>(null)
+  const attachComposer = useCallback(
+    (node: HTMLDivElement | null) => {
+      composerRef(node)
+      composerRoRef.current?.disconnect()
+      composerRoRef.current = null
+      if (!node) {
+        setComposerHeight(0)
+        return
+      }
+      setComposerHeight(node.offsetHeight)
+      const ro = new ResizeObserver(() => setComposerHeight(node.offsetHeight))
+      ro.observe(node)
+      composerRoRef.current = ro
+    },
+    [composerRef],
+  )
+  useEffect(() => () => composerRoRef.current?.disconnect(), [])
 
   useEffect(
     () => () => {
@@ -918,7 +974,9 @@ export default function ChatView({
     // Root is a horizontal row: [chat pane | group info panel]. The chat pane
     // takes the remaining width and reflows when the panel opens beside it on
     // desktop; the left workspace sidebar lives one level up in Workspace.tsx.
-    <div className="relative flex-1 flex min-h-0">
+    // xl:gap-3 spaces the in-flow group-info side card from the chat (no effect
+    // when it's closed or a narrow-screen overlay — both leave one in-flow child).
+    <div className="relative flex-1 flex min-h-0 xl:gap-3">
       {/* Chat pane — the whole conversation column (header, pinned bar,
           messages, composer). `flex-1 min-w-0` lets it shrink naturally to the
           remaining width when the Group info column is open, and keeps the
@@ -942,8 +1000,12 @@ export default function ChatView({
         </div>
       )}
 
-      {/* Header */}
-      <header className="h-[var(--header-height)] flex items-center justify-between px-5 border-b border-white/[0.06] bg-rail shrink-0">
+      {/* Chat surface — header + pinned bar + message list. No outer card border. */}
+      <div className="flex-1 flex flex-col min-h-0 bg-bg">
+      {/* Header — rounded at the project radius (rounded-[11px]) with the same
+          subtle border as the sidebar (white/[0.08]); bg-rail. Fully rounded, so
+          there's no top-rounded / bottom-square mismatch. */}
+      <header className="h-[var(--header-height)] flex items-center justify-between px-5 border border-white/[0.08] rounded-[11px] bg-rail shrink-0">
         <div className="min-w-0 flex items-center gap-2.5">
           {group.type === 'direct' ? (
             <Avatar
@@ -964,14 +1026,26 @@ export default function ChatView({
           </div>
         </div>
         {group.type === 'vehicle' && (
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-0.5 shrink-0">
+            {/* Borderless toolbar-style icons: larger glyphs in transparent ~36px
+                hit areas (no frame/box). Hover lifts the colour with a very soft
+                circular wash; focus-visible shows a subtle on-theme ring. Smaller
+                than the header height, so the header doesn't grow. */}
+            <button
+              onClick={() => setLocationOpen(true)}
+              aria-label="Vehicle location"
+              title="Vehicle location"
+              className="h-9 w-9 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+            >
+              <MapPin size={20} strokeWidth={1.8} />
+            </button>
             <button
               onClick={() => setGroupInfoOpen(true)}
               aria-label="Group info"
               title="Group info"
-              className="h-8 w-8 flex items-center justify-center rounded-chip border border-white/[0.08] text-muted hover:text-text hover:border-white/[0.16] transition-colors"
+              className="h-9 w-9 -mr-1 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
             >
-              <Info size={15} strokeWidth={1.8} />
+              <Info size={20} strokeWidth={1.8} />
             </button>
           </div>
         )}
@@ -995,7 +1069,13 @@ export default function ChatView({
             <div
               ref={scrollRef}
               onScroll={onScroll}
-              className="flex-1 overflow-y-auto pt-4 pb-1 [scrollbar-gutter:stable]"
+              // Bottom padding == the floating composer's height (+ a small gap),
+              // so the last message scrolls fully clear above the overlaid input
+              // while older messages scroll BEHIND its transparent body. No fade
+              // is applied to the list itself — the only fade is at the window's
+              // bottom edge, below the composer (see the chat surface).
+              className="flex-1 overflow-y-auto pt-4 [scrollbar-gutter:stable]"
+              style={{ paddingBottom: composerHeight + 8 }}
             >
               {loading ? (
                 // Centre the loader in the FULL chat pane (the scroller has a
@@ -1010,6 +1090,21 @@ export default function ChatView({
                     <p className="text-[12.5px] text-faint">No messages yet. Say something.</p>
                   </div>
                 ) : (
+                  // PERF / TODO (message-list virtualization): every loaded
+                  // message currently mounts a real DOM row. That's fine for the
+                  // paginated window we keep today, but once a thread can hold a
+                  // few hundred+ loaded rows the unrendered ones still cost
+                  // layout/paint. When that day comes, virtualize THIS list with
+                  // react-virtuoso or @tanstack/react-virtual. Keep the current
+                  // scroll behavior intact: useChatScroll's bottom-pinning,
+                  // anchorBeforePrepend (load-older jump preservation), the
+                  // data-message-id jump-to-original lookup, and per-row
+                  // imagePriority all need equivalents (Virtuoso's
+                  // followOutput/firstItemIndex map cleanly onto these). It's
+                  // intentionally NOT done now — the rows are memoized (see
+                  // MessageRow) which removes the immediate re-render pressure,
+                  // and virtualization here is a behavioral risk best taken on
+                  // its own.
                   <div className="flex flex-col gap-0.5">
                     {nextCursor && (
                       <div className="flex justify-center pb-3">
@@ -1044,7 +1139,9 @@ export default function ChatView({
                           message={m}
                           mine={m.authorId === currentUserId}
                           currentUserId={currentUserId}
-                          members={members}
+                          // Receipts only for my own rows; incoming rows get
+                          // undefined so they don't re-render on read updates.
+                          readers={m.authorId === currentUserId ? readers : undefined}
                           prev={messages[i - 1]}
                           groupType={group.type}
                           highlighted={highlightedMessageId === m.id}
@@ -1073,58 +1170,82 @@ export default function ChatView({
                 </div>
               )}
             </div>
+            {/* Bottom-edge fadeout — overlays the bottom of the message list so
+                the content dissolves softly at the end of the window. z-0 paints
+                it ABOVE the bubbles (so they actually fade) but BELOW the chips
+                (z-10) and the composer (z-20), so the input stays fully sharp and
+                the scroll-down chip stays visible. pointer-events-none → never
+                blocks clicks/scroll (action menus are portaled/fixed, above this
+                regardless). The right inset keeps the scrollbar visible. */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute left-0 right-[var(--chat-scrollbar-gutter)] bottom-0 z-0"
+              style={{
+                height: CHAT_BOTTOM_FADE_HEIGHT,
+                backgroundImage: 'linear-gradient(to top, #000 0%, transparent 100%)',
+              }}
+            />
             {showScrollDown && (
               <button
                 onClick={scrollToBottom}
                 aria-label="Scroll to latest messages"
-                className="absolute bottom-3 left-1/2 -translate-x-1/2 h-9 w-9 rounded-full bg-surface border border-white/[0.10] text-text hover:bg-surface-2 hover:border-white/[0.20] flex items-center justify-center transition-colors shadow-[0_4px_14px_rgba(0,0,0,0.55)]"
+                style={{ bottom: composerHeight + 8 }}
+                className="absolute left-1/2 -translate-x-1/2 z-10 h-9 w-9 rounded-full bg-surface border border-white/[0.10] text-text hover:bg-surface-2 hover:border-white/[0.20] flex items-center justify-center transition-colors shadow-[0_4px_14px_rgba(0,0,0,0.55)]"
               >
                 <ArrowDown size={16} strokeWidth={1.8} />
               </button>
             )}
             {notice && (
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-chip bg-surface border border-white/[0.10] text-[11.5px] text-muted px-3 py-1.5 shadow-[0_4px_14px_rgba(0,0,0,0.55)]">
+              <div
+                style={{ bottom: composerHeight + 8 }}
+                className="absolute left-1/2 -translate-x-1/2 z-10 rounded-chip bg-surface border border-white/[0.10] text-[11.5px] text-muted px-3 py-1.5 shadow-[0_4px_14px_rgba(0,0,0,0.55)]"
+              >
                 {notice}
               </div>
             )}
-          </div>
 
-          {/* Composer — a normal solid footer (in flex flow, below the message
-              list, never overlapping it). No top border — the minimal input bar
-              carries its own edge. The right pad matches the scroller's reserved
-              scrollbar gutter so the composer's centred column lines up exactly
-              with the messages. */}
-          <div
-            ref={composerRef}
-            data-composer
-            className="shrink-0 pb-3 pt-1.5 pr-[var(--chat-scrollbar-gutter)] bg-bg"
-          >
-            <div className="chat-column">
-              {typingUsers.length > 0 && (
-                <div className="mb-1 px-1">
-                  <TypingIndicator users={typingUsers} />
-                </div>
-              )}
-              {error && <div className="text-[11.5px] text-alert mb-1.5">{error}</div>}
-              <ChatComposer
-                ref={composerHandleRef}
-                placeholder={`Message ${groupLabel(group)}`}
-                text={text}
-                onTextChange={setText}
-                members={members}
-                onFilePicked={setPendingFile}
-                replyContext={replyContext}
-                onCancelReply={() => setReplyContext(null)}
-                editContext={editContext}
-                onCancelEdit={cancelEdit}
-                onSend={send}
-                onFileError={setError}
-                onClearError={() => setError(null)}
-              />
+            {/* Floating composer — OVERLAYS the bottom of the message list, so
+                bubbles scroll behind its transparent body. The outer overlay is
+                pointer-events-none (scroll/clicks pass through to the messages);
+                only the inner lane is interactive. No background, border, or
+                footer chrome — just the input controls. .chat-column keeps it on
+                the message bubble lane (capped + centred) and it recenters/shrinks
+                with the chat when the group-info column opens. Reply/typing/error
+                rows sit directly above the input, sharing the same lane. */}
+            <div
+              ref={attachComposer}
+              data-composer
+              className="absolute inset-x-0 bottom-0 z-20 pointer-events-none pt-2 pb-3 pr-[var(--chat-scrollbar-gutter)]"
+            >
+              <div className="chat-column pointer-events-auto">
+                {typingUsers.length > 0 && (
+                  <div className="mb-1 px-1">
+                    <TypingIndicator users={typingUsers} />
+                  </div>
+                )}
+                {error && <div className="text-[11.5px] text-alert mb-1.5">{error}</div>}
+                <ChatComposer
+                  ref={composerHandleRef}
+                  placeholder={`Message ${groupLabel(group)}`}
+                  text={text}
+                  onTextChange={setText}
+                  members={members}
+                  onFilePicked={setPendingFile}
+                  replyContext={replyContext}
+                  onCancelReply={() => setReplyContext(null)}
+                  editContext={editContext}
+                  onCancelEdit={cancelEdit}
+                  onSend={send}
+                  onFileError={setError}
+                  onClearError={() => setError(null)}
+                />
+              </div>
             </div>
           </div>
         </>
       )}
+      </div>
+      {/* end chat card */}
       </div>
       {/* end chat pane */}
 
@@ -1194,6 +1315,18 @@ export default function ChatView({
           existingMemberIds={members.map((m) => m.id)}
           onClose={() => setInviteOpen(false)}
         />
+      )}
+
+      {group.type === 'vehicle' && locationOpen && (
+        // Lazy chunk (MapLibre) — fetched only on open; null fallback keeps the
+        // open instant (the modal renders its own themed loading state).
+        <Suspense fallback={null}>
+          <VehicleLocationModal
+            groupId={group.id}
+            groupName={groupLabel(group)}
+            onClose={() => setLocationOpen(false)}
+          />
+        </Suspense>
       )}
 
       {pendingDelete && (

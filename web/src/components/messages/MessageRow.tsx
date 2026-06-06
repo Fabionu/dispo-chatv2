@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState, type ReactNode } from 'react'
+import { Fragment, memo, useRef, useState, type ReactNode } from 'react'
 import {
   ChevronDown,
   Copy,
@@ -11,12 +11,12 @@ import {
   Reply,
   Trash2,
 } from 'lucide-react'
-import type { Attachment, GroupMember, GroupType, Mention } from '../../lib/types'
+import type { Attachment, GroupType, Mention } from '../../lib/types'
 import { splitBodyByMentions } from '../../lib/mentions'
 import AttachmentBlock from '../attachments/AttachmentBlock'
 import { downloadAttachment } from '../attachments/attachmentUtils'
 import MessageActionsMenu, { type MessageAction } from './MessageActionsMenu'
-import ReadReceipts from './ReadReceipts'
+import ReadReceipts, { type Reader } from './ReadReceipts'
 import ReplyQuote from './ReplyQuote'
 import { DELETE_WINDOW_MS, formatDay, formatTime } from './messageUtils'
 import Avatar from '../Avatar'
@@ -56,9 +56,13 @@ type Props = {
   mine: boolean
   // The viewing user — used to highlight mentions of *me* more strongly.
   currentUserId: string
-  // Conversation members — the source for my-message read receipts (each
-  // member's lastReadAt vs this message's createdAt).
-  members: GroupMember[]
+  // Read-receipt readers for MY sent messages — every member except me, each
+  // carrying their lastReadAt marker (compared against this message's createdAt
+  // inside ReadReceipts). Supplied — and changing — ONLY for my own messages;
+  // left undefined for incoming ones so they don't re-render when the roster's
+  // read state advances. Derived once per render in ChatView and shared by all
+  // of my rows, so its reference is stable unless the roster actually changes.
+  readers?: Reader[]
   prev?: LocalMessage
   groupType: GroupType
   highlighted: boolean
@@ -83,11 +87,11 @@ type Props = {
   onJumpToMessage: (messageId: string) => void
 }
 
-export default function MessageRow({
+function MessageRow({
   message,
   mine,
   currentUserId,
-  members,
+  readers,
   prev,
   groupType,
   highlighted,
@@ -154,21 +158,6 @@ export default function MessageRow({
   // incoming bubbles sit flush to the left.
   const showAuthorChrome = !mine && groupType === 'vehicle'
 
-  // Read-receipt readers: everyone in the conversation except me (the author).
-  // Drives the sent-message checkmarks — fully read when ALL of them have seen
-  // it (a single peer in a DM, all members in a group). Only computed for my
-  // own messages; empty otherwise.
-  const readers = mine
-    ? members
-        .filter((m) => m.id !== currentUserId)
-        .map((m) => ({
-          id: m.id,
-          displayName: m.displayName,
-          hasAvatar: m.hasAvatar,
-          lastReadAt: m.lastReadAt,
-        }))
-    : []
-
   // The actions menu is opened two ways: from the chevron (anchored under it)
   // or by right-clicking the bubble (anchored at the cursor). One state covers
   // both — 'chevron' or a {x,y} cursor point, else null (closed).
@@ -190,19 +179,19 @@ export default function MessageRow({
   const bubblePad = hasAttachment ? 'p-1' : 'px-3 pt-1.5 pb-1'
   const bubbleBase = `${bubblePad} text-[length:var(--chat-msg-font-size)] leading-[1.45] flex flex-col text-[#F4F1EC] transition-[box-shadow,border-color] duration-500`
   const deletedSkin = mine
-    ? 'bg-white/[0.02] border border-white/[0.04] text-muted italic rounded-[8px] rounded-br-[3px]'
-    : 'bg-white/[0.02] border border-white/[0.04] text-muted italic rounded-[8px] rounded-bl-[3px]'
+    ? 'bg-white/[0.02] text-muted italic rounded-[8px] rounded-br-[3px]'
+    : 'bg-white/[0.02] text-muted italic rounded-[8px] rounded-bl-[3px]'
   // Minimal flat skins: darker neutral greys — incoming a touch darker than my
-  // own so the two read apart without any colour tint. A faint matching border,
-  // no shadow. The bubble itself never changes on hover; only the actions
-  // affordance reveals.
+  // own so the two read apart without any colour tint. Borderless, no shadow.
+  // The bubble itself never changes on hover; only the actions affordance
+  // reveals. (Failed sends keep an alert border as their error cue.)
   const bubbleSkin = deleted
     ? deletedSkin
     : mine
       ? failed
         ? 'bg-[#1C1C1F] border border-alert/50 rounded-[8px] rounded-br-[3px]'
-        : 'bg-[#1C1C1F] border border-[#2A2A2E] rounded-[8px] rounded-br-[3px]'
-      : 'bg-[#141416] border border-[#1F1F22] rounded-[8px] rounded-bl-[3px]'
+        : 'bg-[#1C1C1F] rounded-[8px] rounded-br-[3px]'
+      : 'bg-[#141416] rounded-[8px] rounded-bl-[3px]'
   // Subtle, theme-warm pulse applied when this row is the target of a
   // jump-to-original. Clears after ~1.8s back in ChatView.
   const highlightSkin = highlighted ? 'ring-2 ring-active/60' : ''
@@ -399,7 +388,7 @@ export default function MessageRow({
                         for failed sends (the "Failed" marker stands in). */}
                     {mine && !failed && (
                       <ReadReceipts
-                        others={readers}
+                        others={readers ?? []}
                         createdAt={message.createdAt}
                         pending={pending}
                       />
@@ -456,3 +445,27 @@ export default function MessageRow({
     </>
   )
 }
+
+// Careful memo comparison. We compare only the DATA props that affect this
+// row's output: the message + its predecessor (for the author-run / day-divider
+// logic), who's viewing, the readers list (my-message receipts), and the
+// presentational flags. The callback props are intentionally NOT compared —
+// they're effectively stable for a given message (each one acts on the `message`
+// passed at call time), so re-rendering just because ChatView handed down a new
+// closure identity is pure waste. The big win: incoming rows get `readers ===
+// undefined` on both sides and so DON'T re-render when the roster's read state
+// advances — only my own sent rows update their checkmarks live.
+function propsEqual(a: Props, b: Props): boolean {
+  return (
+    a.message === b.message &&
+    a.prev === b.prev &&
+    a.mine === b.mine &&
+    a.currentUserId === b.currentUserId &&
+    a.readers === b.readers &&
+    a.groupType === b.groupType &&
+    a.highlighted === b.highlighted &&
+    a.imagePriority === b.imagePriority
+  )
+}
+
+export default memo(MessageRow, propsEqual)

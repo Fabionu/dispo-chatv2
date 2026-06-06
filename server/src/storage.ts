@@ -1,4 +1,5 @@
 import { extname } from 'node:path'
+import type { Readable } from 'node:stream'
 import { createClient } from '@supabase/supabase-js'
 import { env } from './env.js'
 
@@ -52,6 +53,31 @@ export async function saveBuffer(
   })
   if (error) throw error
   return { storagePath: key, byteSize: buffer.byteLength }
+}
+
+// Stream bytes to storage WITHOUT buffering the whole object in the process
+// heap. Used by the message-attachment upload path: multer streams the incoming
+// request to a temp file on disk, then we stream that file straight to the
+// bucket. The storage-js SDK accepts a Node Readable and switches fetch into
+// half-duplex streaming automatically, so peak memory stays at a few stream
+// chunks rather than the full (up to 25MB) file. Returns the object key; the
+// caller already knows the byte size (from multer's on-disk size) so we don't
+// re-derive it here. `upsert: true` keeps retries idempotent, matching saveBuffer.
+export async function saveStream(
+  id: string,
+  originalName: string,
+  body: Readable,
+  contentType?: string,
+): Promise<string> {
+  const key = `${id}${safeExt(originalName)}`
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(key, body as NodeJS.ReadableStream, {
+      contentType: contentType || 'application/octet-stream',
+      upsert: true,
+    })
+  if (error) throw error
+  return key
 }
 
 // Store a generated WebP preview under a key derived from the attachment id.
