@@ -4,6 +4,8 @@ import {
   ChevronDown,
   CircleUser,
   LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Search,
   Settings,
@@ -41,6 +43,7 @@ import InboxView from '../components/inbox/InboxView'
 import { useIdle } from '../hooks/useIdle'
 import { usePresence } from '../hooks/usePresence'
 import { useDensity, SIDEBAR_AVATAR_SIZE } from '../lib/density'
+import { getStoredSidebarCollapsed, setStoredSidebarCollapsed } from '../lib/sidebar'
 import { preloadAvatar } from '../lib/avatarCache'
 import { statusMeta, AWAY, OFFLINE } from '../lib/availability'
 import { useAuth } from '../auth/AuthContext'
@@ -90,6 +93,10 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   const { online: onlineIds, resync: resyncPresence } = usePresence()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [newMenuOpen, setNewMenuOpen] = useState(false)
+  // Collapsed left rail — frees the main area for the map / wide chats. Persisted
+  // so the choice survives reloads; collapsing/expanding never reloads the app or
+  // touches the current selection.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(getStoredSidebarCollapsed)
   const [modal, setModal] = useState<NewGroupKind | null>(null)
   // "My profile" and "Workspace settings" both open as sidebar drawers that
   // replace the conversation list (the chat stays visible on the right).
@@ -343,6 +350,22 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     setModal(kind)
   }
 
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((c) => {
+      const next = !c
+      setStoredSidebarCollapsed(next)
+      return next
+    })
+  }, [])
+
+  // Collapsing/expanding the rail reflows the main pane. MapLibre v5 tracks size
+  // via a ResizeObserver that can lag this change, so tell any mounted map to
+  // resize once the new layout has committed — the map fills the new width with
+  // no reload. Runs after the DOM update (the rail width is already applied).
+  useEffect(() => {
+    window.dispatchEvent(new Event('dispo:layout-resize'))
+  }, [sidebarCollapsed])
+
   // Drop the given group into local state immediately, select it, and
   // reconcile against the server in the background. This is what makes new
   // chats appear instantly even on slow connections — the rail and main
@@ -504,9 +527,52 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // contained without wasting space.
   return (
     <div className="h-screen w-full flex gap-3 p-2 2xl:p-3 bg-bg text-text overflow-hidden">
-      {/* Left rail — wrapped as a subtle card. overflow-hidden so the rounded
+      {/* Collapsed left rail — a slim icon strip so the main area (map / wide
+          chats) gets the freed width. Keeps the essentials reachable: expand,
+          workspace home, and the account menu (clicking it expands first). All
+          list state (search, groups, DMs, requests, panels) is preserved and
+          returns intact on expand. */}
+      {sidebarCollapsed ? (
+        <aside className="w-14 shrink-0 bg-rail border border-white/[0.08] rounded-[11px] overflow-hidden flex flex-col items-center py-3 gap-1.5">
+          <button
+            onClick={toggleSidebar}
+            title="Expand sidebar"
+            aria-label="Expand sidebar"
+            className="h-9 w-9 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+          >
+            <PanelLeftOpen size={18} strokeWidth={1.8} />
+          </button>
+          <button
+            onClick={() => setSelection({ kind: 'inbox' })}
+            title={`${workspace.name} — home`}
+            aria-label="Workspace home"
+            aria-current={inboxActive ? 'page' : undefined}
+            // Same split as the expanded header: subtle persistent selected state,
+            // separate transient hover.
+            className={`flex items-center justify-center rounded-full p-1 transition-colors hover:bg-white/[0.05] ${
+              inboxActive ? 'bg-white/[0.025]' : ''
+            }`}
+          >
+            <CompanyLogo size={sidebarAvatar} version={logoVersion} />
+          </button>
+          <div className="flex-1" />
+          <button
+            onClick={() => {
+              setStoredSidebarCollapsed(false)
+              setSidebarCollapsed(false)
+              setUserMenuOpen(true)
+            }}
+            title={user.displayName}
+            aria-label="Open account menu"
+            className="rounded-full p-0.5 hover:bg-white/[0.04] transition-colors"
+          >
+            <Avatar userId={user.id} name={user.displayName} size={sidebarAvatar} version={avatarVersion} />
+          </button>
+        </aside>
+      ) : (
+      /* Left rail — wrapped as a subtle card. overflow-hidden so the rounded
           corners clip the header/list cleanly; full border replaces the old
-          right divider. */}
+          right divider. */
       <aside className="w-[var(--sidebar-width)] shrink-0 bg-rail border border-white/[0.08] rounded-[11px] overflow-hidden flex flex-col">
         {profilePanelOpen ? (
           <ProfileSidebarPanel
@@ -533,26 +599,42 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           <>
         {/* Workspace identity = the entry point to the Inbox / workspace home.
             Clicking it deselects any chat/request/invite and opens the tools
-            area. Carries a subtle active state while the Inbox is showing. (No
-            workspace switcher — actions live in the user menu below.) */}
-        <button
-          onClick={() => setSelection({ kind: 'inbox' })}
-          title="Workspace home"
-          aria-current={inboxActive ? 'page' : undefined}
-          className={`h-[var(--header-height)] w-full flex items-center gap-2.5 px-4 border-b border-white/[0.05] text-left transition-colors ${
-            inboxActive ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'
-          }`}
-        >
-          <CompanyLogo size={sidebarAvatar} version={logoVersion} />
-          <div className="min-w-0 flex-1">
-            <div
-              className="font-semibold tracking-[-0.2px] truncate"
-              style={{ fontSize: 'var(--sidebar-title-font-size)' }}
-            >
-              {workspace.name}
+            area. The whole row (identity + collapse control) is ONE hover
+            surface, and there's no persistent "selected" tint — the header keeps
+            the sidebar colour at rest. The collapse control sits to its right.
+            (No workspace switcher — actions live in the user menu below.) */}
+        <div className="h-[var(--header-height)] flex items-stretch border-b border-white/[0.05] transition-colors hover:bg-white/[0.04]">
+          <button
+            onClick={() => setSelection({ kind: 'inbox' })}
+            title="Workspace home"
+            aria-current={inboxActive ? 'page' : undefined}
+            // Transparent: the unified row hover (parent) provides the highlight,
+            // and there's no persistent active background.
+            className="flex-1 min-w-0 flex items-center gap-2.5 px-4 text-left"
+          >
+            <CompanyLogo size={sidebarAvatar} version={logoVersion} />
+            <div className="min-w-0 flex-1">
+              <div
+                className="font-semibold tracking-[-0.2px] truncate"
+                style={{ fontSize: 'var(--sidebar-title-font-size)' }}
+              >
+                {workspace.name}
+              </div>
             </div>
-          </div>
-        </button>
+          </button>
+          {/* Integrated icon action (same treatment as the chat header's map /
+              Group info buttons): borderless ~36px hit area, no own background so
+              the unified header hover reads across it too; the icon colour lifts
+              for affordance, with an on-theme focus ring. */}
+          <button
+            onClick={toggleSidebar}
+            title="Collapse sidebar"
+            aria-label="Collapse sidebar"
+            className="self-center mr-1.5 h-9 w-9 flex items-center justify-center rounded-full text-muted hover:text-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 shrink-0"
+          >
+            <PanelLeftClose size={18} strokeWidth={1.8} />
+          </button>
+        </div>
 
         {/* Quick search + create */}
         <div className="px-3 pt-3 pb-2 flex items-center gap-1.5">
@@ -791,6 +873,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           </>
         )}
       </aside>
+      )}
 
       {/* Main — holds the right-side content region. NOT a card: it has no outer
           border or radius, so the chat / inbox / route / request / invite views

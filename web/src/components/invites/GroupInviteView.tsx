@@ -46,7 +46,7 @@ export default function GroupInviteView({ invite, onAccepted, onDeclined }: Prop
   return (
     <>
       {/* Header — mirrors ChatView / ConnectionRequestView */}
-      <header className="h-[var(--header-height)] flex items-center justify-between px-5 border-b border-white/[0.06] bg-rail shrink-0">
+      <header className="h-[var(--header-height)] flex items-center justify-between px-5 rounded-[11px] border border-white/[0.08] bg-rail shrink-0 overflow-hidden">
         <div className="min-w-0">
           <div className="text-[13.5px] font-semibold truncate">{title}</div>
           <div className="text-[11px] text-muted truncate">Vehicle group invitation</div>

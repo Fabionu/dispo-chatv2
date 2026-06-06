@@ -10,6 +10,11 @@ interface ImportMetaEnv {
   readonly VITE_AWS_LOCATION_MAP_STYLE?: string
   // Legacy v1 Maps: a Map resource name you created (takes precedence if set).
   readonly VITE_AWS_LOCATION_MAP_NAME?: string
+  // Legacy v1 HERE truck map resource created with VectorHereExploreTruck.
+  readonly VITE_AWS_LOCATION_MAP_TRUCK_NAME?: string
+  readonly VITE_AWS_LOCATION_TRUCK_MAP_NAME?: string
+  readonly VITE_AWS_LOCATION_TRUCK_MAP_STYLE?: string
+  readonly VITE_AWS_LOCATION_TRUCK_API_KEY?: string
 }
 
 interface ImportMeta {

@@ -1002,10 +1002,10 @@ export default function ChatView({
 
       {/* Chat surface — header + pinned bar + message list. No outer card border. */}
       <div className="flex-1 flex flex-col min-h-0 bg-bg">
-      {/* Header — rounded at the project radius (rounded-[11px]) with the same
-          subtle border as the sidebar (white/[0.08]); bg-rail. Fully rounded, so
-          there's no top-rounded / bottom-square mismatch. */}
-      <header className="h-[var(--header-height)] flex items-center justify-between px-5 border border-white/[0.08] rounded-[11px] bg-rail shrink-0">
+      {/* Header — a standalone rounded rail panel. It uses the exact sidebar
+          border treatment so it stays rounded on every corner instead of
+          reading as a square strip clipped into the chat surface. */}
+      <header className="h-[var(--header-height)] flex items-center justify-between px-5 rounded-[11px] border border-white/[0.08] bg-rail shrink-0 overflow-hidden">
         <div className="min-w-0 flex items-center gap-2.5">
           {group.type === 'direct' ? (
             <Avatar

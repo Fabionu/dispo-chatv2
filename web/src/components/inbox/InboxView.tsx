@@ -19,15 +19,12 @@ export default function InboxView({ workspaceName }: Props) {
 
   return (
     <>
-      <header className="h-[var(--header-height)] flex items-center px-5 border border-white/[0.08] rounded-[11px] bg-rail shrink-0">
-        <span className="eyebrow">Inbox</span>
+      <header className="h-[var(--header-height)] flex flex-col justify-center px-5 rounded-[11px] border border-white/[0.08] bg-rail shrink-0 overflow-hidden">
+        <div className="text-[15px] font-semibold tracking-[-0.2px] leading-tight">Workspace</div>
+        <div className="text-[12px] text-muted leading-tight mt-0.5">Operational tools for {workspaceName}.</div>
       </header>
       <div className="flex-1 overflow-y-auto px-5 py-5">
         <div className="max-w-[920px] mx-auto flex flex-col gap-4">
-          <div>
-            <h2 className="text-[15px] font-semibold tracking-[-0.2px]">Workspace tools</h2>
-            <p className="text-[12px] text-muted mt-0.5">Operational tools for {workspaceName}.</p>
-          </div>
           {/* Auto-fill grid leaves room for future tools to flow in alongside. */}
           <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
             <ToolCard
