@@ -62,6 +62,18 @@ function createPointMarker(pt: RoutePoint): maplibregl.Marker {
   return new maplibregl.Marker({ element: el })
 }
 
+// A high-contrast draggable dot for the route line (hover + drag). The white ring
+// plus a dark outer halo keep it clearly visible on BOTH the light and dark
+// basemaps, and the grab cursor signals it can be pulled.
+function createDragHandleEl(): HTMLElement {
+  const el = document.createElement('div')
+  el.style.cssText =
+    'box-sizing:border-box;width:18px;height:18px;border-radius:9999px;' +
+    `background:${ROUTE_COLOR};border:3px solid #fff;` +
+    'box-shadow:0 0 0 1.5px rgba(0,0,0,0.6),0 1px 4px rgba(0,0,0,0.5);cursor:grab;'
+  return el
+}
+
 // Force a flat (Mercator) projection. Amazon Location's newer built-in styles
 // can ship a globe projection; this app is a practical dispatch/route planner,
 // so we always pin the normal flat road map (no globe / 3D).
@@ -133,6 +145,8 @@ export default function MapView({
   const onRouteDragRef = useRef(onRouteDrag)
   onRouteDragRef.current = onRouteDrag
   const draggingRef = useRef(false)
+  // Shared dot shown when hovering the route and while dragging it.
+  const dragHandleRef = useRef<maplibregl.Marker | null>(null)
   // Read the initial colour scheme without making the init effect depend on it
   // (scheme changes are handled by setStyle below, not a full re-init). Also acts
   // as the "currently applied" scheme so a re-render doesn't re-trigger setStyle.
@@ -179,15 +193,26 @@ export default function MapView({
     })
 
     // ── Drag the route line to insert a via-waypoint ───────────────────────
-    // Grab the drawn 'route' line and release elsewhere; the dropped point is
-    // reported to the caller, which inserts a stop and re-routes (truck-aware).
-    // Layer-scoped handlers are safe to register before the layer exists — they
-    // only fire once the 'route' layer is added by drawRoute().
-    map.on('mouseenter', 'route', () => {
-      if (onRouteDragRef.current && !draggingRef.current) map.getCanvas().style.cursor = 'grab'
+    // Hovering the route shows a grabbable dot that tracks the cursor along the
+    // line; pressing and releasing reports the dropped point so the caller can
+    // insert a stop and re-route (truck-aware). The dot (not a teardrop) stays
+    // visible on both light and dark basemaps. Layer-scoped handlers are safe to
+    // register before the 'route' layer exists — they fire once drawRoute adds it.
+    const ensureHandle = () => {
+      if (!dragHandleRef.current) {
+        dragHandleRef.current = new maplibregl.Marker({ element: createDragHandleEl() })
+      }
+      return dragHandleRef.current
+    }
+    map.on('mousemove', 'route', (e) => {
+      if (!onRouteDragRef.current || draggingRef.current) return
+      ensureHandle().setLngLat(e.lngLat).addTo(map)
+      map.getCanvas().style.cursor = 'grab'
     })
     map.on('mouseleave', 'route', () => {
-      if (!draggingRef.current) map.getCanvas().style.cursor = ''
+      if (draggingRef.current) return
+      dragHandleRef.current?.remove()
+      map.getCanvas().style.cursor = ''
     })
     map.on('mousedown', 'route', (e) => {
       const cb = onRouteDragRef.current
@@ -195,13 +220,13 @@ export default function MapView({
       e.preventDefault() // suppress the map's drag-pan while dragging the route
       draggingRef.current = true
       map.getCanvas().style.cursor = 'grabbing'
-      const ghost = new maplibregl.Marker({ color: ROUTE_COLOR }).setLngLat(e.lngLat).addTo(map)
-      const onMove = (ev: maplibregl.MapMouseEvent) => ghost.setLngLat(ev.lngLat)
+      const handle = ensureHandle().setLngLat(e.lngLat).addTo(map)
+      const onMove = (ev: maplibregl.MapMouseEvent) => handle.setLngLat(ev.lngLat)
       map.on('mousemove', onMove)
       map.once('mouseup', (ev: maplibregl.MapMouseEvent) => {
         map.off('mousemove', onMove)
-        ghost.remove()
         draggingRef.current = false
+        handle.remove()
         map.getCanvas().style.cursor = ''
         cb([ev.lngLat.lng, ev.lngLat.lat])
       })
@@ -224,6 +249,8 @@ export default function MapView({
     return () => {
       ro.disconnect()
       window.removeEventListener('dispo:layout-resize', onLayoutResize)
+      dragHandleRef.current?.remove()
+      dragHandleRef.current = null
       map.remove()
       if (truckStyleTimeoutRef.current !== null) window.clearTimeout(truckStyleTimeoutRef.current)
       mapRef.current = null

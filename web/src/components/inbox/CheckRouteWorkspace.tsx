@@ -16,6 +16,12 @@ import {
   type TruckRouteOptions,
 } from '../../lib/geo'
 import PlaceAutocompleteField from './PlaceAutocompleteField'
+import {
+  deleteTruckProfile,
+  getTruckProfiles,
+  saveTruckProfile,
+  type TruckProfile,
+} from '../../lib/truckProfiles'
 
 // MapLibre is heavy, so the map is pulled in lazily when this workspace opens.
 const MapView = lazy(() => import('../map/MapView'))
@@ -111,6 +117,9 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
   // Advanced truck-restriction options, collapsed by default.
   const [truckOpen, setTruckOpen] = useState(false)
   const [truck, setTruck] = useState<TruckOptions>(EMPTY_TRUCK)
+  // Saved truck presets (localStorage). Applying one fills the fields (and the
+  // auto-recalc re-routes truck-aware).
+  const [truckProfiles, setTruckProfiles] = useState<TruckProfile[]>(() => getTruckProfiles())
 
   const canCheck = from.text.trim().length > 0 && to.text.trim().length > 0 && geoConfigured && !busy
 
@@ -125,6 +134,15 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
   }
   function setTruckField<K extends keyof TruckOptions>(key: K, value: TruckOptions[K]) {
     setTruck((t) => ({ ...t, [key]: value }))
+  }
+  function applyTruckProfile(p: TruckProfile) {
+    setTruck({ ...p.values })
+  }
+  function saveCurrentTruckProfile(name: string) {
+    setTruckProfiles(saveTruckProfile(name, truck))
+  }
+  function removeTruckProfile(id: string) {
+    setTruckProfiles(deleteTruckProfile(id))
   }
 
   // Selected places (with coords + role), in order, for role-specific markers +
@@ -401,6 +419,10 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
             onToggle={() => setTruckOpen((v) => !v)}
             truck={truck}
             onChange={setTruckField}
+            profiles={truckProfiles}
+            onApplyProfile={applyTruckProfile}
+            onSaveProfile={saveCurrentTruckProfile}
+            onDeleteProfile={removeTruckProfile}
           />
 
           <button
@@ -517,12 +539,21 @@ function TruckRestrictions({
   onToggle,
   truck,
   onChange,
+  profiles,
+  onApplyProfile,
+  onSaveProfile,
+  onDeleteProfile,
 }: {
   open: boolean
   onToggle: () => void
   truck: TruckOptions
   onChange: <K extends keyof TruckOptions>(key: K, value: TruckOptions[K]) => void
+  profiles: TruckProfile[]
+  onApplyProfile: (p: TruckProfile) => void
+  onSaveProfile: (name: string) => void
+  onDeleteProfile: (id: string) => void
 }) {
+  const [presetName, setPresetName] = useState('')
   return (
     <div className="rounded-card border border-white/[0.06] bg-white/[0.015]">
       <button
@@ -542,6 +573,35 @@ function TruckRestrictions({
 
       {open && (
         <div className="px-2.5 pb-2.5 pt-0.5 flex flex-col gap-2">
+          {/* Saved presets — click to apply, × to delete. */}
+          {profiles.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {profiles.map((p) => (
+                <span
+                  key={p.id}
+                  className="flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-chip border border-white/[0.10] bg-white/[0.03] text-[11px]"
+                >
+                  <button
+                    type="button"
+                    onClick={() => onApplyProfile(p)}
+                    className="text-muted hover:text-text transition-colors"
+                    title={`Apply preset “${p.name}”`}
+                  >
+                    {p.name}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDeleteProfile(p.id)}
+                    aria-label={`Delete preset ${p.name}`}
+                    className="text-faint hover:text-alert transition-colors leading-none px-0.5"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-2">
             <NumberField
               label="Height"
@@ -584,6 +644,33 @@ function TruckRestrictions({
             />
             <span className="text-[12px] text-muted">Hazardous goods</span>
           </label>
+
+          {/* Save the current values as a reusable preset. */}
+          <div className="flex items-center gap-1.5 pt-0.5">
+            <input
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && presetName.trim()) {
+                  onSaveProfile(presetName.trim())
+                  setPresetName('')
+                }
+              }}
+              placeholder="Preset name (e.g. 40t semi)"
+              className="flex-1 min-w-0 bg-white/[0.02] border border-white/[0.06] focus:border-white/[0.16] rounded-chip px-2.5 h-8 text-[12px] outline-none placeholder:text-faint transition-colors"
+            />
+            <button
+              type="button"
+              disabled={!presetName.trim()}
+              onClick={() => {
+                onSaveProfile(presetName.trim())
+                setPresetName('')
+              }}
+              className="shrink-0 text-[11.5px] font-medium rounded-btn px-2.5 h-8 border border-white/[0.10] text-muted enabled:hover:text-text enabled:hover:border-white/[0.16] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Save preset
+            </button>
+          </div>
         </div>
       )}
     </div>
