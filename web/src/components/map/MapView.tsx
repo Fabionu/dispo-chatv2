@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { MapPinned, TriangleAlert, Truck } from 'lucide-react'
+import { MapPinned, TriangleAlert } from 'lucide-react'
 import { mapConfigured, mapStyleUrl, type MapColorScheme } from '../../lib/mapConfig'
 import Spinner from '../Spinner'
 
@@ -100,12 +100,21 @@ function drawRoute(map: maplibregl.Map, coords: [number, number][]) {
       existing.setData(geojson)
     } else {
       map.addSource('route', { type: 'geojson', data: geojson })
+      // Casing first (drawn under): a dark outline so the tan route stays clearly
+      // visible on LIGHT/Satellite basemaps too, not just dark.
+      map.addLayer({
+        id: 'route-casing',
+        type: 'line',
+        source: 'route',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': 'rgba(0,0,0,0.55)', 'line-width': 8 },
+      })
       map.addLayer({
         id: 'route',
         type: 'line',
         source: 'route',
         layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: { 'line-color': ROUTE_COLOR, 'line-width': 4, 'line-opacity': 0.9 },
+        paint: { 'line-color': ROUTE_COLOR, 'line-width': 4.5 },
       })
     }
     const bounds = coords.reduce(
@@ -115,6 +124,7 @@ function drawRoute(map: maplibregl.Map, coords: [number, number][]) {
     map.fitBounds(bounds, { padding: 48, duration: 600 })
   } else if (existing) {
     if (map.getLayer('route')) map.removeLayer('route')
+    if (map.getLayer('route-casing')) map.removeLayer('route-casing')
     map.removeSource('route')
   }
 }
@@ -151,16 +161,7 @@ export default function MapView({
   // (scheme changes are handled by setStyle below, not a full re-init). Also acts
   // as the "currently applied" scheme so a re-render doesn't re-trigger setStyle.
   const initialSchemeRef = useRef(colorScheme)
-  // Live mode, so the (once-registered) error handler knows whether a failure
-  // happened in Truck mode (→ "not available") vs the base map (→ generic error).
-  const modeRef = useRef(colorScheme)
-  modeRef.current = colorScheme
-  const pendingTruckStyleRef = useRef(false)
-  const truckStyleTimeoutRef = useRef<number | null>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
-  // True when Truck mode is selected but the HERE truck style isn't configured or
-  // fails to load — drives a themed message over the (untouched) base map.
-  const [truckUnavailable, setTruckUnavailable] = useState(false)
 
   // Initialise the map exactly once. Colour-scheme changes are applied via
   // setStyle (below) rather than recreating the GL instance.
@@ -178,17 +179,20 @@ export default function MapView({
     })
     mapRef.current = map
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
-    map.on('load', () => {
+    const onReady = () => {
       forceFlatProjection(map)
       setStatus('ready')
       drawRoute(map, routeRef.current)
-    })
+    }
+    map.on('load', onReady)
+    // Fallback: the one-shot 'load' event can fail to fire in throttled/offscreen
+    // tabs (no paint frame), which would leave the spinner up and the route
+    // undrawn. The style is usable as soon as its data arrives, so also become
+    // ready on the first 'styledata'. Idempotent with 'load'.
+    map.once('styledata', onReady)
     map.on('error', () => {
-      // MapLibre can emit non-fatal errors for individual tiles/glyphs/sprites.
-      // The HERE truck style may still be loaded and visible, so don't mark
-      // Truck as unavailable from a generic map error. The Truck-specific
-      // timeout in the style-switch effect below handles true style-load failure.
-      if (modeRef.current === 'Truck') return
+      // Only treat a failure as fatal if the map hasn't loaded at all; ignore
+      // non-fatal per-tile/glyph/sprite errors once it's up.
       if (!map.loaded()) setStatus('error')
     })
 
@@ -204,22 +208,21 @@ export default function MapView({
       }
       return dragHandleRef.current
     }
+    // Cursor is handled in CSS (a high-contrast custom cursor that's visible on
+    // light/satellite basemaps too); here we only show/move the grab dot.
     map.on('mousemove', 'route', (e) => {
       if (!onRouteDragRef.current || draggingRef.current) return
       ensureHandle().setLngLat(e.lngLat).addTo(map)
-      map.getCanvas().style.cursor = 'grab'
     })
     map.on('mouseleave', 'route', () => {
       if (draggingRef.current) return
       dragHandleRef.current?.remove()
-      map.getCanvas().style.cursor = ''
     })
     map.on('mousedown', 'route', (e) => {
       const cb = onRouteDragRef.current
       if (!cb) return
       e.preventDefault() // suppress the map's drag-pan while dragging the route
       draggingRef.current = true
-      map.getCanvas().style.cursor = 'grabbing'
       const handle = ensureHandle().setLngLat(e.lngLat).addTo(map)
       const onMove = (ev: maplibregl.MapMouseEvent) => handle.setLngLat(ev.lngLat)
       map.on('mousemove', onMove)
@@ -227,7 +230,6 @@ export default function MapView({
         map.off('mousemove', onMove)
         draggingRef.current = false
         handle.remove()
-        map.getCanvas().style.cursor = ''
         cb([ev.lngLat.lng, ev.lngLat.lat])
       })
     })
@@ -252,7 +254,6 @@ export default function MapView({
       dragHandleRef.current?.remove()
       dragHandleRef.current = null
       map.remove()
-      if (truckStyleTimeoutRef.current !== null) window.clearTimeout(truckStyleTimeoutRef.current)
       mapRef.current = null
       markerRef.current = null
       pointMarkersRef.current = []
@@ -268,35 +269,12 @@ export default function MapView({
     const map = mapRef.current
     if (!map || colorScheme === initialSchemeRef.current) return
     const url = mapStyleUrl(colorScheme)
-    // Truck mode with no configured HERE truck style: keep the current basemap
-    // and show the themed "not available" message instead of a broken style.
-    if (colorScheme === 'Truck' && !url) {
-      setTruckUnavailable(true)
-      initialSchemeRef.current = colorScheme
-      return
-    }
     if (!url) return
-    // Leaving Truck (or a configured Truck load): clear any prior message.
-    setTruckUnavailable(false)
-    pendingTruckStyleRef.current = colorScheme === 'Truck'
-    if (truckStyleTimeoutRef.current !== null) window.clearTimeout(truckStyleTimeoutRef.current)
-    if (colorScheme === 'Truck') {
-      truckStyleTimeoutRef.current = window.setTimeout(() => {
-        if (pendingTruckStyleRef.current) setTruckUnavailable(true)
-      }, 8000)
-    }
     map.setStyle(url)
-    const onStyleReady = () => {
-      pendingTruckStyleRef.current = false
-      if (truckStyleTimeoutRef.current !== null) {
-        window.clearTimeout(truckStyleTimeoutRef.current)
-        truckStyleTimeoutRef.current = null
-      }
-      setTruckUnavailable(false)
+    map.once('styledata', () => {
       forceFlatProjection(map)
       drawRoute(map, routeRef.current)
-    }
-    map.once('styledata', onStyleReady)
+    })
     // Track the applied scheme so an unrelated re-render doesn't re-trigger.
     initialSchemeRef.current = colorScheme
   }, [colorScheme])
@@ -392,18 +370,6 @@ export default function MapView({
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-rail text-center px-6">
           <TriangleAlert size={24} strokeWidth={1.6} className="text-alert" />
           <div className="text-[12.5px] text-muted">Could not load the map.</div>
-        </div>
-      )}
-      {/* Truck mode unavailable — a subtle themed notice over the base map (which
-          stays visible/interactive), not a full takeover. */}
-      {truckUnavailable && (
-        <div className="absolute inset-x-0 bottom-4 flex justify-center px-6 pointer-events-none">
-          <div className="flex items-center gap-2.5 rounded-card border border-white/[0.10] bg-rail/90 backdrop-blur px-3.5 py-2.5 max-w-[340px]">
-            <Truck size={16} strokeWidth={1.6} className="text-faint shrink-0" />
-            <div className="text-[12px] text-muted leading-snug">
-              Truck restrictions are not available for this map style.
-            </div>
-          </div>
         </div>
       )}
     </div>

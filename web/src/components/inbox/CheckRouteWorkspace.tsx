@@ -1,5 +1,14 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ChevronDown, Moon, Plus, Route as RouteIcon, Sun, Truck } from 'lucide-react'
+import {
+  ArrowLeft,
+  ChevronDown,
+  Moon,
+  Plus,
+  Route as RouteIcon,
+  Satellite,
+  Sun,
+  Truck,
+} from 'lucide-react'
 import Spinner from '../Spinner'
 import type { LatLng, RoutePoint } from '../map/MapView'
 import type { MapColorScheme } from '../../lib/mapConfig'
@@ -458,8 +467,8 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
             ))}
           {mapMode === 'Truck' && (
             <div className="text-[11px] text-faint">
-              Zoom in to see truck restriction segments.
-              {result?.mode !== 'Truck' && ' Enter truck size/weight to route for a truck.'}
+              Truck restrictions overlaid on the map — zoom in to see height/weight/bridge
+              and hazmat limits. Enter size/weight below for truck-safe routing.
             </div>
           )}
           {result && (
@@ -496,6 +505,12 @@ function MapModeToggle({
         onClick={() => onChange('Light')}
         label="Light map"
         icon={<Sun size={13} strokeWidth={1.8} />}
+      />
+      <ModeButton
+        active={mode === 'Satellite'}
+        onClick={() => onChange('Satellite')}
+        label="Satellite map"
+        icon={<Satellite size={13} strokeWidth={1.8} />}
       />
       <ModeButton
         active={mode === 'Truck'}
