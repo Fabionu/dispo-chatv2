@@ -1,10 +1,12 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, ChevronDown, Moon, Plus, Route as RouteIcon, Sun, Truck } from 'lucide-react'
 import Spinner from '../Spinner'
-import type { LatLng } from '../map/MapView'
+import type { LatLng, RoutePoint } from '../map/MapView'
 import type { MapColorScheme } from '../../lib/mapConfig'
 import {
   calculateRoute,
+  DEFAULT_BIAS,
+  formatCoords,
   formatDistance,
   formatDuration,
   geocode,
@@ -80,6 +82,17 @@ function hasTruckParams(t: TruckOptions): boolean {
   return Boolean(o.heightM || o.widthM || o.lengthM || o.grossWeightT || o.axleWeightT)
 }
 
+// Planar distance from point p to segment a–b (lng/lat treated as x/y — fine for
+// choosing which route segment a dragged via-point belongs to at city scale).
+function pointSegmentDistance(p: LngLat, a: LngLat, b: LngLat): number {
+  const dx = b[0] - a[0]
+  const dy = b[1] - a[1]
+  const len2 = dx * dx + dy * dy
+  let t = len2 === 0 ? 0 : ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2
+  t = Math.max(0, Math.min(1, t))
+  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy))
+}
+
 // Dedicated "Check route" workspace: a full-bleed map as the primary surface with
 // a floating, translucent route panel over its top-left (Google-Maps-like, in the
 // Dispo-chat dark theme). Fields use Amazon Location Places autocomplete; picking
@@ -114,12 +127,31 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
     setTruck((t) => ({ ...t, [key]: value }))
   }
 
-  // Selected places (with coords), in order, for markers + bounds. Reflects the
-  // map state immediately as each suggestion is picked — before any route.
-  const selectedPoints = useMemo<LatLng[]>(() => {
-    return [from, ...stops, to]
-      .filter((w) => w.place)
-      .map((w) => ({ lng: w.place!.position[0], lat: w.place!.position[1] }))
+  // Selected places (with coords + role), in order, for role-specific markers +
+  // bounds. Reflects the map state immediately as each suggestion is picked —
+  // before any route. Start = From, numbered stops in between, End = To.
+  const selectedPoints = useMemo<RoutePoint[]>(() => {
+    const pts: RoutePoint[] = []
+    if (from.place) {
+      pts.push({ lng: from.place.position[0], lat: from.place.position[1], kind: 'start' })
+    }
+    let n = 1
+    for (const s of stops) {
+      if (s.place) {
+        pts.push({ lng: s.place.position[0], lat: s.place.position[1], kind: 'stop', index: n++ })
+      }
+    }
+    if (to.place) {
+      pts.push({ lng: to.place.position[0], lat: to.place.position[1], kind: 'end' })
+    }
+    return pts
+  }, [from, stops, to])
+
+  // Bias for Places Suggest: the first selected waypoint, else a default. Lets
+  // company/POI search rank results near the route.
+  const bias = useMemo<LngLat>(() => {
+    const sel = [from, ...stops, to].find((w) => w.place)
+    return sel?.place?.position ?? DEFAULT_BIAS
   }, [from, stops, to])
 
   // Resolved waypoints for routing: requires both From and To selected; includes
@@ -230,6 +262,45 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
     }
   }
 
+  // Route line dragged: insert a via-waypoint at the dropped point, placed into
+  // the closest existing segment so ordering stays sensible. The auto-recalc
+  // effect then re-routes through it (truck-aware) — never a hand-drawn line.
+  function handleRouteDrag([lng, lat]: LngLat) {
+    if (!from.place || !to.place) return
+    // Ordered resolved waypoints, each tagged with its anchor in the stops array
+    // (-1 = From; otherwise the stops[] index of that resolved stop).
+    const ordered: Array<{ pos: LngLat; anchorStopIndex: number }> = [
+      { pos: from.place.position, anchorStopIndex: -1 },
+    ]
+    stops.forEach((s, i) => {
+      if (s.place) ordered.push({ pos: s.place.position, anchorStopIndex: i })
+    })
+    ordered.push({ pos: to.place.position, anchorStopIndex: stops.length })
+
+    let bestK = 0
+    let bestD = Infinity
+    for (let k = 0; k < ordered.length - 1; k++) {
+      const d = pointSegmentDistance([lng, lat], ordered[k].pos, ordered[k + 1].pos)
+      if (d < bestD) {
+        bestD = d
+        bestK = k
+      }
+    }
+    const anchor = ordered[bestK].anchorStopIndex
+    const insertAt = anchor === -1 ? 0 : anchor + 1
+    const label = formatCoords(lng, lat)
+    const place: ResolvedPlace = {
+      placeId: 'coordinates',
+      label,
+      position: [lng, lat],
+      postalCode: null,
+      country: null,
+      region: null,
+      locality: null,
+    }
+    setStops((s) => [...s.slice(0, insertAt), { text: label, place }, ...s.slice(insertAt)])
+  }
+
   return (
     <>
       {/* Header — back + title, with the subtle map light/dark control on the right. */}
@@ -268,6 +339,7 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
             colorScheme={mapMode}
             route={result?.geometry ?? null}
             points={selectedPoints}
+            onRouteDrag={result ? handleRouteDrag : undefined}
           />
         </Suspense>
 
@@ -285,7 +357,8 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
           <PlaceAutocompleteField
             label="From"
             value={from.text}
-            placeholder="Start address or city"
+            bias={bias}
+            placeholder="Address, city, or company"
             onTextChange={(text) => setFrom({ text, place: null })}
             onSelect={(place) => setFrom({ text: place.label, place })}
           />
@@ -295,7 +368,8 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
               key={i}
               label={`Stop ${i + 1}`}
               value={s.text}
-              placeholder="Intermediate stop"
+              bias={bias}
+              placeholder="Address, city, or company"
               onTextChange={(text) => setStopText(i, text)}
               onSelect={(place) => setStopPlace(i, place)}
               onRemove={() => removeStop(i)}
@@ -305,7 +379,8 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
           <PlaceAutocompleteField
             label="To"
             value={to.text}
-            placeholder="Destination address or city"
+            bias={bias}
+            placeholder="Address, city, or company"
             onTextChange={(text) => setTo({ text, place: null })}
             onSelect={(place) => setTo({ text: place.label, place })}
           />
@@ -359,10 +434,14 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
             ) : (
               <div className="text-[11px] text-faint">Car route</div>
             ))}
-          {mapMode === 'Truck' && result?.mode !== 'Truck' && (
+          {mapMode === 'Truck' && (
             <div className="text-[11px] text-faint">
-              Map shows truck restrictions. Enter truck size/weight to route for a truck.
+              Zoom in to see truck restriction segments.
+              {result?.mode !== 'Truck' && ' Enter truck size/weight to route for a truck.'}
             </div>
+          )}
+          {result && (
+            <div className="text-[11px] text-faint">Tip: drag the route line to add a stop.</div>
           )}
         </div>
       </div>

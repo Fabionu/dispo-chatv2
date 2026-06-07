@@ -61,6 +61,28 @@ export type PlaceSuggestion = {
   secondary: string
   // Full one-line label, used to fill the input on selection.
   label: string
+  // When present, selection resolves directly to these coords (no GetPlace) —
+  // used for raw coordinate entries typed into the search.
+  position?: LngLat
+}
+
+// Parse a free-text "lat, lng" / "lat lng" entry into [lng, lat], or null. Lets
+// dispatchers paste coordinates straight into the route fields.
+export function parseCoordinates(text: string): LngLat | null {
+  const m = text
+    .trim()
+    .match(/^(-?\d{1,2}(?:\.\d+)?)\s*[,;\s]\s*(-?\d{1,3}(?:\.\d+)?)$/)
+  if (!m) return null
+  const lat = Number.parseFloat(m[1])
+  const lng = Number.parseFloat(m[2])
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null
+  return [lng, lat]
+}
+
+// Compact "50.11090, 8.68210" label for a coordinate point.
+export function formatCoords(lng: number, lat: number): string {
+  return `${lat.toFixed(5)}, ${lng.toFixed(5)}`
 }
 
 // A selected place resolved to coordinates + structured address (via GetPlace).
@@ -103,6 +125,55 @@ export async function autocompletePlaces(
         .filter(Boolean)
         .join(' · ')
       return { placeId: it.PlaceId as string, primary, secondary, label }
+    })
+}
+
+// Default bias for Suggest when no waypoint is selected yet: central Europe. A
+// bias only RANKS nearby results first — it doesn't restrict — so distant places
+// are still found, just lower. (Suggest requires a bias; this provides one.)
+export const DEFAULT_BIAS: LngLat = [10.0, 51.0]
+
+// Place/POI suggestions (GeoPlaces v2 Suggest). Unlike Autocomplete this returns
+// businesses/companies and named POIs (depots, stations, airports) as well as
+// addresses — so dispatchers can search a company by name. Requires a bias
+// position; pass the nearest known waypoint or DEFAULT_BIAS. Resolves coords on
+// selection via getPlace (Suggest, like Autocomplete, omits the position).
+export async function suggestPlaces(
+  query: string,
+  bias: LngLat,
+  signal?: AbortSignal,
+): Promise<PlaceSuggestion[]> {
+  const res = await fetch(placesUrl('suggest'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      QueryText: query,
+      MaxResults: 6,
+      BiasPosition: bias,
+      AdditionalFeatures: ['Core'],
+    }),
+    signal,
+  })
+  if (!res.ok) throw new Error(`Suggest failed (${res.status})`)
+  const data = await res.json()
+  const items: any[] = Array.isArray(data?.ResultItems) ? data.ResultItems : []
+  return items
+    .filter((it) => it?.SuggestResultItemType === 'Place' && it.Place?.PlaceId)
+    .map((it) => {
+      const p = it.Place
+      const addr = p.Address ?? {}
+      const label: string = addr.Label ?? it.Title ?? ''
+      const primary = (it.Title || label.split(',')[0] || '').trim()
+      let secondary = label
+      if (primary && secondary.startsWith(primary)) {
+        secondary = secondary.slice(primary.length).replace(/^[\s,·]+/, '')
+      }
+      if (!secondary) {
+        secondary = [addr.PostalCode, addr.Region?.Name, addr.Country?.Name]
+          .filter(Boolean)
+          .join(' · ')
+      }
+      return { placeId: p.PlaceId as string, primary, secondary, label }
     })
 }
 

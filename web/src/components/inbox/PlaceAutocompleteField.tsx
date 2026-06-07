@@ -2,8 +2,11 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { MapPin, X } from 'lucide-react'
 import Spinner from '../Spinner'
 import {
-  autocompletePlaces,
+  formatCoords,
   getPlace,
+  parseCoordinates,
+  suggestPlaces,
+  type LngLat,
   type PlaceSuggestion,
   type ResolvedPlace,
 } from '../../lib/geo'
@@ -12,6 +15,9 @@ type Props = {
   label: string
   value: string
   placeholder?: string
+  // Bias for Suggest — the nearest known waypoint (or a default). Ranks nearby
+  // companies/addresses first.
+  bias: LngLat
   // Free-text edits (typing). Clears any previously-selected place upstream.
   onTextChange: (v: string) => void
   // A suggestion was picked and resolved to coordinates + structured address.
@@ -30,6 +36,7 @@ export default function PlaceAutocompleteField({
   label,
   value,
   placeholder,
+  bias,
   onTextChange,
   onSelect,
   onRemove,
@@ -44,6 +51,10 @@ export default function PlaceAutocompleteField({
   // Suppress the search that the programmatic input fill would otherwise trigger
   // right after a selection.
   const skipNextSearchRef = useRef(false)
+  // Latest bias, read at search time so changing it (after selecting another
+  // field) doesn't re-trigger this field's search.
+  const biasRef = useRef(bias)
+  biasRef.current = bias
   const listboxId = useId()
 
   // Debounced autocomplete. Aborts the in-flight request when the query changes
@@ -61,12 +72,25 @@ export default function PlaceAutocompleteField({
       setError(false)
       return
     }
+    // Raw coordinates → offer them directly (no API call, instant).
+    const coords = parseCoordinates(q)
+    if (coords) {
+      const label = formatCoords(coords[0], coords[1])
+      setSuggestions([
+        { placeId: 'coordinates', primary: 'Use coordinates', secondary: label, label, position: coords },
+      ])
+      setActiveIndex(0)
+      setOpen(true)
+      setLoading(false)
+      setError(false)
+      return
+    }
     setLoading(true)
     setError(false)
     const ctrl = new AbortController()
     const timer = setTimeout(async () => {
       try {
-        const res = await autocompletePlaces(q, ctrl.signal)
+        const res = await suggestPlaces(q, biasRef.current, ctrl.signal)
         setSuggestions(res)
         setActiveIndex(-1)
         setOpen(true)
@@ -103,6 +127,19 @@ export default function PlaceAutocompleteField({
     setOpen(false)
     setSuggestions([])
     setActiveIndex(-1)
+    // Coordinate entries already carry a position — resolve without GetPlace.
+    if (s.position) {
+      onSelect({
+        placeId: s.placeId,
+        label: s.label,
+        position: s.position,
+        postalCode: null,
+        country: null,
+        region: null,
+        locality: null,
+      })
+      return
+    }
     setResolving(true)
     try {
       const resolved = await getPlace(s.placeId)

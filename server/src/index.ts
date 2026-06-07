@@ -1,4 +1,5 @@
 import express from 'express'
+import compression from 'compression'
 import cookieParser from 'cookie-parser'
 import cors from 'cors'
 import { createServer } from 'node:http'
@@ -29,6 +30,11 @@ const app = express()
 // to honour them so rate-limit keys hash the real client IP, not the proxy.
 app.set('trust proxy', 1)
 
+// Gzip responses — without this the ~1MB MapLibre JS chunk ships uncompressed,
+// which is the main cause of slow first loads on Railway (it drops to ~275KB
+// gzipped). Cheap and covers API JSON + the static frontend bundle.
+app.use(compression())
+
 app.use(express.json({ limit: '1mb' }))
 app.use(cookieParser())
 
@@ -57,8 +63,22 @@ app.use('/api/users', usersRouter)
 if (isProd) {
   const webDist = resolve(__dirname, '../../web/dist')
   if (existsSync(webDist)) {
-    app.use(express.static(webDist))
+    // Vite emits content-hashed filenames under /assets, so they can be cached
+    // forever (a new build → new names). Everything else (index.html) must stay
+    // fresh so deploys are picked up immediately.
+    app.use(
+      express.static(webDist, {
+        setHeaders: (res, path) => {
+          if (path.includes(`${'/assets/'}`) || /\.[0-9a-f]{8,}\./i.test(path)) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+          } else {
+            res.setHeader('Cache-Control', 'no-cache')
+          }
+        },
+      }),
+    )
     app.get('*', (_req, res) => {
+      res.setHeader('Cache-Control', 'no-cache')
       res.sendFile(join(webDist, 'index.html'))
     })
   } else {

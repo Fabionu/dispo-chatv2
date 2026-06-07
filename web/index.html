@@ -7,6 +7,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <!-- Warm the Amazon Location endpoints early so the map's style/tiles and
+         Places/Routes calls don't pay TLS setup on first use. -->
+    <link rel="preconnect" href="https://maps.geo.eu-central-1.amazonaws.com" crossorigin />
+    <link rel="dns-prefetch" href="https://places.geo.eu-central-1.amazonaws.com" />
+    <link rel="dns-prefetch" href="https://routes.geo.eu-central-1.amazonaws.com" />
     <title>Dispo-chat</title>
   </head>
   <body>

@@ -7,6 +7,10 @@ import Spinner from '../Spinner'
 
 export type LatLng = { lat: number; lng: number }
 
+// A route waypoint with its role, so the map can draw a clear start dot,
+// numbered stop dots, and a prominent destination pin.
+export type RoutePoint = LatLng & { kind: 'start' | 'stop' | 'end'; index?: number }
+
 type Props = {
   // Where to center the map. Null → a neutral world view (e.g. no data yet).
   center: LatLng | null
@@ -16,15 +20,47 @@ type Props = {
   // Optional route geometry as [lng, lat] points. When set, it's drawn as a
   // line and the view fits to its bounds (overriding center/zoom).
   route?: [number, number][] | null
-  // Optional waypoint markers (e.g. From / stops / To) drawn along the route.
-  points?: LatLng[] | null
+  // Optional route waypoints (From / stops / To) drawn with role-specific
+  // markers: a start dot, numbered stop dots, and a destination pin.
+  points?: RoutePoint[] | null
   // Light/Dark basemap appearance. Switching swaps the style at runtime without
   // recreating the map. Defaults to Dark to match the app theme.
   colorScheme?: MapColorScheme
+  // When set, the route line becomes draggable: grabbing it and releasing
+  // reports the dropped [lng, lat] so the caller can insert a via-waypoint and
+  // re-route (Google-Maps-style). Only active while a route is drawn.
+  onRouteDrag?: (lngLat: [number, number]) => void
   className?: string
 }
 
 const ROUTE_COLOR = '#c89572'
+const START_COLOR = '#7d8a78' // green-ish "go"
+const END_COLOR = '#d97757' // orange-red destination
+
+// Role-specific waypoint markers: a green start dot, white numbered stop dots,
+// and a prominent teardrop pin for the destination — so it's immediately clear
+// where the route begins and ends. Dots anchor centre; the pin anchors at its
+// tip (MapLibre default for the built-in marker).
+function createPointMarker(pt: RoutePoint): maplibregl.Marker {
+  if (pt.kind === 'end') {
+    return new maplibregl.Marker({ color: END_COLOR })
+  }
+  const el = document.createElement('div')
+  const base =
+    'box-sizing:border-box;border-radius:9999px;box-shadow:0 1px 5px rgba(0,0,0,0.55);'
+  if (pt.kind === 'start') {
+    el.style.cssText = `${base}width:16px;height:16px;background:${START_COLOR};border:2.5px solid #fff;`
+    el.title = 'Start'
+  } else {
+    el.style.cssText =
+      `${base}width:19px;height:19px;background:#fff;border:2.5px solid ${ROUTE_COLOR};` +
+      'display:flex;align-items:center;justify-content:center;color:#7a4f33;' +
+      "font:700 10px/1 Inter,system-ui,sans-serif;"
+    el.textContent = String(pt.index ?? '')
+    el.title = `Stop ${pt.index ?? ''}`
+  }
+  return new maplibregl.Marker({ element: el })
+}
 
 // Force a flat (Mercator) projection. Amazon Location's newer built-in styles
 // can ship a globe projection; this app is a practical dispatch/route planner,
@@ -82,6 +118,7 @@ export default function MapView({
   route,
   points,
   colorScheme = 'Dark',
+  onRouteDrag,
   className,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -91,6 +128,11 @@ export default function MapView({
   // Latest route geometry, so the style-reload handler can re-draw it without a
   // stale closure.
   const routeRef = useRef<[number, number][]>([])
+  // Latest route-drag callback + an in-flight drag flag (so the cursor doesn't
+  // reset mid-drag). Refs because the handlers are registered once.
+  const onRouteDragRef = useRef(onRouteDrag)
+  onRouteDragRef.current = onRouteDrag
+  const draggingRef = useRef(false)
   // Read the initial colour scheme without making the init effect depend on it
   // (scheme changes are handled by setStyle below, not a full re-init). Also acts
   // as the "currently applied" scheme so a re-render doesn't re-trigger setStyle.
@@ -134,6 +176,35 @@ export default function MapView({
       // timeout in the style-switch effect below handles true style-load failure.
       if (modeRef.current === 'Truck') return
       if (!map.loaded()) setStatus('error')
+    })
+
+    // ── Drag the route line to insert a via-waypoint ───────────────────────
+    // Grab the drawn 'route' line and release elsewhere; the dropped point is
+    // reported to the caller, which inserts a stop and re-routes (truck-aware).
+    // Layer-scoped handlers are safe to register before the layer exists — they
+    // only fire once the 'route' layer is added by drawRoute().
+    map.on('mouseenter', 'route', () => {
+      if (onRouteDragRef.current && !draggingRef.current) map.getCanvas().style.cursor = 'grab'
+    })
+    map.on('mouseleave', 'route', () => {
+      if (!draggingRef.current) map.getCanvas().style.cursor = ''
+    })
+    map.on('mousedown', 'route', (e) => {
+      const cb = onRouteDragRef.current
+      if (!cb) return
+      e.preventDefault() // suppress the map's drag-pan while dragging the route
+      draggingRef.current = true
+      map.getCanvas().style.cursor = 'grabbing'
+      const ghost = new maplibregl.Marker({ color: ROUTE_COLOR }).setLngLat(e.lngLat).addTo(map)
+      const onMove = (ev: maplibregl.MapMouseEvent) => ghost.setLngLat(ev.lngLat)
+      map.on('mousemove', onMove)
+      map.once('mouseup', (ev: maplibregl.MapMouseEvent) => {
+        map.off('mousemove', onMove)
+        ghost.remove()
+        draggingRef.current = false
+        map.getCanvas().style.cursor = ''
+        cb([ev.lngLat.lng, ev.lngLat.lat])
+      })
     })
 
     // The map often mounts (lazily, inside a flex/Suspense container) before the
@@ -243,7 +314,7 @@ export default function MapView({
     pointMarkersRef.current = []
     const pts = points ?? []
     for (const p of pts) {
-      const m = new maplibregl.Marker({ color: ROUTE_COLOR }).setLngLat([p.lng, p.lat]).addTo(map)
+      const m = createPointMarker(p).setLngLat([p.lng, p.lat]).addTo(map)
       pointMarkersRef.current.push(m)
     }
     const hasRoute = (route?.length ?? 0) >= 2
