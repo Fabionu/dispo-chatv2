@@ -640,7 +640,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         <div className="px-3 pt-3 pb-2 flex items-center gap-1.5">
           <label
             htmlFor="rail-search"
-            className="flex-1 h-[var(--sidebar-search-height)] flex items-center gap-2 px-2.5 rounded-chip border border-white/[0.06] bg-white/[0.02] focus-within:border-white/[0.16] hover:border-white/[0.10] transition-colors cursor-text"
+            className="flex-1 h-[var(--sidebar-search-height)] flex items-center gap-2 px-3 rounded-[11px] border border-white/[0.06] bg-white/[0.02] focus-within:border-white/[0.16] hover:border-white/[0.10] transition-colors cursor-text"
           >
             <Search size={12} strokeWidth={1.6} className="text-faint shrink-0" />
             <input
@@ -671,13 +671,13 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               aria-label="Create a new conversation"
               aria-haspopup="menu"
               aria-expanded={newMenuOpen}
-              className={`h-[var(--sidebar-search-height)] w-[var(--sidebar-search-height)] flex items-center justify-center rounded-chip border transition-colors ${
+              className={`h-[var(--sidebar-search-height)] w-[var(--sidebar-search-height)] flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
                 newMenuOpen
-                  ? 'border-white/[0.16] bg-white/[0.05] text-text'
-                  : 'border-white/[0.06] bg-white/[0.02] text-muted hover:text-text hover:border-white/[0.10]'
+                  ? 'bg-white/[0.08] text-text'
+                  : 'text-muted hover:text-text hover:bg-white/[0.05]'
               }`}
             >
-              <Plus size={14} strokeWidth={1.8} />
+              <Plus size={18} strokeWidth={2.25} />
             </button>
 
             {newMenuOpen && (
