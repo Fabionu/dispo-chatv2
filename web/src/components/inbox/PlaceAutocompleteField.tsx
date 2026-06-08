@@ -5,7 +5,7 @@ import {
   formatCoords,
   getPlace,
   parseCoordinates,
-  suggestPlaces,
+  searchPlaces,
   type LngLat,
   type PlaceSuggestion,
   type ResolvedPlace,
@@ -33,9 +33,11 @@ type Props = {
 const MIN_CHARS = 3
 const DEBOUNCE_MS = 300
 
-// Amazon Location Places autocomplete field with a themed dropdown. Debounced,
-// keyboard-navigable, cancels superseded requests, and resolves the chosen
-// suggestion to coordinates (GetPlace) before reporting it upward.
+// Amazon Location Places search field with a themed dropdown. Backed by
+// SearchText so company/POI names (not just addresses) resolve to real
+// locations. Debounced, keyboard-navigable, cancels superseded requests; results
+// carry their coordinate inline, so a pick reports upward immediately (the
+// GetPlace fallback only runs for the rare result without a position).
 export default function PlaceAutocompleteField({
   label,
   value,
@@ -109,7 +111,7 @@ export default function PlaceAutocompleteField({
     const ctrl = new AbortController()
     const timer = setTimeout(async () => {
       try {
-        const res = await suggestPlaces(q, biasRef.current, ctrl.signal)
+        const res = await searchPlaces(q, biasRef.current, ctrl.signal)
         setSuggestions(res)
         setActiveIndex(-1)
         setOpen(true)

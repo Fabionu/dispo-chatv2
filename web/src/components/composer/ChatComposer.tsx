@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { ArrowUp } from 'lucide-react'
+import { ArrowUp, Bold, Italic } from 'lucide-react'
 import type { GroupMember, ReplyToPreview } from '../../lib/types'
 import { DOC_ACCEPT, IMAGE_ACCEPT, fileError } from '../attachments/attachmentUtils'
 import ComposerContextRow from '../messages/ComposerContextRow'
@@ -96,9 +96,15 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
   // Caret position to restore after a programmatic insert (mention selection),
   // applied once the controlled value has updated.
   const pendingCaretRef = useRef<number | null>(null)
+  // Selection range to restore after a programmatic edit (bold/italic wrap), so
+  // the just-formatted text stays highlighted and the format bar stays open.
+  const pendingSelectionRef = useRef<[number, number] | null>(null)
 
   const [mention, setMention] = useState<MentionState | null>(null)
   const [activeIndex, setActiveIndex] = useState(0)
+  // Whether a non-empty selection exists in the textarea — drives the floating
+  // bold/italic format bar above the input.
+  const [hasSelection, setHasSelection] = useState(false)
 
   useComposerAutosize(textareaRef, text)
 
@@ -119,14 +125,23 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
 
   const pickerOpen = mention !== null && matches.length > 0
 
-  // Restore the caret after a mention insert (the value is controlled, so we
-  // can only set selection once React has applied the new text).
+  // Restore the caret/selection after a programmatic edit — a mention insert
+  // (collapsed caret) or a bold/italic wrap (a range). The value is controlled,
+  // so selection can only be set once React has applied the new text.
   useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    const range = pendingSelectionRef.current
+    if (range) {
+      pendingSelectionRef.current = null
+      el.focus()
+      el.setSelectionRange(range[0], range[1])
+      setHasSelection(range[1] > range[0])
+      return
+    }
     const pos = pendingCaretRef.current
     if (pos == null) return
     pendingCaretRef.current = null
-    const el = textareaRef.current
-    if (!el) return
     el.focus()
     el.setSelectionRange(pos, pos)
   }, [text])
@@ -194,6 +209,8 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
     const caret = e.target.selectionStart ?? value.length
     setMention(members.length ? detectMention(value, caret) : null)
     setActiveIndex(0)
+    // Typing collapses any selection — hide the format bar.
+    setHasSelection((e.target.selectionEnd ?? 0) > (e.target.selectionStart ?? 0))
   }
 
   // Replace the `@query` span with `@Display Name ` and close the picker.
@@ -206,6 +223,30 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
     onTextChange(next)
     pendingCaretRef.current = mention.anchor + insert.length
     setMention(null)
+  }
+
+  // Track whether there's a non-empty selection so the format bar shows only
+  // while text is highlighted.
+  function syncSelection() {
+    const el = textareaRef.current
+    if (!el) return
+    setHasSelection((el.selectionEnd ?? 0) > (el.selectionStart ?? 0))
+  }
+
+  // Wrap the current selection in a formatting marker (* for bold, _ for italic)
+  // — the same syntax rendered in message bubbles. No-op without a selection.
+  // Re-selects the wrapped inner text so the bar stays open and the change reads
+  // clearly; toggling again would nest, which the renderer handles.
+  function applyFormat(marker: '*' | '_') {
+    const el = textareaRef.current
+    if (!el) return
+    const start = el.selectionStart ?? 0
+    const end = el.selectionEnd ?? 0
+    if (end <= start) return
+    const next = text.slice(0, start) + marker + text.slice(start, end) + marker + text.slice(end)
+    onTextChange(next)
+    // Keep the original text selected (now shifted right by one marker char).
+    pendingSelectionRef.current = [start + 1, end + 1]
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -229,6 +270,20 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
       if (e.key === 'Escape') {
         e.preventDefault()
         setMention(null)
+        return
+      }
+    }
+    // Ctrl/Cmd+B / +I wrap the selection in bold / italic markers.
+    if ((e.metaKey || e.ctrlKey) && !e.altKey) {
+      const k = e.key.toLowerCase()
+      if (k === 'b') {
+        e.preventDefault()
+        applyFormat('*')
+        return
+      }
+      if (k === 'i') {
+        e.preventDefault()
+        applyFormat('_')
         return
       }
     }
@@ -256,6 +311,23 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           onHover={setActiveIndex}
           onSelect={selectMember}
         />
+      )}
+      {/* Floating format bar — a small tooltip above the input that appears while
+          text is selected, offering Bold / Italic. Buttons use onMouseDown +
+          preventDefault so clicking them doesn't blur the textarea (which would
+          drop the selection before the wrap runs). Hidden while the @-mention
+          picker is open to avoid stacking two popovers. */}
+      {hasSelection && !pickerOpen && (
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-[calc(100%+8px)] z-20 flex items-center gap-0.5 rounded-chip border border-white/[0.12] bg-surface-2 px-1 py-1 shadow-[0_2px_12px_rgba(0,0,0,0.5)]">
+          <FormatButton label="Bold" shortcut="Ctrl/Cmd+B" onClick={() => applyFormat('*')}>
+            <Bold size={15} strokeWidth={2.4} />
+          </FormatButton>
+          <FormatButton label="Italic" shortcut="Ctrl/Cmd+I" onClick={() => applyFormat('_')}>
+            <Italic size={15} strokeWidth={2.2} />
+          </FormatButton>
+          {/* Downward caret so it reads as a tooltip anchored to the input. */}
+          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-px h-2 w-2 rotate-45 border-r border-b border-white/[0.12] bg-surface-2" />
+        </div>
       )}
       {replyContext && (
         <ComposerContextRow
@@ -296,6 +368,10 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           onChange={handleChange}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
+          onSelect={syncSelection}
+          onMouseUp={syncSelection}
+          onKeyUp={syncSelection}
+          onBlur={() => setHasSelection(false)}
           rows={1}
           placeholder={editContext ? 'Edit message…' : placeholder}
           className="flex-1 bg-transparent text-[length:var(--chat-msg-font-size)] leading-[1.5] outline-none resize-none placeholder:text-faint overflow-y-auto max-h-[9em] px-1.5 py-1.5"
@@ -312,5 +388,32 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
     </div>
   )
 })
+
+// One button in the floating format bar. onMouseDown preventDefault keeps the
+// textarea focused and its selection intact through the click.
+function FormatButton({
+  label,
+  shortcut,
+  onClick,
+  children,
+}: {
+  label: string
+  shortcut: string
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={`${label} (${shortcut})`}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onClick}
+      className="h-7 w-7 flex items-center justify-center rounded-[3px] text-muted hover:text-text hover:bg-white/[0.08] transition-colors"
+    >
+      {children}
+    </button>
+  )
+}
 
 export default ChatComposer

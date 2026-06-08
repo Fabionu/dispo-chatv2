@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import type { Attachment, GroupType, Mention } from '../../lib/types'
 import { splitBodyByMentions } from '../../lib/mentions'
+import { renderRichText } from '../../lib/richText'
 import AttachmentBlock from '../attachments/AttachmentBlock'
 import { downloadAttachment } from '../attachments/attachmentUtils'
 import MessageActionsMenu, { type MessageAction } from './MessageActionsMenu'
@@ -22,19 +23,20 @@ import { DELETE_WINDOW_MS, formatDay, formatTime } from './messageUtils'
 import Avatar from '../Avatar'
 import type { LocalMessage } from './types'
 
-// Render a message body with @-mentions highlighted. Tokenized into plain-text
-// and mention segments (never HTML) so user input is always escaped by React.
-// A mention of the current user gets a stronger-but-subtle chip; others are a
-// quiet accent-coloured token.
+// Render a message body with @-mentions highlighted and *bold* / _italic_ inline
+// formatting applied. Tokenized into plain-text and mention segments (never HTML)
+// so user input is always escaped by React; the plain segments additionally run
+// through renderRichText for bold/italic. A mention of the current user gets a
+// stronger-but-subtle chip; others are a quiet accent-coloured token.
 function renderBody(
   body: string,
   mentions: Mention[] | undefined,
   currentUserId: string,
 ): ReactNode {
   const segments = splitBodyByMentions(body, mentions)
-  if (segments.length === 1 && !segments[0].mention) return body
+  if (segments.length === 1 && !segments[0].mention) return renderRichText(body)
   return segments.map((seg, i) => {
-    if (!seg.mention) return <Fragment key={i}>{seg.text}</Fragment>
+    if (!seg.mention) return <Fragment key={i}>{renderRichText(seg.text, `s${i}-`)}</Fragment>
     const isMe = seg.mention.userId === currentUserId
     return (
       <span

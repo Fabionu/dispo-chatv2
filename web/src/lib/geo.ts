@@ -177,6 +177,56 @@ export async function suggestPlaces(
     })
 }
 
+// Full-text place search (GeoPlaces v2 SearchText). Unlike Suggest — which
+// returns a `Query`/BusinessChain item for a company name (e.g. "McDonald's"),
+// NOT an actual location — SearchText resolves a free-text query to concrete
+// places: businesses/POIs (depots, stores, a company by name), addresses,
+// streets, and cities, ALL with a coordinate Position inline. That makes
+// "search a company and route to it" work, and lets selection skip the GetPlace
+// round-trip (the position is already here). Requires a bias position to rank
+// nearby results first; pass the nearest known waypoint or DEFAULT_BIAS. Pass an
+// AbortSignal so a superseded keystroke's request can be cancelled.
+export async function searchPlaces(
+  query: string,
+  bias: LngLat,
+  signal?: AbortSignal,
+): Promise<PlaceSuggestion[]> {
+  const res = await fetch(placesUrl('search-text'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ QueryText: query, MaxResults: 6, BiasPosition: bias }),
+    signal,
+  })
+  if (!res.ok) throw new Error(`Search failed (${res.status})`)
+  const data = await res.json()
+  const items: any[] = Array.isArray(data?.ResultItems) ? data.ResultItems : []
+  return items
+    .map((it): PlaceSuggestion | null => {
+      const pos = it.Position
+      // Only results we can route to (must carry a coordinate).
+      if (!Array.isArray(pos) || pos.length < 2) return null
+      const addr = it.Address ?? {}
+      const label: string = addr.Label ?? it.Title ?? ''
+      const primary = (it.Title || label.split(',')[0] || '').trim()
+      // Secondary = the address with the (already-shown) primary stripped off the
+      // front, falling back to postcode · region · country.
+      let secondary = label
+      if (primary && secondary.startsWith(primary)) {
+        secondary = secondary.slice(primary.length).replace(/^[\s,·]+/, '')
+      }
+      if (!secondary) {
+        secondary = [addr.PostalCode, addr.Region?.Name, addr.Country?.Name]
+          .filter(Boolean)
+          .join(' · ')
+      }
+      // SearchText returns a PlaceId for most results; synthesise a stable key
+      // from the coordinate when it doesn't, so the list still renders/keys.
+      const placeId: string = it.PlaceId ?? `pos:${pos[0]},${pos[1]}`
+      return { placeId, primary, secondary, label, position: [pos[0], pos[1]] as LngLat }
+    })
+    .filter((s): s is PlaceSuggestion => s !== null)
+}
+
 // Resolve a selected suggestion's PlaceId to coordinates + structured address.
 // Autocomplete doesn't return a position, so this is called on selection.
 export async function getPlace(placeId: string): Promise<ResolvedPlace | null> {

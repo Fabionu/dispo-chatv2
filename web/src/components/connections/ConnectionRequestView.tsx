@@ -46,11 +46,16 @@ export default function ConnectionRequestView({ connection, onAccepted, onDeclin
 
   return (
     <>
-      {/* Header — mirrors ChatView */}
+      {/* Header — mirrors ChatView, but while the invitation is still pending it
+          names the STATE ("Connection invitation"), not the requester: their
+          name + workspace are already shown prominently in the identity block
+          below, so repeating the name here would be redundant. Once the request
+          is accepted/declined this view is replaced (by the DM chat or the
+          inbox), so the normal name-based header returns automatically. */}
       <header className="h-[var(--header-height)] flex items-center justify-between px-5 rounded-[11px] border border-white/[0.08] bg-rail shrink-0 overflow-hidden">
         <div className="min-w-0">
-          <div className="text-[13.5px] font-semibold truncate">{u.displayName}</div>
-          <div className="text-[11px] text-muted truncate">{u.workspace.name}</div>
+          <div className="text-[13.5px] font-semibold truncate">Connection invitation</div>
+          <div className="text-[11px] text-muted truncate">from {u.workspace.name}</div>
         </div>
         <span className="font-mono text-[11px] text-muted border border-white/[0.08] rounded-chip px-2 py-0.5 shrink-0">
           Pending

@@ -1,3 +1,4 @@
+import { CircleUser } from 'lucide-react'
 import type { Connection } from '../../lib/types'
 
 type Props = {
@@ -27,6 +28,15 @@ export default function ConnectionRequestRow({ connection, selected, onClick }: 
       }`}
     >
       <span className="h-1.5 w-1.5 rounded-full shrink-0 bg-active" />
+      {/* Same leading glyph as a DM row (GroupRow uses CircleUser for `direct`),
+          so a pending invitation reads as a person conversation in the rail. */}
+      <span className="relative shrink-0 flex">
+        <CircleUser
+          strokeWidth={1.6}
+          style={{ width: 'var(--sidebar-icon-size)', height: 'var(--sidebar-icon-size)' }}
+          className="shrink-0 text-muted"
+        />
+      </span>
       <span
         className="flex-1 truncate text-text font-medium"
         style={{ fontSize: 'var(--sidebar-row-font-size)' }}
