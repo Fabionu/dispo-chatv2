@@ -40,6 +40,9 @@ type Props = {
   onPointDragEnd?: (pt: RoutePoint, lngLat: [number, number]) => void
   // When set, clicking a stop dot reports it so the caller can remove that stop.
   onPointRemove?: (pt: RoutePoint) => void
+  // When set, right-clicking the map reports the clicked [lng, lat] and the
+  // viewport pixel of the click, so the caller can open a context menu there.
+  onContextMenu?: (lngLat: [number, number], page: { x: number; y: number }) => void
   className?: string
 }
 
@@ -154,6 +157,7 @@ export default function MapView({
   onRouteDrag,
   onPointDragEnd,
   onPointRemove,
+  onContextMenu,
   className,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -173,6 +177,8 @@ export default function MapView({
   onPointDragEndRef.current = onPointDragEnd
   const onPointRemoveRef = useRef(onPointRemove)
   onPointRemoveRef.current = onPointRemove
+  const onContextMenuRef = useRef(onContextMenu)
+  onContextMenuRef.current = onContextMenu
   const draggingRef = useRef(false)
   // Shared dot shown when hovering the route and while dragging it.
   const dragHandleRef = useRef<maplibregl.Marker | null>(null)
@@ -251,6 +257,16 @@ export default function MapView({
         handle.remove()
         cb([ev.lngLat.lng, ev.lngLat.lat])
       })
+    })
+
+    // Right-click anywhere on the map → report the point + pixel so the caller
+    // can open its own context menu (Add stop / Copy coordinates). Suppress the
+    // browser's native menu so only ours shows.
+    map.on('contextmenu', (e) => {
+      const cb = onContextMenuRef.current
+      if (!cb) return
+      e.originalEvent.preventDefault()
+      cb([e.lngLat.lng, e.lngLat.lat], { x: e.originalEvent.clientX, y: e.originalEvent.clientY })
     })
 
     // The map often mounts (lazily, inside a flex/Suspense container) before the

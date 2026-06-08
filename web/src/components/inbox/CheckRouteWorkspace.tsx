@@ -1,5 +1,16 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ChevronDown, Moon, Plus, Route as RouteIcon, Sun, Truck } from 'lucide-react'
+import {
+  ArrowLeft,
+  ChevronDown,
+  Copy,
+  GripVertical,
+  MapPin,
+  Moon,
+  Plus,
+  Route as RouteIcon,
+  Sun,
+  Truck,
+} from 'lucide-react'
 import Spinner from '../Spinner'
 import type { LatLng, RoutePoint } from '../map/MapView'
 import type { MapColorScheme } from '../../lib/mapConfig'
@@ -105,15 +116,26 @@ function coordPlace(lng: number, lat: number): ResolvedPlace {
   }
 }
 
-// Planar distance from point p to segment a–b (lng/lat treated as x/y — fine for
-// choosing which route segment a dragged via-point belongs to at city scale).
-function pointSegmentDistance(p: LngLat, a: LngLat, b: LngLat): number {
-  const dx = b[0] - a[0]
-  const dy = b[1] - a[1]
-  const len2 = dx * dx + dy * dy
-  let t = len2 === 0 ? 0 : ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2
-  t = Math.max(0, Math.min(1, t))
-  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy))
+// Great-circle distance in km between two [lng, lat] points (haversine). Used to
+// score where a new stop fits with the least detour — planar lng/lat would
+// distort badly over the long, north-south distances of a real route.
+function distanceKm(a: LngLat, b: LngLat): number {
+  const R = 6371
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const dLat = toRad(b[1] - a[1])
+  const dLng = toRad(b[0] - a[0])
+  const lat1 = toRad(a[1])
+  const lat2 = toRad(b[1])
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)))
+}
+
+// Extra distance added to the route by inserting point p into segment a→b:
+//   detour = d(a,p) + d(p,b) − d(a,b)
+// Zero when p already lies on the segment, large when it forces a backtrack.
+function insertionDetourKm(p: LngLat, a: LngLat, b: LngLat): number {
+  return distanceKm(a, p) + distanceKm(p, b) - distanceKm(a, b)
 }
 
 // Dedicated "Check route" workspace: a full-bleed map as the primary surface with
@@ -142,8 +164,36 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
   // Saved truck presets (localStorage). Applying one fills the fields (and the
   // auto-recalc re-routes truck-aware).
   const [truckProfiles, setTruckProfiles] = useState<TruckProfile[]>(() => getTruckProfiles())
+  // Right-click context menu on the map: its viewport pixel + the clicked coords,
+  // or null when closed.
+  const [menu, setMenu] = useState<{ x: number; y: number; lng: number; lat: number } | null>(null)
+  // Transient confirmation toast (e.g. "Coordinates copied").
+  const [toast, setToast] = useState<string | null>(null)
+  // Drag-to-reorder: index of the stop being dragged, and the row it's over.
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [overIndex, setOverIndex] = useState<number | null>(null)
 
   const canCheck = from.text.trim().length > 0 && to.text.trim().length > 0 && geoConfigured && !busy
+
+  // Auto-dismiss the toast.
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 1600)
+    return () => clearTimeout(t)
+  }, [toast])
+
+  // Close the context menu on Escape or any scroll/resize that would move the map.
+  useEffect(() => {
+    if (!menu) return
+    const close = () => setMenu(null)
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close()
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('resize', close)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('resize', close)
+    }
+  }, [menu])
 
   function setStopText(i: number, text: string) {
     setStops((s) => s.map((x, idx) => (idx === i ? { text, place: null } : x)))
@@ -315,34 +365,89 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
     }
   }
 
-  // Route line dragged: insert a via-waypoint at the dropped point, placed into
-  // the closest existing segment so ordering stays sensible. The auto-recalc
-  // effect then re-routes through it (truck-aware) — never a hand-drawn line.
-  function handleRouteDrag([lng, lat]: LngLat) {
-    if (!from.place || !to.place) return
+  // Find the stops[] index at which inserting point p keeps the route most
+  // natural: the segment (start→…→finish) where p adds the least detour. Returns
+  // the position in the stops[] array to splice the new stop into. Requires both
+  // From and To to be resolved (the caller guarantees this).
+  function bestStopInsertIndex(p: LngLat): number {
     // Ordered resolved waypoints, each tagged with its anchor in the stops array
-    // (-1 = From; otherwise the stops[] index of that resolved stop).
+    // (-1 = From; otherwise the stops[] index of that resolved stop; stops.length
+    // = To, so a point closest to the last leg lands at the end).
     const ordered: Array<{ pos: LngLat; anchorStopIndex: number }> = [
-      { pos: from.place.position, anchorStopIndex: -1 },
+      { pos: from.place!.position, anchorStopIndex: -1 },
     ]
     stops.forEach((s, i) => {
       if (s.place) ordered.push({ pos: s.place.position, anchorStopIndex: i })
     })
-    ordered.push({ pos: to.place.position, anchorStopIndex: stops.length })
+    ordered.push({ pos: to.place!.position, anchorStopIndex: stops.length })
 
     let bestK = 0
-    let bestD = Infinity
+    let bestDetour = Infinity
     for (let k = 0; k < ordered.length - 1; k++) {
-      const d = pointSegmentDistance([lng, lat], ordered[k].pos, ordered[k + 1].pos)
-      if (d < bestD) {
-        bestD = d
+      const detour = insertionDetourKm(p, ordered[k].pos, ordered[k + 1].pos)
+      if (detour < bestDetour) {
+        bestDetour = detour
         bestK = k
       }
     }
     const anchor = ordered[bestK].anchorStopIndex
-    const insertAt = anchor === -1 ? 0 : anchor + 1
+    return anchor === -1 ? 0 : anchor + 1
+  }
+
+  // Route line dragged: insert a via-waypoint at the dropped point, placed into
+  // the least-detour segment so ordering stays sensible. The auto-recalc effect
+  // then re-routes through it (truck-aware) — never a hand-drawn line.
+  function handleRouteDrag([lng, lat]: LngLat) {
+    if (!from.place || !to.place) return
+    const insertAt = bestStopInsertIndex([lng, lat])
     const place = coordPlace(lng, lat)
     setStops((s) => [...s.slice(0, insertAt), { text: place.label, place }, ...s.slice(insertAt)])
+  }
+
+  // Map context menu → "Add stop": the first two points placed become From then
+  // To; after that, a new point is inserted at the least-detour position in the
+  // existing route (NOT blindly appended). The auto-recalc effect re-routes.
+  function addStopFromMap(lng: number, lat: number) {
+    const place = coordPlace(lng, lat)
+    const field = { text: place.label, place }
+    if (!from.place) {
+      setFrom(field)
+    } else if (!to.place) {
+      setTo(field)
+    } else {
+      const insertAt = bestStopInsertIndex([lng, lat])
+      setStops((s) => [...s.slice(0, insertAt), field, ...s.slice(insertAt)])
+    }
+  }
+
+  // Map context menu → "Copy coordinates": copy "lat, lng" to the clipboard.
+  async function copyCoords(lng: number, lat: number) {
+    const text = `${lat.toFixed(6)}, ${lng.toFixed(6)}`
+    try {
+      await navigator.clipboard.writeText(text)
+      setToast('Coordinates copied')
+    } catch {
+      setToast('Could not copy')
+    }
+  }
+
+  // Open the context menu where the user right-clicked, clamped to the viewport.
+  function handleMapContextMenu([lng, lat]: LngLat, page: { x: number; y: number }) {
+    const x = Math.min(page.x, window.innerWidth - 200)
+    const y = Math.min(page.y, window.innerHeight - 96)
+    setMenu({ x, y, lng, lat })
+  }
+
+  // Drag a stop row onto another to reorder. `to` is the row dropped onto; the
+  // dragged stop is inserted before it (index adjusted for the removal).
+  function reorderStops(fromIdx: number, toIdx: number) {
+    if (fromIdx === toIdx) return
+    setStops((s) => {
+      const next = [...s]
+      const [moved] = next.splice(fromIdx, 1)
+      next.splice(fromIdx < toIdx ? toIdx - 1 : toIdx, 0, moved)
+      return next
+    })
   }
 
   // A From/Stop/To dot was dragged to a new spot: update that waypoint to the
@@ -403,6 +508,7 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
             onRouteDrag={result ? handleRouteDrag : undefined}
             onPointDragEnd={handlePointDragEnd}
             onPointRemove={handlePointRemove}
+            onContextMenu={handleMapContextMenu}
           />
         </Suspense>
 
@@ -440,12 +546,7 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
           {panelOpen && (
             <div className="px-4 pb-4 flex flex-col gap-2.5">
           {/* Route waypoint model: [From, ...stops, To]. Stops are the ordered
-              intermediate waypoints. TODO(route-drag): dragging the route line (or
-              a draggable handle on it) should INSERT a new entry into `stops` at
-              the dragged position (reverse-geocoded for its label) and let the
-              existing auto-recalc effect re-route — truck-aware when truck params
-              are set. Not faked here: we don't draw an adjusted line that ignores
-              restrictions; a dragged waypoint must go through calculateRoute. */}
+              intermediate waypoints — reorderable by dragging the grip handle. */}
           <PlaceAutocompleteField
             label="From"
             value={from.text}
@@ -456,16 +557,52 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
           />
 
           {stops.map((s, i) => (
-            <PlaceAutocompleteField
+            <div
               key={i}
-              label={`Stop ${i + 1}`}
-              value={s.text}
-              bias={bias}
-              placeholder="Address, city, or company"
-              onTextChange={(text) => setStopText(i, text)}
-              onSelect={(place) => setStopPlace(i, place)}
-              onRemove={() => removeStop(i)}
-            />
+              onDragOver={(e) => {
+                if (dragIndex === null) return
+                e.preventDefault()
+                if (overIndex !== i) setOverIndex(i)
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                if (dragIndex !== null) reorderStops(dragIndex, i)
+                setDragIndex(null)
+                setOverIndex(null)
+              }}
+              className={`flex items-start gap-1 rounded-chip transition-colors ${
+                dragIndex === i ? 'opacity-40' : ''
+              } ${overIndex === i && dragIndex !== i ? 'ring-1 ring-active/60' : ''}`}
+            >
+              <button
+                type="button"
+                draggable
+                onDragStart={(e) => {
+                  setDragIndex(i)
+                  e.dataTransfer.effectAllowed = 'move'
+                }}
+                onDragEnd={() => {
+                  setDragIndex(null)
+                  setOverIndex(null)
+                }}
+                aria-label={`Reorder stop ${i + 1}`}
+                title="Drag to reorder"
+                className="mt-[26px] shrink-0 cursor-grab active:cursor-grabbing text-faint hover:text-text transition-colors"
+              >
+                <GripVertical size={15} strokeWidth={1.8} />
+              </button>
+              <div className="flex-1 min-w-0">
+                <PlaceAutocompleteField
+                  label={`Stop ${i + 1}`}
+                  value={s.text}
+                  bias={bias}
+                  placeholder="Address, city, or company"
+                  onTextChange={(text) => setStopText(i, text)}
+                  onSelect={(place) => setStopPlace(i, place)}
+                  onRemove={() => removeStop(i)}
+                />
+              </div>
+            </div>
           ))}
 
           <PlaceAutocompleteField
@@ -535,14 +672,81 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
             Truck restrictions overlaid on the map — zoom in to see height/weight/bridge and hazmat
             limits. Enter size/weight below for truck-safe routing.
           </div>
-          {result && (
-            <div className="text-[11px] text-faint">Tip: drag the route line to add a stop.</div>
-          )}
+          <div className="text-[11px] text-faint">
+            Tip: right-click the map to add a stop or copy coordinates. Drag a stop’s grip to
+            reorder.
+          </div>
             </div>
           )}
         </div>
+
+        {/* Right-click context menu (Add stop / Copy coordinates). A full-screen
+            backdrop catches outside clicks and any right-click to dismiss it. */}
+        {menu && (
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => setMenu(null)}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                setMenu(null)
+              }}
+            />
+            <div
+              className="fixed z-50 min-w-[184px] rounded-card border border-white/[0.10] bg-surface shadow-2xl shadow-black/50 py-1"
+              style={{ left: menu.x, top: menu.y }}
+            >
+              <ContextItem
+                icon={<Plus size={13} strokeWidth={1.8} />}
+                label="Add stop"
+                onClick={() => {
+                  addStopFromMap(menu.lng, menu.lat)
+                  setMenu(null)
+                }}
+              />
+              <ContextItem
+                icon={<Copy size={13} strokeWidth={1.8} />}
+                label="Copy coordinates"
+                onClick={() => {
+                  void copyCoords(menu.lng, menu.lat)
+                  setMenu(null)
+                }}
+              />
+            </div>
+          </>
+        )}
+
+        {/* Transient confirmation toast (e.g. coordinates copied). */}
+        {toast && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 rounded-chip border border-white/[0.10] bg-surface/95 backdrop-blur-md px-3 py-1.5 text-[12px] shadow-2xl shadow-black/50">
+            <MapPin size={12} strokeWidth={1.8} className="text-active" />
+            {toast}
+          </div>
+        )}
       </div>
     </>
+  )
+}
+
+// One row in the map right-click context menu.
+function ContextItem({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: React.ReactNode
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[12.5px] text-left text-text hover:bg-white/[0.06] transition-colors"
+    >
+      <span className="text-muted shrink-0">{icon}</span>
+      {label}
+    </button>
   )
 }
 
