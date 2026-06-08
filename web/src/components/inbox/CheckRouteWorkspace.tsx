@@ -169,9 +169,11 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
   const [menu, setMenu] = useState<{ x: number; y: number; lng: number; lat: number } | null>(null)
   // Transient confirmation toast (e.g. "Coordinates copied").
   const [toast, setToast] = useState<string | null>(null)
-  // Drag-to-reorder: index of the stop being dragged, and the row it's over.
+  // Drag-to-reorder: index of the waypoint being dragged, and the row it's over.
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [overIndex, setOverIndex] = useState<number | null>(null)
+  // Whether the cursor is in the bottom half of the hovered row (→ drop after it).
+  const overAfterRef = useRef(false)
 
   const canCheck = from.text.trim().length > 0 && to.text.trim().length > 0 && geoConfigured && !busy
 
@@ -438,16 +440,36 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
     setMenu({ x, y, lng, lat })
   }
 
-  // Drag a stop row onto another to reorder. `to` is the row dropped onto; the
-  // dragged stop is inserted before it (index adjusted for the removal).
-  function reorderStops(fromIdx: number, toIdx: number) {
-    if (fromIdx === toIdx) return
-    setStops((s) => {
-      const next = [...s]
-      const [moved] = next.splice(fromIdx, 1)
-      next.splice(fromIdx < toIdx ? toIdx - 1 : toIdx, 0, moved)
-      return next
-    })
+  // The full ordered route as one list: position 0 = start (From), last = finish
+  // (To), middle = stops. Used so From/To are draggable in the same list as the
+  // stops and the route order updates from a single reorder.
+  const waypoints = [from, ...stops, to]
+
+  // Edit a waypoint by its position in the combined list.
+  function setWaypointText(pos: number, text: string) {
+    if (pos === 0) setFrom({ text, place: null })
+    else if (pos === waypoints.length - 1) setTo({ text, place: null })
+    else setStopText(pos - 1, text)
+  }
+  function setWaypointPlace(pos: number, place: ResolvedPlace) {
+    if (pos === 0) setFrom({ text: place.label, place })
+    else if (pos === waypoints.length - 1) setTo({ text: place.label, place })
+    else setStopPlace(pos - 1, place)
+  }
+
+  // Reorder the whole route. `insertAt` is the slot (0..len) in the original
+  // combined list where the dragged item should land — derived from whether the
+  // drop fell in the top/bottom half of the target row. From/To are simply
+  // whatever ends up first/last after the move.
+  function reorderWaypoints(fromPos: number, insertAt: number) {
+    const arr = [from, ...stops, to]
+    const [moved] = arr.splice(fromPos, 1)
+    const dest = insertAt > fromPos ? insertAt - 1 : insertAt
+    if (dest === fromPos) return
+    arr.splice(dest, 0, moved)
+    setFrom(arr[0])
+    setTo(arr[arr.length - 1])
+    setStops(arr.slice(1, -1))
   }
 
   // A From/Stop/To dot was dragged to a new spot: update that waypoint to the
@@ -545,74 +567,67 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
 
           {panelOpen && (
             <div className="px-4 pb-4 flex flex-col gap-2.5">
-          {/* Route waypoint model: [From, ...stops, To]. Stops are the ordered
-              intermediate waypoints — reorderable by dragging the grip handle. */}
-          <PlaceAutocompleteField
-            label="From"
-            value={from.text}
-            bias={bias}
-            placeholder="Address, city, or company"
-            onTextChange={(text) => setFrom({ text, place: null })}
-            onSelect={(place) => setFrom({ text: place.label, place })}
-          />
-
-          {stops.map((s, i) => (
-            <div
-              key={i}
-              onDragOver={(e) => {
-                if (dragIndex === null) return
-                e.preventDefault()
-                if (overIndex !== i) setOverIndex(i)
-              }}
-              onDrop={(e) => {
-                e.preventDefault()
-                if (dragIndex !== null) reorderStops(dragIndex, i)
-                setDragIndex(null)
-                setOverIndex(null)
-              }}
-              className={`flex items-start gap-1 rounded-chip transition-colors ${
-                dragIndex === i ? 'opacity-40' : ''
-              } ${overIndex === i && dragIndex !== i ? 'ring-1 ring-active/60' : ''}`}
-            >
-              <button
-                type="button"
-                draggable
-                onDragStart={(e) => {
-                  setDragIndex(i)
-                  e.dataTransfer.effectAllowed = 'move'
+          {/* Ordered route: position 0 = start (From), last = finish (To), the
+              rest are stops. Every row is reorderable by dragging its grip — drag
+              From/To into the middle (or a stop to an end) and the order updates. */}
+          {waypoints.map((wp, pos) => {
+            const isFrom = pos === 0
+            const isTo = pos === waypoints.length - 1
+            const label = isFrom ? 'From' : isTo ? 'To' : `Stop ${pos}`
+            return (
+              <div
+                key={pos}
+                onDragOver={(e) => {
+                  if (dragIndex === null) return
+                  e.preventDefault()
+                  const r = e.currentTarget.getBoundingClientRect()
+                  overAfterRef.current = e.clientY > r.top + r.height / 2
+                  if (overIndex !== pos) setOverIndex(pos)
                 }}
-                onDragEnd={() => {
+                onDrop={(e) => {
+                  e.preventDefault()
+                  if (dragIndex !== null) {
+                    reorderWaypoints(dragIndex, pos + (overAfterRef.current ? 1 : 0))
+                  }
                   setDragIndex(null)
                   setOverIndex(null)
                 }}
-                aria-label={`Reorder stop ${i + 1}`}
-                title="Drag to reorder"
-                className="mt-[26px] shrink-0 cursor-grab active:cursor-grabbing text-faint hover:text-text transition-colors"
+                className={`flex items-start gap-1 rounded-chip transition-colors ${
+                  dragIndex === pos ? 'opacity-40' : ''
+                } ${overIndex === pos && dragIndex !== pos ? 'ring-1 ring-active/60' : ''}`}
               >
-                <GripVertical size={15} strokeWidth={1.8} />
-              </button>
-              <div className="flex-1 min-w-0">
-                <PlaceAutocompleteField
-                  label={`Stop ${i + 1}`}
-                  value={s.text}
-                  bias={bias}
-                  placeholder="Address, city, or company"
-                  onTextChange={(text) => setStopText(i, text)}
-                  onSelect={(place) => setStopPlace(i, place)}
-                  onRemove={() => removeStop(i)}
-                />
+                <button
+                  type="button"
+                  draggable
+                  onDragStart={(e) => {
+                    setDragIndex(pos)
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                  onDragEnd={() => {
+                    setDragIndex(null)
+                    setOverIndex(null)
+                  }}
+                  aria-label={`Reorder ${label}`}
+                  title="Drag to reorder"
+                  className="mt-[26px] shrink-0 cursor-grab active:cursor-grabbing text-faint hover:text-text transition-colors"
+                >
+                  <GripVertical size={15} strokeWidth={1.8} />
+                </button>
+                <div className="flex-1 min-w-0">
+                  <PlaceAutocompleteField
+                    label={label}
+                    value={wp.text}
+                    bias={bias}
+                    selected={Boolean(wp.place)}
+                    placeholder="Address, city, or company"
+                    onTextChange={(text) => setWaypointText(pos, text)}
+                    onSelect={(place) => setWaypointPlace(pos, place)}
+                    onRemove={isFrom || isTo ? undefined : () => removeStop(pos - 1)}
+                  />
+                </div>
               </div>
-            </div>
-          ))}
-
-          <PlaceAutocompleteField
-            label="To"
-            value={to.text}
-            bias={bias}
-            placeholder="Address, city, or company"
-            onTextChange={(text) => setTo({ text, place: null })}
-            onSelect={(place) => setTo({ text: place.label, place })}
-          />
+            )
+          })}
 
           <button
             onClick={() => setStops((s) => [...s, EMPTY_FIELD])}

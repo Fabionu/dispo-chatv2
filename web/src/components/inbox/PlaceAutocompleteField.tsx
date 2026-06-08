@@ -24,6 +24,10 @@ type Props = {
   onSelect: (place: ResolvedPlace) => void
   // When set, a small remove control appears (used for optional stops).
   onRemove?: () => void
+  // True when `value` already reflects a committed selection (e.g. a place set
+  // from the map). Suppresses the autocomplete so it doesn't pop a "Use
+  // coordinates" / suggestions dropdown for a value the user didn't just type.
+  selected?: boolean
 }
 
 const MIN_CHARS = 3
@@ -40,6 +44,7 @@ export default function PlaceAutocompleteField({
   onTextChange,
   onSelect,
   onRemove,
+  selected,
 }: Props) {
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([])
   const [open, setOpen] = useState(false)
@@ -51,6 +56,10 @@ export default function PlaceAutocompleteField({
   // Suppress the search that the programmatic input fill would otherwise trigger
   // right after a selection.
   const skipNextSearchRef = useRef(false)
+  // Latest "this value is a committed selection" flag, read inside the search
+  // effect without making it a dependency.
+  const selectedRef = useRef(selected)
+  selectedRef.current = selected
   // Latest bias, read at search time so changing it (after selecting another
   // field) doesn't re-trigger this field's search.
   const biasRef = useRef(bias)
@@ -62,6 +71,16 @@ export default function PlaceAutocompleteField({
   useEffect(() => {
     if (skipNextSearchRef.current) {
       skipNextSearchRef.current = false
+      return
+    }
+    // Value reflects an already-committed place (e.g. set from the map): don't
+    // open the autocomplete — otherwise a coordinate value pops a stray "Use
+    // coordinates" suggestion under every map-added stop.
+    if (selectedRef.current) {
+      setSuggestions([])
+      setOpen(false)
+      setLoading(false)
+      setError(false)
       return
     }
     const q = value.trim()
