@@ -1,14 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  ArrowLeft,
-  ChevronDown,
-  Moon,
-  Plus,
-  Route as RouteIcon,
-  Satellite,
-  Sun,
-  Truck,
-} from 'lucide-react'
+import { ArrowLeft, ChevronDown, Moon, Plus, Route as RouteIcon, Sun, Truck } from 'lucide-react'
 import Spinner from '../Spinner'
 import type { LatLng, RoutePoint } from '../map/MapView'
 import type { MapColorScheme } from '../../lib/mapConfig'
@@ -52,6 +43,9 @@ type RouteState = {
   points: LatLng[]
   // Travel mode that produced this route, for truthful labelling.
   mode: 'Car' | 'Truck'
+  // Whether truck size/weight restrictions were actually applied (vs a default
+  // truck profile), so the label doesn't overclaim compliance.
+  restricted: boolean
 }
 
 // Truck restrictions captured from the UI (strings). Converted to numbers and
@@ -97,6 +91,20 @@ function hasTruckParams(t: TruckOptions): boolean {
   return Boolean(o.heightM || o.widthM || o.lengthM || o.grossWeightT || o.axleWeightT)
 }
 
+// A ResolvedPlace for a raw coordinate (from dragging a point/route on the map).
+// Labelled with its compact "lat, lng" so the field shows something meaningful.
+function coordPlace(lng: number, lat: number): ResolvedPlace {
+  return {
+    placeId: 'coordinates',
+    label: formatCoords(lng, lat),
+    position: [lng, lat],
+    postalCode: null,
+    country: null,
+    region: null,
+    locality: null,
+  }
+}
+
 // Planar distance from point p to segment a–b (lng/lat treated as x/y — fine for
 // choosing which route segment a dragged via-point belongs to at city scale).
 function pointSegmentDistance(p: LngLat, a: LngLat, b: LngLat): number {
@@ -120,9 +128,14 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<RouteState | null>(null)
-  // Map basemap appearance — local to this workspace; does NOT change the app
-  // theme, only the map style.
-  const [mapMode, setMapMode] = useState<MapColorScheme>('Dark')
+  // Map theme (light/dark) for the truck basemap — local to this workspace; does
+  // NOT change the app theme, only the map's colour scheme. The basemap is always
+  // the truck travel-mode style. Defaults to Light for the familiar "basic" road
+  // map look (clear roads/highways); the user can switch to Dark.
+  const [mapMode, setMapMode] = useState<MapColorScheme>('Light')
+  // The floating route panel can be collapsed to a slim header so it doesn't
+  // cover the map while placing points. Open by default.
+  const [panelOpen, setPanelOpen] = useState(true)
   // Advanced truck-restriction options, collapsed by default.
   const [truckOpen, setTruckOpen] = useState(false)
   const [truck, setTruck] = useState<TruckOptions>(EMPTY_TRUCK)
@@ -163,11 +176,17 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
       pts.push({ lng: from.place.position[0], lat: from.place.position[1], kind: 'start' })
     }
     let n = 1
-    for (const s of stops) {
+    stops.forEach((s, i) => {
       if (s.place) {
-        pts.push({ lng: s.place.position[0], lat: s.place.position[1], kind: 'stop', index: n++ })
+        pts.push({
+          lng: s.place.position[0],
+          lat: s.place.position[1],
+          kind: 'stop',
+          index: n++,
+          stopIndex: i,
+        })
       }
-    }
+    })
     if (to.place) {
       pts.push({ lng: to.place.position[0], lat: to.place.position[1], kind: 'end' })
     }
@@ -218,7 +237,9 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
     setError(null)
     ;(async () => {
       try {
-        const route = await calculateRoute(wps, ta ? { truck: tp } : undefined)
+        // Always Truck mode so the duration is computed for a truck; pass entered
+        // size/weight as restrictions when present.
+        const route = await calculateRoute(wps, { truck: ta ? tp : undefined, mode: 'Truck' })
         if (cancelled) return
         if (!route) {
           setError('No route could be found between those locations.')
@@ -231,6 +252,7 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
           geometry: route.geometry,
           points: wps.map(([lng, lat]) => ({ lng, lat })),
           mode: route.mode,
+          restricted: ta,
         })
       } catch (e) {
         if (cancelled) return
@@ -268,7 +290,10 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
         }
         waypoints.push(g.position)
       }
-      const route = await calculateRoute(waypoints, truckActive ? { truck: truckParams } : undefined)
+      const route = await calculateRoute(waypoints, {
+        truck: truckActive ? truckParams : undefined,
+        mode: 'Truck',
+      })
       if (!route) {
         setError('No route could be found between those locations.')
         setResult(null)
@@ -280,6 +305,7 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
         geometry: route.geometry,
         points: waypoints.map(([lng, lat]) => ({ lng, lat })),
         mode: route.mode,
+        restricted: truckActive,
       })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Route calculation failed.')
@@ -315,17 +341,25 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
     }
     const anchor = ordered[bestK].anchorStopIndex
     const insertAt = anchor === -1 ? 0 : anchor + 1
-    const label = formatCoords(lng, lat)
-    const place: ResolvedPlace = {
-      placeId: 'coordinates',
-      label,
-      position: [lng, lat],
-      postalCode: null,
-      country: null,
-      region: null,
-      locality: null,
+    const place = coordPlace(lng, lat)
+    setStops((s) => [...s.slice(0, insertAt), { text: place.label, place }, ...s.slice(insertAt)])
+  }
+
+  // A From/Stop/To dot was dragged to a new spot: update that waypoint to the
+  // dropped coordinate so the auto-recalc effect re-routes through it.
+  function handlePointDragEnd(pt: RoutePoint, [lng, lat]: LngLat) {
+    const place = coordPlace(lng, lat)
+    const field = { text: place.label, place }
+    if (pt.kind === 'start') setFrom(field)
+    else if (pt.kind === 'end') setTo(field)
+    else if (pt.kind === 'stop' && pt.stopIndex != null) {
+      setStops((s) => s.map((x, idx) => (idx === pt.stopIndex ? field : x)))
     }
-    setStops((s) => [...s.slice(0, insertAt), { text: label, place }, ...s.slice(insertAt)])
+  }
+
+  // A stop dot was clicked: remove that stop (From/To are required, so ignored).
+  function handlePointRemove(pt: RoutePoint) {
+    if (pt.kind === 'stop' && pt.stopIndex != null) removeStop(pt.stopIndex)
   }
 
   return (
@@ -367,13 +401,44 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
             route={result?.geometry ?? null}
             points={selectedPoints}
             onRouteDrag={result ? handleRouteDrag : undefined}
+            onPointDragEnd={handlePointDragEnd}
+            onPointRemove={handlePointRemove}
           />
         </Suspense>
 
         {/* Floating route panel — top-left on desktop, full-width across the top
             on narrow screens. Translucent dark, light border, small radius —
-            deliberately not a heavy modal. Scrolls internally when stops pile up. */}
-        <div className="absolute top-4 left-4 right-4 sm:right-auto sm:w-[360px] lg:w-[400px] max-h-[calc(100%-32px)] overflow-y-auto rounded-[11px] border border-white/[0.10] bg-rail/85 backdrop-blur-md shadow-2xl shadow-black/50 p-4 flex flex-col gap-2.5">
+            deliberately not a heavy modal. Collapsible to a slim header so it
+            doesn't cover the map; scrolls internally when stops pile up. */}
+        <div className="absolute top-4 left-4 right-4 sm:right-auto sm:w-[360px] lg:w-[400px] max-h-[calc(100%-32px)] overflow-y-auto rounded-[11px] border border-white/[0.10] bg-rail/85 backdrop-blur-md shadow-2xl shadow-black/50 flex flex-col">
+          {/* Header: title + collapse toggle. When collapsed it also shows a
+              one-line distance · duration summary so the result stays visible. */}
+          <div className="flex items-center gap-2 px-4 py-2.5">
+            <RouteIcon size={14} strokeWidth={1.8} className="text-active shrink-0" />
+            <span className="text-[12.5px] font-semibold shrink-0">Route</span>
+            {!panelOpen && result && (
+              <span className="text-[11px] text-faint tabular-nums truncate">
+                {result.distance} · {result.duration}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setPanelOpen((v) => !v)}
+              aria-expanded={panelOpen}
+              aria-label={panelOpen ? 'Collapse route panel' : 'Expand route panel'}
+              title={panelOpen ? 'Collapse' : 'Expand'}
+              className="ml-auto shrink-0 h-7 w-7 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+            >
+              <ChevronDown
+                size={16}
+                strokeWidth={1.8}
+                className={`transition-transform ${panelOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
+          </div>
+
+          {panelOpen && (
+            <div className="px-4 pb-4 flex flex-col gap-2.5">
           {/* Route waypoint model: [From, ...stops, To]. Stops are the ordered
               intermediate waypoints. TODO(route-drag): dragging the route line (or
               a draggable handle on it) should INSERT a new entry into `stops` at
@@ -454,25 +519,26 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
             <Stat label="Duration" value={result?.duration ?? '—'} />
           </div>
 
-          {/* Honest labelling of how the route was computed — never claim truck
-              compliance unless GeoRoutes actually ran in Truck mode. */}
-          {result &&
-            (result.mode === 'Truck' ? (
-              <div className="flex items-center gap-1.5 text-[11px] text-active">
-                <Truck size={12} strokeWidth={1.8} />
-                Routed with truck restrictions
-              </div>
-            ) : (
-              <div className="text-[11px] text-faint">Car route</div>
-            ))}
-          {mapMode === 'Truck' && (
-            <div className="text-[11px] text-faint">
-              Truck restrictions overlaid on the map — zoom in to see height/weight/bridge
-              and hazmat limits. Enter size/weight below for truck-safe routing.
+          {/* Honest labelling — the route always runs in Truck mode, but only
+              claim restriction compliance when size/weight were actually applied. */}
+          {result && (
+            <div
+              className={`flex items-center gap-1.5 text-[11px] ${
+                result.restricted ? 'text-active' : 'text-muted'
+              }`}
+            >
+              <Truck size={12} strokeWidth={1.8} />
+              {result.restricted ? 'Routed with truck restrictions' : 'Truck route (default profile)'}
             </div>
           )}
+          <div className="text-[11px] text-faint">
+            Truck restrictions overlaid on the map — zoom in to see height/weight/bridge and hazmat
+            limits. Enter size/weight below for truck-safe routing.
+          </div>
           {result && (
             <div className="text-[11px] text-faint">Tip: drag the route line to add a stop.</div>
+          )}
+            </div>
           )}
         </div>
       </div>
@@ -480,7 +546,8 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
   )
 }
 
-// Subtle segmented Light/Dark control for the map basemap only.
+// Subtle segmented Dark/Light control for the truck basemap's colour theme only
+// (the basemap is always the truck travel-mode style).
 function MapModeToggle({
   mode,
   onChange,
@@ -491,7 +558,7 @@ function MapModeToggle({
   return (
     <div
       role="group"
-      aria-label="Map appearance"
+      aria-label="Map theme"
       className="flex items-center gap-0.5 rounded-chip border border-white/[0.08] bg-white/[0.02] p-0.5"
     >
       <ModeButton
@@ -505,18 +572,6 @@ function MapModeToggle({
         onClick={() => onChange('Light')}
         label="Light map"
         icon={<Sun size={13} strokeWidth={1.8} />}
-      />
-      <ModeButton
-        active={mode === 'Satellite'}
-        onClick={() => onChange('Satellite')}
-        label="Satellite map"
-        icon={<Satellite size={13} strokeWidth={1.8} />}
-      />
-      <ModeButton
-        active={mode === 'Truck'}
-        onClick={() => onChange('Truck')}
-        label="Truck restrictions map"
-        icon={<Truck size={13} strokeWidth={1.8} />}
       />
     </div>
   )

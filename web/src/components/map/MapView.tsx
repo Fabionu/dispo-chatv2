@@ -8,8 +8,13 @@ import Spinner from '../Spinner'
 export type LatLng = { lat: number; lng: number }
 
 // A route waypoint with its role, so the map can draw a clear start dot,
-// numbered stop dots, and a prominent destination pin.
-export type RoutePoint = LatLng & { kind: 'start' | 'stop' | 'end'; index?: number }
+// numbered stop dots, and a prominent destination pin. `stopIndex` ties a stop
+// dot back to its position in the caller's stops[] array (for drag/remove).
+export type RoutePoint = LatLng & {
+  kind: 'start' | 'stop' | 'end'
+  index?: number
+  stopIndex?: number
+}
 
 type Props = {
   // Where to center the map. Null → a neutral world view (e.g. no data yet).
@@ -30,6 +35,11 @@ type Props = {
   // reports the dropped [lng, lat] so the caller can insert a via-waypoint and
   // re-route (Google-Maps-style). Only active while a route is drawn.
   onRouteDrag?: (lngLat: [number, number]) => void
+  // When set, the From/Stop/To dots become draggable; releasing reports the
+  // moved point and its new [lng, lat] so the caller can update that waypoint.
+  onPointDragEnd?: (pt: RoutePoint, lngLat: [number, number]) => void
+  // When set, clicking a stop dot reports it so the caller can remove that stop.
+  onPointRemove?: (pt: RoutePoint) => void
   className?: string
 }
 
@@ -41,36 +51,37 @@ const END_COLOR = '#d97757' // orange-red destination
 // and a prominent teardrop pin for the destination — so it's immediately clear
 // where the route begins and ends. Dots anchor centre; the pin anchors at its
 // tip (MapLibre default for the built-in marker).
-function createPointMarker(pt: RoutePoint): maplibregl.Marker {
+function createPointMarker(pt: RoutePoint, draggable: boolean): maplibregl.Marker {
   if (pt.kind === 'end') {
-    return new maplibregl.Marker({ color: END_COLOR })
+    return new maplibregl.Marker({ color: END_COLOR, draggable })
   }
   const el = document.createElement('div')
   const base =
     'box-sizing:border-box;border-radius:9999px;box-shadow:0 1px 5px rgba(0,0,0,0.55);'
   if (pt.kind === 'start') {
     el.style.cssText = `${base}width:16px;height:16px;background:${START_COLOR};border:2.5px solid #fff;`
-    el.title = 'Start'
+    el.title = draggable ? 'Start — drag to move' : 'Start'
   } else {
     el.style.cssText =
       `${base}width:19px;height:19px;background:#fff;border:2.5px solid ${ROUTE_COLOR};` +
       'display:flex;align-items:center;justify-content:center;color:#7a4f33;' +
       "font:700 10px/1 Inter,system-ui,sans-serif;"
     el.textContent = String(pt.index ?? '')
-    el.title = `Stop ${pt.index ?? ''}`
+    el.title = draggable ? `Stop ${pt.index ?? ''} — drag to move, click to remove` : `Stop ${pt.index ?? ''}`
   }
-  return new maplibregl.Marker({ element: el })
+  return new maplibregl.Marker({ element: el, draggable })
 }
 
 // A high-contrast draggable dot for the route line (hover + drag). The white ring
 // plus a dark outer halo keep it clearly visible on BOTH the light and dark
-// basemaps, and the grab cursor signals it can be pulled.
+// basemaps. Uses the system `move` cursor (visible on Windows, unlike the white
+// `grab` hand) to signal it can be pulled.
 function createDragHandleEl(): HTMLElement {
   const el = document.createElement('div')
   el.style.cssText =
     'box-sizing:border-box;width:18px;height:18px;border-radius:9999px;' +
     `background:${ROUTE_COLOR};border:3px solid #fff;` +
-    'box-shadow:0 0 0 1.5px rgba(0,0,0,0.6),0 1px 4px rgba(0,0,0,0.5);cursor:grab;'
+    'box-shadow:0 0 0 1.5px rgba(0,0,0,0.6),0 1px 4px rgba(0,0,0,0.5);cursor:move;'
   return el
 }
 
@@ -141,6 +152,8 @@ export default function MapView({
   points,
   colorScheme = 'Dark',
   onRouteDrag,
+  onPointDragEnd,
+  onPointRemove,
   className,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -154,6 +167,12 @@ export default function MapView({
   // reset mid-drag). Refs because the handlers are registered once.
   const onRouteDragRef = useRef(onRouteDrag)
   onRouteDragRef.current = onRouteDrag
+  // Latest waypoint-marker callbacks (drag a dot to move it / click a stop to
+  // remove it). Refs so the markers' handlers always call the current props.
+  const onPointDragEndRef = useRef(onPointDragEnd)
+  onPointDragEndRef.current = onPointDragEnd
+  const onPointRemoveRef = useRef(onPointRemove)
+  onPointRemoveRef.current = onPointRemove
   const draggingRef = useRef(false)
   // Shared dot shown when hovering the route and while dragging it.
   const dragHandleRef = useRef<maplibregl.Marker | null>(null)
@@ -318,8 +337,35 @@ export default function MapView({
     for (const m of pointMarkersRef.current) m.remove()
     pointMarkersRef.current = []
     const pts = points ?? []
+    const draggable = Boolean(onPointDragEndRef.current)
     for (const p of pts) {
-      const m = createPointMarker(p).setLngLat([p.lng, p.lat]).addTo(map)
+      const m = createPointMarker(p, draggable).setLngLat([p.lng, p.lat]).addTo(map)
+      if (draggable) {
+        const el = m.getElement()
+        el.style.cursor = 'move'
+        // A drag and a click both start with mousedown; track movement so a
+        // post-drag click doesn't also fire the remove handler.
+        let moved = false
+        m.on('dragstart', () => {
+          moved = true
+        })
+        m.on('dragend', () => {
+          const ll = m.getLngLat()
+          onPointDragEndRef.current?.(p, [ll.lng, ll.lat])
+          // Reset after the trailing click (if any) has been swallowed below.
+          setTimeout(() => {
+            moved = false
+          }, 0)
+        })
+        // Click a stop dot to remove it (From/To stay — they're required).
+        if (p.kind === 'stop') {
+          el.addEventListener('click', (ev) => {
+            ev.stopPropagation()
+            if (moved) return
+            onPointRemoveRef.current?.(p)
+          })
+        }
+      }
       pointMarkersRef.current.push(m)
     }
     const hasRoute = (route?.length ?? 0) >= 2

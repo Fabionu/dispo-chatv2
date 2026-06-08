@@ -252,18 +252,23 @@ function buildTruckParams(opts: TruckRouteOptions): Record<string, number> | nul
 
 // Calculate a route through an ordered list of waypoints (origin first,
 // destination last, any number of intermediate stops between). Requires at least
-// two points. When `truck` dimensions/weight are supplied it routes in Truck
-// travel mode (honouring restrictions); otherwise as a Car. Returns null when no
-// route could be found.
+// two points. Routes in Truck travel mode by default (so the duration reflects a
+// truck, not a car); pass `mode: 'Car'` to override. When `truck` dimensions are
+// supplied they're sent as restrictions so the route honours height/weight
+// limits — otherwise it's a default truck profile. Returns null when no route
+// could be found.
 export async function calculateRoute(
   waypoints: LngLat[],
-  opts?: { truck?: TruckRouteOptions },
+  opts?: { truck?: TruckRouteOptions; mode?: 'Car' | 'Truck' },
 ): Promise<RouteResult | null> {
   if (waypoints.length < 2) throw new Error('Need at least an origin and destination')
   const [origin, ...rest] = waypoints
   const destination = rest.pop() as LngLat
   const intermediate = rest.map((p) => ({ Position: p }))
   const truck = opts?.truck ? buildTruckParams(opts.truck) : null
+  // Default to Truck so durations are computed for a truck; honour an explicit
+  // override (e.g. a car comparison) when given.
+  const travelMode: 'Car' | 'Truck' = opts?.mode ?? 'Truck'
 
   const res = await fetch(routesUrl('routes'), {
     method: 'POST',
@@ -272,8 +277,9 @@ export async function calculateRoute(
       Origin: origin,
       Destination: destination,
       ...(intermediate.length ? { Waypoints: intermediate } : {}),
-      TravelMode: truck ? 'Truck' : 'Car',
-      ...(truck ? { Truck: truck } : {}),
+      TravelMode: travelMode,
+      // Restrictions only apply to a truck route, and only when entered.
+      ...(travelMode === 'Truck' && truck ? { Truck: truck } : {}),
       LegGeometryFormat: 'Simple',
     }),
   })
@@ -297,7 +303,7 @@ export async function calculateRoute(
     distanceMeters: route.Summary?.Distance ?? 0,
     durationSeconds: route.Summary?.Duration ?? 0,
     geometry,
-    mode: truck ? 'Truck' : 'Car',
+    mode: travelMode,
   }
 }
 
