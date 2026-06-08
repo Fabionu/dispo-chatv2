@@ -307,6 +307,52 @@ export async function calculateRoute(
   }
 }
 
+// ── Snap a dropped point to the road network (GeoRoutes SnapToRoads) ─────────
+// When a route line or waypoint is dragged and released, the dropped coordinate
+// rarely lands exactly on a road. SnapToRoads pulls it onto the nearest routable
+// road segment (respecting the road network and one-way/direction), so the
+// re-routed via-point sits on an actual road rather than in a field or building.
+//
+// TravelMode 'Truck' biases snapping toward truck-suitable roads (the app routes
+// trucks). SnapRadius widens the search so a roughly-dropped point still finds a
+// nearby road. There is no road-class filter in SnapToRoads, so this snaps to the
+// nearest routable road — not strictly a motorway — which is the practical intent.
+//
+// Best-effort: returns the snapped [lng, lat], or null when nothing snaps, the
+// API isn't permitted by the key's policy, or any transport error occurs. The
+// caller falls back to the raw dropped point so dragging never breaks.
+export async function snapToRoad(
+  point: LngLat,
+  opts?: { snapRadiusM?: number },
+): Promise<LngLat | null> {
+  if (!geoConfigured) return null
+  try {
+    const res = await fetch(routesUrl('snap-to-roads'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        // SnapToRoads requires at least two trace points (it's built for GPS
+        // traces). For a single dropped point we send it twice; both snap to the
+        // same nearest road segment and we take the first result.
+        TracePoints: [{ Position: point }, { Position: point }],
+        TravelMode: 'Truck',
+        SnapRadius: Math.round(opts?.snapRadiusM ?? 400),
+        SnappedGeometryFormat: 'Simple',
+      }),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    // SnapToRoads returns the corrected position on SnappedTracePoints[].
+    // SnappedPosition is the snapped coordinate; tolerate Position as a fallback.
+    const snapped = data?.SnappedTracePoints?.[0]
+    const pos = snapped?.SnappedPosition ?? snapped?.Position
+    if (!Array.isArray(pos) || pos.length < 2) return null
+    return [pos[0], pos[1]]
+  } catch {
+    return null
+  }
+}
+
 // Human-friendly "123 km" (or "850 m" under 1 km).
 export function formatDistance(meters: number): string {
   if (meters < 1000) return `${Math.round(meters)} m`

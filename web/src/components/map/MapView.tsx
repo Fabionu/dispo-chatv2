@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { MapPinned, TriangleAlert } from 'lucide-react'
-import { mapConfigured, mapStyleUrl, type MapColorScheme } from '../../lib/mapConfig'
+import {
+  mapConfigured,
+  mapStyleUrl,
+  type MapBaseStyle,
+  type MapColorScheme,
+} from '../../lib/mapConfig'
 import Spinner from '../Spinner'
 
 export type LatLng = { lat: number; lng: number }
@@ -31,6 +36,15 @@ type Props = {
   // Light/Dark basemap appearance. Switching swaps the style at runtime without
   // recreating the map. Defaults to Dark to match the app theme.
   colorScheme?: MapColorScheme
+  // Which basemap to render: the colourful road map ('Standard'), satellite
+  // imagery ('Satellite'), or satellite + labels ('Hybrid'). Switching swaps the
+  // style at runtime (route + traffic are re-drawn). Defaults to 'Standard'.
+  baseStyle?: MapBaseStyle
+  // When true, overlay Amazon Location's real-time traffic (congestion,
+  // construction, incidents) via the GeoMaps `traffic=All` style parameter.
+  // Applied to the Standard/Hybrid basemaps (Satellite has no traffic). Toggling
+  // swaps the style at runtime; the route is re-drawn afterwards.
+  traffic?: boolean
   // When set, the route line becomes draggable: grabbing it and releasing
   // reports the dropped [lng, lat] so the caller can insert a via-waypoint and
   // re-route (Google-Maps-style). Only active while a route is drawn.
@@ -130,6 +144,17 @@ function drawRoute(map: maplibregl.Map, coords: [number, number][]) {
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: { 'line-color': ROUTE_COLOR, 'line-width': 4.5 },
       })
+      // Invisible wide hit area on TOP, so the route is easy to grab even though
+      // the visible line stays thin. line-opacity:0 keeps it transparent while
+      // still being returned by hit-testing, so the drag/hover handlers (bound to
+      // this layer) fire within ~11px of the line centre.
+      map.addLayer({
+        id: 'route-hit',
+        type: 'line',
+        source: 'route',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': '#000', 'line-opacity': 0, 'line-width': 22 },
+      })
     }
     const bounds = coords.reduce(
       (b, c) => b.extend(c),
@@ -137,6 +162,7 @@ function drawRoute(map: maplibregl.Map, coords: [number, number][]) {
     )
     map.fitBounds(bounds, { padding: 48, duration: 600 })
   } else if (existing) {
+    if (map.getLayer('route-hit')) map.removeLayer('route-hit')
     if (map.getLayer('route')) map.removeLayer('route')
     if (map.getLayer('route-casing')) map.removeLayer('route-casing')
     map.removeSource('route')
@@ -154,6 +180,8 @@ export default function MapView({
   route,
   points,
   colorScheme = 'Dark',
+  baseStyle = 'Standard',
+  traffic = false,
   onRouteDrag,
   onPointDragEnd,
   onPointRemove,
@@ -186,6 +214,14 @@ export default function MapView({
   // (scheme changes are handled by setStyle below, not a full re-init). Also acts
   // as the "currently applied" scheme so a re-render doesn't re-trigger setStyle.
   const initialSchemeRef = useRef(colorScheme)
+  // Same idea for the basemap (Standard/Satellite/Hybrid): read the initial value
+  // for the one-time init, then apply changes via setStyle below.
+  const initialBaseStyleRef = useRef(baseStyle)
+  // Same for the traffic overlay (it's part of the style URL).
+  const initialTrafficRef = useRef(traffic)
+  // The style URL currently applied to the map, so a re-render that doesn't
+  // actually change the URL (e.g. theming a satellite basemap) skips setStyle.
+  const appliedUrlRef = useRef<string | null>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
 
   // Initialise the map exactly once. Colour-scheme changes are applied via
@@ -193,8 +229,13 @@ export default function MapView({
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
-    const url = mapStyleUrl(initialSchemeRef.current)
+    const url = mapStyleUrl(
+      initialSchemeRef.current,
+      initialBaseStyleRef.current,
+      initialTrafficRef.current,
+    )
     if (!url) return
+    appliedUrlRef.current = url
     const map = new maplibregl.Map({
       container,
       style: url,
@@ -234,16 +275,18 @@ export default function MapView({
       return dragHandleRef.current
     }
     // Cursor is handled in CSS (a high-contrast custom cursor that's visible on
-    // light/satellite basemaps too); here we only show/move the grab dot.
-    map.on('mousemove', 'route', (e) => {
+    // light/satellite basemaps too); here we only show/move the grab dot. Handlers
+    // bind to the wide transparent 'route-hit' layer (not the thin visible line)
+    // so the route is easy to grab.
+    map.on('mousemove', 'route-hit', (e) => {
       if (!onRouteDragRef.current || draggingRef.current) return
       ensureHandle().setLngLat(e.lngLat).addTo(map)
     })
-    map.on('mouseleave', 'route', () => {
+    map.on('mouseleave', 'route-hit', () => {
       if (draggingRef.current) return
       dragHandleRef.current?.remove()
     })
-    map.on('mousedown', 'route', (e) => {
+    map.on('mousedown', 'route-hit', (e) => {
       const cb = onRouteDragRef.current
       if (!cb) return
       e.preventDefault() // suppress the map's drag-pan while dragging the route
@@ -297,22 +340,29 @@ export default function MapView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Switch the basemap appearance (Light/Dark) without recreating the map.
+  // Switch the basemap (Light/Dark theme, Standard/Satellite/Hybrid, and the
+  // traffic overlay — all encoded in the style URL) without recreating the map.
   // setStyle wipes sources/layers (the route line) but NOT markers; re-draw the
   // route and re-pin the flat projection once the new style has loaded.
   useEffect(() => {
     const map = mapRef.current
-    if (!map || colorScheme === initialSchemeRef.current) return
-    const url = mapStyleUrl(colorScheme)
+    if (!map) return
+    // Track the applied props so an unrelated re-render doesn't re-trigger.
+    initialSchemeRef.current = colorScheme
+    initialBaseStyleRef.current = baseStyle
+    initialTrafficRef.current = traffic
+    const url = mapStyleUrl(colorScheme, baseStyle, traffic)
     if (!url) return
+    // Many prop combos collapse to the same URL (Satellite ignores theme/traffic),
+    // so skip the reload (and its flicker) when the URL hasn't actually changed.
+    if (url === appliedUrlRef.current) return
+    appliedUrlRef.current = url
     map.setStyle(url)
     map.once('styledata', () => {
       forceFlatProjection(map)
       drawRoute(map, routeRef.current)
     })
-    // Track the applied scheme so an unrelated re-render doesn't re-trigger.
-    initialSchemeRef.current = colorScheme
-  }, [colorScheme])
+  }, [colorScheme, baseStyle, traffic])
 
   // Recenter when the target changes (e.g. a fresh position arrives).
   useEffect(() => {

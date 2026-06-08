@@ -16,16 +16,50 @@ export const mapConfigured = Boolean(apiKey && region)
 // chooses the light or dark colour theme for it.
 export type MapColorScheme = 'Dark' | 'Light'
 
-// MapLibre style descriptor URL for Amazon Location v2 GeoMaps. Uses the
-// Standard style with `travel-modes=Truck`: the familiar colourful road map
-// (like Google's basic map — coloured roads, parks, water) plus the truck
-// road/bridge/tunnel layers and restriction/hazmat shields. `colorScheme` only
-// swaps the light/dark theme. No globe / 3D. Returns null when unconfigured so
-// callers can show an empty state. The key is URL-encoded defensively (it's the
-// key VALUE, never the ARN).
-export function mapStyleUrl(colorScheme: MapColorScheme = 'Dark'): string | null {
+// Which v2 GeoMaps basemap to render:
+//  - 'Standard'  the colourful road map (truck-restriction overlay, themeable).
+//  - 'Satellite' aerial/satellite imagery only (no labels).
+//  - 'Hybrid'    satellite imagery WITH road/place labels on top.
+// Standard is the default; Satellite/Hybrid are imagery basemaps so the
+// light/dark theme and the Truck overlay don't apply to them.
+export type MapBaseStyle = 'Standard' | 'Satellite' | 'Hybrid'
+
+// Satellite imagery has no labels/roads to drape traffic over, so the v2 GeoMaps
+// `traffic` parameter is rejected on it (400). It IS supported on Standard and
+// Hybrid (verified against the live API), so the traffic overlay is offered on
+// those two only.
+export function baseStyleSupportsTraffic(baseStyle: MapBaseStyle): boolean {
+  return baseStyle !== 'Satellite'
+}
+
+// MapLibre style descriptor URL for Amazon Location v2 GeoMaps. Returns null when
+// unconfigured so callers can show an empty state. The key is URL-encoded
+// defensively (it's the key VALUE, never the ARN).
+//
+//  - Standard uses the familiar colourful road map with `travel-modes=Truck`
+//    (truck road/bridge/tunnel layers + restriction/hazmat shields) and the
+//    light/dark `color-scheme`.
+//  - Satellite / Hybrid are imagery basemaps: no truck overlay and no colour
+//    scheme (the imagery isn't themeable), so only the key is appended. Hybrid
+//    additionally renders road/place labels over the imagery.
+//  - `traffic` overlays Amazon Location's own real-time traffic (congestion,
+//    construction, incidents) baked into the basemap via the `traffic=All`
+//    descriptor parameter — same scoped key, no extra provider. Applied to
+//    Standard/Hybrid only (Satellite rejects it).
+//
+// No globe / 3D — the projection is pinned flat by the caller.
+export function mapStyleUrl(
+  colorScheme: MapColorScheme = 'Dark',
+  baseStyle: MapBaseStyle = 'Standard',
+  traffic = false,
+): string | null {
   if (!apiKey || !region) return null
   const key = encodeURIComponent(apiKey)
   const base = `https://maps.geo.${region}.amazonaws.com/v2/styles`
-  return `${base}/Standard/descriptor?travel-modes=Truck&color-scheme=${colorScheme}&key=${key}`
+  const trafficParam = traffic && baseStyleSupportsTraffic(baseStyle) ? '&traffic=All' : ''
+  if (baseStyle === 'Standard') {
+    return `${base}/Standard/descriptor?travel-modes=Truck&color-scheme=${colorScheme}${trafficParam}&key=${key}`
+  }
+  // Satellite / Hybrid: imagery basemaps. Just the key — no theme/Truck params.
+  return `${base}/${baseStyle}/descriptor?key=${key}${trafficParam}`
 }

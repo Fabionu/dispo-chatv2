@@ -4,16 +4,24 @@ import {
   ChevronDown,
   Copy,
   GripVertical,
+  Layers,
+  Map as MapIcon,
   MapPin,
   Moon,
   Plus,
   Route as RouteIcon,
+  Satellite,
   Sun,
+  TrafficCone,
   Truck,
 } from 'lucide-react'
 import Spinner from '../Spinner'
 import type { LatLng, RoutePoint } from '../map/MapView'
-import type { MapColorScheme } from '../../lib/mapConfig'
+import {
+  baseStyleSupportsTraffic,
+  type MapBaseStyle,
+  type MapColorScheme,
+} from '../../lib/mapConfig'
 import {
   calculateRoute,
   DEFAULT_BIAS,
@@ -22,6 +30,7 @@ import {
   formatDuration,
   geocode,
   geoConfigured,
+  snapToRoad,
   type LngLat,
   type ResolvedPlace,
   type TruckRouteOptions,
@@ -155,6 +164,12 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
   // the truck travel-mode style. Defaults to Light for the familiar "basic" road
   // map look (clear roads/highways); the user can switch to Dark.
   const [mapMode, setMapMode] = useState<MapColorScheme>('Light')
+  // Which basemap to show: the road map, satellite imagery, or satellite + labels.
+  // Local to this workspace; toggled from the route panel.
+  const [baseStyle, setBaseStyle] = useState<MapBaseStyle>('Standard')
+  // Whether the real-time traffic overlay is on. Only meaningful when a traffic
+  // tile provider is configured (otherwise the toggle is disabled).
+  const [traffic, setTraffic] = useState(false)
   // The floating route panel can be collapsed to a slim header so it doesn't
   // cover the map while placing points. Open by default.
   const [panelOpen, setPanelOpen] = useState(true)
@@ -397,12 +412,16 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
   }
 
   // Route line dragged: insert a via-waypoint at the dropped point, placed into
-  // the least-detour segment so ordering stays sensible. The auto-recalc effect
+  // the least-detour segment so ordering stays sensible. The dropped point is
+  // first snapped to the nearest road (truck-suitable, direction-aware) so the
+  // via-point lands on an actual road rather than wherever the cursor released;
+  // falls back to the raw point if snapping is unavailable. The auto-recalc effect
   // then re-routes through it (truck-aware) — never a hand-drawn line.
-  function handleRouteDrag([lng, lat]: LngLat) {
+  async function handleRouteDrag([lng, lat]: LngLat) {
     if (!from.place || !to.place) return
-    const insertAt = bestStopInsertIndex([lng, lat])
-    const place = coordPlace(lng, lat)
+    const [slng, slat] = (await snapToRoad([lng, lat])) ?? [lng, lat]
+    const insertAt = bestStopInsertIndex([slng, slat])
+    const place = coordPlace(slng, slat)
     setStops((s) => [...s.slice(0, insertAt), { text: place.label, place }, ...s.slice(insertAt)])
   }
 
@@ -472,10 +491,13 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
     setStops(arr.slice(1, -1))
   }
 
-  // A From/Stop/To dot was dragged to a new spot: update that waypoint to the
-  // dropped coordinate so the auto-recalc effect re-routes through it.
-  function handlePointDragEnd(pt: RoutePoint, [lng, lat]: LngLat) {
-    const place = coordPlace(lng, lat)
+  // A From/Stop/To dot was dragged to a new spot: snap the dropped coordinate to
+  // the nearest road (so it sits on a routable road, not in a field) and update
+  // that waypoint, so the auto-recalc effect re-routes through it. Falls back to
+  // the raw point when snapping is unavailable.
+  async function handlePointDragEnd(pt: RoutePoint, [lng, lat]: LngLat) {
+    const [slng, slat] = (await snapToRoad([lng, lat])) ?? [lng, lat]
+    const place = coordPlace(slng, slat)
     const field = { text: place.label, place }
     if (pt.kind === 'start') setFrom(field)
     else if (pt.kind === 'end') setTo(field)
@@ -525,6 +547,8 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
             className="absolute inset-0 h-full w-full"
             center={null}
             colorScheme={mapMode}
+            baseStyle={baseStyle}
+            traffic={traffic}
             route={result?.geometry ?? null}
             points={selectedPoints}
             onRouteDrag={result ? handleRouteDrag : undefined}
@@ -636,6 +660,15 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
             <Plus size={12} strokeWidth={1.8} />
             Add stop
           </button>
+
+          {/* Map layers — basemap (road / satellite / labels) and a traffic
+              overlay, integrated into the panel rather than floating controls. */}
+          <MapLayersControl
+            baseStyle={baseStyle}
+            onBaseStyleChange={setBaseStyle}
+            traffic={traffic}
+            onTrafficChange={setTraffic}
+          />
 
           {/* Truck restrictions — advanced, collapsed by default. When dimensions
               / weight are entered, the route is recalculated in real Truck travel
@@ -815,6 +848,106 @@ function ModeButton({
       aria-pressed={active}
       title={label}
       className={`h-6 w-7 flex items-center justify-center rounded-[3px] transition-colors ${
+        active ? 'bg-white/[0.10] text-text' : 'text-faint hover:text-text'
+      }`}
+    >
+      {icon}
+    </button>
+  )
+}
+
+// Map-layer controls inside the route panel: a segmented basemap switch
+// (road / satellite / satellite+labels) and a traffic-overlay toggle. Compact and
+// styled like the rest of the panel — not a floating map control. The traffic
+// toggle is disabled (with an explanatory tooltip) when no traffic tile provider
+// is configured, so it never pretends to show data it doesn't have.
+function MapLayersControl({
+  baseStyle,
+  onBaseStyleChange,
+  traffic,
+  onTrafficChange,
+}: {
+  baseStyle: MapBaseStyle
+  onBaseStyleChange: (s: MapBaseStyle) => void
+  traffic: boolean
+  onTrafficChange: (v: boolean) => void
+}) {
+  // Amazon Location's traffic overlay is available on the road/labelled basemaps
+  // but not on plain satellite imagery, so the toggle is disabled there.
+  const trafficSupported = baseStyleSupportsTraffic(baseStyle)
+  return (
+    <div className="flex items-center justify-between gap-2 flex-wrap">
+      <div
+        role="group"
+        aria-label="Basemap"
+        className="flex items-center gap-0.5 rounded-chip border border-white/[0.08] bg-white/[0.02] p-0.5"
+      >
+        <LayerButton
+          active={baseStyle === 'Standard'}
+          onClick={() => onBaseStyleChange('Standard')}
+          label="Road map"
+          icon={<MapIcon size={13} strokeWidth={1.8} />}
+        />
+        <LayerButton
+          active={baseStyle === 'Satellite'}
+          onClick={() => onBaseStyleChange('Satellite')}
+          label="Satellite"
+          icon={<Satellite size={13} strokeWidth={1.8} />}
+        />
+        <LayerButton
+          active={baseStyle === 'Hybrid'}
+          onClick={() => onBaseStyleChange('Hybrid')}
+          label="Satellite with labels"
+          icon={<Layers size={13} strokeWidth={1.8} />}
+        />
+      </div>
+
+      <button
+        type="button"
+        disabled={!trafficSupported}
+        aria-pressed={traffic}
+        onClick={() => onTrafficChange(!traffic)}
+        title={
+          trafficSupported
+            ? traffic
+              ? 'Hide traffic'
+              : 'Show real-time traffic'
+            : 'Traffic isn’t available on satellite imagery'
+        }
+        className={`flex items-center gap-1.5 h-7 px-2.5 rounded-chip border text-[11.5px] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+          traffic && trafficSupported
+            ? 'border-active/60 bg-active/15 text-active'
+            : 'border-white/[0.08] bg-white/[0.02] text-muted enabled:hover:text-text enabled:hover:border-white/[0.16]'
+        }`}
+      >
+        <TrafficCone size={13} strokeWidth={1.8} />
+        Traffic
+      </button>
+    </div>
+  )
+}
+
+// One icon button in the basemap segmented control (mirrors ModeButton's look,
+// but wider to fit the basemap icons).
+function LayerButton({
+  active,
+  onClick,
+  label,
+  icon,
+}: {
+  active: boolean
+  onClick: () => void
+  label: string
+  icon: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      aria-pressed={active}
+      title={label}
+      className={`h-6 w-8 flex items-center justify-center rounded-[3px] transition-colors ${
         active ? 'bg-white/[0.10] text-text' : 'text-faint hover:text-text'
       }`}
     >
