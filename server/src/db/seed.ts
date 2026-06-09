@@ -1,6 +1,14 @@
 import bcrypt from 'bcryptjs'
-import { pool } from './pool.js'
-import { isProd } from '../env.js'
+import { makePool } from './pool.js'
+import { env, isProd } from '../env.js'
+
+// Seeding runs DDL-adjacent multi-row writes; use the DIRECT (non-pooled)
+// connection when DATABASE_URL points at a transaction pooler. Small pool — this
+// is a one-shot script that uses a single client.
+const pool = makePool(env.DIRECT_DATABASE_URL || env.DATABASE_URL, {
+  max: 1,
+  application_name: 'dispo-seed',
+})
 
 // Local-development seed. Creates two workspaces with a few users each so the
 // connections flow (same-workspace DM vs. cross-workspace connect → accept →

@@ -79,7 +79,7 @@ export default function SignIn() {
   const isSignIn = tab === 'signin'
 
   return (
-    <div className="min-h-screen w-full grid grid-cols-1 lg:grid-cols-2 bg-bg text-text">
+    <div className="min-h-screen w-full grid grid-cols-1 lg:grid-cols-2 bg-rail text-text">
       {/* LEFT — form */}
       <section className="relative flex flex-col px-8 sm:px-12 lg:px-16 py-8">
         {/* top bar */}
@@ -274,8 +274,12 @@ export default function SignIn() {
         </div>
       </section>
 
-      {/* RIGHT — marketing */}
-      <section className="relative hidden lg:flex flex-col aurora border-l border-white/[0.08] px-14 py-10">
+      {/* RIGHT — marketing. The details/stats live inside a separate pure-black
+          (`bg-bg`) card that floats on the grey page background, matching the
+          chat-window surface. The section just provides the surrounding grey
+          gutter so the card reads as visually detached. */}
+      <section className="relative hidden lg:flex p-6">
+        <div className="flex-1 flex flex-col bg-bg border border-white/[0.08] rounded-[11px] px-14 py-10">
         {/* logo */}
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-card border border-white/[0.1] bg-white/[0.03] flex items-center justify-center">
@@ -327,6 +331,7 @@ export default function SignIn() {
               Status
             </a>
           </div>
+        </div>
         </div>
       </section>
     </div>

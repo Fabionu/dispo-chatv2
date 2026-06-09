@@ -5,6 +5,14 @@ import ConnectionRequestRow from './ConnectionRequestRow'
 
 type Props = {
   pendingReceived: Connection[]
+  // True while the initial connections fetch is in flight. Surfaced as a compact
+  // "Loading requests…" line only when there's nothing to show yet, so a silent
+  // background refresh (which keeps the existing rows) never flashes it.
+  loading: boolean
+  // The last connections fetch failed. We keep whatever rows we already had and
+  // show a compact, retryable error line rather than hiding the section.
+  error: boolean
+  onRetry: () => void
   selectedId: string | null
   onSelect: (connectionId: string) => void
 }
@@ -15,6 +23,9 @@ type Props = {
 // overriding their preference.
 export default function ConnectionRequestsSection({
   pendingReceived,
+  loading,
+  error,
+  onRetry,
   selectedId,
   onSelect,
 }: Props) {
@@ -59,11 +70,31 @@ export default function ConnectionRequestsSection({
 
       {open && (
         <div className="space-y-0.5">
-          {pendingReceived.length === 0 ? (
-            <div className="text-[11.5px] text-faint px-2 py-1 leading-[1.45]">
-              No pending requests.
+          {/* Status line: error (with retry) takes precedence; otherwise a
+              first-load spinner-less hint, otherwise the empty copy. Existing
+              rows below are kept regardless, so an error never hides data. */}
+          {error ? (
+            <div className="flex items-center justify-between gap-2 px-2 py-1 text-[11.5px] leading-[1.45]">
+              <span className="text-alert">Couldn’t load requests.</span>
+              <button
+                type="button"
+                onClick={onRetry}
+                className="text-muted hover:text-text underline underline-offset-2 shrink-0 transition-colors"
+              >
+                Retry
+              </button>
             </div>
-          ) : (
+          ) : loading && count === 0 ? (
+            <div className="text-[11.5px] text-faint px-2 py-1 leading-[1.45]">
+              Loading requests…
+            </div>
+          ) : count === 0 ? (
+            <div className="text-[11.5px] text-faint px-2 py-1 leading-[1.45]">
+              No pending connection invitations.
+            </div>
+          ) : null}
+
+          {count > 0 &&
             pendingReceived.map((c) => (
               <ConnectionRequestRow
                 key={c.id}
@@ -71,8 +102,7 @@ export default function ConnectionRequestsSection({
                 selected={selectedId === c.id}
                 onClick={() => onSelect(c.id)}
               />
-            ))
-          )}
+            ))}
         </div>
       )}
     </div>

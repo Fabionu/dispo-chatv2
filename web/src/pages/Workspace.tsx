@@ -117,6 +117,11 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // vehicle's tractor plate) so "Jump to…" actually narrows the rail.
   const [query, setQuery] = useState('')
   const [connections, setConnections] = useState<ConnectionsResponse>(EMPTY_CONNECTIONS)
+  // Connection-request fetch status, surfaced as compact rail states. `loading`
+  // only drives a visible hint on the very first load (no data yet); `error`
+  // keeps the existing rows and offers a retry instead of hiding the section.
+  const [loadingConnections, setLoadingConnections] = useState(true)
+  const [connectionsError, setConnectionsError] = useState(false)
   // Pending vehicle-group invitations addressed to the current user.
   const [groupInvites, setGroupInvites] = useState<GroupInvite[]>([])
   // A quote to seed a DM's composer with, set when a DM is opened via "Reply
@@ -271,7 +276,17 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // Connections: load once, then refetch whenever a connection event fires.
   // Refetching (rather than patching) keeps the three buckets consistent.
   const refreshConnections = useCallback(async () => {
-    setConnections(await api.connections.list())
+    setLoadingConnections(true)
+    setConnectionsError(false)
+    try {
+      setConnections(await api.connections.list())
+    } catch {
+      // Keep whatever buckets we already had so the rail doesn't blank out; the
+      // section shows a compact retryable error instead.
+      setConnectionsError(true)
+    } finally {
+      setLoadingConnections(false)
+    }
   }, [])
 
   useEffect(() => {
@@ -427,13 +442,18 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   )
 
   async function handleAccepted(otherUser: ConnectionUser) {
-    await refreshConnections()
+    // Navigate to the new DM FIRST, then drop the now-stale pending request.
+    // Refreshing first would briefly leave selection on a request that's no
+    // longer in pendingReceived, flashing the "no longer pending" state.
     await openDirectFor(otherUser)
+    await refreshConnections()
   }
 
   async function handleDeclined() {
-    await refreshConnections()
+    // Leave the request view before the row disappears from the list, for the
+    // same reason as accept above.
     setSelection(null)
+    await refreshConnections()
   }
 
   // Accepting a group invite: the server added us to group_members and emitted
@@ -742,6 +762,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             <>
               <ConnectionRequestsSection
                 pendingReceived={pendingReceived}
+                loading={loadingConnections}
+                error={connectionsError}
+                onRetry={() => void refreshConnections()}
                 selectedId={selection?.kind === 'request' ? selection.id : null}
                 onSelect={(id) => setSelection({ kind: 'request', id })}
               />
@@ -903,6 +926,22 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 onAccepted={handleAccepted}
                 onDeclined={handleDeclined}
               />
+            ) : selection?.kind === 'request' ? (
+              // The selected request vanished from pendingReceived (cancelled by
+              // the sender, or accepted/declined on another device). Show an
+              // explicit state instead of silently dropping to the Inbox.
+              <div className="flex-1 flex items-center justify-center px-6">
+                <div className="text-center max-w-[320px]">
+                  <p className="text-[13px] text-muted">This invitation is no longer pending.</p>
+                  <button
+                    type="button"
+                    onClick={() => setSelection(null)}
+                    className="mt-3 text-[12.5px] text-text font-semibold hover:underline underline-offset-4"
+                  >
+                    Back to inbox
+                  </button>
+                </div>
+              </div>
             ) : selectedInvite ? (
               <GroupInviteView
                 key={selectedInvite.id}

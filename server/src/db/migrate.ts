@@ -1,7 +1,17 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { pool } from './pool.js'
+import { makePool } from './pool.js'
+import { env } from '../env.js'
+
+// Migrations run DDL — including `create index concurrently` — which a
+// transaction-mode pooler cannot handle. Always migrate over the DIRECT
+// (non-pooled) connection: DIRECT_DATABASE_URL when set, else DATABASE_URL
+// (correct when that's already a direct connection). Single client, one-shot.
+const pool = makePool(env.DIRECT_DATABASE_URL || env.DATABASE_URL, {
+  max: 1,
+  application_name: 'dispo-migrate',
+})
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const MIGRATIONS_DIR = join(__dirname, 'migrations')

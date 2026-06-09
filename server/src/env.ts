@@ -27,20 +27,65 @@ function optionalNumber(name: string): number | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined
 }
 
+// Optional boolean env var (no default). Accepts 1/true/yes/on and 0/false/no/off
+// (case-insensitive). Unset/blank or unrecognised → undefined, so callers can
+// fall back to their own inference rather than a forced false.
+function optionalBoolean(name: string): boolean | undefined {
+  const v = process.env[name]?.trim().toLowerCase()
+  if (v === undefined || v === '') return undefined
+  if (['1', 'true', 'yes', 'on'].includes(v)) return true
+  if (['0', 'false', 'no', 'off'].includes(v)) return false
+  return undefined
+}
+
 export const env = {
   DATABASE_URL: required('DATABASE_URL'),
+  // Direct (non-pooled) Postgres URL for schema migrations and the seed script.
+  // DDL — and especially `create index concurrently` — is incompatible with a
+  // transaction-mode pooler, so when DATABASE_URL points at the Supabase pooler
+  // (:6543), point this at the direct connection (:5432). Unset → migrations use
+  // DATABASE_URL (correct when that's already a direct/un-pooled connection).
+  DIRECT_DATABASE_URL: process.env.DIRECT_DATABASE_URL ?? '',
   JWT_SECRET: required('JWT_SECRET'),
   PORT: Number(process.env.PORT ?? 3001),
   NODE_ENV: process.env.NODE_ENV ?? 'development',
   PUBLIC_ORIGIN: process.env.PUBLIC_ORIGIN ?? '',
-  // Postgres connection pool tuning. PG_POOL_MAX caps concurrent DB
-  // connections (default 10 — the previous hardcoded value, so behavior is
-  // unchanged unless set). The two timeouts are optional: when unset, the
-  // node-postgres defaults apply (idleTimeoutMillis 10s, no connection timeout)
-  // — so local dev is unaffected.
+  // ── Postgres connection pool tuning ────────────────────────────────────────
+  // PG_POOL_MAX caps the connections EACH app instance opens (default 10 — the
+  // previous hardcoded value, so behavior is unchanged unless set). Behind a
+  // transaction-mode pooler (Supabase Supavisor / PgBouncer) this is the count
+  // PER INSTANCE *to the pooler*, which multiplexes them onto far fewer real
+  // Postgres connections — so the number that must stay under Postgres'
+  // max_connections is (PG_POOL_MAX × instance count), measured at the pooler,
+  // not here. Keep this modest (10–20) and scale out instances, not this value.
   PG_POOL_MAX: numberWithDefault('PG_POOL_MAX', 10),
   PG_IDLE_TIMEOUT_MS: optionalNumber('PG_IDLE_TIMEOUT_MS'),
   PG_CONNECTION_TIMEOUT_MS: optionalNumber('PG_CONNECTION_TIMEOUT_MS'),
+  // Recycle a pooled connection once it has been open this long (it's reaped on
+  // its next idle moment). Stops a connection from pinning a pooler server slot
+  // indefinitely or outliving a failover/DNS change. Unset → node-postgres keeps
+  // connections indefinitely (fine for local dev). Recommended in prod, e.g. 600.
+  PG_MAX_LIFETIME_SEC: optionalNumber('PG_MAX_LIFETIME_SEC'),
+  // Server-side guards sent as connection startup parameters. A runaway query or
+  // an abandoned open transaction otherwise holds a pooled connection, and behind
+  // a transaction pooler that starves every other instance sharing the upstream
+  // pool. Unset → no limit (unchanged). Recommended in prod (e.g. 15000 / 30000),
+  // but the most pooler-robust place is the DB role: `alter role <user> set
+  // statement_timeout = '15s'` (see docs/DATABASE_POOLING.md).
+  PG_STATEMENT_TIMEOUT_MS: optionalNumber('PG_STATEMENT_TIMEOUT_MS'),
+  PG_IDLE_TX_TIMEOUT_MS: optionalNumber('PG_IDLE_TX_TIMEOUT_MS'),
+  // Identifies this app's connections in pg_stat_activity and the pooler
+  // dashboard — invaluable when diagnosing connection pressure across instances.
+  PG_APPLICATION_NAME: process.env.PG_APPLICATION_NAME ?? 'dispo-api',
+  // Force-enable/disable TLS to Postgres, overriding the host-based inference in
+  // db/pool.ts. Unset → inferred (managed hosts + the Supabase pooler use TLS;
+  // localhost does not). Set DATABASE_SSL=false only for a non-TLS local DB on a
+  // host the inference would otherwise treat as managed.
+  DATABASE_SSL: optionalBoolean('DATABASE_SSL'),
+  // Override the "are we behind a pooler?" inference used only for the startup
+  // log + the prod warning (never changes connection behavior). Unset → inferred
+  // from the host/port (*.pooler.supabase.com, :6543, :6432).
+  DATABASE_POOLED: optionalBoolean('DATABASE_POOLED'),
   // Above this many milliseconds an API request is additionally logged as a
   // `slow_request` warning (on top of the normal http_request line). Default
   // 1000ms. Lower it to surface more, raise it to quiet the warnings.
