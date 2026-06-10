@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { MapPinned, TriangleAlert } from 'lucide-react'
 import { apiKey, hereConfigured, loadHere } from '../../lib/hereMaps'
 import type { HereVehicleSpecs } from '../../lib/hereRouting'
+import { snapToRoad } from '../../lib/hereSearch'
 import {
   baseStyleSupportsTraffic,
   type LatLng,
@@ -49,15 +50,25 @@ const END_COLOR = '#d97757'
 const DEFAULT_CENTER = { lat: 50, lng: 10 } // central Europe
 const DEFAULT_ZOOM = 4
 
-// Build the DOM markup for a role-specific waypoint marker. Dots anchor centre;
-// the destination pin anchors at its tip.
+// Build the DOM markup for a role-specific waypoint marker. The start and stop
+// dots anchor at their centre (on the route); the destination is a teardrop pin
+// anchored at its tip so the tip sits precisely on the route line. The three
+// roles are deliberately distinct: sage origin dot, white numbered stop dots, and
+// a coral end pin in the app's accent colour.
 function pointMarkup(pt: RoutePoint): string {
   const base = 'box-sizing:border-box;border-radius:9999px;box-shadow:0 1px 5px rgba(0,0,0,0.55);'
   if (pt.kind === 'end') {
+    // Themed SVG map pin (coral fill, white outline + inner dot), anchored at the
+    // tip. drop-shadow gives it the same lift as the dots without a box-shadow
+    // (which an SVG's transparent corners can't carry).
     return (
-      `<div style="transform:translate(-50%,-100%);width:22px;height:22px;${base}` +
-      `background:${END_COLOR};border:3px solid #fff;border-bottom-right-radius:2px;` +
-      `rotate:45deg;"></div>`
+      `<svg width="26" height="34" viewBox="0 0 26 34" xmlns="http://www.w3.org/2000/svg" ` +
+      `style="display:block;transform:translate(-50%,-100%);` +
+      `filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));">` +
+      `<path d="M13 1C6.4 1 1 6.4 1 13c0 8.3 12 19.5 12 19.5S25 21.3 25 13C25 6.4 19.6 1 13 1z" ` +
+      `fill="${END_COLOR}" stroke="#fff" stroke-width="2"/>` +
+      `<circle cx="13" cy="13" r="4.5" fill="#fff"/>` +
+      `</svg>`
     )
   }
   if (pt.kind === 'start') {
@@ -115,6 +126,16 @@ export default function HereMapView({
 
   // Latest route geometry, so the async init can draw it once the map is ready.
   const routeRef = useRef<[number, number][]>([])
+  // Latest waypoints, so the single fit routine can frame them without depending
+  // on render identity.
+  const pointsRef = useRef<RoutePoint[]>([])
+  // Content key of the last camera fit, so we animate the view ONLY when the thing
+  // being framed actually changes — not on every effect re-run caused by an
+  // unstable `points`/`route` array identity (which otherwise re-zooms forever).
+  const fitKeyRef = useRef('')
+  // Content key of the last marker draw, so we rebuild markers only when their
+  // positions/roles (or the route they snap to) actually change.
+  const markersKeyRef = useRef('')
   // Latest callbacks (init binds the map handlers once; they read these refs).
   const onRouteDragRef = useRef(onRouteDrag)
   onRouteDragRef.current = onRouteDrag
@@ -167,9 +188,14 @@ export default function HereMapView({
       try {
         const features = style.getEnabledFeatures ? style.getEnabledFeatures() : []
         const others = (features || []).filter((f: any) => f.feature !== 'vehicle restrictions')
+        // The HARP JS SDK feature name is `vehicle restrictions` (with a SPACE —
+        // the `vehicle_restrictions` underscore form is the REST Image API, and the
+        // SDK silently ignores it, so the overlay vanishes). The mode value is the
+        // canonical `active_and_inactive` (show all restrictions); the older
+        // `active & inactive` ampersand form is not a valid mode.
         style.setEnabledFeatures([
           ...others,
-          { feature: 'vehicle restrictions', mode: 'active & inactive' },
+          { feature: 'vehicle restrictions', mode: 'active_and_inactive' },
         ])
         if (provider.setVehicleSpecs) {
           provider.setVehicleSpecs(truckVehicleSpecs(H, vehicleSpecsRef.current))
@@ -193,8 +219,9 @@ export default function HereMapView({
     }
   }
 
-  // Add/update the route line + fit the view. Casing (dark) under a tan line so
-  // it reads on light/satellite basemaps too.
+  // Add/update the route line (drawing only — framing is handled once by
+  // fitView). Casing (dark) under a tan line so it reads on light/satellite
+  // basemaps too.
   function drawRoute(coords: [number, number][]) {
     const H = HRef.current
     const map = mapRef.current
@@ -205,44 +232,95 @@ export default function HereMapView({
     const ls = new H.geo.LineString()
     for (const [lng, lat] of coords) ls.pushPoint({ lat, lng })
     const casing = new H.map.Polyline(ls, {
-      style: { lineWidth: 8, strokeColor: 'rgba(0,0,0,0.55)', lineJoin: 'round', lineCap: 'round' },
+      style: { lineWidth: 6, strokeColor: 'rgba(0,0,0,0.55)', lineJoin: 'round', lineCap: 'round' },
     })
     const line = new H.map.Polyline(ls, {
-      style: { lineWidth: 5, strokeColor: ROUTE_COLOR, lineJoin: 'round', lineCap: 'round' },
+      style: { lineWidth: 4, strokeColor: ROUTE_COLOR, lineJoin: 'round', lineCap: 'round' },
     })
     group.addObjects([casing, line])
-    const bbox = group.getBoundingBox()
-    if (bbox) map.getViewModel().setLookAtData({ bounds: bbox }, true)
   }
 
-  // Sync the waypoint markers (From / stops / To) and frame them when there's no
-  // route (the route owns the bounds when present).
+  // Compact content key for the route geometry — enough to detect a real change
+  // (length + endpoints) without hashing every vertex.
+  function routeSig(geom: [number, number][]): string {
+    if (geom.length < 2) return '0'
+    const a = geom[0]
+    const b = geom[geom.length - 1]
+    return `${geom.length}:${a[0]},${a[1]}:${b[0]},${b[1]}`
+  }
+
+  // Sync the waypoint markers (From / stops / To). Drawing only — framing is
+  // handled once by fitView. Skips the rebuild when nothing that affects the
+  // markers (their coords/roles, the route they snap to, or draggability) changed,
+  // so typing in a field doesn't churn the whole marker group every keystroke.
   function drawPoints(pts: RoutePoint[]) {
     const H = HRef.current
     const map = mapRef.current
     const group = markerGroupRef.current
     if (!H || !map || !group) return
-    group.removeAll()
     const draggable = Boolean(onPointDragEndRef.current)
+    const geom = routeRef.current
+    const key =
+      pts.map((p) => `${p.kind}:${p.index ?? ''}:${p.lng},${p.lat}`).join('|') +
+      `#${routeSig(geom)}#${draggable ? 1 : 0}`
+    if (key === markersKeyRef.current) return
+    markersKeyRef.current = key
+
+    group.removeAll()
+    // Align each marker to the calculated route so it sits ON the line rather than
+    // beside it. HERE matches origin/destination/vias onto roads when routing, so
+    // the returned geometry is authoritative: the start sits at its first vertex,
+    // the end at its last, and stops at their nearest point on the polyline. With
+    // no route yet (still picking points) markers stay at their raw coordinate.
+    const hasRouteLine = geom.length >= 2
     for (const p of pts) {
+      let lng = p.lng
+      let lat = p.lat
+      if (hasRouteLine) {
+        if (p.kind === 'start') [lng, lat] = geom[0]
+        else if (p.kind === 'end') [lng, lat] = geom[geom.length - 1]
+        else {
+          const snapped = snapToRoad([p.lng, p.lat], geom)
+          if (snapped) [lng, lat] = snapped
+        }
+      }
       const icon = new H.map.DomIcon(pointMarkup(p))
-      const m = new H.map.DomMarker({ lat: p.lat, lng: p.lng }, { icon, volatility: draggable })
+      const m = new H.map.DomMarker({ lat, lng }, { icon, volatility: draggable })
       m.draggable = draggable
       m.setData(p)
       group.addObject(m)
     }
-    const hasRoute = routeRef.current.length >= 2
-    if (!hasRoute && pts.length > 0) {
-      if (pts.length === 1) {
-        map.getViewModel().setLookAtData({
-          position: { lat: pts[0].lat, lng: pts[0].lng },
-          zoom: Math.max(zoom, 11),
-        }, true)
-      } else {
-        const bbox = group.getBoundingBox()
-        if (bbox) map.getViewModel().setLookAtData({ bounds: bbox }, true)
-      }
+  }
+
+  // Frame the view ONCE per meaningful change. The route's bounds own the camera
+  // when a route is present; otherwise the selected waypoints are framed. A
+  // content key gates the animation so re-runs from unstable array identities (or
+  // repeated effects) never re-trigger the same fit — which is what caused the
+  // "keeps slowly zooming toward the first point" loop.
+  function fitView() {
+    const map = mapRef.current
+    if (!map) return
+    const geom = routeRef.current
+    const pts = pointsRef.current
+    let key = ''
+    let target: any = null
+    if (geom.length >= 2) {
+      key = `route:${routeSig(geom)}`
+      const bbox = routeGroupRef.current?.getBoundingBox?.()
+      if (bbox) target = { bounds: bbox }
+    } else if (pts.length === 1) {
+      key = `point:${pts[0].lng},${pts[0].lat}`
+      target = { position: { lat: pts[0].lat, lng: pts[0].lng }, zoom: Math.max(zoom, 11) }
+    } else if (pts.length > 1) {
+      key = `points:${pts.map((p) => `${p.lng},${p.lat}`).join('|')}`
+      const bbox = markerGroupRef.current?.getBoundingBox?.()
+      if (bbox) target = { bounds: bbox }
+    } else {
+      return
     }
+    if (!target || key === fitKeyRef.current) return
+    fitKeyRef.current = key
+    map.getViewModel().setLookAtData(target, true)
   }
 
   // Show/move the shared drag dot while dragging the route line.
@@ -284,20 +362,25 @@ export default function HereMapView({
         HRef.current = H
         const platform = new H.service.Platform({ apikey: apiKey })
         platformRef.current = platform
-        // The logistics basemap + vehicle-restriction overlay are HARP-engine
-        // layers, so request the HARP engine explicitly — `createDefaultLayers()`
-        // without it returns P2D layers that have no `.logistics` style.
-        const layers = platform.createDefaultLayers({ engineType: H.Map.EngineType.HARP })
+        // v3.2: HARP is the default (and only) engine, bundled in core, so we do
+        // NOT pass an `engineType` (it was removed — `H.Map.EngineType` no longer
+        // exists and referencing it would throw). createDefaultLayers() returns
+        // HARP layers, including `vector.normal.logistics` with the vehicle
+        // restrictions overlay.
+        const layers = platform.createDefaultLayers()
         layersRef.current = layers
 
         const map = new H.Map(
           container,
           baseLayerFor(layers, baseStyleRef.current, schemeRef.current),
           {
-            engineType: H.Map.EngineType.HARP,
             center: center ? { lat: center.lat, lng: center.lng } : DEFAULT_CENTER,
             zoom: center ? zoom : DEFAULT_ZOOM,
-            pixelRatio: window.devicePixelRatio || 1,
+            // Cap the render resolution at 2×. The HARP engine rasterises the
+            // logistics vector tiles (+ restriction icons) on the GPU every frame;
+            // on 3×/4K displays an uncapped devicePixelRatio makes pan/zoom crawl
+            // for no visible gain. 2× stays crisp while keeping it smooth.
+            pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
           },
         )
         mapRef.current = map
@@ -492,10 +575,13 @@ export default function HereMapView({
     }
   }, [vehicleSpecs, status])
 
-  // Recenter when the target changes.
+  // Recenter when the explicit `center` target changes. Skipped while a route is
+  // visible — the route's bounds own the camera, so centering must not fight the
+  // fit. (The route planner passes center=null; this serves the single-marker use.)
   useEffect(() => {
     const map = mapRef.current
     if (!map || !center || status !== 'ready') return
+    if (routeRef.current.length >= 2) return
     map.getViewModel().setLookAtData({ position: { lat: center.lat, lng: center.lng }, zoom })
   }, [center, zoom, status])
 
@@ -518,18 +604,25 @@ export default function HereMapView({
     }
   }, [marker, status])
 
-  // Draw / update the route line and fit the view to it.
+  // Draw / update the route line, re-snap markers to the new geometry, then fit
+  // the view (once per geometry change — fitView is content-keyed).
   useEffect(() => {
     routeRef.current = route ?? []
     if (status !== 'ready') return
     drawRoute(routeRef.current)
+    drawPoints(pointsRef.current)
+    fitView()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route, status])
 
-  // Keep waypoint markers in sync and frame them when there's no route.
+  // Keep waypoint markers in sync and frame them (once per content change). Runs
+  // on `points`/`route` change; both draw and fit are no-ops when their content
+  // key is unchanged, so an unstable `points` identity (typing) can't re-zoom.
   useEffect(() => {
+    pointsRef.current = points ?? []
     if (status !== 'ready') return
-    drawPoints(points ?? [])
+    drawPoints(pointsRef.current)
+    fitView()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [points, route, status])
 

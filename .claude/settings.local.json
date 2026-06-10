@@ -215,7 +215,9 @@
       "Bash(node -e \"console.log\\(require\\('./web/package.json'\\).scripts.dev\\)\")",
       "Bash(ls web/vite.config.*)",
       "Bash(curl -s \"https://raw.githubusercontent.com/heremaps/flexible-polyline/master/javascript/index.js\")",
-      "Bash(node -e \"const fs=require\\('fs'\\);for\\(const f of ['tsconfig.json','tsconfig.app.json']\\){try{const c=fs.readFileSync\\(f,'utf8'\\);const m=c.match\\(/\\\\\"target\\\\\"\\\\s*:\\\\s*\\\\\"\\([^\\\\\"]+\\)\\\\\"/i\\);console.log\\(f, m?m[1]:'\\(no target\\)'\\);}catch\\(e\\){console.log\\(f,'\\(missing\\)'\\)}}\")"
+      "Bash(node -e \"const fs=require\\('fs'\\);for\\(const f of ['tsconfig.json','tsconfig.app.json']\\){try{const c=fs.readFileSync\\(f,'utf8'\\);const m=c.match\\(/\\\\\"target\\\\\"\\\\s*:\\\\s*\\\\\"\\([^\\\\\"]+\\)\\\\\"/i\\);console.log\\(f, m?m[1]:'\\(no target\\)'\\);}catch\\(e\\){console.log\\(f,'\\(missing\\)'\\)}}\")",
+      "WebFetch(domain:docs.here.com)",
+      "Bash(curl -s http://localhost:5173/src/components/map/HereMapView.tsx)"
     ]
   }
 }

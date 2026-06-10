@@ -192,14 +192,64 @@ export async function getPlace(placeId: string): Promise<ResolvedPlace | null> {
   }
 }
 
-// Snap a dropped point to the nearest road. HERE Routing v8 already matches `via`
-// waypoints to the road network when calculating, so a dropped via-point routes
-// onto a real road without a separate snap call. We therefore treat snapping as a
-// no-op here and let the caller fall back to the raw dropped point; the route
-// itself is what places the via on a road. (A dedicated HERE Route Matching v8
-// integration is a possible future refinement.)
-export async function snapToRoad(_point: LngLat): Promise<LngLat | null> {
-  return null
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+// ── Snap-to-road / route alignment ───────────────────────────────────────────
+// HERE Routing v8 already matches origin/destination/`via` waypoints onto the
+// road network when it calculates a route, so the *returned route polyline* is an
+// authoritative on-road geometry. Rather than calling a separate snapping service,
+// we align a coordinate to that geometry: the nearest point on the returned route
+// polyline is, by construction, a real point on a routable road. This is the
+// "reliable local fallback" the planner uses to make markers sit exactly on the
+// route line (and to give dropped/clicked points an on-route coordinate).
+
+// Project [lng, lat] to a local planar frame around `latRef` so distances along
+// the (short) snapping range aren't distorted by longitude convergence. Returns
+// metres-ish units (scaled degrees); only relative magnitudes matter here.
+function projector(latRef: number) {
+  const kx = Math.cos((latRef * Math.PI) / 180)
+  return ([lng, lat]: LngLat): [number, number] => [lng * kx, lat]
 }
 
-/* eslint-enable @typescript-eslint/no-explicit-any */
+// Nearest point to `p` on the segment a→b (all in projected space), returned in
+// the same projected space, plus the squared distance from `p`.
+function nearestOnSegment(
+  p: [number, number],
+  a: [number, number],
+  b: [number, number],
+): { point: [number, number]; d2: number } {
+  const abx = b[0] - a[0]
+  const aby = b[1] - a[1]
+  const len2 = abx * abx + aby * aby
+  let t = len2 === 0 ? 0 : ((p[0] - a[0]) * abx + (p[1] - a[1]) * aby) / len2
+  t = Math.max(0, Math.min(1, t))
+  const point: [number, number] = [a[0] + t * abx, a[1] + t * aby]
+  const dx = p[0] - point[0]
+  const dy = p[1] - point[1]
+  return { point, d2: dx * dx + dy * dy }
+}
+
+// Snap a coordinate to the nearest point on a route polyline ([lng, lat] points
+// from HERE Routing). Returns the on-route coordinate, or null when there's no
+// usable geometry to snap to (the caller then keeps the raw point). Because the
+// polyline is HERE's road-matched route geometry, the result lies on a real road.
+export function snapToRoad(point: LngLat, polyline?: LngLat[] | null): LngLat | null {
+  if (!polyline || polyline.length === 0) return null
+  if (polyline.length === 1) return polyline[0]
+  const project = projector(point[1])
+  const pp = project(point)
+  let best: [number, number] = project(polyline[0])
+  let bestD2 = Infinity
+  for (let i = 0; i < polyline.length - 1; i++) {
+    const a = project(polyline[i])
+    const b = project(polyline[i + 1])
+    const { point: q, d2 } = nearestOnSegment(pp, a, b)
+    if (d2 < bestD2) {
+      bestD2 = d2
+      best = q
+    }
+  }
+  // Unproject back to [lng, lat].
+  const kx = Math.cos((point[1] * Math.PI) / 180) || 1
+  return [best[0] / kx, best[1]]
+}

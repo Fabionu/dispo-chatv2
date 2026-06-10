@@ -1,4 +1,4 @@
-// HERE Maps API for JavaScript (v3.1) loader + config (frontend). The route
+// HERE Maps API for JavaScript (v3.2) loader + config (frontend). The route
 // planner renders the HERE *logistics* basemap with the HGV/truck restriction
 // overlay, so it uses the HERE Maps JS SDK directly (not Amazon Location /
 // MapLibre, which the vehicle-location modal still uses). The SDK ships as
@@ -26,18 +26,19 @@ export const apiKey = import.meta.env.VITE_HERE_API_KEY?.trim()
 // the feature renders a neutral "not configured" state.
 export const hereConfigured = Boolean(apiKey)
 
-// HERE Maps JS v3.1 CDN. Order matters: `core` defines the `H` namespace that the
-// other bundles extend, so it must finish loading before the rest. `harp` is the
-// HARP rendering engine — REQUIRED for the `vector.normal.logistics` basemap and
-// its `vehicle restrictions` overlay (without it `createDefaultLayers()` doesn't
-// expose `.logistics` and the HARP engine is unavailable).
-const CDN = 'https://js.api.here.com/v3/3.1'
+// HERE Maps JS v3.2 CDN. Order matters: `core` defines the `H` namespace that the
+// other bundles extend, so it must finish loading before the rest. In v3.2 the
+// HARP rendering engine is the default and is bundled INTO `mapsjs-core.js` — the
+// separate `mapsjs-harp.js` module was removed, so we must NOT load it (and must
+// not pass an `engineType`, which no longer exists). `createDefaultLayers()` now
+// returns HARP layers — including `vector.normal.logistics` and its
+// `vehicle restrictions` overlay — by default.
+const CDN = 'https://js.api.here.com/v3/3.2'
 const CORE = `${CDN}/mapsjs-core.js`
 const EXTRAS = [
   `${CDN}/mapsjs-service.js`,
   `${CDN}/mapsjs-mapevents.js`,
   `${CDN}/mapsjs-ui.js`,
-  `${CDN}/mapsjs-harp.js`,
 ]
 const UI_CSS = `${CDN}/mapsjs-ui.css`
 
@@ -86,14 +87,14 @@ export async function loadHere(): Promise<any> {
   if (loadPromise) return loadPromise
   loadPromise = (async () => {
     loadStylesheet(UI_CSS)
-    // Load deterministically: core defines the `H` namespace first, then each
-    // extension bundle (service / mapevents / ui / harp) runs after it, one at a
-    // time. Sequential awaits make the execution order explicit and easy to reason
-    // about — `H` (and the HARP engine) are guaranteed ready once this resolves.
+    // Load deterministically but as fast as possible: `core` defines the `H`
+    // namespace and MUST execute first, so it's awaited alone. The extension
+    // bundles (service / mapevents / ui / harp) each only extend `H` from core and
+    // are independent of one another, so once core is ready they load in PARALLEL
+    // — turning four sequential network round-trips into one. `H` (and the HARP
+    // engine) are guaranteed ready once this resolves.
     await loadScript(CORE)
-    for (const src of EXTRAS) {
-      await loadScript(src)
-    }
+    await Promise.all(EXTRAS.map(loadScript))
     if (!window.H) throw new Error('HERE SDK loaded but window.H is undefined')
     return window.H
   })()

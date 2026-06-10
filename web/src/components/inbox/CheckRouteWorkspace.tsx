@@ -347,6 +347,47 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
     }
   }, [routeKey, truckKey])
 
+  // After a route is computed, refine any map-placed (raw coordinate) waypoints
+  // onto the returned route polyline so their stored coordinate AND the value shown
+  // in the field sit exactly on the route — not at the off-road point where they
+  // were dropped/clicked. Named places (geocoded addresses/POIs) keep their label;
+  // only coordinate-type fields are snapped. Start/end take the polyline's first/
+  // last vertex (HERE's origin/destination road-snap); stops take the nearest point
+  // on the polyline. Returning the SAME field object when nothing moved (epsilon
+  // guard) lets React bail out, so this converges in one extra recalc rather than
+  // looping (a point already on the route snaps to itself).
+  useEffect(() => {
+    if (!result) return
+    const geom = result.geometry
+    if (geom.length < 2) return
+    const EPS = 1e-5 // ≈1 m — below this, treat the point as already on the route
+    const refine = (f: WaypointField, anchor?: 'first' | 'last'): WaypointField => {
+      if (!f.place || f.place.placeId !== 'coordinates') return f
+      const [lng, lat] = f.place.position
+      const snapped =
+        anchor === 'first'
+          ? geom[0]
+          : anchor === 'last'
+            ? geom[geom.length - 1]
+            : snapToRoad([lng, lat], geom)
+      if (!snapped) return f
+      if (Math.abs(snapped[0] - lng) < EPS && Math.abs(snapped[1] - lat) < EPS) return f
+      const place = coordPlace(snapped[0], snapped[1])
+      return { text: place.label, place }
+    }
+    setFrom((f) => refine(f, 'first'))
+    setTo((f) => refine(f, 'last'))
+    setStops((ss) => {
+      let changed = false
+      const next = ss.map((s) => {
+        const r = refine(s)
+        if (r !== s) changed = true
+        return r
+      })
+      return changed ? next : ss
+    })
+  }, [result])
+
   // Manual trigger: geocodes any free-text fields that weren't picked from the
   // dropdown, then routes. (Selected fields use their resolved coordinates.)
   async function handleCheck() {
@@ -425,16 +466,14 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
   }
 
   // Route line dragged: insert a via-waypoint at the dropped point, placed into
-  // the least-detour segment so ordering stays sensible. The dropped point is
-  // first snapped to the nearest road (truck-suitable, direction-aware) so the
-  // via-point lands on an actual road rather than wherever the cursor released;
-  // falls back to the raw point if snapping is unavailable. The auto-recalc effect
-  // then re-routes through it (truck-aware) — never a hand-drawn line.
-  async function handleRouteDrag([lng, lat]: LngLat) {
+  // the least-detour segment so ordering stays sensible. The dropped coordinate is
+  // stored as the user dropped it, then the auto-recalc effect re-routes through it
+  // (truck-aware) — HERE matches the via onto a road, and the map snaps the marker
+  // onto the resulting route line, so the point ends up aligned to the route.
+  function handleRouteDrag([lng, lat]: LngLat) {
     if (!from.place || !to.place) return
-    const [slng, slat] = (await snapToRoad([lng, lat])) ?? [lng, lat]
-    const insertAt = bestStopInsertIndex([slng, slat])
-    const place = coordPlace(slng, slat)
+    const insertAt = bestStopInsertIndex([lng, lat])
+    const place = coordPlace(lng, lat)
     setStops((s) => [...s.slice(0, insertAt), { text: place.label, place }, ...s.slice(insertAt)])
   }
 
@@ -504,13 +543,12 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
     setStops(arr.slice(1, -1))
   }
 
-  // A From/Stop/To dot was dragged to a new spot: snap the dropped coordinate to
-  // the nearest road (so it sits on a routable road, not in a field) and update
-  // that waypoint, so the auto-recalc effect re-routes through it. Falls back to
-  // the raw point when snapping is unavailable.
-  async function handlePointDragEnd(pt: RoutePoint, [lng, lat]: LngLat) {
-    const [slng, slat] = (await snapToRoad([lng, lat])) ?? [lng, lat]
-    const place = coordPlace(slng, slat)
+  // A From/Stop/To dot was dragged to a new spot: store the dropped coordinate as
+  // that waypoint, so the auto-recalc effect re-routes through it. HERE matches the
+  // waypoint onto a road and the map snaps the marker onto the recalculated route
+  // line, so the dot ends up sitting on the route rather than where it was released.
+  function handlePointDragEnd(pt: RoutePoint, [lng, lat]: LngLat) {
+    const place = coordPlace(lng, lat)
     const field = { text: place.label, place }
     if (pt.kind === 'start') setFrom(field)
     else if (pt.kind === 'end') setTo(field)

@@ -8,17 +8,20 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <!-- Warm the HERE endpoints early so the route planner's heavy SDK bundles
-         (js.api.here.com), vector tiles (vector.hereapi.com) and routing/search
-         calls don't pay DNS/TLS setup on first use. -->
+         (js.api.here.com), vector tiles (vector.hereapi.com), routing and the
+         geocode/discover/autosuggest/lookup search calls don't pay DNS/TLS setup
+         on first use. -->
     <link rel="preconnect" href="https://js.api.here.com" crossorigin />
     <link rel="preconnect" href="https://vector.hereapi.com" crossorigin />
     <link rel="dns-prefetch" href="https://router.hereapi.com" />
-    <link rel="dns-prefetch" href="https://discover.search.hereapi.com" />
     <link rel="dns-prefetch" href="https://geocode.search.hereapi.com" />
-    <!-- Amazon Location endpoints — used only by the vehicle-location modal map. -->
+    <link rel="dns-prefetch" href="https://discover.search.hereapi.com" />
+    <link rel="dns-prefetch" href="https://autosuggest.search.hereapi.com" />
+    <link rel="dns-prefetch" href="https://lookup.search.hereapi.com" />
+    <!-- Amazon Location is used ONLY by the vehicle-location modal's MapLibre map,
+         which fetches map tiles/style (no places/routing). The route planner uses
+         no Amazon endpoint. -->
     <link rel="preconnect" href="https://maps.geo.eu-central-1.amazonaws.com" crossorigin />
-    <link rel="dns-prefetch" href="https://places.geo.eu-central-1.amazonaws.com" />
-    <link rel="dns-prefetch" href="https://routes.geo.eu-central-1.amazonaws.com" />
     <title>Dispo-chat</title>
   </head>
   <body>
