@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { MapPin, X } from 'lucide-react'
 import Spinner from '../Spinner'
 import {
+  autocompletePlaces,
   formatCoords,
   getPlace,
   parseCoordinates,
@@ -9,7 +10,7 @@ import {
   type LngLat,
   type PlaceSuggestion,
   type ResolvedPlace,
-} from '../../lib/geo'
+} from '../../lib/hereSearch'
 
 type Props = {
   label: string
@@ -33,11 +34,12 @@ type Props = {
 const MIN_CHARS = 3
 const DEBOUNCE_MS = 300
 
-// Amazon Location Places search field with a themed dropdown. Backed by
-// SearchText so company/POI names (not just addresses) resolve to real
-// locations. Debounced, keyboard-navigable, cancels superseded requests; results
-// carry their coordinate inline, so a pick reports upward immediately (the
-// GetPlace fallback only runs for the rare result without a position).
+// HERE Geocoding & Search field with a themed dropdown. While typing it uses
+// HERE Autosuggest, falling back to Discover (company/POI + address) when
+// Autosuggest returns nothing or errors. Debounced, keyboard-navigable, cancels
+// superseded requests; most results carry their coordinate inline, so a pick
+// reports upward immediately (the getPlace/lookup fallback only runs for the rare
+// result without a position).
 export default function PlaceAutocompleteField({
   label,
   value,
@@ -111,15 +113,31 @@ export default function PlaceAutocompleteField({
     const ctrl = new AbortController()
     const timer = setTimeout(async () => {
       try {
-        const res = await searchPlaces(q, biasRef.current, ctrl.signal)
+        // While typing, use HERE Autosuggest (optimised for partial input).
+        let res = await autocompletePlaces(q, biasRef.current, ctrl.signal)
+        // Autosuggest returned nothing useful — fall back to Discover so a manual
+        // address/company search still resolves.
+        if (res.length === 0) {
+          res = await searchPlaces(q, biasRef.current, ctrl.signal)
+        }
         setSuggestions(res)
         setActiveIndex(-1)
         setOpen(true)
       } catch (err) {
         if ((err as { name?: string })?.name === 'AbortError') return
-        setError(true)
-        setSuggestions([])
-        setOpen(true)
+        // Autosuggest failed — try Discover before surfacing an error, so the
+        // field still works for manual address/company search.
+        try {
+          const res = await searchPlaces(q, biasRef.current, ctrl.signal)
+          setSuggestions(res)
+          setActiveIndex(-1)
+          setOpen(true)
+        } catch (err2) {
+          if ((err2 as { name?: string })?.name === 'AbortError') return
+          setError(true)
+          setSuggestions([])
+          setOpen(true)
+        }
       } finally {
         if (!ctrl.signal.aborted) setLoading(false)
       }

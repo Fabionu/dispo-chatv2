@@ -5,6 +5,7 @@ import { MapPinned, TriangleAlert } from 'lucide-react'
 import {
   mapConfigured,
   mapStyleUrl,
+  transformMapRequest,
   type MapBaseStyle,
   type MapColorScheme,
 } from '../../lib/mapConfig'
@@ -64,6 +65,12 @@ const ROUTE_COLOR = '#c89572'
 const START_COLOR = '#7d8a78' // green-ish "go"
 const END_COLOR = '#d97757' // orange-red destination
 
+// Neutral starting view when no `center` is provided yet — e.g. the Check route
+// planner before From/To are picked. This is a European transport app, so frame
+// Europe (central Europe at a continent-level zoom) instead of the whole globe.
+const DEFAULT_CENTER: [number, number] = [10, 50] // [lng, lat] — central Europe
+const DEFAULT_ZOOM = 4
+
 // Role-specific waypoint markers: a green start dot, white numbered stop dots,
 // and a prominent teardrop pin for the destination — so it's immediately clear
 // where the route begins and ends. Dots anchor centre; the pin anchors at its
@@ -110,6 +117,31 @@ function forceFlatProjection(map: maplibregl.Map) {
     map.setProjection({ type: 'mercator' })
   } catch {
     /* older/newer maplibre without setProjection — default is already flat */
+  }
+}
+
+// The HERE "Explore Truck" basemap ships the HGV/truck-restriction layers
+// (hgv-line-* = restricted-road overlays, hgv-shield-* = weight/height/length/
+// width/hazmat restriction shields) but with `visibility: "none"` — i.e. OFF by
+// default. Turn them on so the restrictions actually render. They're minzoom-
+// gated (z8 for major roads, up to z15–16 for finer roads), so they reveal as
+// you zoom into road level. No-op on the v2 Satellite/Hybrid basemaps (no hgv-*
+// layers there) and after any style reload, which resets layer visibility.
+function showTruckRestrictions(map: maplibregl.Map) {
+  let layers: { id: string }[] = []
+  try {
+    layers = map.getStyle()?.layers ?? []
+  } catch {
+    return
+  }
+  for (const layer of layers) {
+    if (layer.id.startsWith('hgv-')) {
+      try {
+        map.setLayoutProperty(layer.id, 'visibility', 'visible')
+      } catch {
+        /* layer not ready / removed — ignore */
+      }
+    }
   }
 }
 
@@ -239,14 +271,19 @@ export default function MapView({
     const map = new maplibregl.Map({
       container,
       style: url,
-      center: center ? [center.lng, center.lat] : [0, 20],
-      zoom: center ? zoom : 1,
+      center: center ? [center.lng, center.lat] : DEFAULT_CENTER,
+      zoom: center ? zoom : DEFAULT_ZOOM,
       attributionControl: false,
+      // The legacy HERE Explore Truck basemap (Standard) authenticates each v0
+      // request and its descriptor's sub-URLs don't carry the key — append it.
+      // No-op for v2 GeoMaps (Satellite/Hybrid) and all other URLs.
+      transformRequest: transformMapRequest,
     })
     mapRef.current = map
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
     const onReady = () => {
       forceFlatProjection(map)
+      showTruckRestrictions(map)
       setStatus('ready')
       drawRoute(map, routeRef.current)
     }
@@ -256,10 +293,27 @@ export default function MapView({
     // undrawn. The style is usable as soon as its data arrives, so also become
     // ready on the first 'styledata'. Idempotent with 'load'.
     map.once('styledata', onReady)
-    map.on('error', () => {
-      // Only treat a failure as fatal if the map hasn't loaded at all; ignore
-      // non-fatal per-tile/glyph/sprite errors once it's up.
-      if (!map.loaded()) setStatus('error')
+    map.on('error', (e) => {
+      // A failure before the map loads (bad style / key / region) is fatal.
+      if (!map.loaded()) {
+        setStatus('error')
+        return
+      }
+      // Post-load, a single resource failing isn't fatal — but DON'T swallow it
+      // silently: a 403/AccessDenied on the legacy v0 sprites or glyphs is the
+      // usual reason the HGV restriction shields + labels go missing while the
+      // base roads still render (the reused key must grant geo:GetMapSprites and
+      // geo:GetMapGlyphs, not just GetMapTile/GetMapStyleDescriptor). Surface the
+      // failing request so it's diagnosable instead of an invisibly-broken map.
+      const err = (e as { error?: { status?: number; message?: string; url?: string } }).error
+      if (err) {
+        console.warn(
+          '[map] non-fatal resource error',
+          err.status ?? '',
+          err.url ?? '',
+          err.message ?? err,
+        )
+      }
     })
 
     // ── Drag the route line to insert a via-waypoint ───────────────────────
@@ -360,6 +414,7 @@ export default function MapView({
     map.setStyle(url)
     map.once('styledata', () => {
       forceFlatProjection(map)
+      showTruckRestrictions(map)
       drawRoute(map, routeRef.current)
     })
   }, [colorScheme, baseStyle, traffic])

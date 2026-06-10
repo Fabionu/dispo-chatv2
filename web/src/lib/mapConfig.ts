@@ -7,45 +7,48 @@
 const apiKey = import.meta.env.VITE_AWS_LOCATION_API_KEY
 const region = import.meta.env.VITE_AWS_LOCATION_REGION
 
-// The app uses a single basemap: the v2 GeoMaps Standard style in Truck travel
-// mode (truck-restriction overlays). It needs only the scoped key + region — no
-// style-name or legacy Map resource is required.
+// Legacy v0 Map resource for the default road basemap: a HERE "Explore Truck"
+// map (created from the VectorHereExploreTruck style) so the road view carries
+// HGV/truck restriction visuals (height/weight/length/hazmat, restricted roads)
+// baked into the tiles. Overridable via env; defaults to the resource created
+// for this app. MUST live in VITE_AWS_LOCATION_REGION, and the API key's policy
+// must allow the legacy geo:GetMapTile / GetMapStyleDescriptor / GetMapGlyphs /
+// GetMapSprites actions on this map's ARN (the v0 endpoints authenticate
+// per-request — see transformMapRequest below).
+const truckMapName =
+  import.meta.env.VITE_AWS_LOCATION_TRUCK_MAP_NAME?.trim() || 'TruckMapDispoChat'
+
+// Only the key + region are required; the legacy truck map name has a default.
 export const mapConfigured = Boolean(apiKey && region)
 
-// Map appearance. The basemap is always the Truck travel-mode style; this only
-// chooses the light or dark colour theme for it.
+// Map appearance. Light/Dark only affects the v2 imagery-adjacent params; the
+// legacy HERE Explore Truck road basemap is a single baked style and ignores it.
 export type MapColorScheme = 'Dark' | 'Light'
 
-// Which v2 GeoMaps basemap to render:
-//  - 'Standard'  the colourful road map (truck-restriction overlay, themeable).
-//  - 'Satellite' aerial/satellite imagery only (no labels).
-//  - 'Hybrid'    satellite imagery WITH road/place labels on top.
-// Standard is the default; Satellite/Hybrid are imagery basemaps so the
-// light/dark theme and the Truck overlay don't apply to them.
+// Which basemap to render:
+//  - 'Standard'  the HERE Explore Truck road map (legacy v0 resource) with HGV
+//                restriction visuals baked in.
+//  - 'Satellite' v2 GeoMaps aerial/satellite imagery only (no labels).
+//  - 'Hybrid'    v2 GeoMaps satellite imagery WITH road/place labels on top.
+// Standard is the default; Satellite/Hybrid are v2 imagery basemaps.
 export type MapBaseStyle = 'Standard' | 'Satellite' | 'Hybrid'
 
-// Satellite imagery has no labels/roads to drape traffic over, so the v2 GeoMaps
-// `traffic` parameter is rejected on it (400). It IS supported on Standard and
-// Hybrid (verified against the live API), so the traffic overlay is offered on
-// those two only.
+// Real-time traffic is a v2 GeoMaps overlay (`traffic=All`). The legacy HERE
+// Standard basemap can't carry it, and Satellite has no roads to drape it over,
+// so it's offered on the v2 Hybrid basemap only (verified against the live API).
 export function baseStyleSupportsTraffic(baseStyle: MapBaseStyle): boolean {
-  return baseStyle !== 'Satellite'
+  return baseStyle === 'Hybrid'
 }
 
-// MapLibre style descriptor URL for Amazon Location v2 GeoMaps. Returns null when
-// unconfigured so callers can show an empty state. The key is URL-encoded
-// defensively (it's the key VALUE, never the ARN).
+// MapLibre style descriptor URL. Returns null when unconfigured so callers can
+// show an empty state.
 //
-//  - Standard uses the familiar colourful road map with `travel-modes=Truck`
-//    (truck road/bridge/tunnel layers + restriction/hazmat shields) and the
-//    light/dark `color-scheme`.
-//  - Satellite / Hybrid are imagery basemaps: no truck overlay and no colour
-//    scheme (the imagery isn't themeable), so only the key is appended. Hybrid
-//    additionally renders road/place labels over the imagery.
-//  - `traffic` overlays Amazon Location's own real-time traffic (congestion,
-//    construction, incidents) baked into the basemap via the `traffic=All`
-//    descriptor parameter — same scoped key, no extra provider. Applied to
-//    Standard/Hybrid only (Satellite rejects it).
+//  - Standard → the legacy v0 HERE Explore Truck Map resource's style descriptor
+//    (HGV restrictions baked in). It's one fixed style: color-scheme and traffic
+//    don't apply, so those params are intentionally not appended here.
+//  - Satellite / Hybrid → v2 GeoMaps imagery basemaps (the key is in the URL and
+//    propagates to sub-resources; no transformRequest needed for these).
+//  - `traffic` overlays Amazon Location's real-time traffic on Hybrid only.
 //
 // No globe / 3D — the projection is pinned flat by the caller.
 export function mapStyleUrl(
@@ -55,11 +58,36 @@ export function mapStyleUrl(
 ): string | null {
   if (!apiKey || !region) return null
   const key = encodeURIComponent(apiKey)
+
+  if (baseStyle === 'Standard') {
+    // Legacy v0 Maps endpoint. The key is appended here for the descriptor fetch;
+    // transformMapRequest re-appends it to the tile/glyph/sprite sub-requests the
+    // descriptor references (which don't carry it themselves).
+    return (
+      `https://maps.geo.${region}.amazonaws.com/maps/v0/maps/` +
+      `${encodeURIComponent(truckMapName)}/style-descriptor?key=${key}`
+    )
+  }
+
+  // Satellite / Hybrid: v2 GeoMaps imagery basemaps. Just the key (+ traffic on
+  // Hybrid) — no theme/Truck params (the imagery isn't themeable).
   const base = `https://maps.geo.${region}.amazonaws.com/v2/styles`
   const trafficParam = traffic && baseStyleSupportsTraffic(baseStyle) ? '&traffic=All' : ''
-  if (baseStyle === 'Standard') {
-    return `${base}/Standard/descriptor?travel-modes=Truck&color-scheme=${colorScheme}${trafficParam}&key=${key}`
-  }
-  // Satellite / Hybrid: imagery basemaps. Just the key — no theme/Truck params.
+  void colorScheme // imagery basemaps ignore color-scheme
   return `${base}/${baseStyle}/descriptor?key=${key}${trafficParam}`
+}
+
+// MapLibre `transformRequest`: the legacy v0 HERE Explore Truck basemap
+// authenticates EVERY request (tiles, glyphs, sprites, the descriptor), and the
+// descriptor's referenced URLs don't carry the key — so append it to any v0 Maps
+// request that's missing it. v2 GeoMaps URLs already embed the key, and all other
+// URLs (markers, app assets) are left untouched, so this is safe to set globally
+// on the map instance.
+export function transformMapRequest(url: string): { url: string } | undefined {
+  if (!apiKey) return undefined
+  if (url.includes('/maps/v0/maps/') && !/[?&]key=/.test(url)) {
+    const sep = url.includes('?') ? '&' : '?'
+    return { url: `${url}${sep}key=${encodeURIComponent(apiKey)}` }
+  }
+  return undefined
 }

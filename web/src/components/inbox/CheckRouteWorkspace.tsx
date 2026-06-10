@@ -16,25 +16,30 @@ import {
   Truck,
 } from 'lucide-react'
 import Spinner from '../Spinner'
-import type { LatLng, RoutePoint } from '../map/MapView'
 import {
   baseStyleSupportsTraffic,
+  type LatLng,
   type MapBaseStyle,
   type MapColorScheme,
-} from '../../lib/mapConfig'
+  type RoutePoint,
+} from '../../lib/hereMapTypes'
 import {
+  buildVehicleSpecs,
   calculateRoute,
-  DEFAULT_BIAS,
-  formatCoords,
   formatDistance,
   formatDuration,
+  type HereVehicleSpecs,
+  type TruckRouteOptions,
+} from '../../lib/hereRouting'
+import {
+  DEFAULT_BIAS,
+  formatCoords,
   geocode,
   geoConfigured,
   snapToRoad,
   type LngLat,
   type ResolvedPlace,
-  type TruckRouteOptions,
-} from '../../lib/geo'
+} from '../../lib/hereSearch'
 import PlaceAutocompleteField from './PlaceAutocompleteField'
 import {
   deleteTruckProfile,
@@ -43,8 +48,9 @@ import {
   type TruckProfile,
 } from '../../lib/truckProfiles'
 
-// MapLibre is heavy, so the map is pulled in lazily when this workspace opens.
-const MapView = lazy(() => import('../map/MapView'))
+// The HERE Maps SDK is heavy, so the map is pulled in lazily when this workspace
+// opens. (The vehicle-location modal keeps using the Amazon Location MapView.)
+const MapView = lazy(() => import('../map/HereMapView'))
 
 type Props = {
   // Return to the Inbox tool grid.
@@ -69,7 +75,7 @@ type RouteState = {
 }
 
 // Truck restrictions captured from the UI (strings). Converted to numbers and
-// real Amazon Location Truck options at route time.
+// real HERE Routing truck options (and map vehicle specs) at route time.
 type TruckOptions = {
   height: string
   width: string
@@ -147,11 +153,11 @@ function insertionDetourKm(p: LngLat, a: LngLat, b: LngLat): number {
   return distanceKm(a, p) + distanceKm(p, b) - distanceKm(a, b)
 }
 
-// Dedicated "Check route" workspace: a full-bleed map as the primary surface with
-// a floating, translucent route panel over its top-left (Google-Maps-like, in the
-// Dispo-chat dark theme). Fields use Amazon Location Places autocomplete; picking
-// From/To drops markers and auto-calculates the route (GeoRoutes), truck-aware
-// when truck restrictions are entered.
+// Dedicated "Check route" workspace: a full-bleed HERE logistics map as the
+// primary surface with a floating, translucent route panel over its top-left
+// (Google-Maps-like, in the Dispo-chat dark theme). Fields use HERE Geocoding &
+// Search autocomplete; picking From/To drops markers and auto-calculates the
+// route (HERE Routing v8), truck-aware when truck restrictions are entered.
 export default function CheckRouteWorkspace({ onBack }: Props) {
   const [from, setFrom] = useState<WaypointField>(EMPTY_FIELD)
   const [to, setTo] = useState<WaypointField>(EMPTY_FIELD)
@@ -283,6 +289,13 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
   // only — not on every keystroke.
   const routeKey = resolvedWaypoints ? resolvedWaypoints.map((p) => p.join(',')).join('|') : ''
   const truckParams = useMemo(() => truckToOptions(truck), [truck])
+  // Vehicle specs for the HERE logistics restriction overlay (cm / kg). Updates
+  // whenever the truck fields change, so the overlay highlights limits that apply
+  // to the current vehicle. Null when nothing usable is entered.
+  const vehicleSpecs = useMemo<HereVehicleSpecs | null>(
+    () => buildVehicleSpecs(truckParams),
+    [truckParams],
+  )
   const truckActive = hasTruckParams(truck)
   const truckKey = truckActive ? JSON.stringify(truckParams) : ''
 
@@ -549,6 +562,7 @@ export default function CheckRouteWorkspace({ onBack }: Props) {
             colorScheme={mapMode}
             baseStyle={baseStyle}
             traffic={traffic}
+            vehicleSpecs={vehicleSpecs}
             route={result?.geometry ?? null}
             points={selectedPoints}
             onRouteDrag={result ? handleRouteDrag : undefined}
@@ -872,8 +886,8 @@ function MapLayersControl({
   traffic: boolean
   onTrafficChange: (v: boolean) => void
 }) {
-  // Amazon Location's traffic overlay is available on the road/labelled basemaps
-  // but not on plain satellite imagery, so the toggle is disabled there.
+  // HERE's traffic flow overlay drapes over the road/labelled basemaps but not
+  // plain satellite imagery, so the toggle is disabled there.
   const trafficSupported = baseStyleSupportsTraffic(baseStyle)
   return (
     <div className="flex items-center justify-between gap-2 flex-wrap">
