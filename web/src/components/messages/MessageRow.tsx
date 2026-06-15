@@ -19,9 +19,16 @@ import { downloadAttachment } from '../attachments/attachmentUtils'
 import MessageActionsMenu, { type MessageAction } from './MessageActionsMenu'
 import ReadReceipts, { type Reader } from './ReadReceipts'
 import ReplyQuote from './ReplyQuote'
-import { DELETE_WINDOW_MS, formatDay, formatTime } from './messageUtils'
+import { DELETE_WINDOW_MS, formatTime } from './messageUtils'
+import DayDivider from './DayDivider'
 import Avatar from '../Avatar'
+import { useMessageDisplay } from '../../lib/messageDisplay'
 import type { LocalMessage } from './types'
+
+// Consecutive messages from the same author within this window are grouped (one
+// author header, then plain rows / tight bubbles). A new group also starts on an
+// author change, a system row, or a date divider. ~7 min reads as "same burst".
+const GROUP_WINDOW_MS = 7 * 60 * 1000
 
 // Render a message body with @-mentions highlighted and *bold* / _italic_ inline
 // formatting applied. Tokenized into plain-text and mention segments (never HTML)
@@ -66,6 +73,9 @@ type Props = {
   // of my rows, so its reference is stable unless the roster actually changes.
   readers?: Reader[]
   prev?: LocalMessage
+  // True when this is the very first message of the whole thread (no older page
+  // to load) — the day divider then reads "Conversation started · <date>".
+  conversationStart?: boolean
   groupType: GroupType
   highlighted: boolean
   onRetry: (localId: string, body: string, file: File | null) => void
@@ -95,6 +105,7 @@ function MessageRow({
   currentUserId,
   readers,
   prev,
+  conversationStart,
   groupType,
   highlighted,
   onRetry,
@@ -120,11 +131,21 @@ function MessageRow({
     prev !== undefined &&
     prev.kind !== 'system' &&
     prev.authorId === message.authorId &&
-    new Date(message.createdAt).getTime() - new Date(prev.createdAt).getTime() < 4 * 60 * 1000
+    new Date(message.createdAt).getTime() - new Date(prev.createdAt).getTime() < GROUP_WINDOW_MS
 
   const showDayDivider =
     prev === undefined ||
     new Date(prev.createdAt).toDateString() !== new Date(message.createdAt).toDateString()
+
+  // A group starts on an author change / time gap / system break (all folded
+  // into !sameAuthorAsPrev) or whenever a date divider precedes this row. Drives
+  // the plain-stream author header; the bubble view uses sameAuthorAsPrev only.
+  const startNewGroup = !sameAuthorAsPrev || showDayDivider
+
+  // Which message timeline style to render — 'bubble' (classic) or 'plain' (the
+  // no-bubble grouped operational-log stream). Reads live via a <html> attribute
+  // so toggling re-renders every row without ChatView prop changes.
+  const display = useMessageDisplay()
 
   const failed = message.failed === true
   const pending = message.pending === true
@@ -284,14 +305,214 @@ function MessageRow({
     </>
   )
 
+  // ── Plain stream (no-bubble, grouped "operational log") ────────────────────
+  // Slack/Discord-style work-log: every group is LEFT-aligned with the SAME
+  // structure regardless of author — including my own. A group start shows the
+  // avatar (in a fixed left gutter) + author name; following rows in the group
+  // are bare text indented under that gutter. Ownership of my messages is marked
+  // only subtly (warmer name + a "You" chip + read ticks) — never by alignment
+  // or a bubble. Per-message time trails the body on the row's end (faint, never
+  // in the header, never above the text). A single subtle dropdown chevron
+  // reveals in the reserved left gutter on hover and opens the full actions
+  // menu; right-click opens the same menu — both reuse the same handlers.
+  if (display === 'plain') {
+    const authorLabel = message.authorName || 'Member'
+    const time = formatTime(message.createdAt)
+    // Trailing meta cluster, a flex sibling at the END of the message (close on
+    // short messages, at the row end on long ones) — never at the viewport edge,
+    // the author header, or above the text. Order: optional `edited`, then my
+    // read ticks, then the time. The ticks stay visible (delivery/read state);
+    // the time and `edited` reveal only on THIS row's hover. Both stay mounted
+    // (opacity-only) so the cluster's width is constant — hovering never reflows.
+    const metaCluster = (
+      <span className="inline-flex items-center gap-1 shrink-0 leading-none select-none pb-[2px]">
+        {edited && (
+          <span className="text-[10px] text-faint italic opacity-0 transition-opacity group-hover/msg:opacity-100">
+            edited
+          </span>
+        )}
+        {mine && !failed && !deleted && (
+          <ReadReceipts
+            others={readers ?? []}
+            createdAt={message.createdAt}
+            pending={pending}
+            align="right"
+          />
+        )}
+        <span className="text-[10px] text-faint tabular-nums opacity-0 transition-opacity group-hover/msg:opacity-100">
+          {time}
+        </span>
+      </span>
+    )
+
+    return (
+      <>
+        {showDayDivider && (
+          <DayDivider iso={message.createdAt} conversationStart={conversationStart} />
+        )}
+        <div
+          data-message-id={message.id}
+          onContextMenu={(e) => {
+            if (!canShowActions) return
+            e.preventDefault()
+            setMenu({ x: e.clientX, y: e.clientY })
+          }}
+          className={`group/msg relative pl-1.5 pr-2 rounded-md transition-colors duration-500 ${
+            startNewGroup ? 'mt-4' : 'mt-0.5'
+          } ${highlighted ? 'bg-active/10' : 'hover:bg-white/[0.02]'}`}
+        >
+          {/* Row layout: avatar gutter · content column. The chevron does NOT
+              live up here next to the avatar/name — it sits INSIDE the content
+              column, in a gutter on the message block (below the author header),
+              so it aligns with the message text row and never shifts the avatar,
+              name, or body. */}
+          <div className="flex items-start gap-2.5">
+            {/* Avatar gutter — avatar only at a group start; empty (indent) on
+                following rows so the group stays visually anchored. */}
+            <div className="w-8 shrink-0 pt-0.5">
+              {startNewGroup && (
+                <Avatar userId={message.authorId} name={authorLabel} size={32} />
+              )}
+            </div>
+
+            {/* Content column — always left-aligned, capped for readability. */}
+            <div className="min-w-0 flex-1 flex flex-col items-start max-w-[680px]">
+              {/* Author header: name (+ subtle "You" chip for mine). Kept clean —
+                  NO chevron and NO timestamp ever live on this row. It sits at
+                  the content-left edge, sharing its x with the chevron gutter
+                  below it. */}
+              {startNewGroup && (
+                <div className="flex items-center gap-1.5 mb-0.5 leading-none">
+                  <span
+                    className={`text-[13.5px] font-semibold ${mine ? 'text-active' : 'text-text'}`}
+                  >
+                    {authorLabel}
+                  </span>
+                  {mine && (
+                    <span className="rounded border border-white/[0.1] px-1 py-px text-[9px] uppercase tracking-[0.06em] leading-none text-faint">
+                      You
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Message block: chevron gutter + message content. The chevron
+                  gutter sits at the content-left edge (under the author name) and
+                  the body indents past it — so the chevron lands on the MESSAGE
+                  TEXT row, aligned to its first line, never the author row. Its
+                  fixed width means the body never shifts when it reveals. */}
+              <div className="flex items-start gap-1.5 w-full">
+                {/* Actions trigger — icon-only, revealed on this row's hover/
+                    focus. No background, border, shadow or rounded box — just a
+                    muted glyph that brightens on hover. Clicking opens the full
+                    actions menu (reply / forward / edit / delete / pin / copy …);
+                    right-click still opens it too. */}
+                <div className="w-4 shrink-0 pt-0.5 flex justify-center">
+                  {canShowActions && (
+                    <button
+                      ref={triggerRef}
+                      type="button"
+                      onClick={() => setMenu((m) => (m === 'chevron' ? null : 'chevron'))}
+                      aria-label="Message actions"
+                      aria-haspopup="menu"
+                      aria-expanded={menuOpen}
+                      className={`flex items-center justify-center text-faint transition hover:text-text ${
+                        menuOpen
+                          ? 'opacity-100 text-text'
+                          : 'opacity-0 group-hover/msg:opacity-100 focus-visible:opacity-100'
+                      }`}
+                    >
+                      <ChevronDown size={15} strokeWidth={1.8} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Message content sub-column — reply quote / pins / attachments
+                    / body, all indented past the chevron gutter so they align
+                    with each other. */}
+                <div className="min-w-0 flex-1 flex flex-col items-start">
+                  {!deleted && message.replyTo && (
+                    <ReplyQuote replyTo={message.replyTo} onJump={onJumpToMessage} />
+                  )}
+                  {pinned && (
+                    <span className="flex items-center gap-1 text-[10.5px] text-active mb-0.5 leading-none">
+                      <Pin size={10} strokeWidth={2} className="fill-current" /> Pinned
+                    </span>
+                  )}
+                  {forwarded && (
+                    <span className="block text-[10.5px] text-muted italic mb-0.5 leading-none">Forwarded</span>
+                  )}
+
+                  {!deleted && message.attachments && message.attachments.length > 0 && (
+                    <div className="flex flex-col gap-1 my-1 max-w-full">
+                      {message.attachments.map((a, i) => (
+                        <AttachmentBlock
+                          key={i}
+                          attachment={a}
+                          uploading={pending}
+                          priority={imagePriority}
+                          captioned={Boolean(message.body)}
+                          onActivate={(a) => onActivateAttachment(message, a)}
+                          onImageLoad={onImageLoad}
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Body + trailing time on the same row (items-end keeps the
+                      time on the body's last line). Deleted → muted italic with
+                      the time still trailing; attachment-only → time on its own
+                      trailing row. */}
+                  {deleted ? (
+                    <div className="flex items-end gap-2 max-w-full">
+                      <span className="min-w-0 text-[length:var(--chat-plain-font-size)] text-muted italic">
+                        {mine ? 'You deleted this message' : 'This message was deleted'}
+                      </span>
+                      <span className="shrink-0 text-[10px] text-faint tabular-nums leading-none select-none pb-[2px] opacity-0 transition-opacity group-hover/msg:opacity-100">
+                        {time}
+                      </span>
+                    </div>
+                  ) : message.body ? (
+                    <div className="flex items-end gap-2 max-w-full">
+                      <span className="min-w-0 text-[length:var(--chat-plain-font-size)] leading-[1.55] text-[#F4F1EC] whitespace-pre-wrap break-words">
+                        {renderBody(message.body, message.mentions, currentUserId)}
+                      </span>
+                      {metaCluster}
+                    </div>
+                  ) : message.attachments && message.attachments.length > 0 ? (
+                    <div className="flex max-w-full">{metaCluster}</div>
+                  ) : null}
+
+                  {failed && mine && message.localId && (
+                    <button
+                      onClick={() => onRetry(message.localId!, message.body, message.pendingFile ?? null)}
+                      className="block text-[10.5px] text-alert hover:text-text transition-colors mt-0.5"
+                    >
+                      Tap to retry
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {menuOpen && (menu !== 'chevron' || triggerRef.current) && (
+            <MessageActionsMenu
+              anchorEl={menu === 'chevron' ? triggerRef.current : undefined}
+              anchorPoint={menu !== 'chevron' && menu ? menu : undefined}
+              actions={actions}
+              onClose={() => setMenu(null)}
+            />
+          )}
+        </div>
+      </>
+    )
+  }
+
   return (
     <>
       {showDayDivider && (
-        <div className="flex items-center gap-3 py-3">
-          <div className="h-px flex-1 bg-white/[0.06]" />
-          <span className="eyebrow">{formatDay(message.createdAt)}</span>
-          <div className="h-px flex-1 bg-white/[0.06]" />
-        </div>
+        <DayDivider iso={message.createdAt} conversationStart={conversationStart} />
       )}
       <div
         data-message-id={message.id}
@@ -461,6 +682,7 @@ function propsEqual(a: Props, b: Props): boolean {
   return (
     a.message === b.message &&
     a.prev === b.prev &&
+    a.conversationStart === b.conversationStart &&
     a.mine === b.mine &&
     a.currentUserId === b.currentUserId &&
     a.readers === b.readers &&

@@ -7,12 +7,13 @@ export default {
         bg: '#000000',
         surface: '#141416',
         'surface-2': '#1d1d20',
-        // Sidebar + headers ("rail"). Matched to the message-bubble grey
-        // (own-message bubble #1C1C1F in MessageRow) so the chrome reads as a
-        // clearly-visible grey, distinct from the pure-black chat window, while
-        // staying consistent with the bubbles. Bubble text is #F4F1EC = `text`,
-        // which the rail already uses.
-        rail: '#1c1c1f',
+        // Sidebar + headers ("rail"). Matched to the composer `surface`
+        // (#141416) so the chrome reads as one calm, consistent surface with the
+        // chat composer, still clearly distinct from the pure-black chat window
+        // (and kept apart by the rail card's border). Selected/hover/search use
+        // white-alpha overlays whose contrast is base-independent, so they stay
+        // visible on this slightly darker grey. Text is #F4F1EC = `text`.
+        rail: '#141416',
         text: '#f4f1ec',
         muted: '#8a8896',
         faint: '#4e4d5a',

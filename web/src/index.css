@@ -39,6 +39,12 @@
        --sidebar-section-gap      spacing between rail sections */
   --app-font-size: 15px;
   --chat-msg-font-size: 14px;
+  /* Plain-stream body text: a touch larger than the bubble/composer size since
+     the no-bubble layout has room to read bigger. Defined once as a calc over
+     --chat-msg-font-size so it tracks every density tier automatically (the
+     var() resolves against the cascaded value). Used ONLY by plain-stream rows
+     — bubble view and the composer keep --chat-msg-font-size. */
+  --chat-plain-font-size: calc(var(--chat-msg-font-size) + 1px);
   --header-height: 60px;
   --sidebar-width: 420px;
   --composer-size: 28px;
@@ -210,15 +216,6 @@
 
 html, body, #root {
   height: 100%;
-}
-
-/* Map cursor: use the normal OS arrow. MapLibre defaults the map to a white-ish
-   `grab`/`grabbing` hand that disappears over the basemap; the system arrow
-   (black with a white outline on Windows) stays visible everywhere.
-   !important overrides maplibre-gl.css's `.maplibregl-interactive { cursor:grab }`. */
-.maplibregl-canvas-container.maplibregl-interactive,
-.maplibregl-canvas-container.maplibregl-interactive:active {
-  cursor: default !important;
 }
 
 body {

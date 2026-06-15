@@ -1,17 +1,22 @@
 import type { ReactNode } from 'react'
-import { formatDay } from './messageUtils'
 import type { LocalMessage } from './types'
+import DayDivider from './DayDivider'
 
 // Compact, centered timeline entry for persisted activity (joins, member adds,
 // pin/unpin, trips, …). No avatar, no bubble, no actions menu — just muted
 // text. Pin/unpin carry a target message, rendered as a button that jumps to it.
+// (Only the date/start separator is the subtle pill — the operational activity
+// line below stays as readable muted text so real events aren't hidden.)
 export default function SystemMessageRow({
   message,
   prev,
+  conversationStart,
   onJumpToMessage,
 }: {
   message: LocalMessage
   prev?: LocalMessage
+  // True when this is the very first message of the whole thread (no older page).
+  conversationStart?: boolean
   onJumpToMessage: (messageId: string) => void
 }) {
   // Keep day dividers correct even when a system row is the first of a new day.
@@ -22,11 +27,7 @@ export default function SystemMessageRow({
   return (
     <>
       {showDayDivider && (
-        <div className="flex items-center gap-3 py-3">
-          <div className="h-px flex-1 bg-white/[0.06]" />
-          <span className="eyebrow">{formatDay(message.createdAt)}</span>
-          <div className="h-px flex-1 bg-white/[0.06]" />
-        </div>
+        <DayDivider iso={message.createdAt} conversationStart={conversationStart} />
       )}
       <div className="flex justify-center my-1.5">
         <span className="text-[11px] text-faint text-center px-2 leading-[1.5]">

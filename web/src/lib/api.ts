@@ -11,6 +11,7 @@ import type {
   Profile,
   WorkspaceMember,
 } from './types'
+import type { HerePlace, LatLng, RouteWaypoint, TruckProfile, TruckRoute } from './here/types'
 
 // Editable subsets sent to PATCH endpoints (all fields optional).
 export type ProfilePatch = Partial<{
@@ -33,16 +34,6 @@ export type CompanyProfilePatch = Partial<{
   dispatchPhone: string | null
   website: string | null
 }>
-
-// Latest vehicle position returned by GET /groups/:id/location (read server-side
-// from Amazon Location Service).
-export type VehiclePosition = {
-  latitude: number
-  longitude: number
-  timestamp: string | null
-  accuracy: number | null
-  deviceId: string
-}
 
 // Thin typed wrapper over fetch. Every call is same-origin and carries the
 // session cookie. Non-2xx responses throw ApiError with the server's machine
@@ -259,12 +250,6 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(upTo ? { upTo } : {}),
       }),
-
-    // Latest known vehicle position for a group (read server-side from Amazon
-    // Location). `location` is null when no position has been received yet.
-    // Throws ApiError('location_not_configured') when the feature is disabled.
-    location: (groupId: string) =>
-      request<{ location: VehiclePosition | null }>(`/groups/${groupId}/location`),
   },
 
   workspace: {
@@ -337,5 +322,43 @@ export const api = {
 
     cancel: (id: string) =>
       request<{ ok: true }>(`/group-invites/${id}/cancel`, { method: 'POST' }),
+  },
+
+  // HERE maps/routing — all proxied through our server so the HERE key stays
+  // server-side. The map-render key is fetched from `config` (auth-gated).
+  here: {
+    // The HERE Maps JS API key, for the browser-rendered map. Auth-gated;
+    // throws ApiError('here_not_configured') when HERE_API_KEY is unset.
+    config: () => request<{ apiKey: string }>('/here/config'),
+
+    // Address/location autocomplete (HERE Discover). Returns [] for queries
+    // shorter than 3 chars (the server short-circuits those).
+    search: (q: string) =>
+      request<{ items: HerePlace[] }>(`/here/search?q=${encodeURIComponent(q)}`),
+
+    // Reverse geocode a clicked/dragged coordinate to a label + road-snapped
+    // position (HERE Reverse Geocode). `place` is null when HERE has no result.
+    // `zoom` (current map zoom) biases the snap toward major roads when zoomed
+    // out; `major` flags that the chosen road looks like a highway/trunk road.
+    revgeocode: (lat: number, lng: number, zoom?: number) =>
+      request<{ place: { label: string; position: LatLng; major?: boolean } | null }>(
+        `/here/revgeocode?at=${lat},${lng}${zoom !== undefined ? `&zoom=${zoom}` : ''}`,
+      ),
+
+    // Truck route (HERE Routing v8, transportMode=truck). `via` is the ordered
+    // list of intermediate stops between origin and destination; each waypoint
+    // may carry a `course` (desired travel heading) so HERE snaps to the correct
+    // carriageway/direction. `truck` refines it with the entered profile (omit a
+    // field to skip it).
+    truckRoute: (input: {
+      origin: RouteWaypoint
+      destination: RouteWaypoint
+      via?: RouteWaypoint[]
+      truck?: TruckProfile
+    }) =>
+      request<{ route: TruckRoute }>('/here/routes/truck', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
   },
 }

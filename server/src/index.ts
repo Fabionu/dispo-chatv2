@@ -16,6 +16,7 @@ import { directoryRouter } from './routes/directory.js'
 import { attachmentsRouter } from './routes/attachments.js'
 import { profileRouter, usersRouter } from './routes/profile.js'
 import { companyProfileRouter } from './routes/companyProfile.js'
+import { hereRouter } from './routes/here.js'
 import { initRealtime } from './realtime.js'
 import { initRedis } from './redis.js'
 import { initPreviewQueue } from './jobs/previewQueue.js'
@@ -30,9 +31,9 @@ const app = express()
 // to honour them so rate-limit keys hash the real client IP, not the proxy.
 app.set('trust proxy', 1)
 
-// Gzip responses — without this the ~1MB MapLibre JS chunk ships uncompressed,
-// which is the main cause of slow first loads on Railway (it drops to ~275KB
-// gzipped). Cheap and covers API JSON + the static frontend bundle.
+// Gzip responses — the JS/CSS bundle ships far smaller compressed (e.g. the main
+// chunk drops from ~370KB to ~107KB gzipped), cutting first-load time on Railway.
+// Cheap and covers API JSON + the static frontend bundle.
 app.use(compression())
 
 app.use(express.json({ limit: '1mb' }))
@@ -58,6 +59,7 @@ app.use('/api/attachments', attachmentsRouter)
 app.use('/api/profile', profileRouter)
 app.use('/api/company-profile', companyProfileRouter)
 app.use('/api/users', usersRouter)
+app.use('/api/here', hereRouter)
 
 // In production, serve the built frontend from web/dist.
 if (isProd) {

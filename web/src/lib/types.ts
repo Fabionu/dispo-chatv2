@@ -87,6 +87,22 @@ export type Group = {
    *  separate "@" badge. Optional for forward-compat with older responses. */
   unreadMentionCount?: number
   directPeer: DirectPeer | null
+  /** Compact preview of the latest USER message (matches `lastMessageAt`), for
+   *  the Normal-view sidebar row's second line. Null when the thread has no
+   *  messages. Optional for forward-compat with older responses. */
+  lastMessage?: GroupLastMessage | null
+}
+
+// Just enough of the latest message to render a one-line sidebar preview.
+// `body` is empty for a deleted message (use the `deleted` flag); `authorId`
+// decides the "You:" / name prefix; `hasAttachments` drives the attachment
+// fallback when there's no text.
+export type GroupLastMessage = {
+  body: string
+  authorId: string
+  authorName: string
+  deleted: boolean
+  hasAttachments: boolean
 }
 
 // A group's display label depends on its type: vehicle groups carry a name,
@@ -107,6 +123,37 @@ export function tractorPlate(g: Group): string | undefined {
 // trailers were not modelled before the split.
 export function trailerPlate(g: Group): string | undefined {
   return g.meta.trailerPlate
+}
+
+// Build the one-line latest-message preview for a sidebar row, split into an
+// optional `prefix` (rendered slightly distinct) and the `text`. Prefix rules:
+//   - DM, mine        → "You:"   (the row already names the peer)
+//   - DM, peer        → none
+//   - vehicle, mine   → none
+//   - vehicle, other  → "<First name>:"  (need to know who spoke)
+// Fallbacks: deleted → "Deleted message", attachment-only → "Attachment",
+// empty/none → "No messages yet".
+export function groupPreview(
+  g: Group,
+  currentUserId: string,
+): { prefix: string | null; text: string } {
+  const lm = g.lastMessage
+  if (!lm) return { prefix: null, text: 'No messages yet' }
+
+  const mine = lm.authorId === currentUserId
+  let text: string
+  if (lm.deleted) text = 'Deleted message'
+  else if (lm.body.trim()) text = lm.body.trim()
+  else if (lm.hasAttachments) text = 'Attachment'
+  else text = 'No messages yet'
+
+  let prefix: string | null = null
+  if (g.type === 'direct') {
+    if (mine) prefix = 'You:'
+  } else if (!mine) {
+    prefix = `${(lm.authorName || 'Member').split(' ')[0]}:`
+  }
+  return { prefix, text }
 }
 
 export function groupHasUnread(g: Group): boolean {

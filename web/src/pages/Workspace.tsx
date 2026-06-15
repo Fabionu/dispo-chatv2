@@ -23,7 +23,7 @@ import type {
   Profile,
   ReplyToPreview,
 } from '../lib/types'
-import { groupHasUnread, groupLabel, tractorPlate } from '../lib/types'
+import { groupHasUnread, groupLabel, groupPreview, tractorPlate } from '../lib/types'
 import { api } from '../lib/api'
 import { getSocket } from '../lib/socket'
 import { useMessageCache } from '../hooks/useMessageCache'
@@ -33,16 +33,19 @@ import ConnectionRequestsSection from '../components/connections/ConnectionReque
 import GroupInvitesSection from '../components/invites/GroupInvitesSection'
 import GroupInviteView from '../components/invites/GroupInviteView'
 import Avatar from '../components/Avatar'
+import GroupAvatar from '../components/GroupAvatar'
 import Spinner from '../components/Spinner'
 import CompanyLogo from '../components/CompanyLogo'
 import CreateVehicleGroupModal from '../components/CreateVehicleGroupModal'
 import NewMessageModal from '../components/NewMessageModal'
 import ProfileSidebarPanel from '../components/settings/ProfileSidebarPanel'
 import CompanySidebarPanel from '../components/settings/CompanySidebarPanel'
+import WorkspaceSettingsPanel from '../components/settings/WorkspaceSettingsPanel'
 import InboxView from '../components/inbox/InboxView'
 import { useIdle } from '../hooks/useIdle'
 import { usePresence } from '../hooks/usePresence'
 import { useDensity, SIDEBAR_AVATAR_SIZE } from '../lib/density'
+import { useViewMode } from '../lib/viewMode'
 import { getStoredSidebarCollapsed, setStoredSidebarCollapsed } from '../lib/sidebar'
 import { preloadAvatar } from '../lib/avatarCache'
 import { statusMeta, AWAY, OFFLINE } from '../lib/availability'
@@ -93,7 +96,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   const { online: onlineIds, resync: resyncPresence } = usePresence()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [newMenuOpen, setNewMenuOpen] = useState(false)
-  // Collapsed left rail — frees the main area for the map / wide chats. Persisted
+  // Collapsed left rail — frees the main area for wide chats. Persisted
   // so the choice survives reloads; collapsing/expanding never reloads the app or
   // touches the current selection.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(getStoredSidebarCollapsed)
@@ -102,6 +105,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // replace the conversation list (the chat stays visible on the right).
   const [profilePanelOpen, setProfilePanelOpen] = useState(false)
   const [companyPanelOpen, setCompanyPanelOpen] = useState(false)
+  const [settingsPanelOpen, setSettingsPanelOpen] = useState(false)
   // Prefetched once at mount so opening "My profile" is instant (the panel
   // remounts each open, so without this it would refetch every time and flash
   // a "Loading…" state). Kept fresh by the panel's onSaved.
@@ -226,6 +230,14 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           lastMessageAt: msg.createdAt,
           unreadCount: (prev[idx].unreadCount ?? 0) + (bumpUnread ? 1 : 0),
           unreadMentionCount: (prev[idx].unreadMentionCount ?? 0) + (bumpMention ? 1 : 0),
+          // Keep the Normal-view preview live (system rows don't arrive here).
+          lastMessage: {
+            body: msg.body,
+            authorId: msg.authorId,
+            authorName: msg.authorName,
+            deleted: false,
+            hasAttachments: (msg.attachments?.length ?? 0) > 0,
+          },
         }
         const next = prev.filter((_, i) => i !== idx)
         next.unshift(updated)
@@ -372,14 +384,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
       return next
     })
   }, [])
-
-  // Collapsing/expanding the rail reflows the main pane. MapLibre v5 tracks size
-  // via a ResizeObserver that can lag this change, so tell any mounted map to
-  // resize once the new layout has committed — the map fills the new width with
-  // no reload. Runs after the DOM update (the rail width is already applied).
-  useEffect(() => {
-    window.dispatchEvent(new Event('dispo:layout-resize'))
-  }, [sidebarCollapsed])
 
   // Drop the given group into local state immediately, select it, and
   // reconcile against the server in the background. This is what makes new
@@ -547,13 +551,13 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // contained without wasting space.
   return (
     <div className="h-screen w-full flex gap-3 p-2 2xl:p-3 bg-bg text-text overflow-hidden">
-      {/* Collapsed left rail — a slim icon strip so the main area (map / wide
+      {/* Collapsed left rail — a slim icon strip so the main area (wide
           chats) gets the freed width. Keeps the essentials reachable: expand,
           workspace home, and the account menu (clicking it expands first). All
           list state (search, groups, DMs, requests, panels) is preserved and
           returns intact on expand. */}
       {sidebarCollapsed ? (
-        <aside className="w-14 shrink-0 bg-rail border border-white/[0.08] rounded-[11px] overflow-hidden flex flex-col items-center py-3 gap-1.5">
+        <aside className="w-14 shrink-0 bg-rail rounded-[11px] overflow-hidden flex flex-col items-center py-3 gap-1.5">
           <button
             onClick={toggleSidebar}
             title="Expand sidebar"
@@ -590,10 +594,10 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           </button>
         </aside>
       ) : (
-      /* Left rail — wrapped as a subtle card. overflow-hidden so the rounded
-          corners clip the header/list cleanly; full border replaces the old
-          right divider. */
-      <aside className="w-[var(--sidebar-width)] shrink-0 bg-rail border border-white/[0.08] rounded-[11px] overflow-hidden flex flex-col">
+      /* Left rail — a borderless rounded card. overflow-hidden clips the
+          header/list to the rounded corners; separation from the black app
+          background comes from the panel's own #141416 tone, not a border. */
+      <aside className="w-[var(--sidebar-width)] shrink-0 bg-rail rounded-[11px] overflow-hidden flex flex-col">
         {profilePanelOpen ? (
           <ProfileSidebarPanel
             initialProfile={cachedProfile}
@@ -615,6 +619,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               void refresh()
             }}
           />
+        ) : settingsPanelOpen ? (
+          <WorkspaceSettingsPanel onBack={() => setSettingsPanelOpen(false)} />
         ) : (
           <>
         {/* Workspace identity = the entry point to the Inbox / workspace home.
@@ -642,8 +648,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               </div>
             </div>
           </button>
-          {/* Integrated icon action (same treatment as the chat header's map /
-              Group info buttons): borderless ~36px hit area, no own background so
+          {/* Integrated icon action (same treatment as the chat header's
+              Group info button): borderless ~36px hit area, no own background so
               the unified header hover reads across it too; the icon colour lifts
               for affordance, with an on-theme focus ring. */}
           <button
@@ -737,6 +743,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                         key={g.id}
                         group={g}
                         online={onlineIds}
+                        currentUserId={user.id}
                         selected={selection?.kind === 'group' && selection.id === g.id}
                         onClick={() => setSelection({ kind: 'group', id: g.id })}
                       />
@@ -750,6 +757,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                         key={g.id}
                         group={g}
                         online={onlineIds}
+                        currentUserId={user.id}
                         selected={selection?.kind === 'group' && selection.id === g.id}
                         onClick={() => setSelection({ kind: 'group', id: g.id })}
                       />
@@ -785,7 +793,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                     <GroupRow
                       key={g.id}
                       group={g}
-                        online={onlineIds}
+                      online={onlineIds}
+                      currentUserId={user.id}
                       selected={selection?.kind === 'group' && selection.id === g.id}
                       onClick={() => setSelection({ kind: 'group', id: g.id })}
                     />
@@ -801,7 +810,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                     <GroupRow
                       key={g.id}
                       group={g}
-                        online={onlineIds}
+                      online={onlineIds}
+                      currentUserId={user.id}
                       selected={selection?.kind === 'group' && selection.id === g.id}
                       onClick={() => setSelection({ kind: 'group', id: g.id })}
                     />
@@ -836,7 +846,10 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               </MenuItem>
               <MenuItem
                 icon={<Settings size={13} strokeWidth={1.6} />}
-                onClick={() => setUserMenuOpen(false)}
+                onClick={() => {
+                  setUserMenuOpen(false)
+                  setSettingsPanelOpen(true)
+                }}
               >
                 Workspace settings
               </MenuItem>
@@ -967,16 +980,34 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   )
 }
 
+// Compact last-activity stamp for a Normal-view row: today → HH:MM, yesterday →
+// "Yesterday", otherwise DD/MM. Empty string when there's no timestamp.
+function relTime(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const now = new Date()
+  if (d.toDateString() === now.toDateString()) {
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+  const yesterday = new Date()
+  yesterday.setDate(now.getDate() - 1)
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
+  return d.toLocaleDateString([], { day: '2-digit', month: '2-digit' })
+}
+
 function GroupRow({
   group,
   selected,
   online,
+  currentUserId,
   onClick,
 }: {
   group: Group
   selected: boolean
   // Live online user-id set (presence). Drives the DM status dot.
   online: Set<string>
+  // Viewing user — decides the "You:" / name prefix on the Normal-view preview.
+  currentUserId: string
   onClick: () => void
 }) {
   // A DM peer's dot: their declared status colour when online, dim grey when
@@ -997,10 +1028,79 @@ function GroupRow({
   // Unread @-mentions get their own compact badge, separate from the regular
   // unread dot/count, so being mentioned stands out from ordinary traffic.
   const hasUnreadMention = !selected && (group.unreadMentionCount ?? 0) > 0
-  // Leading type glyph: a single contact for DMs, a multi-contact group glyph
-  // for vehicle conversations. Kept subtle (faint) so the conversation name
-  // stays the focus.
+  // Leading identity slot depends on the VIEW MODE:
+  //  - compact (default): the original small type glyph — CircleUser for a DM,
+  //    Users for a vehicle room — kept faint so the name stays the focus. Dense.
+  //  - normal: a larger avatar-like slot (DM photo/initials, generated vehicle
+  //    icon), sized to the density tier — the future preview-ready layout.
+  const viewMode = useViewMode()
   const TypeIcon = group.type === 'direct' ? CircleUser : Users
+
+  // ── Normal view: breathable two-line rows with a last-message preview ──────
+  // Larger avatar, more padding, name on line 1 (+ time), preview on line 2 (+
+  // unread/mention badges). Compact view is left exactly as it was below.
+  if (viewMode === 'normal') {
+    const NORMAL_AVATAR = 40
+    const preview = groupPreview(group, currentUserId)
+    const time = relTime(group.lastMessageAt)
+    return (
+      <button
+        onClick={onClick}
+        className={`w-full flex items-center gap-2.5 px-2.5 py-2 min-h-[56px] rounded-chip text-left transition-colors ${
+          selected ? 'bg-white/[0.06] text-text' : 'text-muted hover:bg-white/[0.025] hover:text-text'
+        }`}
+      >
+        <span className="relative shrink-0 flex">
+          {group.type === 'direct' ? (
+            <Avatar userId={peer?.id ?? ''} name={peer?.name ?? groupLabel(group)} size={NORMAL_AVATAR} />
+          ) : (
+            <GroupAvatar size={NORMAL_AVATAR} />
+          )}
+          {peerDot && (
+            <span
+              title={peerDot.label}
+              className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-rail"
+              style={{ backgroundColor: peerDot.color }}
+            />
+          )}
+        </span>
+        <span className="flex-1 min-w-0 flex flex-col gap-0.5">
+          <span className="flex items-center gap-2">
+            <span className={`flex-1 truncate text-[13.5px] ${unread ? 'text-text font-semibold' : 'text-text/90'}`}>
+              {groupLabel(group)}
+            </span>
+            {time && <span className="shrink-0 text-[10.5px] text-faint tabular-nums">{time}</span>}
+          </span>
+          <span className="flex items-center gap-2">
+            <span className={`flex-1 truncate text-[12px] ${unread ? 'text-muted' : 'text-faint'}`}>
+              {preview.prefix && (
+                <span className={unread ? 'text-muted font-medium' : 'text-faint'}>{preview.prefix} </span>
+              )}
+              {preview.text}
+            </span>
+            {hasUnreadMention && (
+              <span
+                aria-label="You were mentioned"
+                title="You were mentioned"
+                className="shrink-0 h-4 min-w-4 px-1 rounded-full bg-active/20 text-active text-[10px] font-bold leading-none flex items-center justify-center"
+              >
+                @
+              </span>
+            )}
+            {unread && hasCount && unreadCount > 0 && (
+              <span
+                aria-label={`${unreadCount} unread`}
+                className="shrink-0 h-4 min-w-4 px-1.5 rounded-full bg-active text-bg text-[10px] font-semibold leading-none flex items-center justify-center"
+              >
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </span>
+        </span>
+      </button>
+    )
+  }
+
   return (
     <button
       onClick={onClick}
@@ -1038,11 +1138,24 @@ function GroupRow({
         )}
       </span>
       <span
-        className={`flex-1 truncate ${unread ? 'text-text font-medium' : ''}`}
+        className={`flex-1 min-w-0 truncate ${unread ? 'text-text font-medium' : ''}`}
         style={{ fontSize: 'var(--sidebar-row-font-size)' }}
       >
         {groupLabel(group)}
       </span>
+      {/* DM-only: the peer's company/workspace on the right, filling the unused
+          Compact-view space so cross-company users are identifiable without a
+          full preview row. Muted + capped + truncated; `peer` is null for
+          vehicle rooms so they get no right-side metadata. */}
+      {peer?.workspace && (
+        <span
+          title={peer.workspace}
+          className="shrink truncate text-right text-faint"
+          style={{ fontSize: 'var(--sidebar-meta-font-size)', maxWidth: '46%' }}
+        >
+          {peer.workspace}
+        </span>
+      )}
       {hasUnreadMention && (
         <span
           aria-label="You were mentioned"

@@ -1,7 +1,7 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, Info, MapPin, Upload } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowDown, Info, Upload } from 'lucide-react'
 import type { Attachment, Group, GroupMember, IncomingMessage, ReplyToPreview } from '../lib/types'
-import { groupLabel } from '../lib/types'
+import { groupLabel, trailerPlate } from '../lib/types'
 import { fileError } from './attachments/attachmentUtils'
 import { resolveMentionIds } from '../lib/mentions'
 import { api, ApiError } from '../lib/api'
@@ -27,10 +27,6 @@ import { useChatScroll } from '../hooks/useChatScroll'
 import { devlog } from '../lib/devlog'
 import { useMessageCache } from '../hooks/useMessageCache'
 import { preloadImage } from '../lib/attachmentCache'
-
-// Lazy-loaded so MapLibre GL (large) stays out of the main bundle — only fetched
-// when a user actually opens the vehicle location map.
-const VehicleLocationModal = lazy(() => import('./map/VehicleLocationModal'))
 
 // Stable empty list so a group with no cached thread doesn't hand a fresh
 // array to useChatScroll on every render.
@@ -143,11 +139,6 @@ export default function ChatView({
   const [inviteOpen, setInviteOpen] = useState(false)
   // Whether the group-info drawer is open (vehicle groups only).
   const [groupInfoOpen, setGroupInfoOpen] = useState(false)
-  // Whether the vehicle location map is open (vehicle groups only).
-  const [locationOpen, setLocationOpen] = useState(false)
-  // Cache-buster for the group image, bumped after an upload/remove so the
-  // header avatar and the panel both refetch immediately.
-  const [groupAvatarVersion, setGroupAvatarVersion] = useState(0)
   // Whether a file is being dragged over the conversation (drives the drop
   // overlay). A depth counter keeps it stable across child enter/leave events.
   const [dragActive, setDragActive] = useState(false)
@@ -897,12 +888,15 @@ export default function ChatView({
   }
 
   // ── Header subtitle ────────────────────────────────────────────────────
-  // Vehicle groups are permanent threads, so the subtitle describes the channel
-  // (member count) rather than any single trip. Registration numbers render as
-  // badges on the right.
+  // Vehicle groups are permanent threads, so the subtitle is compact operational
+  // metadata (trailer plate + member count) rather than any single trip — using
+  // only data we already have. DMs show the peer's workspace.
+  const memberText = `${group.memberCount} member${group.memberCount === 1 ? '' : 's'}`
   const subtitle =
     group.type === 'vehicle'
-      ? `${group.memberCount} member${group.memberCount === 1 ? '' : 's'}`
+      ? [trailerPlate(group) && `Trailer ${trailerPlate(group)}`, memberText]
+          .filter(Boolean)
+          .join(' · ')
       : (group.directPeer?.workspace ?? 'Direct message')
 
   // Group-info management gate: workspace admins/dispatchers, or the caller's
@@ -1002,23 +996,27 @@ export default function ChatView({
 
       {/* Chat surface — header + pinned bar + message list. No outer card border. */}
       <div className="flex-1 flex flex-col min-h-0 bg-bg">
-      {/* Header — a standalone rounded rail panel. It uses the exact sidebar
-          border treatment so it stays rounded on every corner instead of
-          reading as a square strip clipped into the chat surface. */}
-      <header className="h-[var(--header-height)] flex items-center justify-between px-5 rounded-[11px] border border-white/[0.08] bg-rail shrink-0 overflow-hidden">
-        <div className="min-w-0 flex items-center gap-2.5">
+      {/* Header — NOT a card. It sits flat on the black chat surface (no rail
+          background, no rounded box, no full border) with only a subtle bottom
+          divider, so the conversation identity reads as part of the timeline
+          rather than a heavy panel. SLIM by design: a fixed compact height
+          (smaller than the shared --header-height used by the sidebar seam, which
+          we intentionally don't touch) gives the message area more room. The
+          identity (avatar + name + subtitle) is CENTERED as one compact cluster;
+          symmetric padding keeps it visually centered while the vehicle "Group
+          info" action floats at the right edge. Same structure for every type. */}
+      <header className="relative h-12 flex items-center justify-center px-14 border-b border-white/[0.06] shrink-0 overflow-hidden">
+        <div className="min-w-0 flex items-center gap-2">
           {group.type === 'direct' ? (
             <Avatar
               userId={group.directPeer?.id ?? ''}
               name={group.directPeer?.name ?? groupLabel(group)}
-              size={40}
+              size={32}
             />
           ) : (
-            // Vehicle group image — same footprint as the DM avatar, falls back
-            // to a themed multi-user icon when no image is set. `|| undefined`
-            // so the un-edited default has no ?v (matching the sidebar preload's
-            // cache key); an upload bumps the version to bust it.
-            <GroupAvatar groupId={group.id} size={40} version={groupAvatarVersion || undefined} />
+            // Vehicle identity — the same circular slot as a DM avatar, but a
+            // GENERATED generic icon (vehicle rooms never use an uploaded image).
+            <GroupAvatar size={32} />
           )}
           <div className="min-w-0">
             <div className="text-[15px] font-semibold truncate leading-tight">{groupLabel(group)}</div>
@@ -1026,28 +1024,17 @@ export default function ChatView({
           </div>
         </div>
         {group.type === 'vehicle' && (
-          <div className="flex items-center gap-0.5 shrink-0">
-            {/* Borderless toolbar-style icons: larger glyphs in transparent ~36px
-                hit areas (no frame/box). Hover lifts the colour with a very soft
-                circular wash; focus-visible shows a subtle on-theme ring. Smaller
-                than the header height, so the header doesn't grow. */}
-            <button
-              onClick={() => setLocationOpen(true)}
-              aria-label="Vehicle location"
-              title="Vehicle location"
-              className="h-9 w-9 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
-            >
-              <MapPin size={20} strokeWidth={1.8} />
-            </button>
-            <button
-              onClick={() => setGroupInfoOpen(true)}
-              aria-label="Group info"
-              title="Group info"
-              className="h-9 w-9 -mr-1 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
-            >
-              <Info size={20} strokeWidth={1.8} />
-            </button>
-          </div>
+          // Borderless toolbar-style action floated at the right edge so the
+          // identity cluster stays centered. Hover lifts the colour with a soft
+          // circular wash; focus-visible shows a subtle on-theme ring.
+          <button
+            onClick={() => setGroupInfoOpen(true)}
+            aria-label="Group info"
+            title="Group info"
+            className="absolute right-3 top-1/2 -translate-y-1/2 h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+          >
+            <Info size={18} strokeWidth={1.8} />
+          </button>
         )}
       </header>
 
@@ -1126,6 +1113,9 @@ export default function ChatView({
                             key={m.id}
                             message={m}
                             prev={messages[i - 1]}
+                            // First message of the whole thread (nothing older to
+                            // load) → its day pill reads "Conversation started".
+                            conversationStart={i === 0 && !nextCursor}
                             onJumpToMessage={jumpToMessage}
                           />
                         )
@@ -1143,6 +1133,7 @@ export default function ChatView({
                           // undefined so they don't re-render on read updates.
                           readers={m.authorId === currentUserId ? readers : undefined}
                           prev={messages[i - 1]}
+                          conversationStart={i === 0 && !nextCursor}
                           groupType={group.type}
                           highlighted={highlightedMessageId === m.id}
                           onRetry={retry}
@@ -1295,15 +1286,10 @@ export default function ChatView({
           members={members}
           membersLoading={members.length === 0}
           canManage={canManageGroup}
-          avatarVersion={groupAvatarVersion}
           onClose={() => setGroupInfoOpen(false)}
           onInvite={() => setInviteOpen(true)}
           onMembersChanged={refetchMembers}
           onMessageMember={messageMember}
-          onAvatarChanged={(hasAvatar) => {
-            setGroupAvatarVersion((v) => v + 1)
-            onGroupUpdated?.(group.id, { hasAvatar })
-          }}
           onGroupUpdated={(partial) => onGroupUpdated?.(group.id, partial)}
         />
       )}
@@ -1315,18 +1301,6 @@ export default function ChatView({
           existingMemberIds={members.map((m) => m.id)}
           onClose={() => setInviteOpen(false)}
         />
-      )}
-
-      {group.type === 'vehicle' && locationOpen && (
-        // Lazy chunk (MapLibre) — fetched only on open; null fallback keeps the
-        // open instant (the modal renders its own themed loading state).
-        <Suspense fallback={null}>
-          <VehicleLocationModal
-            groupId={group.id}
-            groupName={groupLabel(group)}
-            onClose={() => setLocationOpen(false)}
-          />
-        </Suspense>
       )}
 
       {pendingDelete && (

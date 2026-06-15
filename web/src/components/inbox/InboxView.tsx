@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Route } from 'lucide-react'
-import CheckRouteWorkspace from './CheckRouteWorkspace'
+import RoutePlanner from './RoutePlanner'
 
 type Props = {
   workspaceName: string
@@ -9,12 +9,12 @@ type Props = {
 // The Inbox / workspace home — reached by clicking the sidebar company header.
 // It's an operational tools area: a grid of large tool cards. Selecting a tool
 // opens its dedicated workspace in place (replacing the chat area), with a back
-// action returning here. Today the only tool is "Check route".
+// action returning here. Today the only tool is the HERE "Route planner".
 export default function InboxView({ workspaceName }: Props) {
   const [tool, setTool] = useState<'route' | null>(null)
 
   if (tool === 'route') {
-    return <CheckRouteWorkspace onBack={() => setTool(null)} />
+    return <RoutePlanner onBack={() => setTool(null)} />
   }
 
   return (
@@ -29,8 +29,8 @@ export default function InboxView({ workspaceName }: Props) {
           <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
             <ToolCard
               icon={<Route size={26} strokeWidth={1.5} />}
-              title="Check route"
-              subtitle="Calculate distance and drive time between stops"
+              title="Route planner"
+              subtitle="Truck routing, distance and ETA with HERE"
               onClick={() => setTool('route')}
             />
           </div>

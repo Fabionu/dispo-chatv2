@@ -21,7 +21,6 @@ import {
   uploadAttachment,
 } from '../middleware/upload.js'
 import { saveBuffer, saveStream, readBuffer, deleteFile } from '../storage.js'
-import { isLocationConfigured, deviceIdForGroup, getLatestPosition } from '../location.js'
 import { serveImageObject } from '../util/serveImage.js'
 import { enqueuePreviewJob } from '../jobs/previewQueue.js'
 import { directPairKey, sortPair } from '../util/pair.js'
@@ -82,6 +81,11 @@ groupsRouter.get(
       peer_name: string | null
       peer_workspace: string | null
       peer_availability: string | null
+      last_body: string | null
+      last_author_id: string | null
+      last_author_name: string | null
+      last_deleted_at: string | null
+      last_has_attachments: boolean | null
     }>(
       `select g.id, g.type, g.name, g.description, g.meta, g.avatar_path,
               g.last_message_at, g.created_at,
@@ -90,7 +94,13 @@ groupsRouter.get(
               -- Denormalized counters (migration 0020), maintained on write.
               gm.unread_count,
               gm.unread_mention_count,
-              peer.peer_id, peer.peer_name, peer.peer_workspace, peer.peer_availability
+              peer.peer_id, peer.peer_name, peer.peer_workspace, peer.peer_availability,
+              -- Latest USER message (matches last_message_at, which system rows
+              -- don't bump) for the sidebar preview. Skips messages the caller
+              -- deleted for themselves, same as the thread view.
+              lm.body as last_body, lm.author_id as last_author_id,
+              lm.author_name as last_author_name, lm.deleted_at as last_deleted_at,
+              lm.has_attachments as last_has_attachments
          from groups g
          join group_members gm on gm.group_id = g.id and gm.user_id = $1
          left join lateral (
@@ -104,6 +114,21 @@ groupsRouter.get(
             where gm2.group_id = g.id and gm2.user_id <> $1
             limit 1
          ) peer on g.type = 'direct'
+         left join lateral (
+           select m.body, m.author_id, m.deleted_at,
+                  au.display_name as author_name,
+                  exists (select 1 from attachments a where a.message_id = m.id) as has_attachments
+             from messages m
+             join users au on au.id = m.author_id
+            where m.group_id = g.id
+              and m.kind = 'user'
+              and not exists (
+                select 1 from message_deletions md
+                 where md.message_id = m.id and md.user_id = $1
+              )
+            order by m.created_at desc
+            limit 1
+         ) lm on true
         where g.archived_at is null
         order by g.last_message_at desc nulls last, g.created_at desc
         limit 200`,
@@ -133,6 +158,18 @@ groupsRouter.get(
                 availabilityStatus: r.peer_availability,
               }
             : null,
+        // Compact preview of the latest user message for the sidebar. Body is
+        // cleared for a soft-deleted message (the `deleted` flag drives its
+        // "Deleted message" label client-side).
+        lastMessage: r.last_author_id
+          ? {
+              body: r.last_deleted_at ? '' : r.last_body ?? '',
+              authorId: r.last_author_id,
+              authorName: r.last_author_name ?? '',
+              deleted: r.last_deleted_at !== null,
+              hasAttachments: r.last_has_attachments ?? false,
+            }
+          : null,
       })),
     })
   }),
@@ -371,41 +408,6 @@ groupsRouter.get(
     if (membership.length === 0) return res.status(403).json({ error: 'not_a_member' })
 
     res.json({ members: await fetchGroupMembers(groupId) })
-  }),
-)
-
-// ── GET /api/groups/:id/location ─────────────────────────────────────────
-// Latest known vehicle position for a group, read from Amazon Location Service
-// on the SERVER (the browser never touches the tracker or AWS credentials).
-// Gated on membership. Vehicle groups only — DMs have no vehicle. Responses:
-//   { location: { latitude, longitude, timestamp, accuracy, deviceId } }
-//   { location: null }                  → no position recorded yet
-//   503 { error: 'location_not_configured' } → feature disabled (no AWS env)
-groupsRouter.get(
-  '/:id/location',
-  asyncHandler(async (req, res) => {
-    const { userId } = req.session!
-    const groupId = req.params.id
-
-    const { rows: membership } = await pool.query<{ type: 'vehicle' | 'direct' }>(
-      `select g.type
-         from group_members gm
-         join groups g on g.id = gm.group_id
-        where gm.group_id = $1 and gm.user_id = $2
-        limit 1`,
-      [groupId, userId],
-    )
-    if (membership.length === 0) return res.status(403).json({ error: 'not_a_member' })
-    // Location is a vehicle concept; a DM has no tracked device.
-    if (membership[0].type !== 'vehicle') {
-      return res.status(400).json({ error: 'not_a_vehicle_group' })
-    }
-    if (!isLocationConfigured()) {
-      return res.status(503).json({ error: 'location_not_configured' })
-    }
-
-    const location = await getLatestPosition(deviceIdForGroup(groupId))
-    res.json({ location })
   }),
 )
 

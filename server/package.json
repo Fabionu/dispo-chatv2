@@ -13,7 +13,6 @@
     "backfill:previews": "tsx src/jobs/backfillPreviews.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-location": "^3.1063.0",
     "@socket.io/redis-adapter": "^8.3.0",
     "@supabase/supabase-js": "^2.106.2",
     "bcryptjs": "^2.4.3",

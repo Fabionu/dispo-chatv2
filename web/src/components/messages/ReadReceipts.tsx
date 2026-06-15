@@ -21,6 +21,11 @@ type Props = {
   createdAt: string
   // Optimistic send still in flight — show a clock, no receipts yet.
   pending?: boolean
+  // Where the receipts popover opens relative to the checkmark. 'auto' (default)
+  // opens below/above, right-edge aligned — the classic bubble-footer placement.
+  // 'right' opens to the RIGHT of the ticks (used by the plain stream), flipping
+  // left only when it would run off the viewport edge.
+  align?: 'auto' | 'right'
 }
 
 // Spec colours (kept local so they're explicit and don't drift):
@@ -45,7 +50,7 @@ function seenAt(iso: string): string {
 //   • fully read       → double check, accent
 //     (DM: the one peer has seen it; group: ALL other members have — a partial
 //      group read stays muted.)
-export default function ReadReceipts({ others, createdAt, pending }: Props) {
+export default function ReadReceipts({ others, createdAt, pending, align = 'auto' }: Props) {
   const [open, setOpen] = useState(false)
   const btnRef = useRef<HTMLButtonElement>(null)
 
@@ -95,6 +100,7 @@ export default function ReadReceipts({ others, createdAt, pending }: Props) {
       {open && (
         <ReceiptsPopover
           anchorEl={btnRef.current}
+          align={align}
           seen={seen}
           notSeen={notSeen}
           onClose={() => setOpen(false)}
@@ -110,11 +116,13 @@ export default function ReadReceipts({ others, createdAt, pending }: Props) {
 // there's no room.
 function ReceiptsPopover({
   anchorEl,
+  align,
   seen,
   notSeen,
   onClose,
 }: {
   anchorEl: HTMLElement | null
+  align: 'auto' | 'right'
   seen: Reader[]
   notSeen: Reader[]
   onClose: () => void
@@ -142,19 +150,31 @@ function ReceiptsPopover({
       ? composer.getBoundingClientRect().top - 8
       : window.innerHeight - 8
 
-    let left = a.right - r.width
-    // Prefer opening BELOW the checkmark (at the bottom of the bubble)…
-    let top = a.bottom + 6
-    // …but flip above if that would overlap the composer / run off-screen.
-    if (top + r.height > bottomLimit) {
-      const above = a.top - r.height - 6
-      top = above >= 8 ? above : Math.max(8, bottomLimit - r.height)
+    let left: number
+    let top: number
+    if (align === 'right') {
+      // Open to the RIGHT of the checkmarks, top-aligned with them. Flip to the
+      // LEFT only if the right side would run off the viewport edge.
+      left = a.right + 8
+      if (left + r.width > window.innerWidth - 8) left = a.left - r.width - 8
+      top = a.top
+    } else {
+      // Classic: right-edge aligned, opening BELOW the checkmark…
+      left = a.right - r.width
+      top = a.bottom + 6
+      // …but flip above if that would overlap the composer / run off-screen.
+      if (top + r.height > bottomLimit) {
+        const above = a.top - r.height - 6
+        top = above >= 8 ? above : Math.max(8, bottomLimit - r.height)
+      }
     }
+    // Clamp inside the chat pane + viewport (both placements).
     if (left + r.width > window.innerWidth - 8) left = window.innerWidth - r.width - 8
     if (left < minLeft) left = minLeft
+    if (top + r.height > bottomLimit) top = Math.max(8, bottomLimit - r.height)
     if (top < 8) top = 8
     setPos({ top, left, visible: true })
-  }, [anchorEl, seen.length, notSeen.length])
+  }, [anchorEl, align, seen.length, notSeen.length])
 
   useEffect(() => {
     function onDown(e: MouseEvent) {

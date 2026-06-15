@@ -26,7 +26,7 @@ export function renderRichText(text: string, keyPrefix = ''): ReactNode {
     if (idx > last) nodes.push(text.slice(last, idx))
     if (m[1] != null) {
       nodes.push(
-        <strong key={`${keyPrefix}b${i}`} className="font-semibold">
+        <strong key={`${keyPrefix}b${i}`} className="font-bold text-white">
           {renderRichText(m[1], `${keyPrefix}b${i}-`)}
         </strong>,
       )

@@ -3,26 +3,21 @@ import { MoreVertical, UserPlus, X } from 'lucide-react'
 import type { Group, GroupMember, GroupPendingInvitee, Role } from '../lib/types'
 import { groupLabel, tractorPlate, trailerPlate } from '../lib/types'
 import { api, ApiError } from '../lib/api'
-import { avatarUrl, clearAvatarCache } from '../lib/avatarCache'
 import { statusMeta, OFFLINE } from '../lib/availability'
 import { usePresence } from '../hooks/usePresence'
 import Avatar from './Avatar'
 import GroupAvatar from './GroupAvatar'
-import AvatarPhotoEditor from './AvatarPhotoEditor'
 import EditableRow from './EditableRow'
 import Spinner from './Spinner'
-import AvatarCropModal from './settings/AvatarCropModal'
 
 type Props = {
   group: Group
   currentUserId: string
   members: GroupMember[]
   membersLoading: boolean
-  // Whether the caller may edit details / change the image / invite. The server
-  // re-enforces the full rule; this only gates the controls' visibility.
+  // Whether the caller may edit details / invite. The server re-enforces the
+  // full rule; this only gates the controls' visibility.
   canManage: boolean
-  // Current cache-busting version for the group image (shared with the header).
-  avatarVersion: number
   onClose: () => void
   // Open the shared invite picker (owned by ChatView so it can sit above chat).
   onInvite: () => void
@@ -32,9 +27,6 @@ type Props = {
   // member action. Reuses the parent's existing direct-message creation flow;
   // throws an ApiError (e.g. `connection_required`) the panel surfaces inline.
   onMessageMember: (member: GroupMember) => Promise<void>
-  // Bubble an image change up so the header avatar refetches and the parent
-  // group's `hasAvatar` flag stays accurate.
-  onAvatarChanged: (hasAvatar: boolean) => void
   // Patch the parent group after a details edit so the header reflects it live.
   onGroupUpdated: (partial: Partial<Group>) => void
 }
@@ -55,25 +47,22 @@ const ROLE_LABEL: Record<Role, string> = {
 // Reads as clean information by default — each detail is a label/value row, not
 // a form box. Managers (admins / dispatchers) edit fields INDIVIDUALLY: each row
 // has its own pencil → inline input → Save/Cancel, so changes are made one field
-// at a time. The group image is the header hero: managers change/remove it via
-// the image itself + a small More menu (see AvatarPhotoEditor).
+// at a time. The identity hero is a GENERATED vehicle icon (the same slot as the
+// header/sidebar) — vehicle rooms have no uploaded/custom image, so there is no
+// image upload/crop/remove UI here.
 export default function GroupInfoPanel({
   group,
   currentUserId,
   members,
   membersLoading,
   canManage,
-  avatarVersion,
   onClose,
   onInvite,
   onMembersChanged,
   onMessageMember,
-  onAvatarChanged,
   onGroupUpdated,
 }: Props) {
   const [error, setError] = useState<string | null>(null)
-  const [hasAvatar, setHasAvatar] = useState(group.hasAvatar ?? false)
-  const [cropFile, setCropFile] = useState<File | null>(null)
   // The member whose role is currently being changed (drives the row spinner).
   const [roleBusyId, setRoleBusyId] = useState<string | null>(null)
 
@@ -197,28 +186,6 @@ export default function GroupInfoPanel({
     onGroupUpdated({ name: updated.name, description: updated.description, meta: updated.meta })
   }
 
-  async function uploadCropped(cropped: File) {
-    await api.groups.uploadAvatar(group.id, cropped)
-    // Drop every cached state for this group's old image (any version, incl. the
-    // no-version key used by the header) so the new picture is fetched fresh.
-    clearAvatarCache('group', group.id)
-    setHasAvatar(true)
-    onAvatarChanged(true)
-    setCropFile(null)
-  }
-
-  async function removeImage() {
-    setError(null)
-    try {
-      await api.groups.removeAvatar(group.id)
-      clearAvatarCache('group', group.id)
-      setHasAvatar(false)
-      onAvatarChanged(false)
-    } catch {
-      setError('Could not remove the image.')
-    }
-  }
-
   async function cancelInvite(inviteId: string) {
     const prev = pending
     setPending((p) => p.filter((i) => i.id !== inviteId))
@@ -262,25 +229,11 @@ export default function GroupInfoPanel({
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
-          {/* Identity — the group image is the hero. Managers change/remove it
-              via the image overlay + the More menu (top-right). */}
+          {/* Identity — a GENERATED vehicle icon hero (same slot as the header /
+              sidebar). Vehicle rooms have no uploaded image, so there's no
+              upload/crop/remove control here. */}
           <div className="relative flex flex-col items-center text-center pt-1">
-            <AvatarPhotoEditor
-              size={120}
-              hasImage={hasAvatar}
-              canEdit={canManage}
-              noun="group photo"
-              viewSrc={hasAvatar ? avatarUrl('group', group.id, avatarVersion || undefined) : undefined}
-              viewTitle={groupLabel(group)}
-              onFile={(file) => {
-                setError(null)
-                setCropFile(file)
-              }}
-              onRemove={removeImage}
-              onError={setError}
-            >
-              <GroupAvatar groupId={group.id} size={120} version={avatarVersion || undefined} />
-            </AvatarPhotoEditor>
+            <GroupAvatar size={120} />
             <div className="mt-3 text-[16px] font-semibold tracking-[-0.2px]">
               {groupLabel(group)}
             </div>
@@ -401,10 +354,6 @@ export default function GroupInfoPanel({
           )}
         </div>
       </aside>
-
-      {cropFile && (
-        <AvatarCropModal file={cropFile} onCancel={() => setCropFile(null)} onConfirm={uploadCropped} />
-      )}
     </>
   )
 }

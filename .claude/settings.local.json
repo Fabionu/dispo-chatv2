@@ -217,7 +217,26 @@
       "Bash(curl -s \"https://raw.githubusercontent.com/heremaps/flexible-polyline/master/javascript/index.js\")",
       "Bash(node -e \"const fs=require\\('fs'\\);for\\(const f of ['tsconfig.json','tsconfig.app.json']\\){try{const c=fs.readFileSync\\(f,'utf8'\\);const m=c.match\\(/\\\\\"target\\\\\"\\\\s*:\\\\s*\\\\\"\\([^\\\\\"]+\\)\\\\\"/i\\);console.log\\(f, m?m[1]:'\\(no target\\)'\\);}catch\\(e\\){console.log\\(f,'\\(missing\\)'\\)}}\")",
       "WebFetch(domain:docs.here.com)",
-      "Bash(curl -s http://localhost:5173/src/components/map/HereMapView.tsx)"
+      "Bash(curl -s http://localhost:5173/src/components/map/HereMapView.tsx)",
+      "Bash(rm -rf web/src/components/map)",
+      "Bash(rm -f web/src/pages/HereDiagnostics.tsx web/src/lib/hereMaps.ts web/src/lib/hereSearch.ts web/src/lib/hereRouting.ts web/src/lib/hereMapTypes.ts web/src/lib/mapConfig.ts web/src/lib/truckProfiles.ts web/src/components/inbox/CheckRouteWorkspace.tsx web/src/components/inbox/PlaceAutocompleteField.tsx server/src/location.ts)",
+      "Bash(echo \"--- exit: $? \\(1 = no matches, good\\) ---\")",
+      "Bash(curl -s 'https://discover.search.hereapi.com/v1/discover?apiKey=__TRACKED_VAR__&q=Berlin%20Hauptbahnhof&at=50.1109,8.6821&limit=2&lang=en-US' -w '\\\\n[HTTP %{http_code}]\\\\n')",
+      "Bash(cd C:/Users/Home/Desktop/dispo-chatv2)",
+      "Bash(echo \"=== TRUCK ROUTE WITH 1 VIA \\(Frankfurt -> [Würzburg via] -> Berlin\\) ===\")",
+      "Bash(curl -s -G https://router.hereapi.com/v8/routes --data-urlencode apiKey=__TRACKED_VAR__ --data-urlencode transportMode=truck --data-urlencode origin=50.1109,8.6821 --data-urlencode via=49.7913,9.9534 --data-urlencode destination=52.5200,13.4050 --data-urlencode return=summary,polyline --data-urlencode vehicle[grossWeight]=40000 -w '\\\\n[HTTP %{http_code}]\\\\n')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); s=d['routes'][0]['sections']; print\\('sections:',len\\(s\\)\\); [print\\(f'  sec{i}: dep={x[\\\\\"departure\\\\\"][\\\\\"place\\\\\"][\\\\\"location\\\\\"]} arr={x[\\\\\"arrival\\\\\"][\\\\\"place\\\\\"][\\\\\"location\\\\\"]} len={x[\\\\\"summary\\\\\"][\\\\\"length\\\\\"]}'\\) for i,x in enumerate\\(s\\)]\")",
+      "Bash(curl -s -G https://router.hereapi.com/v8/routes --data-urlencode apiKey=__TRACKED_VAR__ --data-urlencode transportMode=truck --data-urlencode origin=50.1109,8.6821 --data-urlencode via=49.7913,9.9534 --data-urlencode destination=52.5200,13.4050 --data-urlencode return=summary,polyline --data-urlencode vehicle[grossWeight]=40000)",
+      "Bash(node -e \"const d=require\\('/tmp/route.json'\\);const s=d.routes[0].sections;console.log\\('sections:',s.length\\);s.forEach\\(\\(x,i\\)=>console.log\\('  sec'+i,'dep',JSON.stringify\\(x.departure.place.location\\),'arr',JSON.stringify\\(x.arrival.place.location\\),'len',x.summary.length\\)\\)\")",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const d=JSON.parse\\(s\\);const sec=d.routes[0].sections;console.log\\('sections:',sec.length\\);sec.forEach\\(\\(x,i\\)=>console.log\\('  sec'+i,'dep',JSON.stringify\\(x.departure.place.location\\),'arr',JSON.stringify\\(x.arrival.place.location\\),'origDep',JSON.stringify\\(x.departure.place.originalLocation\\)\\)\\)}\\)\")",
+      "Bash(echo \"--- providers exit: $? \\(1=clean\\) ---\")",
+      "Bash(curl -s 'https://revgeocode.search.hereapi.com/v1/revgeocode?at=50.1109,8.6821&lang=en-US&limit=1&apiKey=__TRACKED_VAR__' -w '\\\\n[HTTP %{http_code}]\\\\n')",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{try{const d=JSON.parse\\(s\\);const it=d.items&&d.items[0];console.log\\('label:',it&&it.address&&it.address.label\\);console.log\\('position:',JSON.stringify\\(it&&it.position\\)\\);console.log\\('title:',it&&it.title\\);}catch\\(e\\){console.log\\('raw:',s.slice\\(0,300\\)\\)}}\\)\")",
+      "Bash(echo \"exit $? \\(1=clean\\)\")",
+      "Bash(echo \"providers exit $? \\(1=clean\\)\")",
+      "Bash(ls \"C:/Users/Home/.claude/projects/C--Users-Home-Desktop-dispo-chatv2/memory/\")",
+      "mcp__visualize__read_me",
+      "mcp__visualize__show_widget"
     ]
   }
 }

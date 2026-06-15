@@ -50,6 +50,9 @@ export const env = {
   PORT: Number(process.env.PORT ?? 3001),
   NODE_ENV: process.env.NODE_ENV ?? 'development',
   PUBLIC_ORIGIN: process.env.PUBLIC_ORIGIN ?? '',
+  // HERE Location Services. Used by the server-side proxy for search/routing
+  // and exposed to authenticated clients only for HERE Maps JS rendering.
+  HERE_API_KEY: process.env.HERE_API_KEY ?? '',
   // ── Postgres connection pool tuning ────────────────────────────────────────
   // PG_POOL_MAX caps the connections EACH app instance opens (default 10 — the
   // previous hardcoded value, so behavior is unchanged unless set). Behind a
@@ -108,15 +111,6 @@ export const env = {
   SUPABASE_URL: required('SUPABASE_URL'),
   SUPABASE_SERVICE_ROLE_KEY: required('SUPABASE_SERVICE_ROLE_KEY'),
   SUPABASE_STORAGE_BUCKET: process.env.SUPABASE_STORAGE_BUCKET ?? 'attachments',
-  // ── Amazon Location Service (optional vehicle tracking) ────────────────────
-  // When BOTH AWS_REGION and AWS_LOCATION_TRACKER_NAME are set, the location
-  // endpoints read the latest device position from the tracker. AWS credentials
-  // come from the standard AWS provider chain (env AWS_ACCESS_KEY_ID /
-  // AWS_SECRET_ACCESS_KEY, IAM role, etc.) — never hardcoded here. Left unset =
-  // the feature is disabled and the endpoint returns `location_not_configured`,
-  // so existing deployments are unaffected.
-  AWS_REGION: process.env.AWS_REGION ?? '',
-  AWS_LOCATION_TRACKER_NAME: process.env.AWS_LOCATION_TRACKER_NAME ?? '',
 }
 
 export const isProd = env.NODE_ENV === 'production'
