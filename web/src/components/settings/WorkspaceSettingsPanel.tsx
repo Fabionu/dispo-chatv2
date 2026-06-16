@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { ArrowLeft, ChevronRight, Palette } from 'lucide-react'
 import { useViewMode, setViewMode, type ViewMode } from '../../lib/viewMode'
-import { useMessageDisplay, setMessageDisplay, type MessageDisplay } from '../../lib/messageDisplay'
 
 type Props = { onBack: () => void }
 
@@ -47,7 +46,7 @@ export default function WorkspaceSettingsPanel({ onBack }: Props) {
         <CategoryCard
           icon={<Palette size={16} strokeWidth={1.8} />}
           title="Appearance"
-          description="Conversation density and message layout."
+          description="Conversation list density."
           onClick={() => setCategory('appearance')}
         />
       </div>
@@ -119,7 +118,6 @@ function CategoryCard({
 // dividers, so nothing competes. Subscribes to the prefs only while mounted.
 function AppearanceSettings() {
   const viewMode = useViewMode()
-  const messageDisplay = useMessageDisplay()
 
   return (
     <div className="space-y-5">
@@ -141,20 +139,6 @@ function AppearanceSettings() {
                 { value: 'normal', label: 'Normal' },
               ]}
               onChange={(v) => setViewMode(v as ViewMode)}
-            />
-          </SettingBlock>
-
-          <SettingBlock
-            label="Message style"
-            description="Choose how messages appear in a chat."
-          >
-            <Segmented
-              value={messageDisplay}
-              options={[
-                { value: 'bubble', label: 'Bubble' },
-                { value: 'plain', label: 'Plain stream' },
-              ]}
-              onChange={(v) => setMessageDisplay(v as MessageDisplay)}
             />
           </SettingBlock>
         </div>

@@ -1,72 +1,39 @@
-// Message DISPLAY STYLE — a user preference for how the message timeline is
-// rendered. Independent of both the auto width-based `density` and the
-// sidebar `viewMode` (compact/normal):
-//   - 'bubble' (DEFAULT): the classic chat bubbles (mine right, others left).
-//   - 'plain': a no-bubble grouped "operational log" stream — plain text rows
-//     grouped by author, timestamps on hover, lighter and easier to scan.
+// Message DISPLAY STYLE.
 //
-// Persisted in localStorage and reflected as a `data-msg-style` attribute on
-// <html> (same mechanism as density/viewMode) so message rows react live when
-// the user switches. Defaults to 'bubble' so nothing changes until opted in —
-// the plain stream is a reversible experiment, never a forced replacement.
-
-import { useEffect, useState } from 'react'
+// Plain stream is now the ONLY message style — the no-bubble grouped
+// "operational log" timeline. The bubble view and its settings toggle were
+// retired. This tiny module survives as a hook + a startup applier so the
+// reader in MessageRow and the <html data-msg-style> hook point don't change,
+// but every resolution is 'plain' and any legacy stored 'bubble' preference is
+// migrated to 'plain' on startup so it can never force the old view again.
+//
+// The bubble RENDERING code in MessageRow is left intact (simply never reached)
+// in case the option is ever reinstated.
 
 export type MessageDisplay = 'bubble' | 'plain'
 
 const STORAGE_KEY = 'dispo:msg-style'
 
-function isMessageDisplay(v: unknown): v is MessageDisplay {
-  return v === 'bubble' || v === 'plain'
-}
-
-export function getStoredMessageDisplay(): MessageDisplay | null {
-  try {
-    const v = localStorage.getItem(STORAGE_KEY)
-    return isMessageDisplay(v) ? v : null
-  } catch {
-    return null
-  }
-}
+// The single supported style.
+const STYLE: MessageDisplay = 'plain'
 
 function apply(m: MessageDisplay) {
   document.documentElement.dataset.msgStyle = m
 }
 
-// Set (and persist) the message display style. Applies immediately so every
-// mounted message row re-renders in the new style.
-export function setMessageDisplay(m: MessageDisplay) {
-  try {
-    localStorage.setItem(STORAGE_KEY, m)
-  } catch {
-    /* ignore quota/availability — the attribute still applies this session */
-  }
-  apply(m)
-}
-
-// React hook: the live message display style. Reads the attribute this module
-// writes on <html> and re-renders when it changes. Defaults to 'bubble'.
+// React hook, kept for call-site stability (MessageRow). Always 'plain'.
 export function useMessageDisplay(): MessageDisplay {
-  const [m, setM] = useState<MessageDisplay>(() => {
-    if (typeof document === 'undefined') return 'bubble'
-    const v = document.documentElement.dataset.msgStyle
-    return isMessageDisplay(v) ? v : (getStoredMessageDisplay() ?? 'bubble')
-  })
-  useEffect(() => {
-    const el = document.documentElement
-    const obs = new MutationObserver(() => {
-      const v = el.dataset.msgStyle
-      if (isMessageDisplay(v)) setM(v)
-    })
-    obs.observe(el, { attributes: true, attributeFilter: ['data-msg-style'] })
-    return () => obs.disconnect()
-  }, [])
-  return m
+  return STYLE
 }
 
-// Call once at startup (before React renders) so the attribute is present on the
-// first paint — no flash. Applies the stored choice, else the 'bubble' default.
+// Call once at startup (before React renders): paint plain from the first frame
+// and migrate any legacy stored choice (e.g. 'bubble') to 'plain'.
 export function initMessageDisplay() {
   if (typeof window === 'undefined') return
-  apply(getStoredMessageDisplay() ?? 'bubble')
+  try {
+    if (localStorage.getItem(STORAGE_KEY) !== STYLE) localStorage.setItem(STORAGE_KEY, STYLE)
+  } catch {
+    /* ignore storage availability/quota — the attribute still applies */
+  }
+  apply(STYLE)
 }
