@@ -401,7 +401,7 @@ function MessageRow({
                   the body indents past it — so the chevron lands on the MESSAGE
                   TEXT row, aligned to its first line, never the author row. Its
                   fixed width means the body never shifts when it reveals. */}
-              <div className="flex items-start gap-1.5 w-full">
+              <div className="flex items-start gap-1 w-full">
                 {/* Actions trigger — icon-only, revealed on this row's hover/
                     focus. No background, border, shadow or rounded box — just a
                     muted glyph that brightens on hover. Clicking opens the full
