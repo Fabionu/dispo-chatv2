@@ -1,12 +1,12 @@
 import { useState, type ReactNode } from 'react'
-import { ArrowLeft, ChevronRight, Palette } from 'lucide-react'
+import { ArrowLeft, ChevronRight, Info, Palette } from 'lucide-react'
 import { useViewMode, setViewMode, type ViewMode } from '../../lib/viewMode'
 
 type Props = { onBack: () => void }
 
-// The settings categories. Today just Appearance; new ones (Notifications,
-// Members, Integrations …) drop in as another CategoryCard + detail view.
-type Category = 'appearance'
+// The settings categories. New ones (Notifications, Members, Integrations …)
+// drop in as another CategoryCard + detail view.
+type Category = 'appearance' | 'about'
 
 // Workspace settings as a sidebar drawer — consistent with "My profile" /
 // "Company profile" (replaces the conversation list; the chat stays on the
@@ -38,6 +38,22 @@ export default function WorkspaceSettingsPanel({ onBack }: Props) {
     )
   }
 
+  // ── Detail: About ───────────────────────────────────────────────────────────
+  if (category === 'about') {
+    return (
+      <div className="flex flex-col h-full">
+        <PanelHeader
+          title="About"
+          onBack={() => setCategory(null)}
+          backLabel="Back to Workspace settings"
+        />
+        <div className="flex-1 overflow-y-auto px-4 py-5">
+          <AboutSettings />
+        </div>
+      </div>
+    )
+  }
+
   // ── Category list ───────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full">
@@ -48,6 +64,12 @@ export default function WorkspaceSettingsPanel({ onBack }: Props) {
           title="Appearance"
           description="Conversation list density."
           onClick={() => setCategory('appearance')}
+        />
+        <CategoryCard
+          icon={<Info size={16} strokeWidth={1.8} />}
+          title="About"
+          description="Version and build information."
+          onClick={() => setCategory('about')}
         />
       </div>
     </div>
@@ -143,6 +165,50 @@ function AppearanceSettings() {
           </SettingBlock>
         </div>
       </div>
+    </div>
+  )
+}
+
+// About detail content: app/version/build metadata in a clean label/value
+// card. Values come from optional build-time env (injected by CI) and fall back
+// to the package version / "Not available" so nothing sensitive is exposed.
+function AboutSettings() {
+  const appVersion = import.meta.env.VITE_APP_VERSION ?? '0.3.1'
+  const environment = import.meta.env.MODE
+  const buildDate = import.meta.env.VITE_BUILD_DATE ?? 'Not available'
+  const commitRaw = import.meta.env.VITE_COMMIT_SHA ?? 'Not available'
+  // Show a short SHA when a full one is provided; leave the fallback untouched.
+  const commit =
+    commitRaw !== 'Not available' && commitRaw.length > 10 ? commitRaw.slice(0, 7) : commitRaw
+
+  return (
+    <div className="space-y-5">
+      <p className="text-[12px] text-faint leading-[1.5]">Version and build information for this app.</p>
+
+      <div className="rounded-card border border-white/[0.06] bg-white/[0.015] px-4 py-1.5">
+        <FieldRow label="App version" value={appVersion} />
+        <FieldRow label="Environment" value={environment} />
+        <FieldRow label="Build date" value={buildDate} />
+        <FieldRow label="Commit" value={commit} mono />
+      </div>
+    </div>
+  )
+}
+
+// A compact label/value line: label muted on the left, value on the right.
+// Rows are separated by a hairline divider (none after the last).
+function FieldRow({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-2.5 border-b border-white/[0.05] last:border-0">
+      <span className="shrink-0 text-[12px] text-muted">{label}</span>
+      <span
+        title={value}
+        className={`min-w-0 truncate text-right text-text ${
+          mono ? 'font-mono text-[11.5px] tabular-nums' : 'text-[12.5px]'
+        }`}
+      >
+        {value}
+      </span>
     </div>
   )
 }

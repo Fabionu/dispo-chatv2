@@ -237,7 +237,11 @@
       "Bash(ls \"C:/Users/Home/.claude/projects/C--Users-Home-Desktop-dispo-chatv2/memory/\")",
       "mcp__visualize__read_me",
       "mcp__visualize__show_widget",
-      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\({...p.dependencies,...p.devDependencies},null,0\\)\\)\")"
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\({...p.dependencies,...p.devDependencies},null,0\\)\\)\")",
+      "Bash(node -e \"console.log\\(require\\('./package.json'\\).version\\)\")",
+      "Bash(ls src/vite-env.d.ts)",
+      "Bash(cat src/vite-env.d.ts)",
+      "Bash(ls src/*.d.ts)"
     ]
   }
 }
