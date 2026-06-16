@@ -16,9 +16,9 @@ export type Density = 'compact' | 'default' | 'comfortable'
 // they read this map via useDensity() instead. Kept in lockstep with the
 // --sidebar-user-avatar-size token in index.css.
 export const SIDEBAR_AVATAR_SIZE: Record<Density, number> = {
-  compact: 28,
-  default: 30,
-  comfortable: 34,
+  compact: 31,
+  default: 33,
+  comfortable: 37,
 }
 
 const STORAGE_KEY = 'dispo:density'

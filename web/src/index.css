@@ -46,7 +46,7 @@
      — bubble view and the composer keep --chat-msg-font-size. */
   --chat-plain-font-size: calc(var(--chat-msg-font-size) + 1px);
   --header-height: 60px;
-  --sidebar-width: 420px;
+  --sidebar-width: 500px;
   --composer-size: 28px;
   --chat-max-width: 1560px;
   --chat-gutter: 20px;
@@ -55,19 +55,19 @@
      (see .chat-column). Constant across tiers. */
   --chat-scrollbar-gutter: 10px;
 
-  --sidebar-title-font-size: 15.5px;
-  --sidebar-row-font-size: 13.5px;
-  --sidebar-meta-font-size: 11.5px;
-  --sidebar-section-font-size: 10px;
-  --sidebar-icon-size: 18px;
-  --sidebar-user-avatar-size: 30px;
-  --sidebar-search-height: 32px;
-  --sidebar-row-height: 36px;
-  --sidebar-badge-size: 19px;
-  --sidebar-row-gap: 10px;
-  --sidebar-row-pad-x: 10px;
-  --sidebar-row-pad-y: 7px;
-  --sidebar-section-gap: 26px;
+  --sidebar-title-font-size: 16.5px;
+  --sidebar-row-font-size: 14.5px;
+  --sidebar-meta-font-size: 12.5px;
+  --sidebar-section-font-size: 10.5px;
+  --sidebar-icon-size: 20px;
+  --sidebar-user-avatar-size: 33px;
+  --sidebar-search-height: 36px;
+  --sidebar-row-height: 40px;
+  --sidebar-badge-size: 20px;
+  --sidebar-row-gap: 11px;
+  --sidebar-row-pad-x: 11px;
+  --sidebar-row-pad-y: 8px;
+  --sidebar-section-gap: 28px;
 }
 
 /* compact — small laptops / dense preference (the previous base scale). */
@@ -75,24 +75,24 @@
   --app-font-size: 14px;
   --chat-msg-font-size: 13px;
   --header-height: 56px;
-  --sidebar-width: 380px;
+  --sidebar-width: 440px;
   --composer-size: 26px;
   --chat-max-width: 1280px;
   --chat-gutter: 16px;
 
-  --sidebar-title-font-size: 15px;
-  --sidebar-row-font-size: 13px;
-  --sidebar-meta-font-size: 11px;
-  --sidebar-section-font-size: 10px;
-  --sidebar-icon-size: 17px;
-  --sidebar-user-avatar-size: 28px;
-  --sidebar-search-height: 30px;
-  --sidebar-row-height: 32px;
-  --sidebar-badge-size: 18px;
-  --sidebar-row-gap: 8px;
-  --sidebar-row-pad-x: 8px;
-  --sidebar-row-pad-y: 6px;
-  --sidebar-section-gap: 22px;
+  --sidebar-title-font-size: 16px;
+  --sidebar-row-font-size: 14px;
+  --sidebar-meta-font-size: 12px;
+  --sidebar-section-font-size: 10.5px;
+  --sidebar-icon-size: 19px;
+  --sidebar-user-avatar-size: 31px;
+  --sidebar-search-height: 34px;
+  --sidebar-row-height: 36px;
+  --sidebar-badge-size: 19px;
+  --sidebar-row-gap: 10px;
+  --sidebar-row-pad-x: 10px;
+  --sidebar-row-pad-y: 7px;
+  --sidebar-section-gap: 25px;
 }
 
 /* default — desktop / 1080p (current hand-tuned scale; matches :root). */
@@ -100,24 +100,24 @@
   --app-font-size: 15px;
   --chat-msg-font-size: 14px;
   --header-height: 60px;
-  --sidebar-width: 420px;
+  --sidebar-width: 500px;
   --composer-size: 28px;
   --chat-max-width: 1560px;
   --chat-gutter: 20px;
 
-  --sidebar-title-font-size: 15.5px;
-  --sidebar-row-font-size: 13.5px;
-  --sidebar-meta-font-size: 11.5px;
-  --sidebar-section-font-size: 10px;
-  --sidebar-icon-size: 18px;
-  --sidebar-user-avatar-size: 30px;
-  --sidebar-search-height: 32px;
-  --sidebar-row-height: 36px;
-  --sidebar-badge-size: 19px;
-  --sidebar-row-gap: 10px;
-  --sidebar-row-pad-x: 10px;
-  --sidebar-row-pad-y: 7px;
-  --sidebar-section-gap: 26px;
+  --sidebar-title-font-size: 16.5px;
+  --sidebar-row-font-size: 14.5px;
+  --sidebar-meta-font-size: 12.5px;
+  --sidebar-section-font-size: 10.5px;
+  --sidebar-icon-size: 20px;
+  --sidebar-user-avatar-size: 33px;
+  --sidebar-search-height: 36px;
+  --sidebar-row-height: 40px;
+  --sidebar-badge-size: 20px;
+  --sidebar-row-gap: 11px;
+  --sidebar-row-pad-x: 11px;
+  --sidebar-row-pad-y: 8px;
+  --sidebar-section-gap: 28px;
 }
 
 /* comfortable — 2K/QHD and larger: a touch more air so the UI doesn't read as
@@ -126,24 +126,24 @@
   --app-font-size: 16.5px;
   --chat-msg-font-size: 15px;
   --header-height: 66px;
-  --sidebar-width: 460px;
+  --sidebar-width: 540px;
   --composer-size: 30px;
   --chat-max-width: 1840px;
   --chat-gutter: 24px;
 
-  --sidebar-title-font-size: 17px;
-  --sidebar-row-font-size: 14.5px;
-  --sidebar-meta-font-size: 12.5px;
-  --sidebar-section-font-size: 11px;
-  --sidebar-icon-size: 20px;
-  --sidebar-user-avatar-size: 34px;
-  --sidebar-search-height: 36px;
-  --sidebar-row-height: 40px;
-  --sidebar-badge-size: 21px;
-  --sidebar-row-gap: 12px;
-  --sidebar-row-pad-x: 12px;
-  --sidebar-row-pad-y: 9px;
-  --sidebar-section-gap: 30px;
+  --sidebar-title-font-size: 18px;
+  --sidebar-row-font-size: 15.5px;
+  --sidebar-meta-font-size: 13.5px;
+  --sidebar-section-font-size: 11.5px;
+  --sidebar-icon-size: 22px;
+  --sidebar-user-avatar-size: 37px;
+  --sidebar-search-height: 40px;
+  --sidebar-row-height: 44px;
+  --sidebar-badge-size: 22px;
+  --sidebar-row-gap: 13px;
+  --sidebar-row-pad-x: 13px;
+  --sidebar-row-pad-y: 10px;
+  --sidebar-section-gap: 32px;
 }
 
 /* No-JS / pre-hydration fallback: follow the display size when no explicit
@@ -155,24 +155,24 @@
     --app-font-size: 14px;
     --chat-msg-font-size: 13px;
     --header-height: 56px;
-    --sidebar-width: 380px;
+    --sidebar-width: 440px;
     --composer-size: 26px;
     --chat-max-width: 1280px;
     --chat-gutter: 16px;
 
-    --sidebar-title-font-size: 15px;
-    --sidebar-row-font-size: 13px;
-    --sidebar-meta-font-size: 11px;
-    --sidebar-section-font-size: 10px;
-    --sidebar-icon-size: 17px;
-    --sidebar-user-avatar-size: 28px;
-    --sidebar-search-height: 30px;
-    --sidebar-row-height: 32px;
-    --sidebar-badge-size: 18px;
-    --sidebar-row-gap: 8px;
-    --sidebar-row-pad-x: 8px;
-    --sidebar-row-pad-y: 6px;
-    --sidebar-section-gap: 22px;
+    --sidebar-title-font-size: 16px;
+    --sidebar-row-font-size: 14px;
+    --sidebar-meta-font-size: 12px;
+    --sidebar-section-font-size: 10.5px;
+    --sidebar-icon-size: 19px;
+    --sidebar-user-avatar-size: 31px;
+    --sidebar-search-height: 34px;
+    --sidebar-row-height: 36px;
+    --sidebar-badge-size: 19px;
+    --sidebar-row-gap: 10px;
+    --sidebar-row-pad-x: 10px;
+    --sidebar-row-pad-y: 7px;
+    --sidebar-section-gap: 25px;
   }
 }
 @media (min-width: 2200px) {
@@ -180,24 +180,24 @@
     --app-font-size: 16.5px;
     --chat-msg-font-size: 15px;
     --header-height: 66px;
-    --sidebar-width: 460px;
+    --sidebar-width: 540px;
     --composer-size: 30px;
     --chat-max-width: 1840px;
     --chat-gutter: 24px;
 
-    --sidebar-title-font-size: 17px;
-    --sidebar-row-font-size: 14.5px;
-    --sidebar-meta-font-size: 12.5px;
-    --sidebar-section-font-size: 11px;
-    --sidebar-icon-size: 20px;
-    --sidebar-user-avatar-size: 34px;
-    --sidebar-search-height: 36px;
-    --sidebar-row-height: 40px;
-    --sidebar-badge-size: 21px;
-    --sidebar-row-gap: 12px;
-    --sidebar-row-pad-x: 12px;
-    --sidebar-row-pad-y: 9px;
-    --sidebar-section-gap: 30px;
+    --sidebar-title-font-size: 18px;
+    --sidebar-row-font-size: 15.5px;
+    --sidebar-meta-font-size: 13.5px;
+    --sidebar-section-font-size: 11.5px;
+    --sidebar-icon-size: 22px;
+    --sidebar-user-avatar-size: 37px;
+    --sidebar-search-height: 40px;
+    --sidebar-row-height: 44px;
+    --sidebar-badge-size: 22px;
+    --sidebar-row-gap: 13px;
+    --sidebar-row-pad-x: 13px;
+    --sidebar-row-pad-y: 10px;
+    --sidebar-section-gap: 32px;
   }
 }
 
