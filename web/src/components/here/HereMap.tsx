@@ -297,9 +297,21 @@ export default function HereMap({
         }
         map.addEventListener('tap', onTap)
 
+        // Reset the drag latch at the START of every pointer interaction so a
+        // `tap` is judged purely by THIS gesture. `onDrag` sets the latch true
+        // for ANY drag (including a plain map pan) and only `onDragStart` cleared
+        // it — so after the first pan/zoom the latch stayed true and silently
+        // swallowed every later marker tap, breaking "click a stop to remove it".
+        // pointerdown fires before dragstart/tap, so it's the reliable reset.
+        const onPointerDown = () => {
+          didDragRef.current = false
+        }
+        map.addEventListener('pointerdown', onPointerDown)
+
         detachListeners = () => {
           container.removeEventListener('contextmenu', onContextMenu)
           map.removeEventListener('mapviewchangestart', onViewChange)
+          map.removeEventListener('pointerdown', onPointerDown)
           map.removeEventListener('dragstart', onDragStart)
           map.removeEventListener('drag', onDrag)
           map.removeEventListener('dragend', onDragEnd)

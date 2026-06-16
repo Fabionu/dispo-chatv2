@@ -10,6 +10,7 @@ import {
   ChevronUp,
   Copy,
   Flag,
+  GripVertical,
   MapPin,
   Navigation,
   Plus,
@@ -172,6 +173,8 @@ export default function RoutePlanner({ onBack }: Props) {
   const [panelCollapsed, setPanelCollapsed] = useState(false)
   const [truckOpen, setTruckOpen] = useState(false)
   const [addingStop, setAddingStop] = useState(false)
+  // Id of the stop currently being dragged in the list (for reorder + ghosting).
+  const [dragId, setDragId] = useState<string | null>(null)
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [markerMenu, setMarkerMenu] = useState<MarkerMenuState | null>(null)
   const [truckOverlay, setTruckOverlay] = useState(false)
@@ -349,15 +352,22 @@ export default function RoutePlanner({ onBack }: Props) {
   function removePoint(id: string) {
     setPoints((prev) => prev.filter((p) => p.id !== id))
   }
-  function moveStop(id: string, dir: -1 | 1) {
+  // Drag-and-drop reorder: move the dragged stop to the position of the stop it
+  // is hovering over. Only reorders intermediate stops (start/destination keep
+  // their fixed first/last slots). Mutates points like moveStop did, so the
+  // route goes "outdated" and recalcs on the next Create/Update — same behavior
+  // the up/down buttons had.
+  function reorderStops(dragId: string, targetId: string) {
+    if (dragId === targetId) return
     setPoints((prev) => {
       const s = prev.filter((p) => p.role === 'start')
       const stps = prev.filter((p) => p.role === 'stop')
       const d = prev.filter((p) => p.role === 'destination')
-      const i = stps.findIndex((x) => x.id === id)
-      const j = i + dir
-      if (i < 0 || j < 0 || j >= stps.length) return prev
-      ;[stps[i], stps[j]] = [stps[j], stps[i]]
+      const from = stps.findIndex((x) => x.id === dragId)
+      const to = stps.findIndex((x) => x.id === targetId)
+      if (from < 0 || to < 0 || from === to) return prev
+      const [moved] = stps.splice(from, 1)
+      stps.splice(to, 0, moved)
       return [...s, ...stps, ...d]
     })
   }
@@ -669,7 +679,7 @@ export default function RoutePlanner({ onBack }: Props) {
               <PlaceSearchField label="Start" value={null} onChange={(p) => p && setStart(fromSearch(p))} placeholder="Start address or place…" />
             )}
 
-            {/* Stops */}
+            {/* Stops — draggable to reorder (start/destination stay fixed). */}
             {stops.map((s, i) => (
               <PointRow
                 key={s.id}
@@ -677,8 +687,13 @@ export default function RoutePlanner({ onBack }: Props) {
                 index={i + 1}
                 point={s}
                 coord={displayCoord(s)}
-                onUp={i > 0 ? () => moveStop(s.id, -1) : undefined}
-                onDown={i < stops.length - 1 ? () => moveStop(s.id, 1) : undefined}
+                draggable
+                dragging={dragId === s.id}
+                onDragStartRow={() => setDragId(s.id)}
+                onDragEnterRow={() => {
+                  if (dragId && dragId !== s.id) reorderStops(dragId, s.id)
+                }}
+                onDragEndRow={() => setDragId(null)}
                 onClear={() => removePoint(s.id)}
               />
             ))}
@@ -943,22 +958,30 @@ export default function RoutePlanner({ onBack }: Props) {
 }
 
 // ── Compact row for a committed point (start / stop / destination) ──────────
+// Intermediate stops are draggable (native DnD) to reorder; start/destination
+// are fixed. The reorder happens live as the dragged row enters another stop.
 function PointRow({
   role,
   index,
   point,
   coord,
-  onUp,
-  onDown,
   onClear,
+  draggable = false,
+  dragging = false,
+  onDragStartRow,
+  onDragEnterRow,
+  onDragEndRow,
 }: {
   role: RoutePointRole
   index?: number
   point: RoutePoint
   coord: LatLng
-  onUp?: () => void
-  onDown?: () => void
   onClear: () => void
+  draggable?: boolean
+  dragging?: boolean
+  onDragStartRow?: () => void
+  onDragEnterRow?: () => void
+  onDragEndRow?: () => void
 }) {
   const [copied, setCopied] = useState(false)
 
@@ -989,7 +1012,36 @@ function PointRow({
     )
 
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.02] px-2 py-1.5">
+    <div
+      draggable={draggable}
+      onDragStart={
+        draggable
+          ? (e) => {
+              // Required for Firefox to start a drag; also marks the payload.
+              e.dataTransfer.effectAllowed = 'move'
+              e.dataTransfer.setData('text/plain', point.id)
+              onDragStartRow?.()
+            }
+          : undefined
+      }
+      onDragEnter={draggable ? () => onDragEnterRow?.() : undefined}
+      // preventDefault marks this row as a valid drop target so the live reorder
+      // (done on dragenter) sticks and the cursor reads as "movable".
+      onDragOver={draggable ? (e) => e.preventDefault() : undefined}
+      onDragEnd={draggable ? () => onDragEndRow?.() : undefined}
+      className={`flex items-center gap-2 rounded-lg border bg-white/[0.02] px-2 py-1.5 transition-[opacity,border-color] ${
+        dragging ? 'opacity-50 border-active/40' : 'border-white/[0.08]'
+      }`}
+    >
+      {draggable && (
+        <span
+          aria-hidden
+          title="Drag to reorder"
+          className="shrink-0 -ml-0.5 -mr-0.5 text-muted/60 hover:text-text cursor-grab active:cursor-grabbing"
+        >
+          <GripVertical size={14} strokeWidth={1.8} />
+        </span>
+      )}
       <div className="shrink-0">{badge}</div>
       <div className="min-w-0 flex-1">
         <div className="text-[12.5px] leading-tight truncate" title={point.label}>
@@ -1010,16 +1062,6 @@ function PointRow({
         </button>
       </div>
       <div className="flex items-center gap-0.5 shrink-0">
-        {onUp !== undefined && (
-          <IconBtn label="Move up" onClick={onUp}>
-            <ChevronUp size={14} strokeWidth={2} />
-          </IconBtn>
-        )}
-        {onDown !== undefined && (
-          <IconBtn label="Move down" onClick={onDown}>
-            <ChevronDown size={14} strokeWidth={2} />
-          </IconBtn>
-        )}
         <IconBtn label="Remove" onClick={onClear}>
           <X size={14} strokeWidth={2} />
         </IconBtn>
