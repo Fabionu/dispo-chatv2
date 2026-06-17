@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, Info, Upload } from 'lucide-react'
+import { ArrowDown, Info, Search, Upload } from 'lucide-react'
 import type { Attachment, Group, GroupMember, IncomingMessage, ReplyToPreview } from '../lib/types'
 import { groupLabel, trailerPlate } from '../lib/types'
 import { fileError } from './attachments/attachmentUtils'
@@ -14,6 +14,7 @@ import ChatComposer, { type ChatComposerHandle, type EditContext } from './compo
 import Avatar from './Avatar'
 import GroupAvatar from './GroupAvatar'
 import GroupInfoPanel from './GroupInfoPanel'
+import ConversationSearch from './ConversationSearch'
 import MessageRow from './messages/MessageRow'
 import SystemMessageRow from './messages/SystemMessageRow'
 import PinnedBar from './messages/PinnedBar'
@@ -139,6 +140,12 @@ export default function ChatView({
   const [inviteOpen, setInviteOpen] = useState(false)
   // Whether the group-info drawer is open (vehicle groups only).
   const [groupInfoOpen, setGroupInfoOpen] = useState(false)
+  // Whether the in-conversation search panel is open (DMs + vehicle groups).
+  const [searchOpen, setSearchOpen] = useState(false)
+  // Close search when switching conversations so it never carries a stale query.
+  useEffect(() => {
+    setSearchOpen(false)
+  }, [group.id])
   // Whether a file is being dragged over the conversation (drives the drop
   // overlay). A depth counter keeps it stable across child enter/leave events.
   const [dragActive, setDragActive] = useState(false)
@@ -1004,39 +1011,66 @@ export default function ChatView({
           we intentionally don't touch) gives the message area more room. The
           identity (avatar + name + subtitle) is CENTERED as one compact cluster;
           symmetric padding keeps it visually centered while the vehicle "Group
-          info" action floats at the right edge. Same structure for every type. */}
-      <header className="relative h-12 flex items-center justify-center px-14 border-b border-white/[0.06] shrink-0 overflow-hidden">
-        <div className="min-w-0 flex items-center gap-2">
+          info" action floats at the right edge. Same structure for every type.
+          Comfortable (not oversized) height + padding give the identity room to
+          breathe; avatar/title/subtitle/actions are scaled up in step. */}
+      <header className="relative h-16 flex items-center justify-center px-24 border-b border-white/[0.06] shrink-0 overflow-hidden">
+        <div className="min-w-0 flex items-center gap-3">
           {group.type === 'direct' ? (
             <Avatar
               userId={group.directPeer?.id ?? ''}
               name={group.directPeer?.name ?? groupLabel(group)}
-              size={32}
+              size={40}
             />
           ) : (
             // Vehicle identity — the same circular slot as a DM avatar, but a
             // GENERATED generic icon (vehicle rooms never use an uploaded image).
-            <GroupAvatar size={32} />
+            <GroupAvatar size={40} />
           )}
           <div className="min-w-0">
-            <div className="text-[15px] font-semibold truncate leading-tight">{groupLabel(group)}</div>
-            <div className="text-[12px] text-muted truncate leading-tight">{subtitle}</div>
+            <div className="text-[16px] font-semibold truncate leading-tight">{groupLabel(group)}</div>
+            <div className="text-[13px] text-muted truncate leading-tight">{subtitle}</div>
           </div>
         </div>
-        {group.type === 'vehicle' && (
-          // Borderless toolbar-style action floated at the right edge so the
-          // identity cluster stays centered. Hover lifts the colour with a soft
-          // circular wash; focus-visible shows a subtle on-theme ring.
+        {/* Borderless toolbar-style actions floated at the right edge so the
+            identity cluster stays centered. Search is offered in EVERY
+            conversation (DM + vehicle); Group info stays vehicle-only. Same
+            circular hover wash + on-theme focus ring for both. */}
+        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
           <button
-            onClick={() => setGroupInfoOpen(true)}
-            aria-label="Group info"
-            title="Group info"
-            className="absolute right-3 top-1/2 -translate-y-1/2 h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+            onClick={() => setSearchOpen((v) => !v)}
+            aria-label="Search conversation"
+            title="Search conversation"
+            aria-pressed={searchOpen}
+            className={`h-9 w-9 flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+              searchOpen ? 'text-text bg-white/[0.06]' : 'text-muted hover:text-text hover:bg-white/[0.05]'
+            }`}
           >
-            <Info size={18} strokeWidth={1.8} />
+            <Search size={19} strokeWidth={1.8} />
           </button>
-        )}
+          {group.type === 'vehicle' && (
+            <button
+              onClick={() => setGroupInfoOpen(true)}
+              aria-label="Group info"
+              title="Group info"
+              className="h-9 w-9 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+            >
+              <Info size={20} strokeWidth={1.8} />
+            </button>
+          )}
+        </div>
       </header>
+
+      {/* In-conversation search — compact panel under the header; clicking a
+          result jumps to that message (reusing the reply jump + highlight). */}
+      {searchOpen && (
+        <ConversationSearch
+          messages={messages}
+          currentUserId={currentUserId}
+          onJump={jumpToMessage}
+          onClose={() => setSearchOpen(false)}
+        />
+      )}
 
       {pdfPreview ? (
         <InlinePdfPreview

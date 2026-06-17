@@ -173,7 +173,7 @@ function AppearanceSettings() {
 // card. Values come from optional build-time env (injected by CI) and fall back
 // to the package version / "Not available" so nothing sensitive is exposed.
 function AboutSettings() {
-  const appVersion = import.meta.env.VITE_APP_VERSION ?? '0.3.1'
+  const appVersion = import.meta.env.VITE_APP_VERSION ?? '0.3.2'
   const environment = import.meta.env.MODE
   const buildDate = import.meta.env.VITE_BUILD_DATE ?? 'Not available'
   const commitRaw = import.meta.env.VITE_COMMIT_SHA ?? 'Not available'
