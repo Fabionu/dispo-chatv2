@@ -204,17 +204,18 @@ function MessageRow({
   const deletedSkin = mine
     ? 'bg-white/[0.02] text-muted italic rounded-[8px] rounded-br-[3px]'
     : 'bg-white/[0.02] text-muted italic rounded-[8px] rounded-bl-[3px]'
-  // Minimal flat skins: darker neutral greys — incoming a touch darker than my
-  // own so the two read apart without any colour tint. Borderless, no shadow.
-  // The bubble itself never changes on hover; only the actions affordance
-  // reveals. (Failed sends keep an alert border as their error cue.)
+  // Minimal flat skins: neutral greys lifted above the grey chat surface
+  // (`bg` #141416) — incoming a touch darker than my own so the two read apart
+  // without any colour tint. Borderless, no shadow. The bubble itself never
+  // changes on hover; only the actions affordance reveals. (Failed sends keep
+  // an alert border as their error cue.)
   const bubbleSkin = deleted
     ? deletedSkin
     : mine
       ? failed
-        ? 'bg-[#1C1C1F] border border-alert/50 rounded-[8px] rounded-br-[3px]'
-        : 'bg-[#1C1C1F] rounded-[8px] rounded-br-[3px]'
-      : 'bg-[#141416] rounded-[8px] rounded-bl-[3px]'
+        ? 'bg-[#26262A] border border-alert/50 rounded-[8px] rounded-br-[3px]'
+        : 'bg-[#26262A] rounded-[8px] rounded-br-[3px]'
+      : 'bg-[#1D1D20] rounded-[8px] rounded-bl-[3px]'
   // Subtle, theme-warm pulse applied when this row is the target of a
   // jump-to-original. Clears after ~1.8s back in ChatView.
   const highlightSkin = highlighted ? 'ring-2 ring-active/60' : ''

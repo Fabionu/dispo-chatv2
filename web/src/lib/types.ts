@@ -1,6 +1,8 @@
 // Shared shapes for data crossing the API boundary. Kept in one place so the
 // fetch helpers, socket events, and components all agree.
 
+import type { VehicleOps } from './vehicleOps'
+
 export type GroupType = 'vehicle' | 'direct'
 
 export type Role = 'admin' | 'dispatcher' | 'driver' | 'partner'
@@ -65,6 +67,10 @@ export type Group = {
   meta: {
     tractorPlate?: string
     trailerPlate?: string
+    /** Manual operational data for the vehicle room (vehicle details, one active
+     *  trip, and stops) — edited by dispatchers, persisted in this JSONB blob.
+     *  See lib/vehicleOps.ts. Absent on groups that have never set it. */
+    ops?: VehicleOps
     /** @deprecated legacy single plate — read as a tractor-plate fallback. */
     plate?: string
     /** @deprecated legacy one-trip label — kept for old groups, not shown. */

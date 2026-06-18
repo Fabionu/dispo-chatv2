@@ -2,13 +2,37 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { MoreVertical, UserPlus, X } from 'lucide-react'
 import type { Group, GroupMember, GroupPendingInvitee, Role } from '../lib/types'
 import { groupLabel, tractorPlate, trailerPlate } from '../lib/types'
+import {
+  getOps,
+  labelOf,
+  vehicleStatusTone,
+  VEHICLE_STATUSES,
+  type ActiveTrip,
+  type VehicleInfo,
+  type VehicleOps,
+  type VehicleStop,
+} from '../lib/vehicleOps'
 import { api, ApiError } from '../lib/api'
 import { statusMeta, OFFLINE } from '../lib/availability'
 import { usePresence } from '../hooks/usePresence'
 import Avatar from './Avatar'
 import GroupAvatar from './GroupAvatar'
-import EditableRow from './EditableRow'
 import Spinner from './Spinner'
+import { StatusChip } from './vehicle/opsControls'
+import VehicleInfoTab from './vehicle/VehicleInfoTab'
+import TripTab from './vehicle/TripTab'
+import StopsTab from './vehicle/StopsTab'
+import DocumentsTab from './vehicle/DocumentsTab'
+
+// The operational tabs in the vehicle-room info panel.
+type PanelTab = 'info' | 'trip' | 'stops' | 'docs' | 'members'
+const PANEL_TABS: ReadonlyArray<{ id: PanelTab; label: string }> = [
+  { id: 'info', label: 'Info' },
+  { id: 'trip', label: 'Trip' },
+  { id: 'stops', label: 'Stops' },
+  { id: 'docs', label: 'Docs' },
+  { id: 'members', label: 'Members' },
+]
 
 type Props = {
   group: Group
@@ -65,6 +89,12 @@ export default function GroupInfoPanel({
   const [error, setError] = useState<string | null>(null)
   // The member whose role is currently being changed (drives the row spinner).
   const [roleBusyId, setRoleBusyId] = useState<string | null>(null)
+  // Active operational tab (Info / Trip / Stops / Docs / Members).
+  const [tab, setTab] = useState<PanelTab>('info')
+
+  // Operational data, read off the group's meta (server-backed; re-derives each
+  // render once a save flows the updated meta back through onGroupUpdated).
+  const ops = getOps(group)
 
   // Group role vs workspace role: managing GROUP roles needs the caller to be a
   // GROUP admin or a WORKSPACE admin (stricter than inviting — dispatchers can
@@ -186,6 +216,23 @@ export default function GroupInfoPanel({
     onGroupUpdated({ name: updated.name, description: updated.description, meta: updated.meta })
   }
 
+  // Persist the whole operational blob, then flow the updated meta back up so
+  // `ops` re-derives on the next render (single source of truth = the group's
+  // server-backed meta; no separate local copy that could drift). Throws on
+  // failure so the calling control surfaces a retryable error.
+  async function saveOps(next: VehicleOps) {
+    const { group: updated } = await api.groups.update(group.id, { ops: next })
+    onGroupUpdated({ meta: updated.meta })
+  }
+  // Focused helpers so each tab patches just its slice. Spreading an `undefined`
+  // value drops the key when JSON-serialised, so clearing a field removes it.
+  const saveVehicle = (patch: Partial<VehicleInfo>) =>
+    saveOps({ ...ops, vehicle: { ...ops.vehicle, ...patch } })
+  const saveTrip = (patch: Partial<ActiveTrip>) =>
+    saveOps({ ...ops, trip: { ...(ops.trip ?? {}), ...patch } })
+  const clearTrip = () => saveOps({ ...ops, trip: null })
+  const saveStops = (stops: VehicleStop[]) => saveOps({ ...ops, stops })
+
   async function cancelInvite(inviteId: string) {
     const prev = pending
     setPending((p) => p.filter((i) => i.id !== inviteId))
@@ -228,10 +275,11 @@ export default function GroupInfoPanel({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+        <div className="flex-1 overflow-y-auto px-4 py-4">
           {/* Identity — a GENERATED vehicle icon hero (same slot as the header /
               sidebar). Vehicle rooms have no uploaded image, so there's no
-              upload/crop/remove control here. */}
+              upload/crop/remove control here. The manual vehicle status (when
+              set) shows as a chip so it's scannable above the tabs. */}
           <div className="relative flex flex-col items-center text-center pt-1">
             <GroupAvatar size={120} />
             <div className="mt-3 text-[16px] font-semibold tracking-[-0.2px]">
@@ -243,115 +291,126 @@ export default function GroupInfoPanel({
             {vehicleMeta && (
               <div className="mt-1 text-[11.5px] text-faint">{vehicleMeta}</div>
             )}
+            {ops.vehicle.status && (
+              <div className="mt-2">
+                <StatusChip
+                  tone={vehicleStatusTone(ops.vehicle.status)}
+                  label={labelOf(VEHICLE_STATUSES, ops.vehicle.status)}
+                />
+              </div>
+            )}
             {error && <div className="text-[11.5px] text-alert mt-2">{error}</div>}
           </div>
 
-          {/* Details — each row edits individually (managers only). */}
-          <Section label="Details">
-            <EditableRow
-              label="Group name"
-              value={group.name}
-              editable={canManage}
-              required
-              onSave={(v) => saveField({ name: v })}
-            />
-            <EditableRow
-              label="Tractor plate"
-              value={tractorPlate(group)}
-              editable={canManage}
-              placeholder="e.g. B-123-ABC"
-              onSave={(v) => saveField({ tractorPlate: v || null })}
-            />
-            <EditableRow
-              label="Trailer plate"
-              value={trailerPlate(group)}
-              editable={canManage}
-              placeholder="e.g. B-456-XYZ"
-              onSave={(v) => saveField({ trailerPlate: v || null })}
-            />
-            <EditableRow
-              label="Description"
-              value={group.description}
-              editable={canManage}
-              multiline
-              placeholder="Optional notes about this vehicle"
-              onSave={(v) => saveField({ description: v || null })}
-            />
-          </Section>
+          {/* Tab bar — compact segmented control for the operational sections. */}
+          <div className="mt-4 flex items-center gap-0.5 rounded-lg bg-white/[0.03] p-0.5">
+            {PANEL_TABS.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                aria-current={tab === t.id ? 'true' : undefined}
+                className={`flex-1 h-7 rounded-md text-[11.5px] font-medium transition-colors ${
+                  tab === t.id ? 'bg-white/[0.08] text-text' : 'text-muted hover:text-text'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
 
-          {/* Members — count already shown under the group name, so the section
-              title stays plain (no duplicate "· N"). */}
-          <Section
-            label="Members"
-            action={
-              canManage ? (
-                <button
-                  onClick={onInvite}
-                  className="inline-flex items-center gap-1 text-[11.5px] text-muted hover:text-text transition-colors"
+          <div className="mt-4">
+            {tab === 'info' && (
+              <VehicleInfoTab
+                group={group}
+                canManage={canManage}
+                vehicle={ops.vehicle}
+                onSaveField={saveField}
+                onSaveVehicle={saveVehicle}
+              />
+            )}
+            {tab === 'trip' && (
+              <TripTab trip={ops.trip} canManage={canManage} onSaveTrip={saveTrip} onClearTrip={clearTrip} />
+            )}
+            {tab === 'stops' && <StopsTab stops={ops.stops} canManage={canManage} onSaveStops={saveStops} />}
+            {tab === 'docs' && <DocumentsTab />}
+            {tab === 'members' && (
+              <div className="space-y-5">
+                {/* Members — count already shown in the hero, so the section
+                    title stays plain (no duplicate "· N"). */}
+                <Section
+                  label="Members"
+                  action={
+                    canManage ? (
+                      <button
+                        onClick={onInvite}
+                        className="inline-flex items-center gap-1 text-[11.5px] text-muted hover:text-text transition-colors"
+                      >
+                        <UserPlus size={12} strokeWidth={1.8} />
+                        Invite
+                      </button>
+                    ) : undefined
+                  }
                 >
-                  <UserPlus size={12} strokeWidth={1.8} />
-                  Invite
-                </button>
-              ) : undefined
-            }
-          >
-            {membersLoading ? (
-              <div className="flex justify-center py-4">
-                <Spinner size={16} />
-              </div>
-            ) : (
-              <div className="-mx-1">
-                {members.map((m) => (
-                  <MemberRow
-                    key={m.id}
-                    member={m}
-                    online={online.has(m.id)}
-                    isSelf={m.id === currentUserId}
-                    canManageRoles={canManageRoles}
-                    isLastAdmin={m.role === 'admin' && adminCount <= 1}
-                    busy={roleBusyId === m.id}
-                    actionsDisabled={roleBusyId !== null}
-                    onSetRole={setMemberRole}
-                    onRemove={removeMember}
-                    onMessage={messageMember}
-                  />
-                ))}
+                  {membersLoading ? (
+                    <div className="flex justify-center py-4">
+                      <Spinner size={16} />
+                    </div>
+                  ) : (
+                    <div className="-mx-1">
+                      {members.map((m) => (
+                        <MemberRow
+                          key={m.id}
+                          member={m}
+                          online={online.has(m.id)}
+                          isSelf={m.id === currentUserId}
+                          canManageRoles={canManageRoles}
+                          isLastAdmin={m.role === 'admin' && adminCount <= 1}
+                          busy={roleBusyId === m.id}
+                          actionsDisabled={roleBusyId !== null}
+                          onSetRole={setMemberRole}
+                          onRemove={removeMember}
+                          onMessage={messageMember}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {error && <div className="text-[11.5px] text-alert px-2 pt-1">{error}</div>}
+                </Section>
+
+                {/* Pending invites (manage-capable only) */}
+                {canManage && (pendingLoading || pending.length > 0) && (
+                  <Section label={`Pending invites${pending.length ? ` · ${pending.length}` : ''}`}>
+                    {pendingLoading ? (
+                      <div className="flex justify-center py-4">
+                        <Spinner size={16} />
+                      </div>
+                    ) : (
+                      <div className="-mx-1">
+                        {pending.map((p) => (
+                          <div
+                            key={p.id}
+                            className="flex items-center gap-2.5 px-2 py-2 rounded-chip hover:bg-white/[0.02] transition-colors"
+                          >
+                            <Avatar userId={p.userId} name={p.displayName} size={28} />
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[12.5px] truncate">{p.displayName}</div>
+                              <div className="text-[11px] text-faint">Invitation pending</div>
+                            </div>
+                            <button
+                              onClick={() => void cancelInvite(p.id)}
+                              className="shrink-0 text-[11px] text-muted hover:text-alert px-2 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </Section>
+                )}
               </div>
             )}
-            {error && <div className="text-[11.5px] text-alert px-2 pt-1">{error}</div>}
-          </Section>
-
-          {/* Pending invites (manage-capable only) */}
-          {canManage && (pendingLoading || pending.length > 0) && (
-            <Section label={`Pending invites${pending.length ? ` · ${pending.length}` : ''}`}>
-              {pendingLoading ? (
-                <div className="flex justify-center py-4">
-                  <Spinner size={16} />
-                </div>
-              ) : (
-                <div className="-mx-1">
-                  {pending.map((p) => (
-                    <div
-                      key={p.id}
-                      className="flex items-center gap-2.5 px-2 py-2 rounded-chip hover:bg-white/[0.02] transition-colors"
-                    >
-                      <Avatar userId={p.userId} name={p.displayName} size={28} />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[12.5px] truncate">{p.displayName}</div>
-                        <div className="text-[11px] text-faint">Invitation pending</div>
-                      </div>
-                      <button
-                        onClick={() => void cancelInvite(p.id)}
-                        className="shrink-0 text-[11px] text-muted hover:text-alert px-2 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Section>
-          )}
+          </div>
         </div>
       </aside>
     </>

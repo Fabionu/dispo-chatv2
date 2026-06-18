@@ -80,7 +80,7 @@ export default function CompanySidebarPanel({ onBack, onSaved }: Props) {
   return (
     <div className="flex flex-col h-full">
       {/* Header — matches the rail's header height, with a back affordance. */}
-      <div className="h-[var(--header-height)] flex items-center gap-2 px-3 border-b border-white/[0.05] shrink-0">
+      <div className="h-[var(--header-height)] flex items-center gap-2 px-3 shrink-0">
         <button
           onClick={onBack}
           aria-label="Back to inbox"

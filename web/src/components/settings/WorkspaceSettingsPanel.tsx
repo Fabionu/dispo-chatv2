@@ -89,7 +89,7 @@ function PanelHeader({
   backLabel: string
 }) {
   return (
-    <div className="h-[var(--header-height)] flex items-center gap-2 px-3 border-b border-white/[0.05] shrink-0">
+    <div className="h-[var(--header-height)] flex items-center gap-2 px-3 shrink-0">
       <button
         onClick={onBack}
         aria-label={backLabel}

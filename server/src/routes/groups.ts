@@ -720,11 +720,64 @@ groupsRouter.delete(
 // admin OR workspace admin/dispatcher) — the same boundary as inviting, since
 // both are "manage this group" actions. Plates live in `meta`; we merge rather
 // than replace so unrelated legacy keys (e.g. an old `trip`) are preserved.
+// Manual vehicle-room operational data (vehicle details, one active trip, its
+// stops). Stored wholesale under `meta.ops` — the client owns the full object
+// and sends it on every change, so we validate shape/enums/caps but otherwise
+// replace the key as-is. Strictly manual: no coordinates/GPS/computed ETA.
+const opsStr = (max: number) => z.string().trim().max(max).optional()
+const opsSchema = z.object({
+  vehicle: z
+    .object({
+      vehicleType: opsStr(80),
+      trailerType: opsStr(80),
+      assignedDrivers: opsStr(200),
+      status: z
+        .enum(['available', 'driving', 'loading', 'unloading', 'waiting', 'break', 'service', 'completed'])
+        .optional(),
+      notes: opsStr(2000),
+    })
+    .default({}),
+  trip: z
+    .object({
+      reference: opsStr(120),
+      loadingAddress: opsStr(300),
+      loadingAt: opsStr(80),
+      unloadingAddress: opsStr(300),
+      unloadingAt: opsStr(80),
+      client: opsStr(160),
+      cargo: opsStr(500),
+      weight: opsStr(60),
+      pallets: opsStr(60),
+      status: z
+        .enum(['planned', 'to_loading', 'at_loading', 'loaded', 'to_unloading', 'at_unloading', 'unloaded', 'completed', 'cancelled'])
+        .optional(),
+      eta: opsStr(80),
+      notes: opsStr(2000),
+    })
+    .nullable()
+    .default(null),
+  stops: z
+    .array(
+      z.object({
+        id: z.string().max(64),
+        type: z.enum(['fuel', 'break', 'service', 'customs', 'parking', 'other']),
+        location: opsStr(300),
+        plannedAt: opsStr(80),
+        notes: opsStr(1000),
+        status: z.enum(['planned', 'done', 'cancelled']),
+      }),
+    )
+    .max(50)
+    .default([]),
+})
+
 const updateGroupSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   description: z.string().trim().max(400).nullable().optional(),
   tractorPlate: z.string().trim().max(20).nullable().optional(),
   trailerPlate: z.string().trim().max(20).nullable().optional(),
+  // Operational blob (vehicle/trip/stops) for the vehicle room's side panel.
+  ops: opsSchema.optional(),
 })
 
 groupsRouter.patch(
@@ -751,23 +804,28 @@ groupsRouter.patch(
         values.push(data.description && data.description.trim() ? data.description : null)
         sets.push(`description = $${values.length}`)
       }
-      // Merge plate edits into meta. A null/empty plate removes its key.
-      if (data.tractorPlate !== undefined || data.trailerPlate !== undefined) {
-        const patch: Record<string, string | null> = {}
-        if (data.tractorPlate !== undefined) {
-          patch.tractorPlate = data.tractorPlate && data.tractorPlate.trim() ? data.tractorPlate : null
-        }
-        if (data.trailerPlate !== undefined) {
-          patch.trailerPlate = data.trailerPlate && data.trailerPlate.trim() ? data.trailerPlate : null
-        }
-        // jsonb || sets/overwrites keys; '- key' strips keys we cleared.
-        const stripKeys = Object.entries(patch)
-          .filter(([, v]) => v === null)
-          .map(([k]) => k)
-        const setObj = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== null))
-        values.push(JSON.stringify(setObj))
+      // Merge meta edits (plates + the ops blob). Keys in `metaSet` are
+      // set/overwritten via jsonb `||`; keys in `metaStrip` are removed via `-`.
+      // A null/empty plate strips its key; `ops` is always set wholesale.
+      const metaSet: Record<string, unknown> = {}
+      const metaStrip: string[] = []
+      if (data.tractorPlate !== undefined) {
+        const v = data.tractorPlate && data.tractorPlate.trim() ? data.tractorPlate : null
+        if (v === null) metaStrip.push('tractorPlate')
+        else metaSet.tractorPlate = v
+      }
+      if (data.trailerPlate !== undefined) {
+        const v = data.trailerPlate && data.trailerPlate.trim() ? data.trailerPlate : null
+        if (v === null) metaStrip.push('trailerPlate')
+        else metaSet.trailerPlate = v
+      }
+      if (data.ops !== undefined) {
+        metaSet.ops = data.ops
+      }
+      if (Object.keys(metaSet).length > 0 || metaStrip.length > 0) {
+        values.push(JSON.stringify(metaSet))
         let metaExpr = `meta || $${values.length}::jsonb`
-        for (const k of stripKeys) {
+        for (const k of metaStrip) {
           values.push(k)
           metaExpr = `(${metaExpr}) - $${values.length}`
         }

@@ -12,6 +12,7 @@ import type {
   WorkspaceMember,
 } from './types'
 import type { HerePlace, LatLng, RouteWaypoint, TruckProfile, TruckRoute } from './here/types'
+import type { VehicleOps } from './vehicleOps'
 
 // Editable subsets sent to PATCH endpoints (all fields optional).
 export type ProfilePatch = Partial<{
@@ -177,6 +178,8 @@ export const api = {
         description: string | null
         tractorPlate: string | null
         trailerPlate: string | null
+        // Manual operational blob (vehicle/trip/stops) — replaced wholesale.
+        ops: VehicleOps
       }>,
     ) =>
       request<{
@@ -343,6 +346,15 @@ export const api = {
     revgeocode: (lat: number, lng: number, zoom?: number) =>
       request<{ place: { label: string; position: LatLng; major?: boolean } | null }>(
         `/here/revgeocode?at=${lat},${lng}${zoom !== undefined ? `&zoom=${zoom}` : ''}`,
+      ),
+
+    // The central road-snap used for EVERY add/drag/release: prefers a nearby
+    // major road, else snaps the coordinate onto the nearest routable road (so a
+    // stop never lands in a field). `place` is null only when HERE finds nothing
+    // and the caller should keep the raw coordinate.
+    snap: (lat: number, lng: number, zoom?: number) =>
+      request<{ place: { label: string; position: LatLng; major?: boolean } | null }>(
+        `/here/snap?at=${lat},${lng}${zoom !== undefined ? `&zoom=${zoom}` : ''}`,
       ),
 
     // Truck route (HERE Routing v8, transportMode=truck). `via` is the ordered

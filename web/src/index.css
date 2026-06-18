@@ -220,7 +220,7 @@ html, body, #root {
 
 body {
   margin: 0;
-  background: #000000;
+  background: #141416;
   color: #f4f1ec;
   font-family: 'Inter', system-ui, sans-serif;
   font-size: var(--app-font-size);
@@ -284,6 +284,18 @@ button {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: #8a8896;
+}
+
+/* HERE map: keep the normal (default arrow) cursor everywhere on the map
+   drawing surface — never grab/grabbing/pointer/move — including while dragging
+   a route marker or the route line. HERE renders markers + the route on the
+   WebGL <canvas> (no per-marker DOM) and sets its own cursor inline on the
+   canvas during interaction, so we override the container AND the canvas with
+   !important. The overlaid HERE UI controls (zoom +/- buttons) are separate DOM
+   elements with their own cursor and are intentionally NOT covered here. */
+.here-map-surface,
+.here-map-surface canvas {
+  cursor: default !important;
 }
 
 .modal-input {

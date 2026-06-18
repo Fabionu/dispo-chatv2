@@ -1,5 +1,33 @@
 import type { LatLng } from './types'
 
+// True when a string looks like a "number, number" (or "number number") pair —
+// i.e. the user is typing coordinates, not an address. Two signed decimals
+// separated by a comma and/or whitespace, nothing else. Used to route the input
+// to direct coordinate parsing instead of HERE address search.
+const COORD_PAIR_RE = /^\s*[-+]?\d+(?:\.\d+)?\s*(?:,\s*|\s+)[-+]?\d+(?:\.\d+)?\s*$/
+
+export function looksLikeCoordPair(input: string): boolean {
+  return COORD_PAIR_RE.test(input)
+}
+
+// Parse manually-entered coordinates in the UI's canonical "lat, lng" order
+// (matching how coordinates are displayed/copied everywhere via fmtCoord) into a
+// validated { lat, lng }. Returns null when the text isn't a coordinate pair OR
+// when a value is out of range (lat −90..90, lng −180..180) — callers treat null
+// as "not a valid coordinate" and must NOT move the map. We deliberately do NOT
+// auto-swap lat/lng: the UI is explicitly lat-first, so a value with lat > 90 is
+// reported invalid rather than silently reinterpreted.
+export function parseLatLng(input: string): LatLng | null {
+  if (!looksLikeCoordPair(input)) return null
+  const parts = input.trim().split(/\s*,\s*|\s+/)
+  if (parts.length !== 2) return null
+  const lat = Number(parts[0])
+  const lng = Number(parts[1])
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null
+  return { lat, lng }
+}
+
 // Small planar geometry helpers for "is this click near the route, and which
 // segment?" — used to insert a right-clicked stop into the logical position on
 // the route. Distances are approximate (equirectangular projection around the

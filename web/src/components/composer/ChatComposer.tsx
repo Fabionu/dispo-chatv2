@@ -297,14 +297,16 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
     ? !text.trim() || text.trim() === editContext.originalBody
     : !text.trim()
 
-  // Floating input bar: a SOLID, rounded, BORDERLESS bar so it reads as the same
-  // calm surface as the sidebar (both `#141416`) rather than a lifted chip. It
-  // sits inside ChatView's transparent overlay (which lets messages scroll
-  // behind); the solid fill + its rounded shape define it against the black chat
-  // area, and a subtle tonal lift on focus (→ surface-2) signals the active
-  // field in place of a focus border. `relative` anchors the mention picker.
+  // Floating input bar: a SOLID, rounded, BORDERLESS bar on the `surface` tone,
+  // one step lighter than the grey chat area (`bg`) so it reads as a calm,
+  // distinct input surface. It sits inside ChatView's transparent overlay (which
+  // lets messages scroll behind); the solid fill + its rounded shape define it
+  // against the chat area. The fill stays CONSTANT across idle / focus / typing —
+  // no focus tint, ring, or border — so the field reads as visually stable; the
+  // textarea's own `outline-none` keeps the browser ring off too. `relative`
+  // anchors the mention picker.
   return (
-    <div className="relative rounded-[14px] bg-surface focus-within:bg-surface-2 transition-colors shadow-[0_1px_10px_rgba(0,0,0,0.4)]">
+    <div className="relative rounded-[14px] bg-surface shadow-[0_1px_10px_rgba(0,0,0,0.4)]">
       {pickerOpen && (
         <MentionPicker
           members={matches}

@@ -199,6 +199,10 @@ export default function RoutePlanner({ onBack }: Props) {
   const start = useMemo(() => points.find((p) => p.role === 'start') ?? null, [points])
   const destination = useMemo(() => points.find((p) => p.role === 'destination') ?? null, [points])
   const stops = useMemo(() => points.filter((p) => p.role === 'stop'), [points])
+  // Drag-to-reorder is offered once there are ≥2 committed points — including the
+  // start and finish, so the user can reorder the full route (not just the
+  // intermediate stops). With a single point there is nothing to reorder.
+  const canReorder = points.length >= 2
 
   // ── Auto-recalculate (debounced) on any routing-relevant change ───────────
   const routeSig = useMemo(() => {
@@ -338,6 +342,13 @@ export default function RoutePlanner({ onBack }: Props) {
   function setDestinationPoint(point: Omit<RoutePoint, 'role'>) {
     setPoints((prev) => [...prev.filter((p) => p.role !== 'destination'), { ...point, role: 'destination' }])
   }
+  // Add an intermediate stop. By default it lands at the END of the stop list —
+  // i.e. logically BEFORE the final destination (and after any existing stops) —
+  // so "Add stop" always keeps the start first and the finish last. `atIndex`
+  // overrides this only for the deliberate cases that need it: a route-line drag
+  // inserts the new stop into the exact leg that was grabbed, and "Add stop on
+  // route" inserts it at the nearest leg. Setting the start/finish is a separate
+  // action (setStart / setDestinationPoint), never this.
   function addStop(point: Omit<RoutePoint, 'role'>, atIndex?: number) {
     setPoints((prev) => {
       const s = prev.filter((p) => p.role === 'start')
@@ -352,23 +363,38 @@ export default function RoutePlanner({ onBack }: Props) {
   function removePoint(id: string) {
     setPoints((prev) => prev.filter((p) => p.id !== id))
   }
-  // Drag-and-drop reorder: move the dragged stop to the position of the stop it
-  // is hovering over. Only reorders intermediate stops (start/destination keep
-  // their fixed first/last slots). Mutates points like moveStop did, so the
-  // route goes "outdated" and recalcs on the next Create/Update — same behavior
-  // the up/down buttons had.
-  function reorderStops(dragId: string, targetId: string) {
+  // Drag-and-drop reorder across the WHOLE route (start → stops → destination,
+  // which is exactly the order `points` is kept in). Moves the dragged point to
+  // the hovered point's slot, then RE-DERIVES every role from the resulting
+  // POSITION: first = start, last = destination, the rest = stops. So dragging a
+  // stop to the top makes it the new start, dragging the finish upward demotes it
+  // to a stop, swapping the two endpoints swaps start/finish — and the badges
+  // follow because they read off the derived role. Course hints are cleared (the
+  // travel direction through a point may have changed); the route goes "outdated"
+  // and recalcs on the next Create/Update, same as the old stop-only reorder.
+  function reorder(dragId: string, targetId: string) {
     if (dragId === targetId) return
     setPoints((prev) => {
-      const s = prev.filter((p) => p.role === 'start')
-      const stps = prev.filter((p) => p.role === 'stop')
-      const d = prev.filter((p) => p.role === 'destination')
-      const from = stps.findIndex((x) => x.id === dragId)
-      const to = stps.findIndex((x) => x.id === targetId)
+      const from = prev.findIndex((p) => p.id === dragId)
+      const to = prev.findIndex((p) => p.id === targetId)
       if (from < 0 || to < 0 || from === to) return prev
-      const [moved] = stps.splice(from, 1)
-      stps.splice(to, 0, moved)
-      return [...s, ...stps, ...d]
+      const next = prev.slice()
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return next.map((p, i) => {
+        // A single point keeps whatever role it had (start or destination); with
+        // two or more, position dictates the role.
+        const role: RoutePointRole =
+          next.length === 1
+            ? p.role
+            : i === 0
+              ? 'start'
+              : i === next.length - 1
+                ? 'destination'
+                : 'stop'
+        if (p.role === role && p.course === undefined) return p
+        return { ...p, role, course: undefined }
+      })
     })
   }
   function clearRoute() {
@@ -385,49 +411,52 @@ export default function RoutePlanner({ onBack }: Props) {
     source: 'search',
   })
 
-  // ── Resolve a clicked/dragged coordinate: reverse-geocode + zoom-aware snap.
-  // `zoom` biases the snap toward visible major roads when the map is zoomed out
-  // (a highway under the cursor wins over a hidden side street).
-  async function resolveClicked(lat: number, lng: number, zoom?: number): Promise<Omit<RoutePoint, 'role'>> {
+  // ── Central road-snap ──────────────────────────────────────────────────────
+  // The ONE place every add/drag/release path snaps a raw map coordinate to a
+  // road. Calls the server's /snap (prefers a nearby main road, else snaps onto
+  // the nearest routable road via a HERE route preview), and is debug-safe: any
+  // failure or empty result falls back to the raw coordinate so adding a stop is
+  // never blocked. `zoom` biases the snap toward visible major roads when zoomed
+  // out. The returned label stays consistent with the returned coordinate.
+  async function snapCoordinate(
+    lat: number,
+    lng: number,
+    zoom?: number,
+  ): Promise<{ label: string; coordinates: LatLng; snapped: boolean }> {
     try {
-      const { place } = await api.here.revgeocode(lat, lng, zoom)
+      const { place } = await api.here.snap(lat, lng, zoom)
       if (place?.position) {
         setSnapNote(null)
-        return { id: uid(), label: place.label || fmtCoord(place.position), coordinates: place.position, source: 'map', snapped: true }
+        return { label: place.label || fmtCoord(place.position), coordinates: place.position, snapped: true }
       }
-      return { id: uid(), label: fmtCoord({ lat, lng }), coordinates: { lat, lng }, source: 'map', snapped: false }
     } catch {
-      setSnapNote('Could not snap the point to a road — using the exact click.')
-      return { id: uid(), label: fmtCoord({ lat, lng }), coordinates: { lat, lng }, source: 'map', snapped: false }
+      /* fall through to the raw coordinate below */
     }
+    setSnapNote('Could not snap the point to a road — using the exact location.')
+    return { label: fmtCoord({ lat, lng }), coordinates: { lat, lng }, snapped: false }
+  }
+
+  // Resolve a clicked coordinate into a fresh route point (new id), road-snapped.
+  async function resolveClicked(lat: number, lng: number, zoom?: number): Promise<Omit<RoutePoint, 'role'>> {
+    const s = await snapCoordinate(lat, lng, zoom)
+    return { id: uid(), label: s.label, coordinates: s.coordinates, source: 'map', snapped: s.snapped }
   }
 
   // ── Marker drag → snap to road + recalc ───────────────────────────────────
-  // Updates the dragged point in place (keeping its role + order), then recalcs
-  // immediately (like a route-line drag) so the route redraws through the moved
-  // point. Snapping is zoom-aware so a drag onto a visible highway lands on it.
+  // Updates the dragged point in place (keeping its id, role + order) via the
+  // SAME central snap, then recalcs immediately (like a route-line drag) so the
+  // route redraws through the moved point.
   async function handleMarkerDragEnd(id: string, lat: number, lng: number, zoom: number) {
-    let coords: LatLng = { lat, lng }
-    let label = fmtCoord(coords)
-    let snapped = false
-    try {
-      const { place } = await api.here.revgeocode(lat, lng, zoom)
-      if (place?.position) {
-        coords = place.position
-        label = place.label || fmtCoord(place.position)
-        snapped = true
-        setSnapNote(null)
-      } else {
-        setSnapNote('Could not snap the dragged point to a road — using the dropped position.')
-      }
-    } catch {
-      setSnapNote('Could not snap the dragged point to a road — using the dropped position.')
-    }
+    const s = await snapCoordinate(lat, lng, zoom)
     // If a route exists, bias the moved point onto the route's travel direction
     // near the drop so the recalc keeps the correct carriageway.
     const course = sectionCoords.length ? routeCourseNear({ lat, lng }, sectionCoords) ?? undefined : undefined
     setPoints((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, coordinates: coords, label, source: 'drag', snapped, course } : p)),
+      prev.map((p) =>
+        p.id === id
+          ? { ...p, coordinates: s.coordinates, label: s.label, source: 'drag', snapped: s.snapped, course }
+          : p,
+      ),
     )
     // Recalc through the moved point (only fires when both endpoints exist).
     recalcAfterDragRef.current = true
@@ -578,7 +607,7 @@ export default function RoutePlanner({ onBack }: Props) {
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <header className="h-[var(--header-height)] flex items-center gap-3 px-4 rounded-[11px] border border-white/[0.08] bg-rail shrink-0">
+      <header className="h-[var(--header-height)] flex items-center gap-3 px-4 shrink-0">
         <button
           onClick={onBack}
           aria-label="Back to workspace"
@@ -672,14 +701,27 @@ export default function RoutePlanner({ onBack }: Props) {
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2.5 flex flex-col gap-2">
-            {/* Start */}
+            {/* Start — draggable so it can be reordered into the route (drop it
+                lower and the next point becomes the new start). */}
             {start ? (
-              <PointRow role="start" point={start} coord={displayCoord(start)} onClear={() => removePoint(start.id)} />
+              <PointRow
+                role="start"
+                point={start}
+                coord={displayCoord(start)}
+                draggable={canReorder}
+                dragging={dragId === start.id}
+                onDragStartRow={() => setDragId(start.id)}
+                onDragEnterRow={() => {
+                  if (dragId && dragId !== start.id) reorder(dragId, start.id)
+                }}
+                onDragEndRow={() => setDragId(null)}
+                onClear={() => removePoint(start.id)}
+              />
             ) : (
               <PlaceSearchField label="Start" value={null} onChange={(p) => p && setStart(fromSearch(p))} placeholder="Start address or place…" />
             )}
 
-            {/* Stops — draggable to reorder (start/destination stay fixed). */}
+            {/* Stops — draggable to reorder anywhere in the route. */}
             {stops.map((s, i) => (
               <PointRow
                 key={s.id}
@@ -687,11 +729,11 @@ export default function RoutePlanner({ onBack }: Props) {
                 index={i + 1}
                 point={s}
                 coord={displayCoord(s)}
-                draggable
+                draggable={canReorder}
                 dragging={dragId === s.id}
                 onDragStartRow={() => setDragId(s.id)}
                 onDragEnterRow={() => {
-                  if (dragId && dragId !== s.id) reorderStops(dragId, s.id)
+                  if (dragId && dragId !== s.id) reorder(dragId, s.id)
                 }}
                 onDragEndRow={() => setDragId(null)}
                 onClear={() => removePoint(s.id)}
@@ -731,9 +773,22 @@ export default function RoutePlanner({ onBack }: Props) {
                 </button>
               ))}
 
-            {/* Destination */}
+            {/* Destination — draggable too; drop it higher and it becomes a stop
+                while the last remaining point becomes the new finish. */}
             {destination ? (
-              <PointRow role="destination" point={destination} coord={displayCoord(destination)} onClear={() => removePoint(destination.id)} />
+              <PointRow
+                role="destination"
+                point={destination}
+                coord={displayCoord(destination)}
+                draggable={canReorder}
+                dragging={dragId === destination.id}
+                onDragStartRow={() => setDragId(destination.id)}
+                onDragEnterRow={() => {
+                  if (dragId && dragId !== destination.id) reorder(dragId, destination.id)
+                }}
+                onDragEndRow={() => setDragId(null)}
+                onClear={() => removePoint(destination.id)}
+              />
             ) : (
               <PlaceSearchField label="Destination" value={null} onChange={(p) => p && setDestinationPoint(fromSearch(p))} placeholder="End address or place…" />
             )}
@@ -958,8 +1013,10 @@ export default function RoutePlanner({ onBack }: Props) {
 }
 
 // ── Compact row for a committed point (start / stop / destination) ──────────
-// Intermediate stops are draggable (native DnD) to reorder; start/destination
-// are fixed. The reorder happens live as the dragged row enters another stop.
+// Every row is draggable (native DnD) once the route has ≥2 points, so the whole
+// route — start and finish included — can be reordered. The reorder happens live
+// as the dragged row enters another row; roles are re-derived from the resulting
+// order by the parent.
 function PointRow({
   role,
   index,
@@ -1037,7 +1094,7 @@ function PointRow({
         <span
           aria-hidden
           title="Drag to reorder"
-          className="shrink-0 -ml-0.5 -mr-0.5 text-muted/60 hover:text-text cursor-grab active:cursor-grabbing"
+          className="shrink-0 -ml-0.5 -mr-0.5 text-muted/60 hover:text-text cursor-default"
         >
           <GripVertical size={14} strokeWidth={1.8} />
         </span>

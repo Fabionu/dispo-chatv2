@@ -19,7 +19,7 @@ export default function InboxView({ workspaceName }: Props) {
 
   return (
     <>
-      <header className="h-[var(--header-height)] flex flex-col justify-center px-5 rounded-[11px] border border-white/[0.08] bg-rail shrink-0 overflow-hidden">
+      <header className="h-[var(--header-height)] flex flex-col justify-center px-5 shrink-0">
         <div className="text-[15px] font-semibold tracking-[-0.2px] leading-tight">Workspace</div>
         <div className="text-[12px] text-muted leading-tight mt-0.5">Operational tools for {workspaceName}.</div>
       </header>

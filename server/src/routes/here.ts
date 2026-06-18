@@ -169,79 +169,149 @@ function isMajorRoad(item: HereRevgeocodeItem): boolean {
   return name.length > 0 && MAJOR_ROAD_RE.test(name)
 }
 
+// A resolved road-snap: a readable label, the snapped coordinate, and whether
+// the chosen road looks like a major/through road.
+type SnapResult = { label: string; position: HerePosition; major: boolean }
+
+const AT_RE = /^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/
+
+function parseAt(raw: unknown): HerePosition {
+  const at = typeof raw === 'string' ? raw.trim() : ''
+  if (!AT_RE.test(at)) throw new HttpError(400, 'invalid_at')
+  const [lat, lng] = at.split(',').map(Number)
+  return { lat, lng }
+}
+
+function parseZoom(raw: unknown): number {
+  const z = typeof raw === 'string' ? Number(raw) : NaN
+  // Absent → treat as zoomed-in (precise nearest snap) for back-compat.
+  return Number.isFinite(z) ? Math.max(0, Math.min(20, z)) : 18
+}
+
+// HERE Reverse Geocode used as a road-snap: resolve a coordinate to the best
+// nearby STREET. Zoom-aware (req: prefer the visible major road when zoomed
+// out): we ask for several street candidates and trade distance against road
+// importance — the more zoomed out, the larger the radius and the stronger the
+// bias toward a major road. Returns null when HERE has no street result.
+async function streetSnap(apiKey: string, at: HerePosition, zoom: number): Promise<SnapResult | null> {
+  // "Zoomed-out-ness" in [0,1]: 1 at zoom ≤8, 0 at zoom ≥14.
+  const out = Math.max(0, Math.min(1, (14 - zoom) / 6))
+  // Max distance we'll accept a snap from: ~80 m zoomed in → ~2 km zoomed out.
+  const maxSnapMeters = 80 + out * 1920
+  // How strongly to favour a major road over a closer minor one when zoomed out.
+  const majorBias = out * 4
+  const limit = out > 0 ? 15 : 6
+
+  const url = new URL(revgeocodeBase)
+  url.searchParams.set('apiKey', apiKey)
+  url.searchParams.set('at', `${at.lat},${at.lng}`)
+  url.searchParams.set('lang', 'en-US')
+  url.searchParams.set('limit', String(limit))
+  // Always snap to STREET geometry (the road centreline) rather than a house
+  // number or POI entrance — a route waypoint belongs on the road.
+  url.searchParams.set('types', 'street')
+
+  const data = await hereJson<HereRevgeocodeResponse>(url)
+  const candidates = (data.items ?? []).filter(
+    (i): i is HereRevgeocodeItem & { position: HerePosition } => Boolean(i.position),
+  )
+  if (candidates.length === 0) return null
+
+  // Score each candidate: lower is better. `effective = distance / (1 + bias)`
+  // so a major road can win even when slightly farther than a side street.
+  // Candidates beyond the zoom-scaled radius are dropped (but we keep the raw
+  // nearest as a fallback so we never return null when HERE found something).
+  let best: { item: HereRevgeocodeItem & { position: HerePosition }; score: number } | null = null
+  let nearest: { item: HereRevgeocodeItem & { position: HerePosition }; dist: number } | null = null
+  for (const item of candidates) {
+    const dist = item.distance ?? metersBetween(at, item.position)
+    if (!nearest || dist < nearest.dist) nearest = { item, dist }
+    if (dist > maxSnapMeters) continue
+    const score = dist / (1 + (isMajorRoad(item) ? majorBias : 0))
+    if (!best || score < best.score) best = { item, score }
+  }
+
+  const chosen = best?.item ?? nearest?.item
+  if (!chosen?.position) return null
+  return {
+    label: chosen.address?.label ?? chosen.title ?? '',
+    position: chosen.position,
+    major: isMajorRoad(chosen),
+  }
+}
+
+// Routing-based snap: ask HERE Routing for a route that STARTS at the clicked
+// point and use the road-snapped origin it returns (section[0].departure.place
+// .location is the on-road coordinate; place.originalLocation is the raw input).
+// This is the robust "is this even on a road?" check — it guarantees the point
+// lands on a routable road rather than a field/yard. We route by car (the most
+// permissive mode, so the snap succeeds widely) over a tiny offset so origin and
+// destination differ; only the snapped ORIGIN is used. Returns null on any
+// failure so callers can fall back. The subsequent truck-route recalc re-snaps
+// every waypoint onto the actual truck route anyway.
+async function routeSnap(apiKey: string, at: HerePosition): Promise<HerePosition | null> {
+  try {
+    const url = new URL(routeBase)
+    url.searchParams.set('apiKey', apiKey)
+    url.searchParams.set('transportMode', 'car')
+    url.searchParams.set('routingMode', 'fast')
+    url.searchParams.set('origin', `${at.lat},${at.lng}`)
+    // ~100 m offset so the pair is a valid (trivial) route; destination is also
+    // snapped by HERE but we ignore it and keep only the snapped origin.
+    url.searchParams.set('destination', `${at.lat + 0.0009},${at.lng + 0.0009}`)
+    url.searchParams.set('return', 'summary')
+    const data = await hereJson<HereRouteResponse>(url)
+    const loc = data.routes?.[0]?.sections?.[0]?.departure?.place?.location
+    return loc ?? null
+  } catch {
+    // Unroutable spot, HERE error, malformed response → let the caller fall back.
+    return null
+  }
+}
+
 // ── GET /api/here/revgeocode?at=lat,lng[&zoom=Z] ─────────────────────────
-// HERE Reverse Geocode used as a road-snap: resolve a clicked/dragged map
-// coordinate to a readable label + a road-snapped position. Returns
-// { place: null } when HERE has no result for the spot (e.g. open sea) so the
-// caller can fall back to the raw coordinate.
-//
-// Zoom-aware candidate selection (req: prefer the visible major road when the
-// user is zoomed out): we ask HERE for several STREET candidates and pick the
-// best one, trading distance against road importance. The more zoomed out the
-// map is, the larger the snap radius and the stronger the bias toward a major
-// road — so drag-releasing onto a visible highway lands on that highway, not a
-// hidden side street. Zoomed in, we snap to the nearest road.
+// Street-only reverse geocode (kept for label/lookup use). Returns
+// { place: null } when HERE has no street result for the spot.
 hereRouter.get(
   '/revgeocode',
   asyncHandler(async (req, res) => {
     const apiKey = requireHereKey()
-    const at = typeof req.query.at === 'string' ? req.query.at.trim() : ''
-    if (!/^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(at)) {
-      throw new HttpError(400, 'invalid_at')
-    }
-    const [atLat, atLng] = at.split(',').map(Number)
-    const atPos: HerePosition = { lat: atLat, lng: atLng }
+    const at = parseAt(req.query.at)
+    const zoom = parseZoom(req.query.zoom)
+    const place = await streetSnap(apiKey, at, zoom)
+    res.json({ place })
+  }),
+)
 
-    // Parse zoom (HERE web map zoom is ~0–20). Absent → treat as zoomed-in
-    // (precise nearest snap, single candidate) for backward-compatible behaviour.
-    const zoomRaw = typeof req.query.zoom === 'string' ? Number(req.query.zoom) : NaN
-    const zoom = Number.isFinite(zoomRaw) ? Math.max(0, Math.min(20, zoomRaw)) : 18
+// ── GET /api/here/snap?at=lat,lng[&zoom=Z] ───────────────────────────────
+// The CENTRAL road-snap every add/drag/release path uses. Two-stage so a stop
+// never lands in a field while still preferring proper/main roads:
+//   1) Street reverse-geocode (zoom-aware, biased toward major roads). If it
+//      finds a clearly-major road, use it — that's the "prefer main roads" win.
+//   2) Otherwise snap onto the nearest ROUTABLE road via routeSnap(), so the
+//      point sits on a real road rather than a field/driveway-that-isn't-a-road.
+//      We reuse the street label (same road, usually) so the address stays
+//      consistent with the snapped coordinate.
+// Falls back gracefully: street result → routed road → raw click ({place:null}).
+hereRouter.get(
+  '/snap',
+  asyncHandler(async (req, res) => {
+    const apiKey = requireHereKey()
+    const at = parseAt(req.query.at)
+    const zoom = parseZoom(req.query.zoom)
 
-    // "Zoomed-out-ness" in [0,1]: 1 at zoom ≤8, 0 at zoom ≥14.
-    const out = Math.max(0, Math.min(1, (14 - zoom) / 6))
-    // Max distance we'll accept a snap from: ~60 m zoomed in → ~1500 m zoomed out.
-    const maxSnapMeters = 60 + out * 1440
-    // How strongly to favour a major road over a closer minor one.
-    const majorBias = out * 3
-    const limit = out > 0 ? 12 : 1
+    const street = await streetSnap(apiKey, at, zoom)
+    // A clearly-major road nearby is the best "main road" snap — take it.
+    if (street?.major) return res.json({ place: street })
 
-    const url = new URL(revgeocodeBase)
-    url.searchParams.set('apiKey', apiKey)
-    url.searchParams.set('at', at)
-    url.searchParams.set('lang', 'en-US')
-    url.searchParams.set('limit', String(limit))
-    // Prefer street geometry (the road) over house/POI points for snapping.
-    if (out > 0) url.searchParams.set('types', 'street')
-
-    const data = await hereJson<HereRevgeocodeResponse>(url)
-    const candidates = (data.items ?? []).filter(
-      (i): i is HereRevgeocodeItem & { position: HerePosition } => Boolean(i.position),
-    )
-    if (candidates.length === 0) return res.json({ place: null })
-
-    // Score each candidate: lower is better. `effective = distance / (1 + bias)`
-    // so a major road can win even when slightly farther than a side street.
-    // Candidates beyond the zoom-scaled radius are dropped (but we keep the raw
-    // nearest as a fallback so we never return null when HERE found something).
-    let best: { item: HereRevgeocodeItem & { position: HerePosition }; score: number } | null = null
-    let nearest: { item: HereRevgeocodeItem & { position: HerePosition }; dist: number } | null = null
-    for (const item of candidates) {
-      const dist = item.distance ?? metersBetween(atPos, item.position)
-      if (!nearest || dist < nearest.dist) nearest = { item, dist }
-      if (dist > maxSnapMeters) continue
-      const score = dist / (1 + (isMajorRoad(item) ? majorBias : 0))
-      if (!best || score < best.score) best = { item, score }
+    // Otherwise guarantee an on-road coordinate via routing.
+    const routed = await routeSnap(apiKey, at)
+    if (routed) {
+      return res.json({ place: { label: street?.label ?? '', position: routed, major: false } })
     }
 
-    const chosen = best?.item ?? nearest?.item
-    if (!chosen?.position) return res.json({ place: null })
-    res.json({
-      place: {
-        label: chosen.address?.label ?? chosen.title ?? '',
-        position: chosen.position,
-        major: isMajorRoad(chosen),
-      },
-    })
+    // No routable road found — fall back to the street result if any, else null.
+    res.json({ place: street ?? null })
   }),
 )
 

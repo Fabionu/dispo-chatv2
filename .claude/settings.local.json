@@ -241,7 +241,13 @@
       "Bash(node -e \"console.log\\(require\\('./package.json'\\).version\\)\")",
       "Bash(ls src/vite-env.d.ts)",
       "Bash(cat src/vite-env.d.ts)",
-      "Bash(ls src/*.d.ts)"
+      "Bash(ls src/*.d.ts)",
+      "Bash(grep -v \"//\")",
+      "Bash(grep -i \"//\\\\|/\\\\*\\\\|black\\\\|#\")",
+      "Bash(npm --prefix server run build)",
+      "Bash(node -e \"try{console.log\\(require\\('./package.json'\\).name, JSON.stringify\\(require\\('./package.json'\\).scripts\\)\\)}catch\\(e\\){console.log\\('no root pkg here'\\)}\")",
+      "Bash(npm --prefix ../server run build)",
+      "Bash(git -C .. status --short)"
     ]
   }
 }

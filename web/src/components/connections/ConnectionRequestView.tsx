@@ -52,7 +52,7 @@ export default function ConnectionRequestView({ connection, onAccepted, onDeclin
           below, so repeating the name here would be redundant. Once the request
           is accepted/declined this view is replaced (by the DM chat or the
           inbox), so the normal name-based header returns automatically. */}
-      <header className="h-[var(--header-height)] flex items-center justify-between px-5 rounded-[11px] border border-white/[0.08] bg-rail shrink-0 overflow-hidden">
+      <header className="h-[var(--header-height)] flex items-center justify-between px-5 shrink-0">
         <div className="min-w-0">
           <div className="text-[13.5px] font-semibold truncate">Connection invitation</div>
           <div className="text-[11px] text-muted truncate">from {u.workspace.name}</div>

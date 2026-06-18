@@ -46,7 +46,7 @@ const RECENT_IMAGE_WINDOW = 15
 // overlays the bottom of the message list (painted ABOVE the bubbles) so the
 // content fades out at the end of the window instead of cutting off — while
 // sitting BELOW the floating composer + chips (z-10/z-20) so the input stays
-// sharp. Fades to the app background (#000).
+// sharp. Fades to the chat background (`bg`, #141416).
 const CHAT_BOTTOM_FADE_HEIGHT = 56
 
 // Typing indicator cadence. We re-announce "still typing" at most once per
@@ -1003,10 +1003,10 @@ export default function ChatView({
 
       {/* Chat surface — header + pinned bar + message list. No outer card border. */}
       <div className="flex-1 flex flex-col min-h-0 bg-bg">
-      {/* Header — NOT a card. It sits flat on the black chat surface (no rail
-          background, no rounded box, no full border) with only a subtle bottom
-          divider, so the conversation identity reads as part of the timeline
-          rather than a heavy panel. SLIM by design: a fixed compact height
+      {/* Header — NOT a card. It sits flat on the grey chat surface (no rail
+          background, no rounded box, no border), so the conversation identity
+          reads as part of the timeline rather than a heavy panel. SLIM by
+          design: a fixed compact height
           (smaller than the shared --header-height used by the sidebar seam, which
           we intentionally don't touch) gives the message area more room. The
           identity (avatar + name + subtitle) is CENTERED as one compact cluster;
@@ -1014,7 +1014,7 @@ export default function ChatView({
           info" action floats at the right edge. Same structure for every type.
           Comfortable (not oversized) height + padding give the identity room to
           breathe; avatar/title/subtitle/actions are scaled up in step. */}
-      <header className="relative h-16 flex items-center justify-center px-24 border-b border-white/[0.06] shrink-0 overflow-hidden">
+      <header className="relative h-16 flex items-center justify-center px-24 shrink-0 overflow-hidden">
         <div className="min-w-0 flex items-center gap-3">
           {group.type === 'direct' ? (
             <Avatar
@@ -1207,7 +1207,7 @@ export default function ChatView({
               className="pointer-events-none absolute left-0 right-[var(--chat-scrollbar-gutter)] bottom-0 z-0"
               style={{
                 height: CHAT_BOTTOM_FADE_HEIGHT,
-                backgroundImage: 'linear-gradient(to top, #000 0%, transparent 100%)',
+                backgroundImage: 'linear-gradient(to top, #141416 0%, transparent 100%)',
               }}
             />
             {showScrollDown && (

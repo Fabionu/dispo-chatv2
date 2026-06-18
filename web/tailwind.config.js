@@ -4,16 +4,21 @@ export default {
   theme: {
     extend: {
       colors: {
-        bg: '#000000',
-        surface: '#141416',
-        'surface-2': '#1d1d20',
-        // Sidebar + headers ("rail"). Matched to the composer `surface`
-        // (#141416) so the chrome reads as one calm, consistent surface with the
-        // chat composer, still clearly distinct from the pure-black chat window
-        // (and kept apart by the rail card's border). Selected/hover/search use
-        // white-alpha overlays whose contrast is base-independent, so they stay
-        // visible on this slightly darker grey. Text is #F4F1EC = `text`.
-        rail: '#141416',
+        // ── Dark surface hierarchy (darkest → lightest) ──────────────────────
+        // bg    — the main app / chat / workspace background: the darkest
+        //         primary surface, a calm dark grey. Also the dark foreground
+        //         placed on accent chips/buttons (`text-bg`).
+        // rail / surface — the SIDEBAR, the Group Info panel, and elevated
+        //         chrome (composer, menus, modals, popovers, footers): one step
+        //         lighter than `bg`, so all of these read as ONE consistent
+        //         surface family that lifts gently off the chat. Selected/hover/
+        //         search use white-alpha overlays (base-independent) so they
+        //         stay readable. Kept equal so sidebar + chrome share one tone.
+        // surface-2 — the extra lift for focus / hover states.
+        bg: '#141416',
+        surface: '#1d1d20',
+        'surface-2': '#29292e',
+        rail: '#1d1d20',
         text: '#f4f1ec',
         muted: '#8a8896',
         faint: '#4e4d5a',

@@ -54,33 +54,37 @@ const DEST_COLOR = '#d97757'
 // Built as SVG with an explicit anchor so the marker sits EXACTLY on the
 // coordinate: centre for the round origin/stop dots, the tip for the
 // destination pin. (HERE places the icon's anchor point on the coordinate.)
+// Kept deliberately small so the markers don't blanket the spot under them —
+// precise clicking/placement needs the coordinate to stay visible. Start (green
+// dot) and finish (coral pin) stay visually distinct in shape + colour.
 function originSvg(): string {
-  return `<svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="9" r="6.5" fill="${ORIGIN_COLOR}" stroke="#ffffff" stroke-width="2.5"/></svg>`
+  return `<svg width="14" height="14" viewBox="0 0 14 14" xmlns="http://www.w3.org/2000/svg"><circle cx="7" cy="7" r="5" fill="${ORIGIN_COLOR}" stroke="#ffffff" stroke-width="2"/></svg>`
 }
 
 function stopSvg(label: string): string {
-  return `<svg width="22" height="22" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="8.5" fill="#ffffff" stroke="${ROUTE_COLOR}" stroke-width="2.5"/><text x="11" y="11" text-anchor="middle" dominant-baseline="central" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="700" fill="#1c1c1f">${label}</text></svg>`
+  return `<svg width="17" height="17" viewBox="0 0 17 17" xmlns="http://www.w3.org/2000/svg"><circle cx="8.5" cy="8.5" r="6.5" fill="#ffffff" stroke="${ROUTE_COLOR}" stroke-width="2"/><text x="8.5" y="8.5" text-anchor="middle" dominant-baseline="central" font-family="Inter, system-ui, sans-serif" font-size="9.5" font-weight="700" fill="#1c1c1f">${label}</text></svg>`
 }
 
 function destSvg(): string {
-  return `<svg width="26" height="34" viewBox="0 0 26 34" xmlns="http://www.w3.org/2000/svg"><path d="M13 1 C6.4 1 1 6.3 1 12.9 c0 8.6 12 19.6 12 19.6 s12-11 12-19.6 C25 6.3 19.6 1 13 1 z" fill="${DEST_COLOR}" stroke="#ffffff" stroke-width="2"/><circle cx="13" cy="13" r="4.6" fill="#ffffff"/></svg>`
+  return `<svg width="20" height="26" viewBox="0 0 20 26" xmlns="http://www.w3.org/2000/svg"><path d="M10 1 C5 1 1 5 1 9.9 c0 6.6 9 15.1 9 15.1 s9-8.5 9-15.1 C19 5 15 1 10 1 z" fill="${DEST_COLOR}" stroke="#ffffff" stroke-width="1.8"/><circle cx="10" cy="10" r="3.4" fill="#ffffff"/></svg>`
 }
 
-// Translucent dot shown under the cursor while dragging the route line.
+// Small translucent dot shown under the cursor while dragging the route line.
+// Kept tiny so it marks the release point without covering the road beneath it.
 function ghostSvg(): string {
-  return `<svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="9" r="6" fill="${ROUTE_COLOR}" fill-opacity="0.65" stroke="#ffffff" stroke-width="2"/></svg>`
+  return `<svg width="12" height="12" viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg"><circle cx="6" cy="6" r="4" fill="${ROUTE_COLOR}" fill-opacity="0.65" stroke="#ffffff" stroke-width="1.5"/></svg>`
 }
 
 // Build the H.map.Icon for a marker with the correct anchor for its kind.
 function iconFor(H: any, marker: RouteMarker): any {
   if (marker.kind === 'origin') {
-    return new H.map.Icon(originSvg(), { anchor: new H.math.Point(9, 9) })
+    return new H.map.Icon(originSvg(), { anchor: new H.math.Point(7, 7) })
   }
   if (marker.kind === 'destination') {
-    // Anchor at the pin's tip (bottom centre of the 26×34 viewBox).
-    return new H.map.Icon(destSvg(), { anchor: new H.math.Point(13, 34) })
+    // Anchor at the pin's tip (bottom centre of the 20×26 viewBox).
+    return new H.map.Icon(destSvg(), { anchor: new H.math.Point(10, 26) })
   }
-  return new H.map.Icon(stopSvg(marker.label ?? ''), { anchor: new H.math.Point(11, 11) })
+  return new H.map.Icon(stopSvg(marker.label ?? ''), { anchor: new H.math.Point(8.5, 8.5) })
 }
 
 // Interactive HERE map (Maps JS v3.2 / HARP). Owns the map instance; redraws the
@@ -218,7 +222,6 @@ export default function HereMap({
             const screen = map.geoToScreen(t.getGeometry())
             t.__dragOffset = new H.math.Point(pointer.viewportX - screen.x, pointer.viewportY - screen.y)
             behavior.disable()
-            if (containerRef.current) containerRef.current.style.cursor = 'grabbing'
           } else if (t instanceof H.map.Polyline && pointer) {
             // Grabbed the route line — start a drag-to-add-stop segment drag.
             const data = t.getData?.()
@@ -226,12 +229,11 @@ export default function HereMap({
               behavior.disable()
               const geo = map.screenToGeo(pointer.viewportX, pointer.viewportY)
               const ghost = new H.map.Marker(geo, {
-                icon: new H.map.Icon(ghostSvg(), { anchor: new H.math.Point(9, 9) }),
+                icon: new H.map.Icon(ghostSvg(), { anchor: new H.math.Point(6, 6) }),
                 volatility: true,
               })
               map.addObject(ghost)
               routeDragRef.current = { active: true, section: data.section, ghost }
-              if (containerRef.current) containerRef.current.style.cursor = 'grabbing'
             }
           }
         }
@@ -251,7 +253,6 @@ export default function HereMap({
           const t = ev.target
           if (t instanceof H.map.Marker) {
             behavior.enable()
-            if (containerRef.current) containerRef.current.style.cursor = 'grab'
             const data = t.getData?.()
             const g = t.getGeometry?.()
             if (didDragRef.current) {
@@ -272,7 +273,6 @@ export default function HereMap({
             const g = ghost?.getGeometry?.()
             if (ghost) map.removeObject(ghost)
             routeDragRef.current = { active: false, section: -1, ghost: null }
-            if (containerRef.current) containerRef.current.style.cursor = ''
             if (g) onRouteDragEndRef.current?.(section, g.lat, g.lng, map.getZoom())
           }
         }
@@ -437,13 +437,9 @@ export default function HereMap({
       for (const poly of [casing, main]) {
         poly.draggable = true
         poly.setData({ section: sectionIndex })
-        // Grab cursor on hover (unless mid-drag).
-        poly.addEventListener('pointerenter', () => {
-          if (!routeDragRef.current.active && containerRef.current) containerRef.current.style.cursor = 'grab'
-        })
-        poly.addEventListener('pointerleave', () => {
-          if (!routeDragRef.current.active && containerRef.current) containerRef.current.style.cursor = ''
-        })
+        // No cursor change on hover — the map keeps the default arrow cursor
+        // everywhere (enforced by the .here-map-surface CSS), so dragging the
+        // route line never flips to a hand/grab cursor.
         group.addObject(poly)
       }
     })
@@ -457,13 +453,9 @@ export default function HereMap({
       const m = new H.map.Marker(marker.position, { icon: iconFor(H, marker), volatility: true })
       m.draggable = true
       m.setData({ id: marker.id, kind: marker.kind })
-      // Grab cursor on hover so the marker reads as draggable (unless mid-drag).
-      m.addEventListener('pointerenter', () => {
-        if (!routeDragRef.current.active && containerRef.current) containerRef.current.style.cursor = 'grab'
-      })
-      m.addEventListener('pointerleave', () => {
-        if (!routeDragRef.current.active && containerRef.current) containerRef.current.style.cursor = ''
-      })
+      // No hover cursor change — markers keep the default arrow cursor; they are
+      // still draggable (the .here-map-surface CSS keeps the cursor as default,
+      // never grab/pointer).
       group.addObject(m)
       allPoints.push(marker.position)
     }
@@ -519,5 +511,5 @@ export default function HereMap({
     if (typeof z === 'number' && z > 16) map.setZoom(16)
   }
 
-  return <div ref={containerRef} className={className} />
+  return <div ref={containerRef} className={['here-map-surface', className].filter(Boolean).join(' ')} />
 }

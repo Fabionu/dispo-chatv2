@@ -545,10 +545,11 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // simplicity (the server enforces the full rule on POST).
   const canInviteMembers = user.role === 'admin' || user.role === 'dispatcher'
 
-  // App shell: two subtle cards (sidebar + chat) on the very dark app
-  // background, with a consistent gap between them. Outer margin is small on
-  // laptops and a touch larger on big monitors (2xl) so large screens feel
-  // contained without wasting space.
+  // App shell: the near-black sidebar card sits on the slightly lighter grey
+  // app background (`bg`), with a consistent gap between them — so the rail
+  // reads as the darkest navigation area and the main/chat content as the
+  // lighter primary surface. Outer margin is small on laptops and a touch
+  // larger on big monitors (2xl) so large screens feel contained.
   return (
     <div className="h-screen w-full flex gap-3 p-2 2xl:p-3 bg-bg text-text overflow-hidden">
       {/* Collapsed left rail — a slim icon strip so the main area (wide
@@ -595,8 +596,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         </aside>
       ) : (
       /* Left rail — a borderless rounded card. overflow-hidden clips the
-          header/list to the rounded corners; separation from the black app
-          background comes from the panel's own #141416 tone, not a border. */
+          header/list to the rounded corners; separation from the darker chat
+          background comes from the panel's own `rail` tone (the same surface as
+          the Group Info panel), not a border. */
       <aside className="w-[var(--sidebar-width)] shrink-0 bg-rail rounded-[11px] overflow-hidden flex flex-col">
         {profilePanelOpen ? (
           <ProfileSidebarPanel
@@ -629,19 +631,22 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             surface, and there's no persistent "selected" tint — the header keeps
             the sidebar colour at rest. The collapse control sits to its right.
             (No workspace switcher — actions live in the user menu below.) */}
-        <div className="h-[var(--header-height)] flex items-stretch border-b border-white/[0.05] transition-colors hover:bg-white/[0.04]">
+        <div className="h-[var(--header-height)] flex items-stretch transition-colors hover:bg-white/[0.04]">
           <button
             onClick={() => setSelection({ kind: 'inbox' })}
             title="Workspace home"
             aria-current={inboxActive ? 'page' : undefined}
             // Transparent: the unified row hover (parent) provides the highlight,
-            // and there's no persistent active background.
-            className="flex-1 min-w-0 flex items-center gap-2.5 px-4 text-left"
+            // and there's no persistent active background. Padding/gap mirror the
+            // chat header's identity cluster and the rail's own content edge (the
+            // search field + footer avatar sit at px-3), so the logo lines up with
+            // everything below it instead of being indented on its own.
+            className="flex-1 min-w-0 flex items-center gap-3 px-3 text-left"
           >
             <CompanyLogo size={sidebarAvatar} version={logoVersion} />
             <div className="min-w-0 flex-1">
               <div
-                className="font-semibold tracking-[-0.2px] truncate"
+                className="font-semibold tracking-[-0.2px] leading-tight truncate"
                 style={{ fontSize: 'var(--sidebar-title-font-size)' }}
               >
                 {workspace.name}

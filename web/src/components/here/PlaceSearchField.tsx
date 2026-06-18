@@ -1,7 +1,15 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { MapPin, X } from 'lucide-react'
 import { api } from '../../lib/api'
-import type { HerePlace } from '../../lib/here/types'
+import { looksLikeCoordPair, parseLatLng } from '../../lib/here/geo'
+import type { HerePlace, LatLng } from '../../lib/here/types'
+
+// Build a HerePlace from directly-entered coordinates so the selection flow is
+// identical to picking a search result (caller reads `position` + `label`).
+function coordPlace(c: LatLng): HerePlace {
+  const text = `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}`
+  return { id: `coord:${c.lat},${c.lng}`, title: text, label: text, position: c }
+}
 
 type Props = {
   // Optional — omit when the caller renders its own header (e.g. stop rows with
@@ -29,6 +37,15 @@ export default function PlaceSearchField({ label, value, onChange, placeholder }
   useEffect(() => {
     if (value) return
     const q = query.trim()
+    // Coordinate input ("lat, lng") is parsed locally and never sent to address
+    // search — otherwise HERE Discover treats the numbers as free text and
+    // returns a "random" place. The render shows a direct "Go to coordinates"
+    // option (or an invalid-coordinate hint) instead.
+    if (looksLikeCoordPair(q)) {
+      setItems([])
+      setLoading(false)
+      return
+    }
     if (q.length < 3) {
       setItems([])
       setLoading(false)
@@ -78,6 +95,12 @@ export default function PlaceSearchField({ label, value, onChange, placeholder }
     setItems([])
   }
 
+  // Coordinate-input state for the current query: whether it looks like a "lat,
+  // lng" pair, and the parsed/validated point (null when out of range).
+  const trimmed = query.trim()
+  const coordShape = !value && looksLikeCoordPair(trimmed)
+  const coord = coordShape ? parseLatLng(trimmed) : null
+
   return (
     <div ref={rootRef} className="relative flex flex-col gap-1.5">
       {label && <label className="text-[12px] font-medium text-muted">{label}</label>}
@@ -103,8 +126,15 @@ export default function PlaceSearchField({ label, value, onChange, placeholder }
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => items.length && setOpen(true)}
-          placeholder={placeholder ?? 'Search address or place…'}
+          onFocus={() => (items.length || coordShape) && setOpen(true)}
+          onKeyDown={(e) => {
+            // Enter submits a valid coordinate pair directly (no result to click).
+            if (e.key === 'Enter' && coord) {
+              e.preventDefault()
+              select(coordPlace(coord))
+            }
+          }}
+          placeholder={placeholder ?? 'Search address, place, or lat, lng…'}
           role="combobox"
           aria-expanded={open}
           aria-controls={listboxId}
@@ -113,7 +143,40 @@ export default function PlaceSearchField({ label, value, onChange, placeholder }
         />
       )}
 
-      {open && !value && (items.length > 0 || loading) && (
+      {/* Coordinate input: a direct "Go to coordinates" option, or an invalid
+          hint. Never runs an address search, so the map only moves on selection
+          of a valid, in-range coordinate. */}
+      {coordShape && (
+        <ul
+          id={listboxId}
+          role="listbox"
+          className="absolute z-20 top-full mt-1 w-full rounded-lg border border-white/[0.1] bg-rail shadow-xl"
+        >
+          {coord ? (
+            <li role="option" aria-selected={false}>
+              <button
+                type="button"
+                onClick={() => select(coordPlace(coord))}
+                className="w-full text-left px-3 py-2 hover:bg-white/[0.05] transition-colors flex items-start gap-2"
+              >
+                <MapPin size={14} className="mt-0.5 shrink-0 text-active" strokeWidth={1.8} />
+                <span className="min-w-0">
+                  <span className="block text-[13px]">Go to coordinates</span>
+                  <span className="block text-[11px] text-muted tabular-nums">
+                    {coord.lat.toFixed(5)}, {coord.lng.toFixed(5)}
+                  </span>
+                </span>
+              </button>
+            </li>
+          ) : (
+            <li className="px-3 py-2.5 text-[12px] text-amber-200/80">
+              Invalid coordinates — latitude −90 to 90, longitude −180 to 180.
+            </li>
+          )}
+        </ul>
+      )}
+
+      {open && !value && !coordShape && (items.length > 0 || loading) && (
         <ul
           id={listboxId}
           role="listbox"
