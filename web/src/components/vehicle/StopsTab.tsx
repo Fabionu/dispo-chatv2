@@ -5,6 +5,7 @@ import {
   STOP_STATUSES,
   STOP_TYPES,
   labelOf,
+  parseCoordinates,
   stopId,
   stopStatusTone,
   type StopStatus,
@@ -125,7 +126,26 @@ function StopRow({
           </div>
         )}
       </div>
-      {stop.location && <div className="text-[12px] text-text mt-1 break-words">{stop.location}</div>}
+      {(() => {
+        // Structured address lines, falling back to the legacy single-line
+        // `location` for stops created before the structured fields existed.
+        const lines = [stop.company, stop.street, stop.cityLine]
+          .map((v) => v?.trim())
+          .filter((v): v is string => Boolean(v))
+        if (lines.length === 0 && stop.location?.trim()) lines.push(stop.location.trim())
+        return lines.length > 0 ? (
+          <div className="mt-1 space-y-0.5">
+            {lines.map((l, i) => (
+              <div key={i} className="text-[12px] text-text break-words">
+                {l}
+              </div>
+            ))}
+          </div>
+        ) : null
+      })()}
+      {stop.coordinates && (
+        <div className="text-[11px] text-muted mt-0.5 break-words">{stop.coordinates}</div>
+      )}
       {stop.plannedAt && <div className="text-[11px] text-muted mt-0.5">{stop.plannedAt}</div>}
       {stop.notes && <div className="text-[11px] text-faint mt-0.5 break-words">{stop.notes}</div>}
     </div>
@@ -143,24 +163,47 @@ function StopEditor({
   onCancel: () => void
   onSave: (draft: Omit<VehicleStop, 'id'>) => Promise<void>
 }) {
+  // A stop with no structured fields yet but a legacy `location` — migrate that
+  // text into the Street field so it stays editable and isn't lost on save.
+  const legacyOnly =
+    !!initial &&
+    !initial.company &&
+    !initial.street &&
+    !initial.cityLine &&
+    !initial.coordinates &&
+    !!initial.location
   const [type, setType] = useState<StopType>(initial?.type ?? 'other')
   const [status, setStatus] = useState<StopStatus>(initial?.status ?? 'planned')
-  const [location, setLocation] = useState(initial?.location ?? '')
+  const [company, setCompany] = useState(initial?.company ?? '')
+  const [street, setStreet] = useState(initial?.street ?? (legacyOnly ? initial!.location! : ''))
+  const [cityLine, setCityLine] = useState(initial?.cityLine ?? '')
+  const [coordinates, setCoordinates] = useState(initial?.coordinates ?? '')
   const [plannedAt, setPlannedAt] = useState(initial?.plannedAt ?? '')
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(false)
 
+  const coordParsed = parseCoordinates(coordinates)
+  const coordInvalid = coordinates.trim().length > 0 && !coordParsed
+
   async function commit() {
     setSaving(true)
     setError(false)
+    const trimOrUndef = (v: string) => (v.trim() ? v.trim() : undefined)
     try {
+      // Legacy `location` is intentionally not re-saved: its text was migrated
+      // into the structured fields above, so the stop ends up fully structured.
       await onSave({
         type,
         status,
-        location: location.trim() || undefined,
-        plannedAt: plannedAt.trim() || undefined,
-        notes: notes.trim() || undefined,
+        company: trimOrUndef(company),
+        street: trimOrUndef(street),
+        cityLine: trimOrUndef(cityLine),
+        coordinates: trimOrUndef(coordinates),
+        lat: coordParsed?.lat,
+        lng: coordParsed?.lng,
+        plannedAt: trimOrUndef(plannedAt),
+        notes: trimOrUndef(notes),
       })
     } catch {
       setError(true)
@@ -195,15 +238,43 @@ function StopEditor({
           </select>
         </label>
       </div>
-      <label className="flex flex-col gap-1">
-        <span className="text-[11px] text-muted">Address / location</span>
+      {/* Address fields — meaning lives in the placeholder (no visible label) to
+          keep the editor compact; each input keeps an aria-label for a11y. */}
+      <input
+        value={company}
+        onChange={(e) => setCompany(e.target.value)}
+        aria-label="Company name"
+        placeholder="Enter company name..."
+        className="modal-input"
+      />
+      <input
+        value={street}
+        onChange={(e) => setStreet(e.target.value)}
+        aria-label="Street name, number or industrial area"
+        placeholder="Enter street name, number or industrial area..."
+        className="modal-input"
+      />
+      <input
+        value={cityLine}
+        onChange={(e) => setCityLine(e.target.value)}
+        aria-label="Country, postal code and city"
+        placeholder="Enter country, postal code and city..."
+        className="modal-input"
+      />
+      <div className="flex flex-col gap-1">
         <input
-          value={location}
-          onChange={(e) => setLocation(e.target.value)}
-          placeholder="Where is the stop"
+          value={coordinates}
+          onChange={(e) => setCoordinates(e.target.value)}
+          aria-label="Coordinates"
+          placeholder="Enter coordinates..."
           className="modal-input"
         />
-      </label>
+        {coordInvalid && (
+          <span className="text-[10.5px] text-faint">
+            Couldn't read these coordinates — they'll be kept as typed.
+          </span>
+        )}
+      </div>
       <label className="flex flex-col gap-1">
         <span className="text-[11px] text-muted">Planned time</span>
         <input

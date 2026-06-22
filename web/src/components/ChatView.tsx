@@ -15,7 +15,7 @@ import Avatar from './Avatar'
 import GroupAvatar from './GroupAvatar'
 import GroupInfoPanel from './GroupInfoPanel'
 import HeaderIconButton from './HeaderIconButton'
-import AddTripModal from './vehicle/AddTripModal'
+import AddTripPanel from './vehicle/AddTripPanel'
 import { StatusChip } from './vehicle/opsControls'
 import { getOps, tripSummary, type VehicleOps } from '../lib/vehicleOps'
 import ConversationSearch from './ConversationSearch'
@@ -50,7 +50,7 @@ const RECENT_IMAGE_WINDOW = 15
 // overlays the bottom of the message list (painted ABOVE the bubbles) so the
 // content fades out at the end of the window instead of cutting off — while
 // sitting BELOW the floating composer + chips (z-10/z-20) so the input stays
-// sharp. Fades to the chat background (`bg`, #18181b).
+// sharp. Fades to the chat background (`bg`, #1f1e1d).
 const CHAT_BOTTOM_FADE_HEIGHT = 56
 
 // Typing indicator cadence. We re-announce "still typing" at most once per
@@ -1300,7 +1300,7 @@ export default function ChatView({
               className="pointer-events-none absolute left-0 right-[var(--chat-scrollbar-gutter)] bottom-0 z-0"
               style={{
                 height: CHAT_BOTTOM_FADE_HEIGHT,
-                backgroundImage: 'linear-gradient(to top, #18181b 0%, transparent 100%)',
+                backgroundImage: 'linear-gradient(to top, #1f1e1d 0%, transparent 100%)',
               }}
             />
             {showScrollDown && (
@@ -1428,7 +1428,9 @@ export default function ChatView({
         />
       )}
 
-      {group.type === 'vehicle' && groupInfoOpen && (
+      {/* Group info and Add trip share the single right-hand column slot — Add
+          trip takes precedence when both are open, so they never stack. */}
+      {group.type === 'vehicle' && groupInfoOpen && !addTripOpen && (
         <GroupInfoPanel
           group={group}
           currentUserId={currentUserId}
@@ -1444,7 +1446,7 @@ export default function ChatView({
       )}
 
       {group.type === 'vehicle' && addTripOpen && (
-        <AddTripModal
+        <AddTripPanel
           ops={ops ?? { vehicle: {}, trip: null, stops: [] }}
           onClose={() => setAddTripOpen(false)}
           onCreate={saveTripOps}

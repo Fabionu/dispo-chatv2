@@ -204,18 +204,18 @@ function MessageRow({
   const deletedSkin = mine
     ? 'bg-white/[0.02] text-muted italic rounded-[8px] rounded-br-[3px]'
     : 'bg-white/[0.02] text-muted italic rounded-[8px] rounded-bl-[3px]'
-  // Minimal flat skins: neutral greys lifted above the grey chat surface
-  // (`bg` #18181b) — incoming a touch darker than my own so the two read apart
-  // without any colour tint. Borderless, no shadow. The bubble itself never
+  // Minimal flat skins: warm greys lifted above the warm chat surface
+  // (`bg` #1f1e1d) — incoming a touch darker than my own so the two read apart
+  // without any cool tint. Borderless, no shadow. The bubble itself never
   // changes on hover; only the actions affordance reveals. (Failed sends keep
   // an alert border as their error cue.)
   const bubbleSkin = deleted
     ? deletedSkin
     : mine
       ? failed
-        ? 'bg-[#26262A] border border-alert/50 rounded-[8px] rounded-br-[3px]'
-        : 'bg-[#26262A] rounded-[8px] rounded-br-[3px]'
-      : 'bg-[#1D1D20] rounded-[8px] rounded-bl-[3px]'
+        ? 'bg-[#30302E] border border-alert/50 rounded-[8px] rounded-br-[3px]'
+        : 'bg-[#30302E] rounded-[8px] rounded-br-[3px]'
+      : 'bg-[#262624] rounded-[8px] rounded-bl-[3px]'
   // Subtle, theme-warm pulse applied when this row is the target of a
   // jump-to-original. Clears after ~1.8s back in ChatView.
   const highlightSkin = highlighted ? 'ring-2 ring-active/60' : ''
@@ -311,7 +311,7 @@ function MessageRow({
   // structure regardless of author — including my own. A group start shows the
   // avatar (in a fixed left gutter) + author name; following rows in the group
   // are bare text indented under that gutter. Ownership of my messages is marked
-  // only subtly (warmer name + a "You" chip + read ticks) — never by alignment
+  // only subtly (warmer name + read ticks) — never by alignment
   // or a bubble. Per-message time trails the body on the row's end (faint, never
   // in the header, never above the text). A single subtle dropdown chevron
   // reveals in the reserved left gutter on hover and opens the full actions
@@ -358,9 +358,7 @@ function MessageRow({
             e.preventDefault()
             setMenu({ x: e.clientX, y: e.clientY })
           }}
-          className={`group/msg relative pl-1.5 pr-2 rounded-md transition-colors duration-500 ${
-            startNewGroup ? 'mt-4' : 'mt-0.5'
-          } ${highlighted ? 'bg-active/10' : 'hover:bg-white/[0.02]'}`}
+          className={`relative pl-1.5 pr-2 ${startNewGroup ? 'mt-4' : 'mt-0.5'}`}
         >
           {/* Row layout: avatar gutter · content column. The chevron does NOT
               live up here next to the avatar/name — it sits INSIDE the content
@@ -376,12 +374,23 @@ function MessageRow({
               )}
             </div>
 
-            {/* Content column — always left-aligned, capped for readability. */}
-            <div className="min-w-0 flex-1 flex flex-col items-start max-w-[680px]">
-              {/* Author header: name (+ subtle "You" chip for mine). Kept clean —
-                  NO chevron and NO timestamp ever live on this row. It sits at
-                  the content-left edge, sharing its x with the chevron gutter
-                  below it. */}
+            {/* Content column — always left-aligned, capped for readability.
+                Carries the hover/jump highlight + `group/msg` so the affordances
+                (background, chevron, trailing time) reveal ONLY when the cursor
+                is over the actual content, not the empty horizontal space that
+                fills the rest of the row. It hugs its content (no `flex-1`) so
+                the highlight never stretches past the text; `-mx-1.5 px-1.5`
+                gives the pill breathing room without shifting the content. */}
+            <div
+              className={`group/msg min-w-0 flex flex-col items-start max-w-[680px] -mx-1.5 px-1.5 rounded-md transition-colors duration-500 ${
+                highlighted ? 'bg-active/10' : 'hover:bg-white/[0.02]'
+              }`}
+            >
+              {/* Author header: just the name. Mine reads in the warm `active`
+                  accent — that alone marks it as my message, so no "You" chip is
+                  needed. Kept clean — NO chevron and NO timestamp ever live on
+                  this row. It sits at the content-left edge, sharing its x with
+                  the chevron gutter below it. */}
               {startNewGroup && (
                 <div className="flex items-center gap-1.5 mb-0.5 leading-none">
                   <span
@@ -389,11 +398,6 @@ function MessageRow({
                   >
                     {authorLabel}
                   </span>
-                  {mine && (
-                    <span className="rounded border border-white/[0.1] px-1 py-px text-[9px] uppercase tracking-[0.06em] leading-none text-faint">
-                      You
-                    </span>
-                  )}
                 </div>
               )}
 

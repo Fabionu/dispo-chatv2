@@ -999,7 +999,10 @@ function relTime(iso: string | null): string {
   const yesterday = new Date()
   yesterday.setDate(now.getDate() - 1)
   if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
-  return d.toLocaleDateString([], { day: '2-digit', month: '2-digit' })
+  // Explicit DD/MM (locale-independent) so it never renders as MM/DD.
+  const day = String(d.getDate()).padStart(2, '0')
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  return `${day}/${month}`
 }
 
 function GroupRow({

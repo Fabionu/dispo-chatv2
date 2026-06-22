@@ -230,6 +230,22 @@ export type ActiveTrip = {
 export type VehicleStop = {
   id: string
   type: StopType
+  /** Company / site name at the stop (free text). */
+  company?: string
+  /** Street name + number (free text). */
+  street?: string
+  /** Combined "Country, postal code and city" line (free text). */
+  cityLine?: string
+  /** Raw coordinates exactly as the dispatcher typed them (e.g.
+   *  "48.99280 N, 21.24404 E"). Kept verbatim even when it doesn't parse, so
+   *  nothing entered is ever lost. */
+  coordinates?: string
+  /** Parsed decimal-degree coordinates, set only when `coordinates` parses
+   *  cleanly — the consistent internal format. Never computed from a map/GPS. */
+  lat?: number
+  lng?: number
+  /** Legacy single-line address from stops created before the structured fields
+   *  above existed. Still rendered as a fallback; new stops don't set it. */
   location?: string
   /** Manual planned time as free text. */
   plannedAt?: string
@@ -270,6 +286,46 @@ export function stopId(): string {
     : `stop_${Math.random().toString(36).slice(2)}`
 }
 
+// Parse a free-text coordinate pair ("lat, lng") into decimal degrees. Accepts
+// an optional N/S/E/W hemisphere suffix per component (e.g.
+// "48.99280 N, 21.24404 E") as well as bare signed decimals
+// ("41.65419, -4.73214"). Returns null when the text isn't a clean comma-
+// separated pair or falls outside valid ranges — callers keep the raw text and
+// may show a gentle hint. Pure string parsing: no geocoding, maps, or GPS.
+export function parseCoordinates(raw: string): { lat: number; lng: number } | null {
+  const parts = raw.trim().split(',')
+  if (parts.length !== 2) return null
+  const lat = parseCoordComponent(parts[0])
+  const lng = parseCoordComponent(parts[1])
+  if (lat === null || lng === null) return null
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null
+  return { lat, lng }
+}
+
+function parseCoordComponent(part: string): number | null {
+  const m = part.trim().match(/^([+-]?\d+(?:\.\d+)?)\s*([nsew])?$/i)
+  if (!m) return null
+  const val = parseFloat(m[1])
+  if (Number.isNaN(val)) return null
+  const hemi = m[2]?.toLowerCase()
+  if (hemi === 's' || hemi === 'w') return -Math.abs(val)
+  if (hemi === 'n' || hemi === 'e') return Math.abs(val)
+  return val
+}
+
+// Best concise single-line label for a stop's place — prefers the structured
+// address fields, then the legacy freeform `location`. Used in compact summaries
+// (header / sidebar / stop chips).
+export function stopLocationLabel(s: VehicleStop): string {
+  return (
+    s.company?.trim() ||
+    s.cityLine?.trim() ||
+    s.street?.trim() ||
+    s.location?.trim() ||
+    ''
+  )
+}
+
 // ── Compact summaries (header + sidebar) ─────────────────────────────────────
 // The next stop a driver is heading to: the first stop still marked planned
 // (stops are kept in dispatcher-entered order). Undefined when none remain.
@@ -294,7 +350,7 @@ export function tripSummary(ops: VehicleOps): TripSummary | null {
   if (!t) return null
   const ns = nextPlannedStop(ops.stops)
   const nextLabel = ns
-    ? [labelOf(STOP_TYPES, ns.type), ns.location].filter(Boolean).join(', ') || undefined
+    ? [labelOf(STOP_TYPES, ns.type), stopLocationLabel(ns)].filter(Boolean).join(', ') || undefined
     : undefined
   return {
     reference: t.reference,

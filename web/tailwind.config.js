@@ -17,13 +17,18 @@ export default {
         //         lighter on top of this surface. Kept equal so sidebar + chrome
         //         share one tone.
         // surface-2 — the extra lift for focus / hover states.
-        bg: '#18181b',
-        surface: '#1d1d20',
-        'surface-2': '#29292e',
-        rail: '#1d1d20',
+        bg: '#1f1e1d',
+        surface: '#262624',
+        'surface-2': '#30302e',
+        rail: '#262624',
         text: '#f4f1ec',
-        muted: '#8a8896',
-        faint: '#4e4d5a',
+        // Secondary / tertiary text. Warm-tinted greys (to sit with the warm
+        // surfaces + cream `text`) and lifted for legibility on the dark panels:
+        //   muted — secondary labels, meta, section text: clearly readable but
+        //           still below `text`.
+        //   faint — timestamps, hints, placeholders: subtle but NOT invisible.
+        muted: '#b3aea4',
+        faint: '#827e74',
         done: '#7d8a78',
         active: '#c89572',
         alert: '#d97757',

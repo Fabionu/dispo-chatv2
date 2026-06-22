@@ -222,7 +222,7 @@ body {
   margin: 0;
   /* Dark-grey app/chat base — keep in sync with the `bg` token in
      tailwind.config.js. */
-  background: #18181b;
+  background: #1f1e1d;
   color: #f4f1ec;
   font-family: 'Inter', system-ui, sans-serif;
   font-size: var(--app-font-size);
@@ -273,7 +273,19 @@ input, button, textarea, select {
 }
 
 input::placeholder {
-  color: #4e4d5a;
+  /* Keep in sync with the `faint` token — readable, not nearly invisible. */
+  color: #827e74;
+}
+
+/* Native <select> dropdown options. The OS draws the open list itself and
+   ignores most styling, but background-color + color ARE honored — without them
+   the rows render as near-invisible faint text on some platforms (notably
+   Windows dark mode). Pin them to the panel surface + cream text so the list is
+   readable everywhere; the OS still paints its own highlight on the active row.
+   Colours mirror the `surface` and `text` tokens (tailwind.config.js). */
+option {
+  background-color: #262624;
+  color: #f4f1ec;
 }
 
 button {
@@ -285,7 +297,9 @@ button {
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #8a8896;
+  /* Section eyebrows: slightly brighter than before for legibility, still
+     subdued (kept below the `muted` secondary tone). */
+  color: #9a958b;
 }
 
 /* HERE map: keep the normal (default arrow) cursor everywhere on the map

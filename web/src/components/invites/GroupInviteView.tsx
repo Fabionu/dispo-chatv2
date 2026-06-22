@@ -83,22 +83,23 @@ export default function GroupInviteView({ invite, onAccepted, onDeclined }: Prop
         </div>
       </div>
 
-      {/* Bottom action bar — fixed at the foot of the pane, composer-like */}
-      <div className="shrink-0 border-t border-white/[0.06] bg-rail px-6 py-3.5">
+      {/* Bottom action area — sits directly on the main pane background, no
+          separate footer surface or divider, so it blends into the page. */}
+      <div className="shrink-0 px-6 py-3.5">
         <div className="mx-auto w-full max-w-[440px]">
           {error && <div className="text-[11.5px] text-alert text-center mb-2">{error}</div>}
           <div className="flex items-center gap-2.5">
             <button
               onClick={() => void decline()}
               disabled={busy !== null}
-              className="flex-1 h-10 rounded-btn border border-white/[0.14] text-text text-[13px] font-medium hover:bg-white/[0.04] disabled:opacity-50 transition-colors"
+              className="flex-1 h-10 rounded-chip border border-white/[0.14] text-text text-[13px] font-medium hover:bg-white/[0.04] disabled:opacity-50 transition-colors"
             >
               {busy === 'decline' ? 'Declining…' : 'Decline'}
             </button>
             <button
               onClick={() => void accept()}
               disabled={busy !== null}
-              className="flex-1 h-10 rounded-btn bg-text text-bg text-[13px] font-semibold hover:bg-text/90 disabled:opacity-50 transition-colors"
+              className="flex-1 h-10 rounded-chip bg-text text-bg text-[13px] font-semibold hover:bg-text/90 disabled:opacity-50 transition-colors"
             >
               {busy === 'accept' ? 'Accepting…' : 'Accept'}
             </button>
