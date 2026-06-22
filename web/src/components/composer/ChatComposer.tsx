@@ -33,6 +33,11 @@ type Props = {
   // parent, which opens the pre-send preview modal.
   onFilePicked: (file: File) => void
 
+  // When provided, the composer's add (+) menu shows a "Trip" option. Wired only
+  // for vehicle rooms (the parent gates on type + manage permission); omitting it
+  // hides the option, e.g. in DMs.
+  onAddTrip?: () => void
+
   replyContext: ReplyToPreview | null
   onCancelReply: () => void
 
@@ -81,6 +86,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
     onTextChange,
     members,
     onFilePicked,
+    onAddTrip,
     replyContext,
     onCancelReply,
     editContext,
@@ -306,7 +312,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
   // textarea's own `outline-none` keeps the browser ring off too. `relative`
   // anchors the mention picker.
   return (
-    <div className="relative rounded-[14px] bg-surface shadow-[0_1px_10px_rgba(0,0,0,0.4)]">
+    <div className="relative rounded-[14px] bg-surface">
       {pickerOpen && (
         <MentionPicker
           members={matches}
@@ -352,7 +358,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           onCancel={onCancelEdit}
         />
       )}
-      {/* Minimal input bar: paperclip · textarea · send. The controls share
+      {/* Minimal input bar: add (+) · textarea · send. The controls share
           --composer-size and are vertically centred against the textarea, so
           they stay aligned with the middle of the input whether it's one line or
           grown to several (items-center tracks the textarea's height). */}
@@ -364,7 +370,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           onChange={onPickFile}
           className="hidden"
         />
-        <AttachMenu disabled={Boolean(editContext)} onPickKind={pickKind} />
+        <AttachMenu disabled={Boolean(editContext)} onPickKind={pickKind} onAddTrip={onAddTrip} />
         <textarea
           ref={textareaRef}
           value={text}

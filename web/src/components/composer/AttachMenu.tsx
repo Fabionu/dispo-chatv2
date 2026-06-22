@@ -1,18 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
-import { FileText, Image as ImageIcon, Paperclip } from 'lucide-react'
+import { FileText, Image as ImageIcon, Plus, Route } from 'lucide-react'
 import { DOC_ACCEPT, IMAGE_ACCEPT } from '../attachments/attachmentUtils'
 
 type Props = {
   disabled?: boolean
-  // Called when the user picks a category. The parent owns the hidden file
+  // Called when the user picks a file category. The parent owns the hidden file
   // input and sets its `accept` attribute before triggering `.click()`.
   onPickKind: (accept: string) => void
+  // When provided, a "Trip" item is shown — used to create a manual trip in
+  // vehicle rooms. Omitted in DMs (no trips), which hides the item entirely.
+  onAddTrip?: () => void
 }
 
-// The paperclip trigger + popover that lets the user choose what kind of
-// file the OS picker should filter to. Manages its own open state plus
+// The composer "add" trigger (a Plus button) + popover. Lets the user choose
+// what to add: a photo/document (which picks the OS file filter the parent then
+// opens) or — in vehicle rooms — a Trip. Manages its own open state plus
 // outside-click / Esc dismissal so the parent stays simple.
-export default function AttachMenu({ disabled, onPickKind }: Props) {
+export default function AttachMenu({ disabled, onPickKind, onAddTrip }: Props) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -38,12 +42,17 @@ export default function AttachMenu({ disabled, onPickKind }: Props) {
     onPickKind(accept)
   }
 
+  function addTrip() {
+    setOpen(false)
+    onAddTrip?.()
+  }
+
   return (
     <div className="relative shrink-0" ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
         disabled={disabled}
-        aria-label="Attach"
+        aria-label="Add"
         aria-haspopup="menu"
         aria-expanded={open}
         className={`h-[var(--composer-size)] w-[var(--composer-size)] flex items-center justify-center rounded-full transition-colors disabled:opacity-30 disabled:cursor-default ${
@@ -52,7 +61,7 @@ export default function AttachMenu({ disabled, onPickKind }: Props) {
             : 'text-muted hover:text-text hover:bg-white/[0.04]'
         }`}
       >
-        <Paperclip size={16} strokeWidth={1.8} />
+        <Plus size={18} strokeWidth={1.8} />
       </button>
       {open && (
         <div
@@ -63,14 +72,19 @@ export default function AttachMenu({ disabled, onPickKind }: Props) {
             icon={<ImageIcon size={14} strokeWidth={1.6} />}
             onClick={() => pick(IMAGE_ACCEPT)}
           >
-            Photos
+            Photo
           </AttachMenuItem>
           <AttachMenuItem
             icon={<FileText size={14} strokeWidth={1.6} />}
             onClick={() => pick(DOC_ACCEPT)}
           >
-            Documents
+            Document
           </AttachMenuItem>
+          {onAddTrip && (
+            <AttachMenuItem icon={<Route size={14} strokeWidth={1.6} />} onClick={addTrip}>
+              Trip
+            </AttachMenuItem>
+          )}
         </div>
       )}
     </div>

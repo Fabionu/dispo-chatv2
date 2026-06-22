@@ -34,11 +34,20 @@ export const VEHICLE_STATUSES: ReadonlyArray<{ value: VehicleStatus; label: stri
   { value: 'completed', label: 'Completed' },
 ]
 
+// Manual trip progress. The order below is the rough lifecycle order a
+// dispatcher/driver walks a load through (also the <select> order). Drivers will
+// later set this from their phone (see TODO in TripTab) — for now any manager can
+// change it; nothing is ever computed from GPS/maps.
 export type TripStatus =
   | 'planned'
   | 'to_loading'
   | 'at_loading'
   | 'loaded'
+  | 'in_transit'
+  | 'at_customs'
+  | 'ferry'
+  | 'break'
+  | 'service'
   | 'to_unloading'
   | 'at_unloading'
   | 'unloaded'
@@ -47,24 +56,41 @@ export type TripStatus =
 
 export const TRIP_STATUSES: ReadonlyArray<{ value: TripStatus; label: string }> = [
   { value: 'planned', label: 'Planned' },
-  { value: 'to_loading', label: 'On the way to loading' },
+  { value: 'to_loading', label: 'Going to loading' },
   { value: 'at_loading', label: 'At loading' },
   { value: 'loaded', label: 'Loaded' },
-  { value: 'to_unloading', label: 'On the way to unloading' },
+  { value: 'in_transit', label: 'In transit' },
+  { value: 'at_customs', label: 'At customs' },
+  { value: 'ferry', label: 'Ferry' },
+  { value: 'break', label: 'Break' },
+  { value: 'service', label: 'Service' },
+  { value: 'to_unloading', label: 'Going to unloading' },
   { value: 'at_unloading', label: 'At unloading' },
   { value: 'unloaded', label: 'Unloaded' },
   { value: 'completed', label: 'Completed' },
   { value: 'cancelled', label: 'Cancelled' },
 ]
 
-export type StopType = 'fuel' | 'break' | 'service' | 'customs' | 'parking' | 'other'
+export type StopType =
+  | 'loading'
+  | 'unloading'
+  | 'customs'
+  | 'ferry'
+  | 'fuel'
+  | 'service'
+  | 'parking'
+  | 'break'
+  | 'other'
 
 export const STOP_TYPES: ReadonlyArray<{ value: StopType; label: string }> = [
-  { value: 'fuel', label: 'Fuel' },
-  { value: 'break', label: 'Break' },
-  { value: 'service', label: 'Service' },
+  { value: 'loading', label: 'Loading' },
+  { value: 'unloading', label: 'Unloading' },
   { value: 'customs', label: 'Customs' },
+  { value: 'ferry', label: 'Ferry' },
+  { value: 'fuel', label: 'Fuel' },
+  { value: 'service', label: 'Service' },
   { value: 'parking', label: 'Parking' },
+  { value: 'break', label: 'Break' },
   { value: 'other', label: 'Other' },
 ]
 
@@ -96,10 +122,23 @@ export function labelOf<T extends string>(
   return options.find((o) => o.value === value)?.label ?? ''
 }
 
-// Visual tone for a status chip — maps a status to one of the app's existing
-// semantic colours (no new palette). `done`=settled/green, `active`=in-progress
-// /amber, `alert`=cancelled/coral, `muted`=idle/neutral.
+// Visual tone for a status chip. The base four reuse the app's existing semantic
+// palette tokens: `done`=settled/green, `active`=in-progress/amber,
+// `alert`=cancelled/coral, `muted`=idle/neutral.
 export type StatusTone = 'done' | 'active' | 'alert' | 'muted'
+
+// Extended chip palette for TRIP progress — a richer, scannable set layered on
+// top of the base four so each operational state reads at a glance (see
+// `tripStatusTone`). The class strings for these live in opsControls' StatusChip.
+export type ChipTone =
+  | StatusTone
+  | 'blue'
+  | 'green'
+  | 'cyan'
+  | 'purple'
+  | 'indigo'
+  | 'slate'
+  | 'orange'
 
 export function vehicleStatusTone(s: VehicleStatus | undefined): StatusTone {
   switch (s) {
@@ -116,18 +155,39 @@ export function vehicleStatusTone(s: VehicleStatus | undefined): StatusTone {
   }
 }
 
-export function tripStatusTone(s: TripStatus | undefined): StatusTone {
+// Per-status colour for trip progress. Distinct, scannable tones (no GPS/route
+// input — purely the manual status value). Loading/unloading transit legs share
+// blue; "at" stops share amber; loaded/unloaded share green; Completed settles to
+// the muted-green `done`; Cancelled is the coral `alert`.
+export function tripStatusTone(s: TripStatus | undefined): ChipTone {
   switch (s) {
-    case 'completed':
+    case 'to_loading':
+    case 'to_unloading':
+      return 'blue'
+    case 'at_loading':
+    case 'at_unloading':
+      return 'active' // amber
+    case 'loaded':
     case 'unloaded':
+      return 'green'
+    case 'in_transit':
+      return 'cyan'
+    case 'at_customs':
+      return 'purple'
+    case 'ferry':
+      return 'indigo'
+    case 'break':
+      return 'slate'
+    case 'service':
+      return 'orange'
+    case 'completed':
       return 'done'
     case 'cancelled':
       return 'alert'
     case 'planned':
     case undefined:
-      return 'muted'
     default:
-      return 'active'
+      return 'muted'
   }
 }
 
@@ -208,4 +268,38 @@ export function stopId(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID
     ? crypto.randomUUID()
     : `stop_${Math.random().toString(36).slice(2)}`
+}
+
+// ── Compact summaries (header + sidebar) ─────────────────────────────────────
+// The next stop a driver is heading to: the first stop still marked planned
+// (stops are kept in dispatcher-entered order). Undefined when none remain.
+export function nextPlannedStop(stops: VehicleStop[]): VehicleStop | undefined {
+  return stops.find((s) => s.status === 'planned')
+}
+
+// One-line trip summary pieces shared by the vehicle-room header and the sidebar
+// row. Returns null when there's no active trip, so callers fall back to their
+// existing (non-trip) subtitle. Everything here is read straight off the manual
+// ops blob — no computed routing/ETA.
+export type TripSummary = {
+  reference?: string
+  statusLabel: string
+  statusTone: ChipTone
+  /** "Customs, Nadlac" — the next planned stop's type + location. */
+  nextLabel?: string
+}
+
+export function tripSummary(ops: VehicleOps): TripSummary | null {
+  const t = ops.trip
+  if (!t) return null
+  const ns = nextPlannedStop(ops.stops)
+  const nextLabel = ns
+    ? [labelOf(STOP_TYPES, ns.type), ns.location].filter(Boolean).join(', ') || undefined
+    : undefined
+  return {
+    reference: t.reference,
+    statusLabel: labelOf(TRIP_STATUSES, t.status) || 'Planned',
+    statusTone: tripStatusTone(t.status),
+    nextLabel,
+  }
 }

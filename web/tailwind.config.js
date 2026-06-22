@@ -5,17 +5,22 @@ export default {
     extend: {
       colors: {
         // ── Dark surface hierarchy (darkest → lightest) ──────────────────────
-        // bg    — the main app / chat / workspace background: the darkest
-        //         primary surface, a calm dark grey. Also the dark foreground
-        //         placed on accent chips/buttons (`text-bg`).
-        // rail / surface — the SIDEBAR, the Group Info panel, and elevated
-        //         chrome (composer, menus, modals, popovers, footers): one step
-        //         lighter than `bg`, so all of these read as ONE consistent
-        //         surface family that lifts gently off the chat. Selected/hover/
-        //         search use white-alpha overlays (base-independent) so they
-        //         stay readable. Kept equal so sidebar + chrome share one tone.
+        // bg    — the chat / message area and the workspace void behind the
+        //         cards: the DARKEST surface, near-black, so the conversation
+        //         reads as the deep focal plane everything else lifts off of.
+        //         Also the dark foreground placed on accent chips/buttons
+        //         (`text-bg`). ONLY this main conversation surface is this dark.
+        // rail / surface — the SIDEBAR, the Group Info panel, modals, settings
+        //         panels and elevated chrome (menus, popovers, footers): a
+        //         lighter dark grey, so all of these read as ONE consistent
+        //         surface family that floats clearly above the near-black chat.
+        //         The composer/chat-input also uses `surface`, so the input
+        //         field lifts off the near-black message area. Selected/hover/
+        //         search use white-alpha overlays (base-independent), which read
+        //         as subtly lighter on top of this surface. Kept equal so
+        //         sidebar + chrome share one tone.
         // surface-2 — the extra lift for focus / hover states.
-        bg: '#141416',
+        bg: '#0b0b0c',
         surface: '#1d1d20',
         'surface-2': '#29292e',
         rail: '#1d1d20',

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, Info, Search, Upload } from 'lucide-react'
+import { ArrowDown, Info, Search, Upload, X } from 'lucide-react'
 import type { Attachment, Group, GroupMember, IncomingMessage, ReplyToPreview } from '../lib/types'
 import { groupLabel, trailerPlate } from '../lib/types'
 import { fileError } from './attachments/attachmentUtils'
@@ -14,6 +14,10 @@ import ChatComposer, { type ChatComposerHandle, type EditContext } from './compo
 import Avatar from './Avatar'
 import GroupAvatar from './GroupAvatar'
 import GroupInfoPanel from './GroupInfoPanel'
+import HeaderIconButton from './HeaderIconButton'
+import AddTripModal from './vehicle/AddTripModal'
+import { StatusChip } from './vehicle/opsControls'
+import { getOps, tripSummary, type VehicleOps } from '../lib/vehicleOps'
 import ConversationSearch from './ConversationSearch'
 import MessageRow from './messages/MessageRow'
 import SystemMessageRow from './messages/SystemMessageRow'
@@ -46,7 +50,7 @@ const RECENT_IMAGE_WINDOW = 15
 // overlays the bottom of the message list (painted ABOVE the bubbles) so the
 // content fades out at the end of the window instead of cutting off — while
 // sitting BELOW the floating composer + chips (z-10/z-20) so the input stays
-// sharp. Fades to the chat background (`bg`, #141416).
+// sharp. Fades to the chat background (`bg`, #0b0b0c).
 const CHAT_BOTTOM_FADE_HEIGHT = 56
 
 // Typing indicator cadence. We re-announce "still typing" at most once per
@@ -140,12 +144,49 @@ export default function ChatView({
   const [inviteOpen, setInviteOpen] = useState(false)
   // Whether the group-info drawer is open (vehicle groups only).
   const [groupInfoOpen, setGroupInfoOpen] = useState(false)
-  // Whether the in-conversation search panel is open (DMs + vehicle groups).
+  // Whether the "Add trip" modal is open (vehicle groups only). Opened from the
+  // composer's add (+) menu.
+  const [addTripOpen, setAddTripOpen] = useState(false)
+  // In-conversation search (DMs + vehicle groups). The query lives here so the
+  // header's inline search field owns it while the results render as a separate
+  // floating overlay (ConversationSearch) — no full-width banner that would push
+  // the message list down.
   const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false)
+    setSearchQuery('')
+  }, [])
+  const openSearch = useCallback(() => {
+    setSearchOpen(true)
+    // Auto-focus once the field has mounted.
+    requestAnimationFrame(() => searchInputRef.current?.focus())
+  }, [])
   // Close search when switching conversations so it never carries a stale query.
   useEffect(() => {
-    setSearchOpen(false)
-  }, [group.id])
+    closeSearch()
+  }, [group.id, closeSearch])
+  // Escape closes search from anywhere; a click outside the search UI (the
+  // header field, its toggle button, or the results dropdown — all tagged with
+  // data-search-region) closes it too. Matches the rest of the app's overlays.
+  useEffect(() => {
+    if (!searchOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeSearch()
+    }
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null
+      if (target?.closest('[data-search-region]')) return
+      closeSearch()
+    }
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('mousedown', onDown)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('mousedown', onDown)
+    }
+  }, [searchOpen, closeSearch])
   // Whether a file is being dragged over the conversation (drives the drop
   // overlay). A depth counter keeps it stable across child enter/leave events.
   const [dragActive, setDragActive] = useState(false)
@@ -912,6 +953,21 @@ export default function ChatView({
   const myGroupRole = members.find((m) => m.id === currentUserId)?.role
   const canManageGroup = canInviteMembers || myGroupRole === 'admin'
 
+  // ── Active trip (header summary) ─────────────────────────────────────────
+  // Read straight off the group's manual ops blob. `trip` is null until a
+  // dispatcher adds one (no map/GPS — purely manual). When present, the header
+  // shows a compact trip line instead of the static vehicle subtitle.
+  const ops = group.type === 'vehicle' ? getOps(group) : null
+  const trip = ops ? tripSummary(ops) : null
+
+  // Persist the whole ops blob and flow the updated meta back up so the header,
+  // sidebar, and group-info panel all re-derive from the same source of truth.
+  // Used by the Add-trip modal; the server enforces the manage permission.
+  async function saveTripOps(next: VehicleOps) {
+    const { group: updated } = await api.groups.update(group.id, { ops: next })
+    onGroupUpdated?.(group.id, { meta: updated.meta })
+  }
+
   // ── Drag-and-drop attachments ───────────────────────────────────────────
   // Dropping an image/document anywhere over the conversation opens the same
   // pre-send preview as the picker. Suppressed while another overlay is open
@@ -1023,13 +1079,35 @@ export default function ChatView({
               size={40}
             />
           ) : (
-            // Vehicle identity — the same circular slot as a DM avatar, but a
-            // GENERATED generic icon (vehicle rooms never use an uploaded image).
-            <GroupAvatar size={40} />
+            // Vehicle identity — the same circular slot as a DM avatar: the
+            // group's uploaded image when set, else the generated generic icon.
+            <GroupAvatar groupId={group.id} hasAvatar={Boolean(group.hasAvatar)} size={40} />
           )}
           <div className="min-w-0">
             <div className="text-[16px] font-semibold truncate leading-tight">{groupLabel(group)}</div>
-            <div className="text-[13px] text-muted truncate leading-tight">{subtitle}</div>
+            {/* When a trip is active, the second line becomes a compact trip
+                summary (order # · status chip · next stop); otherwise it keeps the
+                static vehicle/DM subtitle. Single line, truncating, so it stays
+                clean on both wide and narrow layouts. */}
+            {trip ? (
+              <div className="flex items-center gap-1.5 min-w-0 leading-tight mt-0.5">
+                {trip.reference && (
+                  <span className="shrink-0 text-[12.5px] text-muted truncate max-w-[45%]">
+                    Order #{trip.reference}
+                  </span>
+                )}
+                <span className="shrink-0">
+                  <StatusChip tone={trip.statusTone} label={trip.statusLabel} />
+                </span>
+                {trip.nextLabel && (
+                  <span className="min-w-0 truncate text-[12px] text-faint">
+                    · Next: {trip.nextLabel}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="text-[13px] text-muted truncate leading-tight">{subtitle}</div>
+            )}
           </div>
         </div>
         {/* Borderless toolbar-style actions floated at the right edge so the
@@ -1037,40 +1115,55 @@ export default function ChatView({
             conversation (DM + vehicle); Group info stays vehicle-only. Same
             circular hover wash + on-theme focus ring for both. */}
         <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-          <button
-            onClick={() => setSearchOpen((v) => !v)}
-            aria-label="Search conversation"
-            title="Search conversation"
-            aria-pressed={searchOpen}
-            className={`h-9 w-9 flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
-              searchOpen ? 'text-text bg-white/[0.06]' : 'text-muted hover:text-text hover:bg-white/[0.05]'
-            }`}
+          {/* Inline search field — expands to the LEFT of the search button when
+              open, so it stays inside the header action area instead of taking a
+              full row under the header. Compact borderless pill on the dark
+              theme; a leading clear (×) appears only with text typed. */}
+          {searchOpen && (
+            <div
+              data-search-region
+              className="flex items-center gap-1 h-9 pl-3 pr-1 mr-0.5 rounded-full bg-white/[0.06]"
+            >
+              <input
+                ref={searchInputRef}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') closeSearch()
+                }}
+                placeholder="Search messages…"
+                aria-label="Search this conversation"
+                className="w-40 sm:w-52 bg-transparent text-[13px] outline-none placeholder:text-faint"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => {
+                    setSearchQuery('')
+                    searchInputRef.current?.focus()
+                  }}
+                  aria-label="Clear search"
+                  className="h-6 w-6 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.08] transition-colors shrink-0"
+                >
+                  <X size={14} strokeWidth={2} />
+                </button>
+              )}
+            </div>
+          )}
+          <HeaderIconButton
+            searchRegion
+            active={searchOpen}
+            onClick={() => (searchOpen ? closeSearch() : openSearch())}
+            label={searchOpen ? 'Close search' : 'Search conversation'}
           >
             <Search size={19} strokeWidth={1.8} />
-          </button>
+          </HeaderIconButton>
           {group.type === 'vehicle' && (
-            <button
-              onClick={() => setGroupInfoOpen(true)}
-              aria-label="Group info"
-              title="Group info"
-              className="h-9 w-9 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
-            >
+            <HeaderIconButton label="Group info" onClick={() => setGroupInfoOpen(true)}>
               <Info size={20} strokeWidth={1.8} />
-            </button>
+            </HeaderIconButton>
           )}
         </div>
       </header>
-
-      {/* In-conversation search — compact panel under the header; clicking a
-          result jumps to that message (reusing the reply jump + highlight). */}
-      {searchOpen && (
-        <ConversationSearch
-          messages={messages}
-          currentUserId={currentUserId}
-          onJump={jumpToMessage}
-          onClose={() => setSearchOpen(false)}
-        />
-      )}
 
       {pdfPreview ? (
         <InlinePdfPreview
@@ -1207,7 +1300,7 @@ export default function ChatView({
               className="pointer-events-none absolute left-0 right-[var(--chat-scrollbar-gutter)] bottom-0 z-0"
               style={{
                 height: CHAT_BOTTOM_FADE_HEIGHT,
-                backgroundImage: 'linear-gradient(to top, #141416 0%, transparent 100%)',
+                backgroundImage: 'linear-gradient(to top, #0b0b0c 0%, transparent 100%)',
               }}
             />
             {showScrollDown && (
@@ -1256,6 +1349,14 @@ export default function ChatView({
                   onTextChange={setText}
                   members={members}
                   onFilePicked={setPendingFile}
+                  // Trip creation is a vehicle-room, manage-capable action; the
+                  // composer hides the "Trip" menu item when this is undefined
+                  // (DMs, or members without manage rights).
+                  onAddTrip={
+                    group.type === 'vehicle' && canManageGroup
+                      ? () => setAddTripOpen(true)
+                      : undefined
+                  }
                   replyContext={replyContext}
                   onCancelReply={() => setReplyContext(null)}
                   editContext={editContext}
@@ -1271,6 +1372,20 @@ export default function ChatView({
       )}
       </div>
       {/* end chat card */}
+
+      {/* In-conversation search results — a compact floating dropdown anchored
+          under the header's inline search field. Absolutely positioned within the
+          chat pane so it OVERLAYS the messages (never pushes them down). The query
+          is owned by the header field above; clicking a result jumps to that
+          message (reusing the reply jump + highlight). */}
+      {searchOpen && (
+        <ConversationSearch
+          query={searchQuery}
+          messages={messages}
+          currentUserId={currentUserId}
+          onJump={jumpToMessage}
+        />
+      )}
       </div>
       {/* end chat pane */}
 
@@ -1325,6 +1440,14 @@ export default function ChatView({
           onMembersChanged={refetchMembers}
           onMessageMember={messageMember}
           onGroupUpdated={(partial) => onGroupUpdated?.(group.id, partial)}
+        />
+      )}
+
+      {group.type === 'vehicle' && addTripOpen && (
+        <AddTripModal
+          ops={ops ?? { vehicle: {}, trip: null, stops: [] }}
+          onClose={() => setAddTripOpen(false)}
+          onCreate={saveTripOps}
         />
       )}
 

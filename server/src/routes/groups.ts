@@ -749,7 +749,22 @@ const opsSchema = z.object({
       weight: opsStr(60),
       pallets: opsStr(60),
       status: z
-        .enum(['planned', 'to_loading', 'at_loading', 'loaded', 'to_unloading', 'at_unloading', 'unloaded', 'completed', 'cancelled'])
+        .enum([
+          'planned',
+          'to_loading',
+          'at_loading',
+          'loaded',
+          'in_transit',
+          'at_customs',
+          'ferry',
+          'break',
+          'service',
+          'to_unloading',
+          'at_unloading',
+          'unloaded',
+          'completed',
+          'cancelled',
+        ])
         .optional(),
       eta: opsStr(80),
       notes: opsStr(2000),
@@ -760,7 +775,17 @@ const opsSchema = z.object({
     .array(
       z.object({
         id: z.string().max(64),
-        type: z.enum(['fuel', 'break', 'service', 'customs', 'parking', 'other']),
+        type: z.enum([
+          'loading',
+          'unloading',
+          'customs',
+          'ferry',
+          'fuel',
+          'service',
+          'parking',
+          'break',
+          'other',
+        ]),
         location: opsStr(300),
         plannedAt: opsStr(80),
         notes: opsStr(1000),

@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import EditableRow from '../EditableRow'
-import { SelectRow, SubHeading } from './opsControls'
-import { TRIP_STATUSES, type ActiveTrip } from '../../lib/vehicleOps'
+import { SelectRow, StatusChip, SubHeading } from './opsControls'
+import { TRIP_STATUSES, labelOf, tripStatusTone, type ActiveTrip } from '../../lib/vehicleOps'
 
 type Props = {
   trip: ActiveTrip | null
@@ -51,7 +51,7 @@ export default function TripTab({ trip, canManage, onSaveTrip, onClearTrip }: Pr
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex items-center justify-between mb-2">
         <span className="eyebrow">Active trip</span>
         {canManage && (
           <button
@@ -64,6 +64,21 @@ export default function TripTab({ trip, canManage, onSaveTrip, onClearTrip }: Pr
         )}
       </div>
 
+      {/* Current status as a colored chip — the scannable summary; the row below
+          stays the manual control for changing it. */}
+      <div className="mb-1">
+        <StatusChip
+          tone={tripStatusTone(trip.status)}
+          label={labelOf(TRIP_STATUSES, trip.status) || 'Planned'}
+        />
+      </div>
+
+      {/* TODO(driver/mobile): drivers will advance this status from their phone
+          in the vehicle room (e.g. a big "Update progress" control). The status
+          is already a plain manual field persisted in meta.ops — only a
+          driver-facing, permission-relaxed control needs adding here; nothing is
+          ever derived from GPS/maps. The same status drives the room header and
+          sidebar summaries. */}
       <SelectRow
         label="Trip status"
         value={trip.status}

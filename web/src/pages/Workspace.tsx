@@ -24,6 +24,8 @@ import type {
   ReplyToPreview,
 } from '../lib/types'
 import { groupHasUnread, groupLabel, groupPreview, tractorPlate } from '../lib/types'
+import { getOps, tripSummary } from '../lib/vehicleOps'
+import { StatusChip, StatusDot } from '../components/vehicle/opsControls'
 import { api } from '../lib/api'
 import { getSocket } from '../lib/socket'
 import { useMessageCache } from '../hooks/useMessageCache'
@@ -830,7 +832,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         {/* User menu */}
         <div className="relative border-t border-white/[0.05]" ref={userMenuRef}>
           {userMenuOpen && (
-            <div className="absolute bottom-full left-2 right-2 mb-2 rounded-card border border-white/[0.08] bg-surface overflow-hidden">
+            <div className="absolute bottom-full left-2 w-[240px] max-w-[calc(100%-1rem)] mb-2 rounded-card border border-white/[0.08] bg-surface overflow-hidden">
               <MenuItem
                 icon={<CircleUser size={13} strokeWidth={1.6} />}
                 onClick={() => {
@@ -1041,6 +1043,15 @@ function GroupRow({
   const viewMode = useViewMode()
   const TypeIcon = group.type === 'direct' ? CircleUser : Users
 
+  // Active-trip indicator for vehicle rooms: a compact status line read off the
+  // manual ops blob. Null when there's no trip, so the row keeps its existing
+  // (non-trip) subtitle/metadata. `full` (status · Next: …) is used on the
+  // breathable Normal row; `short` (status only) on the dense Compact row.
+  const trip = group.type === 'vehicle' ? tripSummary(getOps(group)) : null
+  const tripLineFull = trip
+    ? [trip.statusLabel, trip.nextLabel && `Next: ${trip.nextLabel}`].filter(Boolean).join(' · ')
+    : null
+
   // ── Normal view: breathable two-line rows with a last-message preview ──────
   // Larger avatar, more padding, name on line 1 (+ time), preview on line 2 (+
   // unread/mention badges). Compact view is left exactly as it was below.
@@ -1059,7 +1070,7 @@ function GroupRow({
           {group.type === 'direct' ? (
             <Avatar userId={peer?.id ?? ''} name={peer?.name ?? groupLabel(group)} size={NORMAL_AVATAR} />
           ) : (
-            <GroupAvatar size={NORMAL_AVATAR} />
+            <GroupAvatar groupId={group.id} hasAvatar={Boolean(group.hasAvatar)} size={NORMAL_AVATAR} />
           )}
           {peerDot && (
             <span
@@ -1074,9 +1085,20 @@ function GroupRow({
             <span className={`flex-1 truncate text-[13.5px] ${unread ? 'text-text font-semibold' : 'text-text/90'}`}>
               {groupLabel(group)}
             </span>
+            {/* Active vehicle trip → a compact colored status chip on the title
+                line. ADDITIONAL to the preview (line 2 still shows the latest
+                message), so the room's operational state is scannable without
+                losing the conversation preview. */}
+            {trip && (
+              <span className="shrink-0" title={tripLineFull ?? trip.statusLabel}>
+                <StatusChip tone={trip.statusTone} label={trip.statusLabel} />
+              </span>
+            )}
             {time && <span className="shrink-0 text-[10.5px] text-faint tabular-nums">{time}</span>}
           </span>
           <span className="flex items-center gap-2">
+            {/* Latest-message preview — always shown (incl. vehicle rooms with an
+                active trip); the trip status lives in the chip on the title line. */}
             <span className={`flex-1 truncate text-[12px] ${unread ? 'text-muted' : 'text-faint'}`}>
               {preview.prefix && (
                 <span className={unread ? 'text-muted font-medium' : 'text-faint'}>{preview.prefix} </span>
@@ -1142,11 +1164,17 @@ function GroupRow({
           />
         )}
       </span>
-      <span
-        className={`flex-1 min-w-0 truncate ${unread ? 'text-text font-medium' : ''}`}
-        style={{ fontSize: 'var(--sidebar-row-font-size)' }}
-      >
-        {groupLabel(group)}
+      <span className="flex-1 min-w-0 flex items-center gap-1.5">
+        <span
+          className={`min-w-0 truncate ${unread ? 'text-text font-medium' : ''}`}
+          style={{ fontSize: 'var(--sidebar-row-font-size)' }}
+        >
+          {groupLabel(group)}
+        </span>
+        {/* Vehicle-room active trip → a tiny colored status dot hugging the room
+            name. The Compact row is a single dense line, so a dot (not a chip)
+            keeps it uncluttered; the full status shows on hover. */}
+        {trip && <StatusDot tone={trip.statusTone} title={tripLineFull ?? trip.statusLabel} />}
       </span>
       {/* DM-only: the peer's company/workspace on the right, filling the unused
           Compact-view space so cross-company users are identifiable without a

@@ -13,10 +13,13 @@ import {
   type VehicleStop,
 } from '../lib/vehicleOps'
 import { api, ApiError } from '../lib/api'
+import { avatarUrl, clearAvatarCache } from '../lib/avatarCache'
 import { statusMeta, OFFLINE } from '../lib/availability'
 import { usePresence } from '../hooks/usePresence'
 import Avatar from './Avatar'
 import GroupAvatar from './GroupAvatar'
+import AvatarPhotoEditor from './AvatarPhotoEditor'
+import AvatarCropModal from './settings/AvatarCropModal'
 import Spinner from './Spinner'
 import { StatusChip } from './vehicle/opsControls'
 import VehicleInfoTab from './vehicle/VehicleInfoTab'
@@ -91,6 +94,34 @@ export default function GroupInfoPanel({
   const [roleBusyId, setRoleBusyId] = useState<string | null>(null)
   // Active operational tab (Info / Trip / Stops / Docs / Members).
   const [tab, setTab] = useState<PanelTab>('info')
+  // The picked vehicle image awaiting crop confirmation (no upload until the
+  // crop is confirmed). Local version busts the image cache after a change so
+  // the hero updates instantly; `onGroupUpdated({ hasAvatar })` flows the new
+  // state to the header + sidebar slots.
+  const [cropFile, setCropFile] = useState<File | null>(null)
+  const [avatarVersion, setAvatarVersion] = useState(0)
+
+  // Confirm from the crop modal: upload the cropped square, then refresh. Must
+  // THROW on failure so the crop modal surfaces a retryable error and stays open.
+  async function uploadCroppedAvatar(cropped: File) {
+    await api.groups.uploadAvatar(group.id, cropped)
+    clearAvatarCache('group', group.id)
+    setAvatarVersion((v) => v + 1)
+    onGroupUpdated({ hasAvatar: true })
+    setCropFile(null)
+  }
+
+  async function removeGroupAvatar() {
+    setError(null)
+    try {
+      await api.groups.removeAvatar(group.id)
+      clearAvatarCache('group', group.id)
+      setAvatarVersion((v) => v + 1)
+      onGroupUpdated({ hasAvatar: false })
+    } catch {
+      setError('Could not remove the image.')
+    }
+  }
 
   // Operational data, read off the group's meta (server-backed; re-derives each
   // render once a save flows the updated meta back through onGroupUpdated).
@@ -256,15 +287,15 @@ export default function GroupInfoPanel({
         aria-label="Group info"
         // Narrow screens: a fixed right-edge drawer (overlay) up to full width.
         // xl+ : a static, in-flow right column that sits beside the chat as its
-        // own subtle CARD — same rail bg + border + radius as the sidebar/chat
+        // own borderless surface — same rail bg + radius as the sidebar/chat
         // cards, with a gap from the chat (the row's xl:gap-3) — so the chat
-        // reflows narrower and the panel matches the app's card shell.
-        className="fixed top-0 right-0 bottom-0 z-40 w-full max-w-[400px] shadow-[-16px_0_48px_rgba(0,0,0,0.4)] bg-rail border-l border-white/[0.08] flex flex-col
+        // reflows narrower and the panel matches the app's flat card shell.
+        className="fixed top-0 right-0 bottom-0 z-40 w-full max-w-[400px] shadow-[-16px_0_48px_rgba(0,0,0,0.4)] bg-rail flex flex-col
                    xl:static xl:z-auto xl:w-[clamp(360px,26vw,420px)] xl:max-w-none xl:shrink-0 xl:shadow-none
-                   xl:border xl:border-white/[0.08] xl:rounded-[11px] xl:overflow-hidden"
+                   xl:rounded-[11px] xl:overflow-hidden"
       >
         {/* Header — same height as the chat header so the two line up. */}
-        <div className="h-[var(--header-height)] flex items-center justify-between px-4 border-b border-white/[0.06] shrink-0">
+        <div className="h-[var(--header-height)] flex items-center justify-between px-4 shrink-0">
           <span className="text-[13px] font-semibold">Group info</span>
           <button
             onClick={onClose}
@@ -276,12 +307,33 @@ export default function GroupInfoPanel({
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4">
-          {/* Identity — a GENERATED vehicle icon hero (same slot as the header /
-              sidebar). Vehicle rooms have no uploaded image, so there's no
-              upload/crop/remove control here. The manual vehicle status (when
-              set) shows as a chip so it's scannable above the tabs. */}
+          {/* Identity — the vehicle image is the hero (uploaded photo, or the
+              generated multi-user glyph as a fallback), in the same circular slot
+              as the header/sidebar. Managers change/remove it via the image
+              overlay + the "More" menu (top-right); no form-style buttons. The
+              manual vehicle status (when set) shows as a chip below. */}
           <div className="relative flex flex-col items-center text-center pt-1">
-            <GroupAvatar size={120} />
+            <AvatarPhotoEditor
+              size={120}
+              hasImage={Boolean(group.hasAvatar)}
+              canEdit={canManage}
+              noun="vehicle photo"
+              viewSrc={group.hasAvatar ? avatarUrl('group', group.id, avatarVersion) : undefined}
+              viewTitle={groupLabel(group)}
+              onFile={(file) => {
+                setError(null)
+                setCropFile(file)
+              }}
+              onRemove={removeGroupAvatar}
+              onError={setError}
+            >
+              <GroupAvatar
+                groupId={group.id}
+                hasAvatar={Boolean(group.hasAvatar)}
+                version={avatarVersion}
+                size={120}
+              />
+            </AvatarPhotoEditor>
             <div className="mt-3 text-[16px] font-semibold tracking-[-0.2px]">
               {groupLabel(group)}
             </div>
@@ -413,6 +465,16 @@ export default function GroupInfoPanel({
           </div>
         </div>
       </aside>
+
+      {/* Crop step — reuses the same WhatsApp-style cropper as profile photos.
+          It uploads on confirm and rejects on failure so the modal can retry. */}
+      {cropFile && (
+        <AvatarCropModal
+          file={cropFile}
+          onCancel={() => setCropFile(null)}
+          onConfirm={uploadCroppedAvatar}
+        />
+      )}
     </>
   )
 }

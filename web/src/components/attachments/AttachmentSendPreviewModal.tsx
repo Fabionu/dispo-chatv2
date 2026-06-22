@@ -9,7 +9,7 @@ import {
 import { useComposerAutosize } from '../../hooks/useComposerAutosize'
 import DocumentCard from './DocumentCard'
 import { PdfPagePreview } from './PdfRender'
-import { IconButton } from './IconAction'
+import HeaderIconButton from '../HeaderIconButton'
 
 type Props = {
   /** The staged file awaiting confirmation. */
@@ -121,13 +121,13 @@ export default function AttachmentSendPreviewModal({
       {/* Top bar: filename + icon-only replace/close (themed tooltips). */}
       <div className="flex items-center justify-between gap-3 px-2 py-1.5 shrink-0">
         <div className="text-[12.5px] text-text truncate flex-1 min-w-0">{file.name}</div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <IconButton label="Replace" onClick={pickReplace}>
-            <RefreshCw size={15} strokeWidth={1.6} />
-          </IconButton>
-          <IconButton label="Close" onClick={onCancel}>
-            <X size={15} strokeWidth={1.8} />
-          </IconButton>
+        <div className="flex items-center gap-0.5 shrink-0">
+          <HeaderIconButton label="Replace" onClick={pickReplace}>
+            <RefreshCw size={18} strokeWidth={1.8} />
+          </HeaderIconButton>
+          <HeaderIconButton label="Close" onClick={onCancel}>
+            <X size={18} strokeWidth={1.8} />
+          </HeaderIconButton>
         </div>
       </div>
 
@@ -163,23 +163,29 @@ export default function AttachmentSendPreviewModal({
         {error && (
           <div className="text-[11.5px] text-alert mb-1.5 text-center">{error}</div>
         )}
-        <div className="mx-auto w-full max-w-[820px] rounded-card border border-white/[0.14] bg-white/[0.045] focus-within:border-white/[0.24] focus-within:bg-white/[0.06] transition-colors flex items-end gap-2 px-3.5 py-2.5">
-          <textarea
-            ref={textareaRef}
-            value={caption}
-            onChange={(e) => setCaption(e.target.value)}
-            onKeyDown={onKeyDown}
-            rows={1}
-            placeholder="Add a caption…"
-            className="flex-1 bg-transparent text-[length:var(--chat-msg-font-size)] leading-[1.5] outline-none resize-none placeholder:text-faint overflow-y-auto max-h-[9em] py-1"
-          />
-          <button
-            onClick={submit}
-            aria-label="Send attachment"
-            className="h-7 w-7 shrink-0 flex items-center justify-center rounded-chip bg-text text-bg transition-opacity"
-          >
-            <ArrowUp size={15} strokeWidth={2.2} />
-          </button>
+        {/* Caption bar — the SAME borderless input shell as the main chat
+            composer (ChatComposer): solid `surface` fill, rounded-[14px], no
+            border, no focus tint, no shadow; identical textarea + circular send
+            button. Only the outer max-width/centering is preview-specific. */}
+        <div className="mx-auto w-full max-w-[820px] rounded-[14px] bg-surface">
+          <div className="flex items-center gap-1 px-2 py-1.5">
+            <textarea
+              ref={textareaRef}
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              onKeyDown={onKeyDown}
+              rows={1}
+              placeholder="Add a caption…"
+              className="flex-1 bg-transparent text-[length:var(--chat-msg-font-size)] leading-[1.5] outline-none resize-none placeholder:text-faint overflow-y-auto max-h-[9em] px-1.5 py-1.5"
+            />
+            <button
+              onClick={submit}
+              aria-label="Send attachment"
+              className="h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 flex items-center justify-center rounded-full bg-text text-bg hover:bg-text/90 transition-colors disabled:opacity-30 disabled:cursor-default disabled:hover:bg-text"
+            >
+              <ArrowUp size={15} strokeWidth={2.2} />
+            </button>
+          </div>
         </div>
       </div>
     </div>

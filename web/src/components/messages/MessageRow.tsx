@@ -204,8 +204,8 @@ function MessageRow({
   const deletedSkin = mine
     ? 'bg-white/[0.02] text-muted italic rounded-[8px] rounded-br-[3px]'
     : 'bg-white/[0.02] text-muted italic rounded-[8px] rounded-bl-[3px]'
-  // Minimal flat skins: neutral greys lifted above the grey chat surface
-  // (`bg` #141416) — incoming a touch darker than my own so the two read apart
+  // Minimal flat skins: neutral greys lifted above the near-black chat surface
+  // (`bg` #0b0b0c) — incoming a touch darker than my own so the two read apart
   // without any colour tint. Borderless, no shadow. The bubble itself never
   // changes on hover; only the actions affordance reveals. (Failed sends keep
   // an alert border as their error cue.)
