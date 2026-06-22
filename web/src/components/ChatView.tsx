@@ -50,7 +50,7 @@ const RECENT_IMAGE_WINDOW = 15
 // overlays the bottom of the message list (painted ABOVE the bubbles) so the
 // content fades out at the end of the window instead of cutting off — while
 // sitting BELOW the floating composer + chips (z-10/z-20) so the input stays
-// sharp. Fades to the chat background (`bg`, #0b0b0c).
+// sharp. Fades to the chat background (`bg`, #18181b).
 const CHAT_BOTTOM_FADE_HEIGHT = 56
 
 // Typing indicator cadence. We re-announce "still typing" at most once per
@@ -1300,7 +1300,7 @@ export default function ChatView({
               className="pointer-events-none absolute left-0 right-[var(--chat-scrollbar-gutter)] bottom-0 z-0"
               style={{
                 height: CHAT_BOTTOM_FADE_HEIGHT,
-                backgroundImage: 'linear-gradient(to top, #0b0b0c 0%, transparent 100%)',
+                backgroundImage: 'linear-gradient(to top, #18181b 0%, transparent 100%)',
               }}
             />
             {showScrollDown && (

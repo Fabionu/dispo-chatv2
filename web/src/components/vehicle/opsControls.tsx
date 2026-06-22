@@ -7,9 +7,9 @@ import type { ChipTone } from '../../lib/vehicleOps'
 
 // Map a chip tone to colour classes. The base four reuse the app's palette
 // tokens; the trip-progress tones use carefully desaturated hues tuned for the
-// dark theme. Kept as FULL class strings (incl. the tinted backgrounds) so
-// Tailwind's content scan keeps them. The chip layers a faint tone-tinted
-// surface + a solid dot + matching text so each state pops without a big card.
+// dark theme. Kept as FULL class strings so Tailwind's content scan keeps them.
+// The colour lives on the dot + text; the chip keeps the app's neutral grey pill
+// surface so every chip reads consistently (no per-status background wash).
 const TONE_TEXT: Record<ChipTone, string> = {
   muted: 'text-muted',
   done: 'text-done',
@@ -36,29 +36,13 @@ const TONE_DOT: Record<ChipTone, string> = {
   slate: 'bg-[#8a93a6]',
   orange: 'bg-[#d68a52]',
 }
-// Faint tone-tinted chip background. `muted` stays neutral (idle/planned reads
-// calm); every other tone gets a low-alpha wash of its own hue.
-const TONE_BG: Record<ChipTone, string> = {
-  muted: 'bg-white/[0.05]',
-  done: 'bg-done/12',
-  active: 'bg-active/12',
-  alert: 'bg-alert/12',
-  blue: 'bg-[#6f9bd1]/12',
-  green: 'bg-[#5fae72]/12',
-  cyan: 'bg-[#4fb3a7]/12',
-  purple: 'bg-[#a98bd6]/14',
-  indigo: 'bg-[#7c86d8]/14',
-  slate: 'bg-[#8a93a6]/12',
-  orange: 'bg-[#d68a52]/12',
-}
-
-// Compact status pill: a coloured dot + label on a faint tone-tinted surface.
-// Used wherever a status needs to be scannable at a glance (hero, stop rows,
-// trip header, sidebar). Stays small/elegant — never a card.
+// Compact status pill: a coloured dot + label on the app's neutral grey pill
+// surface. Used wherever a status needs to be scannable at a glance (hero, stop
+// rows, trip header, sidebar). Stays small/elegant — never a card.
 export function StatusChip({ tone, label }: { tone: ChipTone; label: string }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-chip px-1.5 py-0.5 text-[10.5px] font-medium ${TONE_BG[tone]} ${TONE_TEXT[tone]}`}
+      className={`inline-flex items-center gap-1.5 rounded-chip bg-white/[0.05] px-1.5 py-0.5 text-[10.5px] font-medium ${TONE_TEXT[tone]}`}
     >
       <span className={`h-1.5 w-1.5 rounded-full ${TONE_DOT[tone]}`} />
       {label}

@@ -220,9 +220,9 @@ html, body, #root {
 
 body {
   margin: 0;
-  /* Near-black app/chat base — keep in sync with the `bg` token in
+  /* Dark-grey app/chat base — keep in sync with the `bg` token in
      tailwind.config.js. */
-  background: #0b0b0c;
+  background: #18181b;
   color: #f4f1ec;
   font-family: 'Inter', system-ui, sans-serif;
   font-size: var(--app-font-size);
