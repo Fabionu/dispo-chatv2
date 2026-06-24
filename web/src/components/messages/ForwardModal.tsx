@@ -4,6 +4,8 @@ import type { Group } from '../../lib/types'
 import { groupLabel } from '../../lib/types'
 import { api, ApiError } from '../../lib/api'
 import Modal from '../Modal'
+import Avatar from '../Avatar'
+import GroupAvatar from '../GroupAvatar'
 import type { LocalMessage } from './types'
 
 type Props = {
@@ -104,6 +106,18 @@ export default function ForwardModal({ fromGroupId, message, onClose, onForwarde
                 disabled={busyId !== null}
                 className="w-full flex items-center justify-between gap-2.5 px-2 py-2 rounded-chip hover:bg-white/[0.02] transition-colors text-left disabled:opacity-50"
               >
+                {/* Same identity slot as the conversation rail: a DM shows the
+                    peer's photo (initials fallback), a vehicle group its uploaded
+                    image (generic multi-user glyph fallback). */}
+                {g.type === 'direct' ? (
+                  <Avatar
+                    userId={g.directPeer?.id ?? ''}
+                    name={g.directPeer?.name ?? groupLabel(g)}
+                    size={32}
+                  />
+                ) : (
+                  <GroupAvatar groupId={g.id} hasAvatar={Boolean(g.hasAvatar)} size={32} />
+                )}
                 <span className="min-w-0 flex-1">
                   <span className="block text-[12.5px] truncate">{groupLabel(g)}</span>
                   <span className="block text-[11px] text-faint truncate">

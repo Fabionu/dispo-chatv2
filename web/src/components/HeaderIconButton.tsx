@@ -1,5 +1,19 @@
 import type { ReactNode } from 'react'
 
+// ── Shared icon-button style ────────────────────────────────────────────────
+// ONE source of truth for the app's borderless 36×36 icon action button:
+// rounded-full, muted glyph that warms on hover, a subtle hover fill, an
+// on-theme focus ring, no border, no shadow. Exported so non-button preview
+// surfaces that can't use this component directly — e.g. the download <a> link
+// and the tooltip-wrapped buttons in the attachment preview action bar — render
+// the IDENTICAL control instead of a one-off class string.
+export const ICON_ACTION_BASE =
+  'h-9 w-9 flex items-center justify-center rounded-full transition-colors ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ' +
+  'disabled:opacity-30 disabled:cursor-default'
+export const ICON_ACTION_IDLE = 'text-muted hover:text-text hover:bg-white/[0.05]'
+export const ICON_ACTION_ACTIVE = 'text-text bg-white/[0.06]'
+
 type Props = {
   /** Accessible name + default tooltip. */
   label: string
@@ -40,9 +54,7 @@ export default function HeaderIconButton({
       aria-pressed={active}
       title={title ?? label}
       data-search-region={searchRegion ? '' : undefined}
-      className={`h-9 w-9 flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 disabled:opacity-30 disabled:cursor-default ${
-        active ? 'text-text bg-white/[0.06]' : 'text-muted hover:text-text hover:bg-white/[0.05]'
-      }`}
+      className={`${ICON_ACTION_BASE} ${active ? ICON_ACTION_ACTIVE : ICON_ACTION_IDLE}`}
     >
       {children}
     </button>

@@ -79,10 +79,10 @@ export default function SignIn() {
   const isSignIn = tab === 'signin'
 
   return (
-    <div className="min-h-screen w-full grid grid-cols-1 lg:grid-cols-2 bg-[#1f1e1d] text-text">
+    <div className="min-h-screen w-full grid grid-cols-1 lg:grid-cols-2 bg-[#181818] text-text">
       {/* LEFT — form. Sits directly on the near-black page, so the sign-in
           details read on a full-black surface. Pinned to the same near-black as
-          the `bg` chat surface (#1f1e1d) so the login background matches the app
+          the `bg` chat surface (#181818) so the login background matches the app
           and the `rail` marketing card floats a step lighter on top. */}
       <section className="relative flex flex-col px-8 sm:px-12 lg:px-16 py-8">
         {/* top bar */}

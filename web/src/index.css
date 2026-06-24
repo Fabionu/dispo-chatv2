@@ -220,10 +220,10 @@ html, body, #root {
 
 body {
   margin: 0;
-  /* Dark-grey app/chat base — keep in sync with the `bg` token in
+  /* Neutral dark-grey app/chat base — keep in sync with the `bg` token in
      tailwind.config.js. */
-  background: #1f1e1d;
-  color: #f4f1ec;
+  background: #181818;
+  color: #f5f5f5;
   font-family: 'Inter', system-ui, sans-serif;
   font-size: var(--app-font-size);
   line-height: 1.5;
@@ -274,7 +274,7 @@ input, button, textarea, select {
 
 input::placeholder {
   /* Keep in sync with the `faint` token — readable, not nearly invisible. */
-  color: #827e74;
+  color: #767676;
 }
 
 /* Native <select> dropdown options. The OS draws the open list itself and
@@ -284,8 +284,8 @@ input::placeholder {
    readable everywhere; the OS still paints its own highlight on the active row.
    Colours mirror the `surface` and `text` tokens (tailwind.config.js). */
 option {
-  background-color: #262624;
-  color: #f4f1ec;
+  background-color: #262626;
+  color: #f5f5f5;
 }
 
 button {
@@ -299,7 +299,7 @@ button {
   text-transform: uppercase;
   /* Section eyebrows: slightly brighter than before for legibility, still
      subdued (kept below the `muted` secondary tone). */
-  color: #9a958b;
+  color: #8a8a8a;
 }
 
 /* HERE map: keep the normal (default arrow) cursor everywhere on the map
@@ -341,8 +341,8 @@ button {
   transition: background 120ms, border-color 120ms;
 }
 .checkbox:checked {
-  background: #f4f1ec;
-  border-color: #f4f1ec;
+  background: #f5f5f5;
+  border-color: #f5f5f5;
 }
 .checkbox:checked::after {
   content: '';

@@ -133,10 +133,9 @@ export function trailerPlate(g: Group): string | undefined {
 
 // Build the one-line latest-message preview for a sidebar row, split into an
 // optional `prefix` (rendered slightly distinct) and the `text`. Prefix rules:
-//   - DM, mine        → "You:"   (the row already names the peer)
-//   - DM, peer        → none
-//   - vehicle, mine   → none
-//   - vehicle, other  → "<First name>:"  (need to know who spoke)
+//   - mine (any type) → none  (my own last message just shows the message)
+//   - DM, peer        → none  (the row already names the peer)
+//   - vehicle, other  → "<First name>:"  (name who spoke, since it's not me)
 // Fallbacks: deleted → "Deleted message", attachment-only → "Attachment",
 // empty/none → "No messages yet".
 export function groupPreview(
@@ -153,12 +152,12 @@ export function groupPreview(
   else if (lm.hasAttachments) text = 'Attachment'
   else text = 'No messages yet'
 
-  let prefix: string | null = null
-  if (g.type === 'direct') {
-    if (mine) prefix = 'You:'
-  } else if (!mine) {
-    prefix = `${(lm.authorName || 'Member').split(' ')[0]}:`
-  }
+  // Only vehicle rooms name the last sender, and only when it isn't me — my own
+  // messages (DM or group) show just the text, with no "You:" prefix.
+  const prefix =
+    !mine && g.type !== 'direct'
+      ? `${(lm.authorName || 'Member').split(' ')[0]}:`
+      : null
   return { prefix, text }
 }
 

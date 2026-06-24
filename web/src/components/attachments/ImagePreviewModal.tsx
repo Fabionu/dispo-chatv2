@@ -261,10 +261,10 @@ export default function ImagePreviewModal({
             disabled={view.scale <= MIN_SCALE}
             onClick={() => applyZoom(1 / BUTTON_STEP)}
           >
-            <ZoomOut size={15} strokeWidth={1.6} />
+            <ZoomOut size={18} strokeWidth={1.8} />
           </IconButton>
           <IconButton label="Fit to screen" tooltipSide="top" onClick={() => setView(FIT)}>
-            <Maximize size={15} strokeWidth={1.6} />
+            <Maximize size={18} strokeWidth={1.8} />
           </IconButton>
           <IconButton
             label="Zoom in"
@@ -272,7 +272,7 @@ export default function ImagePreviewModal({
             disabled={view.scale >= MAX_SCALE}
             onClick={() => applyZoom(BUTTON_STEP)}
           >
-            <ZoomIn size={15} strokeWidth={1.6} />
+            <ZoomIn size={18} strokeWidth={1.8} />
           </IconButton>
         </div>
       </div>

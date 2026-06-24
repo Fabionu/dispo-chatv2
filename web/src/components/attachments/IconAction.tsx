@@ -1,17 +1,20 @@
 import type { ReactNode } from 'react'
+import HeaderIconButton, {
+  ICON_ACTION_BASE,
+  ICON_ACTION_IDLE,
+} from '../HeaderIconButton'
 
 // Shared icon-only action controls for the attachment preview surfaces (image
-// lightbox, PDF shell, document card). Every button is a uniform 36×36 square
-// with NO visible text — just a lucide glyph — and a themed hover tooltip that
-// names the action. Tooltips are CSS-only (group-hover), so they match the dark
-// theme instead of the browser's native title bubble, while `aria-label` keeps
-// the control accessible. A native `title` is kept as a no-JS/long-hover
-// backstop only.
-
-const BTN =
-  'h-9 w-9 inline-flex items-center justify-center rounded-btn border border-white/[0.14] ' +
-  'text-text hover:bg-white/[0.06] disabled:opacity-40 disabled:hover:bg-transparent ' +
-  'transition-colors no-underline'
+// lightbox, image/PDF/document preview modals, the shared action bar). Every
+// control is the SAME borderless 36×36 button as the conversation header and
+// the send preview modal — the visual style lives once in HeaderIconButton
+// (ICON_ACTION_*), and both variants here reuse it so nothing drifts:
+//   • IconButton — delegates straight to HeaderIconButton.
+//   • IconLink   — an <a> (for native downloads), which can't be a <button>, so
+//                  it reuses the same base + idle classes.
+// Each adds a themed hover tooltip (CSS-only, group-hover) that names the
+// action and matches the dark theme instead of the browser's native title
+// bubble; `aria-label`/`title` keep the control accessible.
 
 type TooltipSide = 'top' | 'bottom'
 
@@ -42,16 +45,9 @@ type ButtonProps = {
 export function IconButton({ label, onClick, children, disabled, tooltipSide }: ButtonProps) {
   return (
     <span className="group relative inline-flex">
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={disabled}
-        aria-label={label}
-        title={label}
-        className={BTN}
-      >
+      <HeaderIconButton label={label} onClick={onClick} disabled={disabled}>
         {children}
-      </button>
+      </HeaderIconButton>
       <Tooltip label={label} side={tooltipSide} />
     </span>
   )
@@ -68,7 +64,13 @@ type LinkProps = {
 export function IconLink({ label, href, download, children, tooltipSide }: LinkProps) {
   return (
     <span className="group relative inline-flex">
-      <a href={href} download={download} aria-label={label} title={label} className={BTN}>
+      <a
+        href={href}
+        download={download}
+        aria-label={label}
+        title={label}
+        className={`${ICON_ACTION_BASE} ${ICON_ACTION_IDLE} no-underline`}
+      >
         {children}
       </a>
       <Tooltip label={label} side={tooltipSide} />

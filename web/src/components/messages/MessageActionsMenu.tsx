@@ -15,7 +15,7 @@ export type MessageAction = {
 }
 
 type Props = {
-  // Either anchor the menu to the chevron trigger (right-aligned under it) …
+  // Either anchor the menu to the chevron trigger (left-aligned under it) …
   anchorEl?: HTMLElement | null
   // … or open it at a cursor point (right-click). Exactly one is provided.
   anchorPoint?: { x: number; y: number }
@@ -57,7 +57,14 @@ export default function MessageActionsMenu({ anchorEl, anchorPoint, actions, onC
       if (top + mRect.height > window.innerHeight - 8) top = anchorPoint.y - mRect.height - 4
     } else if (anchorEl) {
       const a = anchorEl.getBoundingClientRect()
-      left = a.right - mRect.width
+      // Anchor the menu's top-left corner under the chevron: align its left edge
+      // with the chevron's left edge so it opens to the RIGHT. If that would run
+      // off the right edge (e.g. the image/attachment chevron sits at the
+      // bubble's right edge), flip to right-aligned — anchor the menu's right
+      // edge to the chevron so it opens LEFT and stays adjacent to the trigger
+      // instead of being clamped to the far corner.
+      left = a.left
+      if (left + mRect.width > window.innerWidth - 8) left = a.right - mRect.width
       top = a.bottom + 4
       if (top + mRect.height > window.innerHeight - 8) top = a.top - mRect.height - 4
     } else {

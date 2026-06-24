@@ -26,16 +26,16 @@ export default function PreviewActionBar({
   return (
     <div className="flex items-center gap-1.5 shrink-0">
       <IconButton label="Reply" onClick={() => onReply(message)}>
-        <Reply size={15} strokeWidth={1.6} />
+        <Reply size={18} strokeWidth={1.8} />
       </IconButton>
       <IconButton label="Forward" onClick={() => onForward(message)}>
-        <Forward size={15} strokeWidth={1.6} />
+        <Forward size={18} strokeWidth={1.8} />
       </IconButton>
       <IconLink label="Download" href={attachment.url} download={attachment.originalName}>
-        <Download size={15} strokeWidth={1.6} />
+        <Download size={18} strokeWidth={1.8} />
       </IconLink>
       <IconButton label="Close" onClick={onClose}>
-        <X size={15} strokeWidth={1.8} />
+        <X size={18} strokeWidth={1.8} />
       </IconButton>
     </div>
   )

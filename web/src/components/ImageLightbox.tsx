@@ -165,7 +165,7 @@ export default function ImageLightbox({ src, title, onClose }: Props) {
       <div className="flex items-center justify-between gap-3 px-2 py-1.5" onClick={stop}>
         <div className="text-[12.5px] text-text truncate flex-1 min-w-0">{title}</div>
         <IconButton label="Close" onClick={onClose}>
-          <X size={16} strokeWidth={1.8} />
+          <X size={18} strokeWidth={1.8} />
         </IconButton>
       </div>
 
@@ -200,10 +200,10 @@ export default function ImageLightbox({ src, title, onClose }: Props) {
             disabled={view.scale <= MIN_SCALE}
             onClick={() => applyZoom(1 / BUTTON_STEP)}
           >
-            <ZoomOut size={15} strokeWidth={1.6} />
+            <ZoomOut size={18} strokeWidth={1.8} />
           </IconButton>
           <IconButton label="Fit to screen" tooltipSide="top" onClick={() => setView(FIT)}>
-            <Maximize size={15} strokeWidth={1.6} />
+            <Maximize size={18} strokeWidth={1.8} />
           </IconButton>
           <IconButton
             label="Zoom in"
@@ -211,7 +211,7 @@ export default function ImageLightbox({ src, title, onClose }: Props) {
             disabled={view.scale >= MAX_SCALE}
             onClick={() => applyZoom(BUTTON_STEP)}
           >
-            <ZoomIn size={15} strokeWidth={1.6} />
+            <ZoomIn size={18} strokeWidth={1.8} />
           </IconButton>
         </div>
       </div>

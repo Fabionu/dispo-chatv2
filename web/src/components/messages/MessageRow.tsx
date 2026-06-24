@@ -200,22 +200,22 @@ function MessageRow({
   // only messages keep a comfortable-but-compact padding. Caption text and the
   // meta footer re-add a small inset on media bubbles (see below).
   const bubblePad = hasAttachment ? 'p-1' : 'px-3 pt-1.5 pb-1'
-  const bubbleBase = `${bubblePad} text-[length:var(--chat-msg-font-size)] leading-[1.45] flex flex-col text-[#F4F1EC] transition-[box-shadow,border-color] duration-500`
+  const bubbleBase = `${bubblePad} text-[length:var(--chat-msg-font-size)] leading-[1.45] flex flex-col text-[#F5F5F5] transition-[box-shadow,border-color] duration-500`
   const deletedSkin = mine
     ? 'bg-white/[0.02] text-muted italic rounded-[8px] rounded-br-[3px]'
     : 'bg-white/[0.02] text-muted italic rounded-[8px] rounded-bl-[3px]'
-  // Minimal flat skins: warm greys lifted above the warm chat surface
-  // (`bg` #1f1e1d) — incoming a touch darker than my own so the two read apart
-  // without any cool tint. Borderless, no shadow. The bubble itself never
-  // changes on hover; only the actions affordance reveals. (Failed sends keep
-  // an alert border as their error cue.)
+  // Minimal flat skins: neutral greys lifted above the neutral chat surface
+  // (`bg` #181818) — incoming a touch darker than my own so the two read apart.
+  // Borderless, no shadow. The bubble itself never changes on hover; only the
+  // actions affordance reveals. (Failed sends keep an alert border as their
+  // error cue.)
   const bubbleSkin = deleted
     ? deletedSkin
     : mine
       ? failed
-        ? 'bg-[#30302E] border border-alert/50 rounded-[8px] rounded-br-[3px]'
-        : 'bg-[#30302E] rounded-[8px] rounded-br-[3px]'
-      : 'bg-[#262624] rounded-[8px] rounded-bl-[3px]'
+        ? 'bg-[#303030] border border-alert/50 rounded-[8px] rounded-br-[3px]'
+        : 'bg-[#303030] rounded-[8px] rounded-br-[3px]'
+      : 'bg-[#262626] rounded-[8px] rounded-bl-[3px]'
   // Subtle, theme-warm pulse applied when this row is the target of a
   // jump-to-original. Clears after ~1.8s back in ChatView.
   const highlightSkin = highlighted ? 'ring-2 ring-active/60' : ''
@@ -314,8 +314,10 @@ function MessageRow({
   // only subtly (warmer name + read ticks) — never by alignment
   // or a bubble. Per-message time trails the body on the row's end (faint, never
   // in the header, never above the text). A single subtle dropdown chevron
-  // reveals in the reserved left gutter on hover and opens the full actions
-  // menu; right-click opens the same menu — both reuse the same handlers.
+  // reveals on hover, ATTACHED to the content: for text it sits just after the
+  // last line (before the time/ticks); for attachment-only messages it sits to
+  // the RIGHT of the media (never below it). It opens the full actions menu;
+  // right-click opens the same menu — both reuse the same handlers.
   if (display === 'plain') {
     const authorLabel = message.authorName || 'Member'
     const time = formatTime(message.createdAt)
@@ -340,11 +342,37 @@ function MessageRow({
             align="right"
           />
         )}
-        <span className="text-[10px] text-faint tabular-nums opacity-0 transition-opacity group-hover/msg:opacity-100">
+        {/* Time is always visible (no hover-reveal) so the log is scannable
+            without hovering each row. */}
+        <span className="text-[10px] text-faint tabular-nums">
           {time}
         </span>
       </span>
     )
+
+    // Actions chevron — sits inline AFTER the message text but BEFORE the
+    // trailing timestamp / read-ticks (the metaCluster). Icon-only, no chrome;
+    // revealed on this row's hover/focus. Always mounted (opacity-only) so
+    // revealing it never reflows the line. Clicking opens the full actions menu;
+    // right-click on the row opens the same menu. Null for rows that don't
+    // expose actions (pending / failed / deleted) — they show no chevron.
+    const actionsTrigger = canShowActions ? (
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setMenu((m) => (m === 'chevron' ? null : 'chevron'))}
+        aria-label="Message actions"
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        className={`shrink-0 flex items-center justify-center text-faint transition hover:text-text leading-none pb-[2px] ${
+          menuOpen
+            ? 'opacity-100 text-text'
+            : 'opacity-0 group-hover/msg:opacity-100 focus-visible:opacity-100'
+        }`}
+      >
+        <ChevronDown size={15} strokeWidth={1.8} />
+      </button>
+    ) : null
 
     return (
       <>
@@ -401,41 +429,13 @@ function MessageRow({
                 </div>
               )}
 
-              {/* Message block: chevron gutter + message content. The chevron
-                  gutter sits at the content-left edge (under the author name) and
-                  the body indents past it — so the chevron lands on the MESSAGE
-                  TEXT row, aligned to its first line, never the author row. Its
-                  fixed width means the body never shifts when it reveals. */}
-              <div className="flex items-start gap-1 w-full">
-                {/* Actions trigger — icon-only, revealed on this row's hover/
-                    focus. No background, border, shadow or rounded box — just a
-                    muted glyph that brightens on hover. Clicking opens the full
-                    actions menu (reply / forward / edit / delete / pin / copy …);
-                    right-click still opens it too. */}
-                <div className="w-4 shrink-0 pt-0.5 flex justify-center">
-                  {canShowActions && (
-                    <button
-                      ref={triggerRef}
-                      type="button"
-                      onClick={() => setMenu((m) => (m === 'chevron' ? null : 'chevron'))}
-                      aria-label="Message actions"
-                      aria-haspopup="menu"
-                      aria-expanded={menuOpen}
-                      className={`flex items-center justify-center text-faint transition hover:text-text ${
-                        menuOpen
-                          ? 'opacity-100 text-text'
-                          : 'opacity-0 group-hover/msg:opacity-100 focus-visible:opacity-100'
-                      }`}
-                    >
-                      <ChevronDown size={15} strokeWidth={1.8} />
-                    </button>
-                  )}
-                </div>
-
-                {/* Message content sub-column — reply quote / pins / attachments
-                    / body, all indented past the chevron gutter so they align
-                    with each other. */}
-                <div className="min-w-0 flex-1 flex flex-col items-start">
+              {/* Message block — reply quote / pins / attachments / body, all
+                  left-aligned under the author name (no left indent). The actions
+                  chevron is NOT a separate gutter: it's rendered inline at the
+                  END of the text row, right after the body and just before the
+                  trailing timestamp / read-ticks (see metaCluster usages below),
+                  so it follows the text without interrupting reading. */}
+              <div className="min-w-0 w-full flex flex-col items-start">
                   {!deleted && message.replyTo && (
                     <ReplyQuote replyTo={message.replyTo} onJump={onJumpToMessage} />
                   )}
@@ -449,18 +449,34 @@ function MessageRow({
                   )}
 
                   {!deleted && message.attachments && message.attachments.length > 0 && (
-                    <div className="flex flex-col gap-1 my-1 max-w-full">
-                      {message.attachments.map((a, i) => (
-                        <AttachmentBlock
-                          key={i}
-                          attachment={a}
-                          uploading={pending}
-                          priority={imagePriority}
-                          captioned={Boolean(message.body)}
-                          onActivate={(a) => onActivateAttachment(message, a)}
-                          onImageLoad={onImageLoad}
-                        />
-                      ))}
+                    // Media + (for attachment-ONLY messages) the actions chevron
+                    // to the RIGHT of the media, top-aligned — never below it.
+                    // Captioned attachments omit the chevron here; it rides the
+                    // caption's text row instead (see the body branch below), so
+                    // there's never a duplicate.
+                    <div className="flex items-start gap-1.5 my-1 max-w-full">
+                      <div className="flex flex-col gap-1 min-w-0">
+                        {message.attachments.map((a, i) => (
+                          <AttachmentBlock
+                            key={i}
+                            attachment={a}
+                            uploading={pending}
+                            priority={imagePriority}
+                            captioned={Boolean(message.body)}
+                            onActivate={(a) => onActivateAttachment(message, a)}
+                            onImageLoad={onImageLoad}
+                          />
+                        ))}
+                        {/* Attachment-only: time/ticks sit in the bottom-RIGHT
+                            corner under the media (right-aligned to the image's
+                            edge), matching the bubble layout — not on a left row
+                            below. Captioned attachments keep their meta inline
+                            with the caption (body branch below). */}
+                        {!message.body && (
+                          <div className="flex justify-end -mt-0.5">{metaCluster}</div>
+                        )}
+                      </div>
+                      {!message.body && <div className="pt-0.5">{actionsTrigger}</div>}
                     </div>
                   )}
 
@@ -478,14 +494,32 @@ function MessageRow({
                       </span>
                     </div>
                   ) : message.body ? (
-                    <div className="flex items-end gap-2 max-w-full">
-                      <span className="min-w-0 text-[length:var(--chat-plain-font-size)] leading-[1.55] text-[#F4F1EC] whitespace-pre-wrap break-words">
-                        {renderBody(message.body, message.mentions, currentUserId)}
+                    // Text (or image caption): chevron + trailing time/ticks flow
+                    // INLINE at the very end of the text — NOT as a flex sibling —
+                    // so on a wrapped message they trail the LAST line instead of
+                    // floating off at the row's right edge. They're two separate
+                    // inline boxes with DIFFERENT vertical anchors:
+                    //   • the chevron uses align-text-top so it sits level with the
+                    //     TOP of the text line;
+                    //   • the time/ticks use align-bottom so they stay in the
+                    //     bottom corner (on the text baseline) as before.
+                    // A ~4px lead keeps each attached; both stay one-piece (nowrap).
+                    <div className="max-w-full text-[length:var(--chat-plain-font-size)] leading-[1.55] text-[#F5F5F5] whitespace-pre-wrap break-words">
+                      {renderBody(message.body, message.mentions, currentUserId)}
+                      {actionsTrigger && (
+                        // Collapsed to zero width when the row isn't hovered, so
+                        // the trailing time/ticks tuck right up against the text.
+                        // On hover it expands (animated) to make room for the
+                        // chevron, nudging the meta over — space is only reserved
+                        // for the arrow while it's actually shown.
+                        <span className="inline-flex align-text-top overflow-hidden max-w-0 ml-0 group-hover/msg:max-w-[20px] group-hover/msg:ml-1 transition-[max-width,margin] duration-200 ease-out">
+                          {actionsTrigger}
+                        </span>
+                      )}
+                      <span className="inline-flex items-end align-bottom ml-1 whitespace-nowrap">
+                        {metaCluster}
                       </span>
-                      {metaCluster}
                     </div>
-                  ) : message.attachments && message.attachments.length > 0 ? (
-                    <div className="flex max-w-full">{metaCluster}</div>
                   ) : null}
 
                   {failed && mine && message.localId && (
@@ -496,7 +530,6 @@ function MessageRow({
                       Tap to retry
                     </button>
                   )}
-                </div>
               </div>
             </div>
           </div>
