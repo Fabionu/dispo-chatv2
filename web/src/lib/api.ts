@@ -352,9 +352,14 @@ export const api = {
     // major road, else snaps the coordinate onto the nearest routable road (so a
     // stop never lands in a field). `place` is null only when HERE finds nothing
     // and the caller should keep the raw coordinate.
-    snap: (lat: number, lng: number, zoom?: number) =>
+    // `course` (the route's travel heading at this point, 0–359° from north)
+    // makes the snap DIRECTION-AWARE: HERE matches the correct carriageway of a
+    // divided road instead of the opposite/contraflow side.
+    snap: (lat: number, lng: number, zoom?: number, course?: number) =>
       request<{ place: { label: string; position: LatLng; major?: boolean } | null }>(
-        `/here/snap?at=${lat},${lng}${zoom !== undefined ? `&zoom=${zoom}` : ''}`,
+        `/here/snap?at=${lat},${lng}${zoom !== undefined ? `&zoom=${zoom}` : ''}${
+          course !== undefined ? `&course=${Math.round(course)}` : ''
+        }`,
       ),
 
     // Truck route (HERE Routing v8, transportMode=truck). `via` is the ordered

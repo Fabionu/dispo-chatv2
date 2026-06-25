@@ -286,12 +286,13 @@ export default function RoutePlanner({ onBack }: Props) {
   // then recalc. `section` maps to the stops-array insertion index (section i
   // joins waypoint i and i+1, so the new stop becomes waypoint i+1).
   async function handleRouteDragEnd(section: number, lat: number, lng: number, zoom: number) {
-    // Heading of the grabbed section at the release point → keeps the inserted
-    // stop on the correct carriageway (no flip onto the oncoming road).
+    // Heading of the grabbed section at the release point → drives BOTH the
+    // direction-aware snap (correct carriageway, not the oncoming road) and the
+    // recalc waypoint course. Computed before the snap so the snap can use it.
     const seg = sectionCoords[section]
     const course = seg ? routeCourseNear({ lat, lng }, [seg]) ?? undefined : undefined
-    const resolved = await resolveClicked(lat, lng, zoom)
-    addStop({ ...resolved, source: 'drag', course }, section)
+    const resolved = await resolveClicked(lat, lng, zoom, course)
+    addStop({ ...resolved, source: 'drag' }, section)
     recalcAfterDragRef.current = true
   }
 
@@ -459,13 +460,18 @@ export default function RoutePlanner({ onBack }: Props) {
   // failure or empty result falls back to the raw coordinate so adding a stop is
   // never blocked. `zoom` biases the snap toward visible major roads when zoomed
   // out. The returned label stays consistent with the returned coordinate.
+  // `course` (route travel heading here) makes the snap DIRECTION-AWARE so the
+  // point lands on the correct carriageway of a divided road, not the contraflow
+  // side. Undefined when there's no route direction to reference (e.g. the very
+  // first points, or a click far from any route).
   async function snapCoordinate(
     lat: number,
     lng: number,
     zoom?: number,
+    course?: number,
   ): Promise<{ label: string; coordinates: LatLng; snapped: boolean }> {
     try {
-      const { place } = await api.here.snap(lat, lng, zoom)
+      const { place } = await api.here.snap(lat, lng, zoom, course)
       if (place?.position) {
         setSnapNote(null)
         if (snapDebug())
@@ -474,6 +480,7 @@ export default function RoutePlanner({ onBack }: Props) {
             raw: { lat, lng },
             snapped: place.position,
             movedMeters: Math.round(haversineMeters({ lat, lng }, place.position)),
+            course,
             label: place.label,
             zoom,
           })
@@ -484,15 +491,22 @@ export default function RoutePlanner({ onBack }: Props) {
     }
     if (snapDebug())
       // eslint-disable-next-line no-console
-      console.log('[routeSnap] snap failed — using raw coordinate', { lat, lng, zoom })
+      console.log('[routeSnap] snap failed — using raw coordinate', { lat, lng, zoom, course })
     setSnapNote('Could not snap the point to a road — using the exact location.')
     return { label: fmtCoord({ lat, lng }), coordinates: { lat, lng }, snapped: false }
   }
 
-  // Resolve a clicked coordinate into a fresh route point (new id), road-snapped.
-  async function resolveClicked(lat: number, lng: number, zoom?: number): Promise<Omit<RoutePoint, 'role'>> {
-    const s = await snapCoordinate(lat, lng, zoom)
-    return { id: uid(), label: s.label, coordinates: s.coordinates, source: 'map', snapped: s.snapped }
+  // Resolve a clicked coordinate into a fresh route point (new id), road-snapped
+  // and (when `course` is known) on the correct carriageway. The course is kept
+  // on the point so the truck recalc routes through it in the same direction.
+  async function resolveClicked(
+    lat: number,
+    lng: number,
+    zoom?: number,
+    course?: number,
+  ): Promise<Omit<RoutePoint, 'role'>> {
+    const s = await snapCoordinate(lat, lng, zoom, course)
+    return { id: uid(), label: s.label, coordinates: s.coordinates, source: 'map', snapped: s.snapped, course }
   }
 
   // ── Marker drag → snap to road + recalc ───────────────────────────────────
@@ -500,10 +514,10 @@ export default function RoutePlanner({ onBack }: Props) {
   // SAME central snap, then recalcs immediately (like a route-line drag) so the
   // route redraws through the moved point.
   async function handleMarkerDragEnd(id: string, lat: number, lng: number, zoom: number) {
-    const s = await snapCoordinate(lat, lng, zoom)
-    // If a route exists, bias the moved point onto the route's travel direction
-    // near the drop so the recalc keeps the correct carriageway.
+    // Travel direction of the route nearest the drop — computed BEFORE the snap
+    // so the snap itself lands on the correct carriageway (not just the recalc).
     const course = sectionCoords.length ? routeCourseNear({ lat, lng }, sectionCoords) ?? undefined : undefined
+    const s = await snapCoordinate(lat, lng, zoom, course)
     setPoints((prev) =>
       prev.map((p) =>
         p.id === id
@@ -528,7 +542,14 @@ export default function RoutePlanner({ onBack }: Props) {
     const { lat, lng, zoom } = menu
     const insertIndex = nearOnRoute
     setMenu(null)
-    const point = await resolveClicked(lat, lng, zoom)
+    // Direction-aware snap for intermediate stops added against an existing route
+    // (use the route's travel heading near the click so it lands on the correct
+    // carriageway). Endpoints have no inbound route direction yet → no course.
+    const course =
+      (action === 'add' || action === 'add-on-route') && sectionCoords.length
+        ? routeCourseNear({ lat, lng }, sectionCoords) ?? undefined
+        : undefined
+    const point = await resolveClicked(lat, lng, zoom, course)
     if (action === 'start') setStart(point)
     else if (action === 'destination') setDestinationPoint(point)
     // Plain "Add stop": slot it into the most logical position. "Add stop on

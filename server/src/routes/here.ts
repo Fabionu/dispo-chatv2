@@ -188,6 +188,13 @@ function parseZoom(raw: unknown): number {
   return Number.isFinite(z) ? Math.max(0, Math.min(20, z)) : 18
 }
 
+// Optional travel heading (deg, clockwise from north) the route runs at this
+// point, normalised to [0,360). Absent → undefined (non-directional snap).
+function parseCourse(raw: unknown): number | undefined {
+  const c = typeof raw === 'string' ? Number(raw) : NaN
+  return Number.isFinite(c) ? ((c % 360) + 360) % 360 : undefined
+}
+
 // Ground metres covered by ONE screen pixel at a Web-Mercator zoom level and
 // latitude. Lets the snap radius track what the user can actually SEE: the road
 // under the cursor sits within a few pixels of the release, which is a small
@@ -257,6 +264,22 @@ async function streetSnap(apiKey: string, at: HerePosition, zoom: number): Promi
   }
 }
 
+// Move a coordinate `meters` along a compass `bearingDeg` (great-circle). Used
+// to head the routeSnap probe in the route's travel direction so HERE matches
+// the correct carriageway.
+function offsetAlong(at: HerePosition, bearingDeg: number, meters: number): HerePosition {
+  const R = 6371000
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const toDeg = (r: number) => (r * 180) / Math.PI
+  const d = meters / R
+  const t = toRad(bearingDeg)
+  const lat1 = toRad(at.lat)
+  const lng1 = toRad(at.lng)
+  const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(t))
+  const lng2 = lng1 + Math.atan2(Math.sin(t) * Math.sin(d) * Math.cos(lat1), Math.cos(d) - Math.sin(lat1) * Math.sin(lat2))
+  return { lat: toDeg(lat2), lng: toDeg(lng2) }
+}
+
 // Routing-based snap: ask HERE Routing for a route that STARTS at the clicked
 // point and use the road-snapped origin it returns (section[0].departure.place
 // .location is the on-road coordinate; place.originalLocation is the raw input).
@@ -266,16 +289,26 @@ async function streetSnap(apiKey: string, at: HerePosition, zoom: number): Promi
 // destination differ; only the snapped ORIGIN is used. Returns null on any
 // failure so callers can fall back. The subsequent truck-route recalc re-snaps
 // every waypoint onto the actual truck route anyway.
-async function routeSnap(apiKey: string, at: HerePosition): Promise<HerePosition | null> {
+//
+// DIRECTION-AWARE: when `course` (the route's A→B heading here) is given, we tag
+// the origin with `;course=` and aim the trivial route THAT way, so HERE matches
+// the origin to the road link travelling in that direction — i.e. the correct
+// carriageway of a divided road, not the opposite/contraflow side.
+async function routeSnap(apiKey: string, at: HerePosition, course?: number): Promise<HerePosition | null> {
   try {
     const url = new URL(routeBase)
     url.searchParams.set('apiKey', apiKey)
     url.searchParams.set('transportMode', 'car')
     url.searchParams.set('routingMode', 'fast')
-    url.searchParams.set('origin', `${at.lat},${at.lng}`)
-    // ~100 m offset so the pair is a valid (trivial) route; destination is also
-    // snapped by HERE but we ignore it and keep only the snapped origin.
-    url.searchParams.set('destination', `${at.lat + 0.0009},${at.lng + 0.0009}`)
+    const origin =
+      course !== undefined ? `${at.lat},${at.lng};course=${Math.round(course)}` : `${at.lat},${at.lng}`
+    // Destination: ~150 m ahead ALONG the course when known (reinforces the
+    // direction), else the old fixed ~100 m NE offset. Only the snapped ORIGIN
+    // is used; the destination just makes the pair a valid trivial route.
+    const dest =
+      course !== undefined ? offsetAlong(at, course, 150) : { lat: at.lat + 0.0009, lng: at.lng + 0.0009 }
+    url.searchParams.set('origin', origin)
+    url.searchParams.set('destination', `${dest.lat},${dest.lng}`)
     url.searchParams.set('return', 'summary')
     const data = await hereJson<HereRouteResponse>(url)
     const loc = data.routes?.[0]?.sections?.[0]?.departure?.place?.location
@@ -307,31 +340,53 @@ hereRouter.get(
 // jumping off the intended main road onto a closer field track.
 const ROUTE_REFINE_METERS = 70
 
-// ── GET /api/here/snap?at=lat,lng[&zoom=Z] ───────────────────────────────
-// The CENTRAL road-snap every add/drag/release path uses. The STREET snap is
-// authoritative: it picks the road NEAREST the release within a zoom-scaled
-// (visible-pixel) radius, with only a mild preference for major roads — so the
-// point lands on the road the user can see under the cursor, upgrading to a
-// highway only when one is right there (never a far jump). Routing then keeps it
-// on a real, ROUTABLE road:
-//   1) streetSnap() → nearest visible street (mild major preference).
-//   2) refine it with routeSnap(streetPos): if routing lands within
-//      ROUTE_REFINE_METERS, use that (guarantees routability) — else keep the
-//      street coordinate. The guard prevents routing from yanking the snap onto
-//      a different, smaller road.
-//   3) no street at all → routeSnap(raw click) as an on-road fallback.
-//   4) nothing routable → {place:null} so the client keeps the raw coordinate.
+// Max metres a DIRECTION-AWARE snap may move the point. Larger than the plain
+// refinement so it can cross a divided road's median to the correct carriageway,
+// but still bounded so it can't fly onto a different road entirely.
+const DIRECTION_REFINE_METERS = 160
+
+// ── GET /api/here/snap?at=lat,lng[&zoom=Z][&course=DEG] ──────────────────
+// The CENTRAL road-snap every add/drag/release path uses. The STREET snap finds
+// the road NEAREST the release within a zoom-scaled (visible-pixel) radius, with
+// a mild major-road preference — so the point lands on the road the user sees
+// under the cursor. Routing then keeps it on a real, ROUTABLE road AND, when a
+// travel direction is known, on the correct carriageway:
+//   • course given → routeSnap(at, course) matches the road link heading that
+//     way (the route's A→B direction here). If that on-road point is within
+//     DIRECTION_REFINE_METERS of the visible road, use it — this is what stops a
+//     point landing on the opposite/contraflow carriageway of a divided road.
+//   • otherwise → streetSnap refined by routeSnap(streetPos) within
+//     ROUTE_REFINE_METERS (nearest routable road, no direction).
+//   • no street → routeSnap(raw) on-road fallback; nothing routable → {place:null}
+//     so the client keeps the raw coordinate.
 hereRouter.get(
   '/snap',
   asyncHandler(async (req, res) => {
     const apiKey = requireHereKey()
     const at = parseAt(req.query.at)
     const zoom = parseZoom(req.query.zoom)
+    const course = parseCourse(req.query.course)
 
     const street = await streetSnap(apiKey, at, zoom)
+
+    // Direction-aware first: snap onto the carriageway travelling along `course`.
+    // Accept it only when it stays near the visible road (same road, correct
+    // side) rather than jumping to a different one.
+    if (course !== undefined) {
+      const routed = await routeSnap(apiKey, at, course)
+      if (routed) {
+        const ref = street?.position ?? at
+        if (metersBetween(routed, ref) <= DIRECTION_REFINE_METERS) {
+          return res.json({
+            place: { label: street?.label ?? '', position: routed, major: street?.major ?? false },
+          })
+        }
+      }
+    }
+
     if (street) {
-      // Refine the major-biased street snap onto its routable centreline, but
-      // only accept the routed point when it stays close (don't jump roads).
+      // Refine the street snap onto its routable centreline, but only accept the
+      // routed point when it stays close (don't jump roads).
       const routed = await routeSnap(apiKey, street.position)
       const position =
         routed && metersBetween(routed, street.position) <= ROUTE_REFINE_METERS
@@ -342,7 +397,7 @@ hereRouter.get(
 
     // No street found near the click — guarantee an on-road coordinate from the
     // raw point so a stop still lands on a road rather than in a field.
-    const routed = await routeSnap(apiKey, at)
+    const routed = await routeSnap(apiKey, at, course)
     if (routed) return res.json({ place: { label: '', position: routed, major: false } })
 
     // Nothing routable nearby — let the client keep the raw coordinate.
