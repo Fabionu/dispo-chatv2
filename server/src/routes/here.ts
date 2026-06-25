@@ -157,17 +157,30 @@ function metersBetween(a: HerePosition, b: HerePosition): number {
 
 // Heuristic "is this a major road?" from the street name / title. HERE Reverse
 // Geocode does NOT expose functional class, so we approximate road importance
-// from common motorway / trunk-road naming across European + English locales
-// (e.g. A5, M6, E45, B27, Autobahn, Motorway, Autostrada, Snelweg, Autoroute…).
-// This is the documented limitation: a true road-class signal would need HERE
-// routing spans (functionalClass), which aren't available for a single snap.
+// from common motorway / expressway / trunk-road naming across European + English
+// locales. Critically this must cover CENTRAL/EASTERN Europe too — the symptom
+// that motivated widening it was a Czech "D1" (Dálnice) motorway being treated as
+// a minor road, so a closer local lane won the snap.
+//   • Designations: A1 (DE/FR/IT/PL/HU/RO), M1 (HU/UK), E50 (Euroroute),
+//     D1 (CZ/SK), S8 (PL expressway), R1 (SK expressway), B27 (DE), SS1 (IT),
+//     N10 (FR/BE).
+//   • Words: dálnice/diaľnica (CZ/SK), autópálya (HU), autostrada (PL/IT),
+//     autobahn, autoroute, autovía, autopista, motorway, freeway, expressway,
+//     highway, snelweg, bundesstraße, trunk, ring road, tangenziale, périph,
+//     droga ekspresowa / szybkiego ruchu (PL).
+// A true road-class signal would need HERE routing spans (functionalClass), which
+// aren't available for a single reverse-geocode snap.
 const MAJOR_ROAD_RE =
-  /\b([AME]\s?\d|B\s?\d{2,}|SS\s?\d|N\s?\d{2,})\b|autobahn|autostrada|autoroute|autovía|autovia|autopista|motorway|freeway|expressway|highway|snelweg|bundesstra|trunk|ring(road)?|tangenziale|périph|peripherique/i
+  /\b([AMESDR]\s?\d+|B\s?\d{2,}|SS\s?\d+|N\s?\d{2,})\b|d[aá]lnice|dia[lľ]nica|autostr|autobahn|autoroute|autov[ií]a|autopista|autop[aá]ly|motorway|freeway|expressway|highway|snelweg|bundesstra|\btrunk\b|ring\s?road|tangenziale|p[ée]riph|ekspresow|szybkiego/i
 
 function isMajorRoad(item: HereRevgeocodeItem): boolean {
   const name = `${item.address?.street ?? ''} ${item.title ?? ''}`.trim()
   return name.length > 0 && MAJOR_ROAD_RE.test(name)
 }
+
+// Opt-in snap tracing: set ROUTE_SNAP_DEBUG=1 to log the candidate roads, their
+// distance/major/score, and the chosen one for each street snap. Off by default.
+const SNAP_DEBUG = process.env.ROUTE_SNAP_DEBUG === '1'
 
 // A resolved road-snap: a readable label, the snapped coordinate, and whether
 // the chosen road looks like a major/through road.
@@ -205,23 +218,31 @@ function metresPerPixel(lat: number, zoom: number): number {
 
 // Pixel radius around the release we treat as "the user was aiming here". The
 // snap radius is this many pixels' worth of ground distance, so it scales with
-// the visible map — not a fixed metric distance.
-const SNAP_PIXEL_TOLERANCE = 16
-// A major road counts as this fraction of its distance when scoring, so it wins
-// ties and small gaps but NOT a far jump: a major must be within ~1/0.6 ≈ 1.67×
-// the nearest road's distance to be chosen. Distance stays dominant — this is
-// what stops a release from leaping onto a different, far-away highway.
-const MAJOR_ROAD_DISCOUNT = 0.6
+// the visible map — not a fixed metric distance. A touch generous so an imprecise
+// zoomed-out release (where 1px can be a kilometre) still reaches the motorway it
+// was aimed at.
+const SNAP_PIXEL_TOLERANCE = 18
 
 // HERE Reverse Geocode used as a road-snap: resolve a coordinate to the best
-// nearby STREET. Returns several street candidates and picks the one closest to
-// the release *on screen*, with only a mild preference for major roads — so the
-// snap lands on the visible road under the cursor, upgrading to a highway only
-// when one is right there. Returns null when HERE has no street result.
+// nearby STREET. Returns many nearby street candidates and scores them by
+// distance with a preference for major roads that STRENGTHENS as the map zooms
+// out — because when zoomed out the release is imprecise and the user can only
+// realistically be aiming at the big visible roads. Returns null when HERE has no
+// street result.
 async function streetSnap(apiKey: string, at: HerePosition, zoom: number): Promise<SnapResult | null> {
+  // "Zoomed-out-ness" in [0,1]: 0 at zoom ≥13 (precise), 1 at zoom ≤7 (only big
+  // roads visible/aimable).
+  const out = Math.max(0, Math.min(1, (13 - zoom) / 6))
   // Visible-scale radius: SNAP_PIXEL_TOLERANCE pixels of ground distance at this
-  // zoom, clamped so it's never absurdly tight or wide.
-  const maxSnapMeters = Math.max(40, Math.min(metresPerPixel(at.lat, zoom) * SNAP_PIXEL_TOLERANCE, 3500))
+  // zoom, clamped so it's never absurdly tight or wide. The wider cap (6 km) lets
+  // a fully zoomed-out release still reach a motorway a few km off.
+  const maxSnapMeters = Math.max(40, Math.min(metresPerPixel(at.lat, zoom) * SNAP_PIXEL_TOLERANCE, 6000))
+  // Major-road score multiplier: a major road's distance counts as this fraction
+  // when comparing candidates. 0.7 zoomed in (mild — distance dominates, so you
+  // can still drop on a specific minor road) → ~0.22 zoomed out (a motorway up to
+  // ~4.5× farther than the nearest local lane still wins). This is the lever that
+  // makes a zoomed-out drag land on the visible motorway, not a closer field lane.
+  const majorFactor = 0.7 - 0.48 * out
 
   const url = new URL(revgeocodeBase)
   url.searchParams.set('apiKey', apiKey)
@@ -251,12 +272,25 @@ async function streetSnap(apiKey: string, at: HerePosition, zoom: number): Promi
     const dist = item.distance ?? metersBetween(at, item.position)
     if (!nearest || dist < nearest.dist) nearest = { item, dist }
     if (dist > maxSnapMeters) continue
-    const score = dist * (isMajorRoad(item) ? MAJOR_ROAD_DISCOUNT : 1)
+    const score = dist * (isMajorRoad(item) ? majorFactor : 1)
     if (!best || score < best.score) best = { item, score }
   }
 
   const chosen = best?.item ?? nearest?.item
   if (!chosen?.position) return null
+
+  if (SNAP_DEBUG) {
+    const rows = candidates
+      .map((i) => {
+        const d = i.distance ?? metersBetween(at, i.position)
+        const major = isMajorRoad(i)
+        return { name: i.address?.street ?? i.title ?? '?', d: Math.round(d), major, score: Math.round(d * (major ? majorFactor : 1)) }
+      })
+      .sort((a, b) => a.score - b.score)
+      .slice(0, 8)
+    console.log('[snap] streetSnap', { zoom, out: out.toFixed(2), maxSnapMeters: Math.round(maxSnapMeters), majorFactor: majorFactor.toFixed(2), chosen: chosen.address?.street ?? chosen.title, candidates: rows })
+  }
+
   return {
     label: chosen.address?.label ?? chosen.title ?? '',
     position: chosen.position,

@@ -7,8 +7,11 @@ import type {
   GroupInvite,
   GroupMember,
   GroupPendingInvitee,
+  InviteValidation,
   Message,
   Profile,
+  WorkspaceInvite,
+  WorkspaceInviteCreated,
   WorkspaceMember,
 } from './types'
 import type { HerePlace, LatLng, RouteWaypoint, TruckProfile, TruckRoute } from './here/types'
@@ -257,6 +260,29 @@ export const api = {
 
   workspace: {
     members: () => request<{ members: WorkspaceMember[] }>('/workspace/members'),
+  },
+
+  // Company invite links (admin only). Generating returns the raw link ONCE;
+  // the list afterwards exposes only status/expiry, never the token.
+  workspaceInvites: {
+    list: () => request<{ invites: WorkspaceInvite[] }>('/workspace-invites'),
+    create: () =>
+      request<{ invite: WorkspaceInviteCreated }>('/workspace-invites', { method: 'POST' }),
+    revoke: (id: string) =>
+      request<{ ok: true }>(`/workspace-invites/${id}`, { method: 'DELETE' }),
+  },
+
+  // Public invite registration (no session yet). `validate` always resolves with
+  // a discriminated status; `accept` creates the account + logs in (sets cookie),
+  // or throws ApiError('invite_used'|'invite_expired'|'invite_invalid'|...).
+  invite: {
+    validate: (token: string) =>
+      request<InviteValidation>(`/auth/invite/${encodeURIComponent(token)}`),
+    accept: (token: string, body: { email: string; password: string; displayName: string }) =>
+      request<{ user: { id: string; email: string; displayName: string; role: string } }>(
+        `/auth/invite/${encodeURIComponent(token)}/accept`,
+        { method: 'POST', body: JSON.stringify(body) },
+      ),
   },
 
   profile: {

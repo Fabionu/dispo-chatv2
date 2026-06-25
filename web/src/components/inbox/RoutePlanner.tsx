@@ -481,6 +481,7 @@ export default function RoutePlanner({ onBack }: Props) {
             snapped: place.position,
             movedMeters: Math.round(haversineMeters({ lat, lng }, place.position)),
             course,
+            major: place.major,
             label: place.label,
             zoom,
           })

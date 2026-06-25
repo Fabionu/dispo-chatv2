@@ -85,7 +85,7 @@ const keyByUserOrIp = (req: Request): string => {
 // ── Limiter specs ────────────────────────────────────────────────────────────
 type Spec = { prefix: string; options: Partial<Options> }
 
-const SPECS: Record<'signin' | 'signup' | 'message' | 'groupCreate', Spec> = {
+const SPECS: Record<'signin' | 'signup' | 'message' | 'groupCreate' | 'inviteCreate', Spec> = {
   // Aggressive on signin — brute-force is the main threat.
   signin: {
     prefix: 'signin:',
@@ -134,6 +134,19 @@ const SPECS: Record<'signin' | 'signup' | 'message' | 'groupCreate', Spec> = {
       message: { error: 'too_many_requests' },
     },
   },
+  // Company invite-link generation (admin only, authenticated). Generous for a
+  // real admin onboarding a team, but caps a compromised admin / script.
+  inviteCreate: {
+    prefix: 'invitecreate:',
+    options: {
+      windowMs: 60 * 60 * 1000,
+      limit: 40,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      keyGenerator: keyByUserOrIp,
+      message: { error: 'too_many_requests' },
+    },
+  },
 }
 
 function build(spec: Spec, useRedis: boolean): RequestHandler {
@@ -159,6 +172,7 @@ export const signinLimiter = delegate('signin')
 export const signupLimiter = delegate('signup')
 export const messageLimiter = delegate('message')
 export const groupCreateLimiter = delegate('groupCreate')
+export const inviteCreateLimiter = delegate('inviteCreate')
 
 // Build the limiters with the correct store. Call AFTER initRedis(): Redis store
 // only when the command client is actually connected, otherwise in-memory. Logs

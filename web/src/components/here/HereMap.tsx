@@ -158,6 +158,12 @@ export default function HereMap({
   const logisticsLayerRef = useRef<any>(null)
   // Guards so we enable the (expensive) vehicle-restrictions feature only once.
   const overlayFeatureEnabledRef = useRef(false)
+  // Last "fit signature" the map was framed for. We auto-fit ONLY on structural
+  // route changes (the route first appearing, or an endpoint added/removed) — not
+  // when an intermediate stop is added/removed/dragged or the route merely
+  // recalculates. This keeps the user's zoom/pan stable while adding stops, which
+  // otherwise reframed (and felt like a random zoom-in) on every change.
+  const lastFitSigRef = useRef<string>('')
   // Flips true once the map exists; drives the effects so the first draw/toggle
   // always runs with the latest props (not whatever they were at mount).
   const [ready, setReady] = useState(false)
@@ -543,13 +549,27 @@ export default function HereMap({
       }
     }
 
-    fitToPoints(H, map, allPoints)
+    // Reframe only when the route's STRUCTURE changes — it first gains an
+    // endpoint, the start/destination is added or removed, or a drawn route first
+    // appears. Adding/removing/dragging an intermediate stop, or a plain
+    // recalculation, leaves this signature unchanged, so the viewport stays put
+    // (no surprise zoom-in near the new stop). On a structural change we frame the
+    // current points once; the user is then free to pan/zoom.
+    const hasOrigin = markers.some((m) => m.kind === 'origin')
+    const hasDestination = markers.some((m) => m.kind === 'destination')
+    const hasRoute = routePolylines.length > 0
+    const fitSig = `${hasOrigin ? 1 : 0}|${hasDestination ? 1 : 0}|${hasRoute ? 1 : 0}`
+    if (fitSig !== lastFitSigRef.current) {
+      lastFitSigRef.current = fitSig
+      fitToPoints(H, map, allPoints)
+    }
   }
 
   // Frame the route + all points: full polyline bounds (not just endpoints),
   // padded, kept clear of the floating left panel, and zoom-clamped so short
-  // routes don't slam to street level. Non-animated; only runs on a real
-  // markers/route change (the parent memoises both).
+  // routes don't slam to street level. Non-animated; called from draw() ONLY on a
+  // structural route change (see the fit-signature guard there), never on every
+  // stop add / drag / recalculation.
   function fitToPoints(H: any, map: any, points: LatLng[]) {
     if (points.length === 0) return
     if (points.length === 1) {

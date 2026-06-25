@@ -1,12 +1,27 @@
-import { useState, type ReactNode } from 'react'
-import { ArrowLeft, ChevronRight, Info, Palette } from 'lucide-react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import {
+  ArrowLeft,
+  Check,
+  ChevronRight,
+  Copy,
+  Info,
+  Link2,
+  Loader2,
+  Palette,
+  Plus,
+  Trash2,
+  Users,
+} from 'lucide-react'
 import { useViewMode, setViewMode, type ViewMode } from '../../lib/viewMode'
+import { useAuth } from '../../auth/AuthContext'
+import { api, ApiError } from '../../lib/api'
+import type { WorkspaceInvite, WorkspaceInviteCreated } from '../../lib/types'
 
 type Props = { onBack: () => void }
 
-// The settings categories. New ones (Notifications, Members, Integrations …)
-// drop in as another CategoryCard + detail view.
-type Category = 'appearance' | 'about'
+// The settings categories. New ones (Notifications, Integrations …) drop in as
+// another CategoryCard + detail view.
+type Category = 'appearance' | 'members' | 'about'
 
 // Workspace settings as a sidebar drawer — consistent with "My profile" /
 // "Company profile" (replaces the conversation list; the chat stays on the
@@ -21,6 +36,26 @@ export default function WorkspaceSettingsPanel({ onBack }: Props) {
   // Which category's detail is open (null = the category list). Local UI state;
   // no routing needed — the drawer is a self-contained master/detail.
   const [category, setCategory] = useState<Category | null>(null)
+  // Only workspace admins manage company members; the card is hidden otherwise
+  // (the server enforces this too). Auth is always signed-in inside this panel.
+  const auth = useAuth()
+  const isAdmin = auth.status === 'signed_in' && auth.user.role === 'admin'
+
+  // ── Detail: Company members ────────────────────────────────────────────────
+  if (category === 'members') {
+    return (
+      <div className="flex flex-col h-full">
+        <PanelHeader
+          title="Company members"
+          onBack={() => setCategory(null)}
+          backLabel="Back to Workspace settings"
+        />
+        <div className="flex-1 overflow-y-auto px-4 py-5">
+          <CompanyMembersSettings />
+        </div>
+      </div>
+    )
+  }
 
   // ── Detail: Appearance ─────────────────────────────────────────────────────
   if (category === 'appearance') {
@@ -59,6 +94,14 @@ export default function WorkspaceSettingsPanel({ onBack }: Props) {
     <div className="flex flex-col h-full">
       <PanelHeader title="Workspace settings" onBack={onBack} backLabel="Back to inbox" />
       <div className="flex-1 overflow-y-auto px-4 py-5 space-y-2.5">
+        {isAdmin && (
+          <CategoryCard
+            icon={<Users size={16} strokeWidth={1.8} />}
+            title="Company members"
+            description="Invite people to your company with a secure link."
+            onClick={() => setCategory('members')}
+          />
+        )}
         <CategoryCard
           icon={<Palette size={16} strokeWidth={1.8} />}
           title="Appearance"
@@ -192,6 +235,244 @@ function AboutSettings() {
         <FieldRow label="Commit" value={commit} mono />
       </div>
     </div>
+  )
+}
+
+// ── Company members (admin) ─────────────────────────────────────────────────
+// Generate single-use, 15-minute invite links and review recent ones. The raw
+// link is shown ONCE (right after generation); the list afterwards carries only
+// status + timing, mirroring the server (which stores just a token hash).
+function CompanyMembersSettings() {
+  const [invites, setInvites] = useState<WorkspaceInvite[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [genError, setGenError] = useState<string | null>(null)
+  // The just-created link, surfaced prominently with copy + countdown. Cleared
+  // on the next generate so only the freshest link shows its raw token.
+  const [fresh, setFresh] = useState<WorkspaceInviteCreated | null>(null)
+
+  const load = useCallback(async () => {
+    try {
+      const { invites } = await api.workspaceInvites.list()
+      setInvites(invites)
+      setLoadError(false)
+    } catch {
+      setLoadError(true)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  async function generate() {
+    setGenerating(true)
+    setGenError(null)
+    try {
+      const { invite } = await api.workspaceInvites.create()
+      setFresh(invite)
+      await load()
+    } catch (err) {
+      setGenError(
+        err instanceof ApiError && err.code === 'too_many_requests'
+          ? 'Too many links generated. Try again later.'
+          : 'Could not generate a link. Try again.',
+      )
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  async function revoke(id: string) {
+    // Optimistic: flip to expired locally, then reconcile.
+    setInvites((prev) => prev.map((i) => (i.id === id ? { ...i, status: 'expired' } : i)))
+    if (fresh && id === fresh.id) setFresh(null)
+    try {
+      await api.workspaceInvites.revoke(id)
+    } finally {
+      void load()
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <p className="text-[12px] text-faint leading-[1.5]">
+        Invite people to join <span className="text-muted">your company</span>. Each link works
+        once, expires after 15 minutes, and can’t be reused after someone signs up.
+      </p>
+
+      <button
+        onClick={generate}
+        disabled={generating}
+        className="w-full h-9 flex items-center justify-center gap-2 rounded-btn bg-text text-bg font-semibold text-[12.5px] hover:bg-text/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+      >
+        {generating ? (
+          <Loader2 size={14} strokeWidth={2.2} className="animate-spin" />
+        ) : (
+          <Plus size={14} strokeWidth={2.2} />
+        )}
+        Generate invite link
+      </button>
+
+      {genError && (
+        <div className="text-[12px] text-alert border border-alert/30 bg-alert/5 rounded-btn px-3 py-2">
+          {genError}
+        </div>
+      )}
+
+      {fresh && <FreshInviteCard invite={fresh} />}
+
+      {/* Recent invites */}
+      <div>
+        <div className="text-[11.5px] text-muted mb-2">Recent invites</div>
+        {loading ? (
+          <div className="flex items-center gap-2 text-[12px] text-faint px-1 py-2">
+            <Loader2 size={13} className="animate-spin" /> Loading…
+          </div>
+        ) : loadError ? (
+          <div className="text-[12px] text-alert px-1 py-2">Could not load invites.</div>
+        ) : invites.length === 0 ? (
+          <div className="text-[12px] text-faint px-1 py-2">No invites yet.</div>
+        ) : (
+          <div className="rounded-card border border-white/[0.06] bg-white/[0.015] divide-y divide-white/[0.05]">
+            {invites.map((inv) => (
+              <InviteListRow key={inv.id} invite={inv} onRevoke={() => revoke(inv.id)} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// A live-updating "now" tick (default 1s) for invite countdowns.
+function useNow(intervalMs = 1000): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), intervalMs)
+    return () => clearInterval(t)
+  }, [intervalMs])
+  return now
+}
+
+// mm:ss remaining until `expiresAt`, or null once elapsed.
+function remaining(expiresAt: string, now: number): string | null {
+  const ms = new Date(expiresAt).getTime() - now
+  if (ms <= 0) return null
+  const total = Math.floor(ms / 1000)
+  const m = Math.floor(total / 60)
+  const s = total % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
+// The freshly-generated link: copyable, with a live countdown. This is the only
+// place the raw link is ever shown.
+function FreshInviteCard({ invite }: { invite: WorkspaceInviteCreated }) {
+  const now = useNow()
+  const [copied, setCopied] = useState(false)
+  const left = remaining(invite.expiresAt, now)
+
+  async function copy() {
+    try {
+      await navigator.clipboard?.writeText(invite.url)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      /* clipboard unavailable — the field is selectable as a fallback */
+    }
+  }
+
+  return (
+    <div className="rounded-card border border-active/30 bg-active/[0.06] px-3.5 py-3 space-y-2.5">
+      <div className="flex items-center gap-2 text-[12px] font-semibold text-active">
+        <Link2 size={14} strokeWidth={2} /> Invite link ready
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          readOnly
+          value={invite.url}
+          onFocus={(e) => e.currentTarget.select()}
+          className="flex-1 min-w-0 bg-black/20 border border-white/[0.08] rounded-btn px-2.5 py-2 text-[11.5px] text-text font-mono truncate focus:outline-none focus:border-white/[0.2]"
+        />
+        <button
+          onClick={copy}
+          className="shrink-0 h-[34px] px-3 flex items-center gap-1.5 rounded-btn bg-white/[0.06] text-text text-[12px] font-medium hover:bg-white/[0.1] transition-colors"
+        >
+          {copied ? (
+            <Check size={13} strokeWidth={2.4} className="text-done" />
+          ) : (
+            <Copy size={13} strokeWidth={1.8} />
+          )}
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      <div className="text-[11px] text-muted">
+        {left ? (
+          <>
+            Single-use · expires in <span className="tabular-nums text-text">{left}</span>
+          </>
+        ) : (
+          <span className="text-alert">This link has expired.</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// One row in the recent-invites list: status badge, who/when, and a revoke
+// action while the link is still active.
+function InviteListRow({ invite, onRevoke }: { invite: WorkspaceInvite; onRevoke: () => void }) {
+  const now = useNow(30_000)
+  const left = invite.status === 'active' ? remaining(invite.expiresAt, now) : null
+  const detail =
+    invite.status === 'used'
+      ? invite.usedByName
+        ? `Joined by ${invite.usedByName}`
+        : 'Used'
+      : invite.status === 'expired'
+        ? 'Expired'
+        : left
+          ? `Expires in ${left}`
+          : 'Expiring…'
+
+  return (
+    <div className="flex items-center gap-2.5 px-3 py-2.5">
+      <StatusBadge status={invite.status} />
+      <div className="min-w-0 flex-1">
+        <div className="text-[12px] text-text leading-tight truncate">{detail}</div>
+        <div className="text-[11px] text-faint mt-0.5 truncate">
+          {invite.createdByName ? `By ${invite.createdByName}` : 'Invite'}
+        </div>
+      </div>
+      {invite.status === 'active' && (
+        <button
+          onClick={onRevoke}
+          title="Revoke link"
+          aria-label="Revoke link"
+          className="shrink-0 h-7 w-7 flex items-center justify-center rounded-chip text-muted hover:text-alert hover:bg-white/[0.05] transition-colors"
+        >
+          <Trash2 size={14} strokeWidth={1.8} />
+        </button>
+      )}
+    </div>
+  )
+}
+
+function StatusBadge({ status }: { status: WorkspaceInvite['status'] }) {
+  const map = {
+    active: { label: 'Active', cls: 'text-done border-done/30 bg-done/10' },
+    used: { label: 'Used', cls: 'text-muted border-white/[0.12] bg-white/[0.04]' },
+    expired: { label: 'Expired', cls: 'text-faint border-white/[0.08] bg-white/[0.02]' },
+  }[status]
+  return (
+    <span
+      className={`shrink-0 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border ${map.cls}`}
+    >
+      {map.label}
+    </span>
   )
 }
 

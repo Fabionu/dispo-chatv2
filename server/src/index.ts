@@ -12,6 +12,7 @@ import { groupsRouter } from './routes/groups.js'
 import { connectionsRouter } from './routes/connections.js'
 import { groupInvitesRouter } from './routes/groupInvites.js'
 import { workspaceRouter } from './routes/workspace.js'
+import { workspaceInvitesRouter } from './routes/workspaceInvites.js'
 import { directoryRouter } from './routes/directory.js'
 import { attachmentsRouter } from './routes/attachments.js'
 import { profileRouter, usersRouter } from './routes/profile.js'
@@ -54,6 +55,7 @@ app.use('/api/groups', groupsRouter)
 app.use('/api/connections', connectionsRouter)
 app.use('/api/group-invites', groupInvitesRouter)
 app.use('/api/workspace', workspaceRouter)
+app.use('/api/workspace-invites', workspaceInvitesRouter)
 app.use('/api/directory', directoryRouter)
 app.use('/api/attachments', attachmentsRouter)
 app.use('/api/profile', profileRouter)

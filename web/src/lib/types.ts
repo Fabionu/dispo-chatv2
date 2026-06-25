@@ -286,6 +286,36 @@ export type WorkspaceMember = {
   role: string
 }
 
+// A company invite link as listed in Workspace settings (admin only). The raw
+// token is NOT part of this — it's shown only once, at creation, via
+// WorkspaceInviteCreated.
+export type WorkspaceInviteStatus = 'active' | 'used' | 'expired'
+export type WorkspaceInvite = {
+  id: string
+  status: WorkspaceInviteStatus
+  createdAt: string
+  expiresAt: string
+  usedAt: string | null
+  createdByName: string | null
+  usedByName: string | null
+}
+
+// The freshly-generated invite, returned once at creation with the shareable
+// link and raw token (never persisted server-side, never re-fetchable).
+export type WorkspaceInviteCreated = {
+  id: string
+  token: string
+  url: string
+  status: 'active'
+  createdAt: string
+  expiresAt: string
+}
+
+// Result of validating an invite token on the public registration page.
+export type InviteValidation =
+  | { status: 'valid'; companyName: string }
+  | { status: 'used' | 'expired' | 'invalid' }
+
 // A person returned by the platform-wide directory search. `connection` is
 // the caller's connection state with this user (null if none exists).
 export type DirectoryUser = {

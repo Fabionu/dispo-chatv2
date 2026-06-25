@@ -5,6 +5,7 @@ import { pool } from '../db/pool.js'
 import { clearSession, issueSession, readSession } from '../auth.js'
 import { signinLimiter, signupLimiter } from '../middleware/rateLimit.js'
 import { asyncHandler, HttpError, withTransaction } from '../http.js'
+import { hashInviteToken } from '../util/workspaceInvites.js'
 
 export const authRouter = Router()
 
@@ -133,6 +134,120 @@ authRouter.post('/signout', (_req, res) => {
   clearSession(res)
   res.json({ ok: true })
 })
+
+// ── GET /api/auth/invite/:token ──────────────────────────────────────────
+// Public: validate a company invite link so the registration page can decide
+// what to render. Always 200 with a discriminated `status` so the client shows
+// a clean state without branching on HTTP codes. Returns the inviting company's
+// name only when the token is still usable, for the read-only prefill.
+authRouter.get(
+  '/invite/:token',
+  asyncHandler(async (req, res) => {
+    const { rows } = await pool.query<{
+      used_at: string | null
+      expires_at: string
+      company_name: string
+    }>(
+      `select wi.used_at, wi.expires_at, w.name as company_name
+         from workspace_invites wi
+         join workspaces w on w.id = wi.workspace_id
+        where wi.token_hash = $1
+        limit 1`,
+      [hashInviteToken(req.params.token)],
+    )
+    const row = rows[0]
+    if (!row) return res.json({ status: 'invalid' as const })
+    if (row.used_at) return res.json({ status: 'used' as const })
+    if (new Date(row.expires_at).getTime() <= Date.now())
+      return res.json({ status: 'expired' as const })
+    res.json({ status: 'valid' as const, companyName: row.company_name })
+  }),
+)
+
+const acceptInviteSchema = z.object({
+  email: z.string().email().max(254),
+  password: z.string().min(8).max(200),
+  displayName: z.string().trim().min(1).max(100),
+})
+
+// ── POST /api/auth/invite/:token/accept ──────────────────────────────────
+// Public: register a new account attached to the inviting workspace and consume
+// the link. Rate-limited like signup. The whole thing runs in one transaction
+// with the invite row locked FOR UPDATE, so the token is strictly single-use
+// even under concurrent submits: the first commit sets used_at; the second sees
+// it and fails with `invite_used`.
+authRouter.post(
+  '/invite/:token/accept',
+  signupLimiter,
+  asyncHandler(async (req, res) => {
+    const parsed = acceptInviteSchema.safeParse(req.body)
+    if (!parsed.success) {
+      const weak = parsed.error.issues.some(
+        (i) => i.path[0] === 'password' && i.code === 'too_small',
+      )
+      return res.status(400).json({ error: weak ? 'weak_password' : 'invalid_input' })
+    }
+
+    const { email, password, displayName } = parsed.data
+    const normEmail = email.toLowerCase().trim()
+    const tokenHash = hashInviteToken(req.params.token)
+    const hash = await bcrypt.hash(password, 10)
+
+    const result = await withTransaction(async (client) => {
+      const { rows } = await client.query<{
+        id: string
+        workspace_id: string
+        used_at: string | null
+        expires_at: string
+      }>(
+        `select id, workspace_id, used_at, expires_at
+           from workspace_invites
+          where token_hash = $1
+          for update`,
+        [tokenHash],
+      )
+      const invite = rows[0]
+      if (!invite) throw new HttpError(404, 'invite_invalid')
+      if (invite.used_at) throw new HttpError(409, 'invite_used')
+      if (new Date(invite.expires_at).getTime() <= Date.now())
+        throw new HttpError(410, 'invite_expired')
+
+      let userId: string
+      try {
+        // Invited members join as a regular dispatcher, not an admin (the admin
+        // role is reserved for the workspace's original creator).
+        const userRow = await client.query<{ id: string }>(
+          `insert into users (workspace_id, email, password_hash, display_name, role)
+           values ($1, $2, $3, $4, 'dispatcher')
+           returning id`,
+          [invite.workspace_id, normEmail, hash, displayName],
+        )
+        userId = userRow.rows[0].id
+      } catch (err: unknown) {
+        // 23505 = unique_violation on (workspace_id, email): already a member.
+        if ((err as { code?: string }).code === '23505') throw new HttpError(409, 'email_taken')
+        throw err
+      }
+
+      await client.query(
+        `update workspace_invites set used_at = now(), used_by = $1 where id = $2`,
+        [userId, invite.id],
+      )
+      return { userId, workspaceId: invite.workspace_id }
+    })
+
+    issueSession(res, { userId: result.userId, workspaceId: result.workspaceId })
+    res.status(201).json({
+      user: {
+        id: result.userId,
+        email: normEmail,
+        displayName,
+        role: 'dispatcher',
+        workspaceId: result.workspaceId,
+      },
+    })
+  }),
+)
 
 authRouter.get(
   '/me',
