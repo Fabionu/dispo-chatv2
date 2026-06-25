@@ -21,7 +21,7 @@ import {
   X,
 } from 'lucide-react'
 import { api, ApiError } from '../../lib/api'
-import { bestInsertionIndex, nearestRouteSection, routeCourseNear } from '../../lib/here/geo'
+import { bestInsertionIndex, haversineMeters, nearestRouteSection, routeCourseNear } from '../../lib/here/geo'
 import { builtInPresets, deleteUserPreset, loadUserPresets, saveUserPreset } from '../../lib/here/truckPresets'
 import type { TruckPreset } from '../../lib/here/truckPresets'
 import HereMap from '../here/HereMap'
@@ -63,6 +63,17 @@ const uid = () =>
     : Math.random().toString(36).slice(2)
 
 const fmtCoord = (c: LatLng) => `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}`
+
+// Opt-in drag/snap tracing (mirrors HereMap): `localStorage.routeSnapDebug = '1'`
+// in the console logs the raw release coordinate, the snapped point, and how far
+// the snap moved it. Silent + off by default.
+function snapDebug(): boolean {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem('routeSnapDebug') === '1'
+  } catch {
+    return false
+  }
+}
 
 function toTruckProfile(form: TruckProfileForm): TruckProfile {
   const num = (s: string) => {
@@ -457,11 +468,23 @@ export default function RoutePlanner({ onBack }: Props) {
       const { place } = await api.here.snap(lat, lng, zoom)
       if (place?.position) {
         setSnapNote(null)
+        if (snapDebug())
+          // eslint-disable-next-line no-console
+          console.log('[routeSnap] snapped', {
+            raw: { lat, lng },
+            snapped: place.position,
+            movedMeters: Math.round(haversineMeters({ lat, lng }, place.position)),
+            label: place.label,
+            zoom,
+          })
         return { label: place.label || fmtCoord(place.position), coordinates: place.position, snapped: true }
       }
     } catch {
       /* fall through to the raw coordinate below */
     }
+    if (snapDebug())
+      // eslint-disable-next-line no-console
+      console.log('[routeSnap] snap failed — using raw coordinate', { lat, lng, zoom })
     setSnapNote('Could not snap the point to a road — using the exact location.')
     return { label: fmtCoord({ lat, lng }), coordinates: { lat, lng }, snapped: false }
   }

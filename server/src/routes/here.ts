@@ -188,28 +188,41 @@ function parseZoom(raw: unknown): number {
   return Number.isFinite(z) ? Math.max(0, Math.min(20, z)) : 18
 }
 
+// Ground metres covered by ONE screen pixel at a Web-Mercator zoom level and
+// latitude. Lets the snap radius track what the user can actually SEE: the road
+// under the cursor sits within a few pixels of the release, which is a small
+// distance zoomed in and a large one zoomed out.
+function metresPerPixel(lat: number, zoom: number): number {
+  return (156543.03392 * Math.cos((lat * Math.PI) / 180)) / 2 ** zoom
+}
+
+// Pixel radius around the release we treat as "the user was aiming here". The
+// snap radius is this many pixels' worth of ground distance, so it scales with
+// the visible map — not a fixed metric distance.
+const SNAP_PIXEL_TOLERANCE = 16
+// A major road counts as this fraction of its distance when scoring, so it wins
+// ties and small gaps but NOT a far jump: a major must be within ~1/0.6 ≈ 1.67×
+// the nearest road's distance to be chosen. Distance stays dominant — this is
+// what stops a release from leaping onto a different, far-away highway.
+const MAJOR_ROAD_DISCOUNT = 0.6
+
 // HERE Reverse Geocode used as a road-snap: resolve a coordinate to the best
-// nearby STREET. Zoom-aware (req: prefer the visible major road when zoomed
-// out): we ask for several street candidates and trade distance against road
-// importance — the more zoomed out, the larger the radius and the stronger the
-// bias toward a major road. Returns null when HERE has no street result.
+// nearby STREET. Returns several street candidates and picks the one closest to
+// the release *on screen*, with only a mild preference for major roads — so the
+// snap lands on the visible road under the cursor, upgrading to a highway only
+// when one is right there. Returns null when HERE has no street result.
 async function streetSnap(apiKey: string, at: HerePosition, zoom: number): Promise<SnapResult | null> {
-  // "Zoomed-out-ness" in [0,1]: 1 at zoom ≤8, 0 at zoom ≥14.
-  const out = Math.max(0, Math.min(1, (14 - zoom) / 6))
-  // Max distance we'll accept a snap from: ~80 m zoomed in → ~2.5 km zoomed out.
-  const maxSnapMeters = 80 + out * 2420
-  // How strongly to favour a major road over a closer minor one when zoomed out.
-  // score = dist / (1 + bias), so at full zoom-out (bias 6) a highway up to ~7×
-  // farther than the nearest side street still wins — matching the user's intent
-  // that a released point land on the visible motorway, not a closer field road.
-  const majorBias = out * 6
-  const limit = out > 0 ? 20 : 6
+  // Visible-scale radius: SNAP_PIXEL_TOLERANCE pixels of ground distance at this
+  // zoom, clamped so it's never absurdly tight or wide.
+  const maxSnapMeters = Math.max(40, Math.min(metresPerPixel(at.lat, zoom) * SNAP_PIXEL_TOLERANCE, 3500))
 
   const url = new URL(revgeocodeBase)
   url.searchParams.set('apiKey', apiKey)
   url.searchParams.set('at', `${at.lat},${at.lng}`)
   url.searchParams.set('lang', 'en-US')
-  url.searchParams.set('limit', String(limit))
+  // Ask for many nearby streets so HERE effectively samples every road around the
+  // release — we then choose among them rather than trusting the single nearest.
+  url.searchParams.set('limit', '20')
   // Always snap to STREET geometry (the road centreline) rather than a house
   // number or POI entrance — a route waypoint belongs on the road.
   url.searchParams.set('types', 'street')
@@ -220,17 +233,18 @@ async function streetSnap(apiKey: string, at: HerePosition, zoom: number): Promi
   )
   if (candidates.length === 0) return null
 
-  // Score each candidate: lower is better. `effective = distance / (1 + bias)`
-  // so a major road can win even when slightly farther than a side street.
-  // Candidates beyond the zoom-scaled radius are dropped (but we keep the raw
-  // nearest as a fallback so we never return null when HERE found something).
+  // Score each candidate: lower is better, DISTANCE-DOMINANT. `effective =
+  // distance × (major ? 0.6 : 1)` keeps the nearest road unless a major road is
+  // only modestly farther. Candidates beyond the visible radius are dropped (but
+  // we keep the raw nearest as a fallback so we never return null when HERE found
+  // a road — better an on-road point than the raw field coordinate).
   let best: { item: HereRevgeocodeItem & { position: HerePosition }; score: number } | null = null
   let nearest: { item: HereRevgeocodeItem & { position: HerePosition }; dist: number } | null = null
   for (const item of candidates) {
     const dist = item.distance ?? metersBetween(at, item.position)
     if (!nearest || dist < nearest.dist) nearest = { item, dist }
     if (dist > maxSnapMeters) continue
-    const score = dist / (1 + (isMajorRoad(item) ? majorBias : 0))
+    const score = dist * (isMajorRoad(item) ? MAJOR_ROAD_DISCOUNT : 1)
     if (!best || score < best.score) best = { item, score }
   }
 
@@ -295,20 +309,18 @@ const ROUTE_REFINE_METERS = 70
 
 // ── GET /api/here/snap?at=lat,lng[&zoom=Z] ───────────────────────────────
 // The CENTRAL road-snap every add/drag/release path uses. The STREET snap is
-// authoritative: it's zoom-aware and biases toward major roads, so when the
-// user releases from a zoomed-out view near a highway it picks that visible main
-// road over a closer minor one (instead of the raw cursor coordinate). Routing
-// is then used only to keep the point on a real, ROUTABLE road:
-//   1) streetSnap() → best nearby street (major-biased, radius scales with zoom).
+// authoritative: it picks the road NEAREST the release within a zoom-scaled
+// (visible-pixel) radius, with only a mild preference for major roads — so the
+// point lands on the road the user can see under the cursor, upgrading to a
+// highway only when one is right there (never a far jump). Routing then keeps it
+// on a real, ROUTABLE road:
+//   1) streetSnap() → nearest visible street (mild major preference).
 //   2) refine it with routeSnap(streetPos): if routing lands within
 //      ROUTE_REFINE_METERS, use that (guarantees routability) — else keep the
 //      street coordinate. The guard prevents routing from yanking the snap onto
 //      a different, smaller road.
 //   3) no street at all → routeSnap(raw click) as an on-road fallback.
 //   4) nothing routable → {place:null} so the client keeps the raw coordinate.
-// The previous bug: step 2 used routeSnap(RAW click), which from a zoomed-out,
-// imprecise release snapped to whatever road was nearest the cursor — typically
-// a field track / side road — discarding the major-biased street snap entirely.
 hereRouter.get(
   '/snap',
   asyncHandler(async (req, res) => {

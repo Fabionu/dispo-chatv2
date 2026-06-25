@@ -55,6 +55,17 @@ const ROUTE_COLOR = '#c89572'
 const ORIGIN_COLOR = '#7d8a78'
 const DEST_COLOR = '#d97757'
 
+// Opt-in drag/snap tracing: run `localStorage.routeSnapDebug = '1'` in the
+// console to log raw release pixels, the converted geo, and (in RoutePlanner)
+// the snapped point + distance moved. Off (and silent) by default.
+function snapDebug(): boolean {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem('routeSnapDebug') === '1'
+  } catch {
+    return false
+  }
+}
+
 // ── Marker icons ───────────────────────────────────────────────────────────
 // Built as SVG with an explicit anchor so the marker sits EXACTLY on the
 // coordinate: centre for the round origin/stop dots, the tip for the
@@ -257,13 +268,35 @@ export default function HereMap({
         }
         const onDragEnd = (ev: any) => {
           const t = ev.target
+          // Resolve the FINAL release coordinate from the dragend pointer itself
+          // (HERE viewport coords → geo), not the last `drag` frame, so we never
+          // use a slightly stale position. Falls back to the object geometry if
+          // the event carries no pointer.
+          const releasePointer = ev.currentPointer
           if (t instanceof H.map.Marker) {
             behavior.enable()
             const data = t.getData?.()
-            const g = t.getGeometry?.()
+            let g = t.getGeometry?.()
+            if (didDragRef.current && releasePointer && t.__dragOffset) {
+              const fresh = map.screenToGeo(
+                releasePointer.viewportX - t.__dragOffset.x,
+                releasePointer.viewportY - t.__dragOffset.y,
+              )
+              if (fresh) g = fresh
+            }
             if (didDragRef.current) {
               // A real drag → report the dropped coordinate for snap + recalc.
-              if (data?.id && g) onMarkerDragEndRef.current?.(data.id, g.lat, g.lng, map.getZoom())
+              if (data?.id && g) {
+                if (snapDebug())
+                  // eslint-disable-next-line no-console
+                  console.log('[routeSnap] marker drag release', {
+                    id: data.id,
+                    viewport: releasePointer && { x: releasePointer.viewportX, y: releasePointer.viewportY },
+                    releaseGeo: { lat: g.lat, lng: g.lng },
+                    zoom: map.getZoom(),
+                  })
+                onMarkerDragEndRef.current?.(data.id, g.lat, g.lng, map.getZoom())
+              }
             } else if (data?.id && data?.kind && g) {
               // Press-release with no movement = a click. HERE may consume the
               // gesture on a draggable marker and not emit a separate `tap`, so
@@ -276,10 +309,24 @@ export default function HereMap({
           if (routeDragRef.current.active) {
             const { ghost, section } = routeDragRef.current
             behavior.enable()
-            const g = ghost?.getGeometry?.()
+            let g = ghost?.getGeometry?.()
+            if (releasePointer) {
+              const fresh = map.screenToGeo(releasePointer.viewportX, releasePointer.viewportY)
+              if (fresh) g = fresh
+            }
             if (ghost) map.removeObject(ghost)
             routeDragRef.current = { active: false, section: -1, ghost: null }
-            if (g) onRouteDragEndRef.current?.(section, g.lat, g.lng, map.getZoom())
+            if (g) {
+              if (snapDebug())
+                // eslint-disable-next-line no-console
+                console.log('[routeSnap] route drag release', {
+                  section,
+                  viewport: releasePointer && { x: releasePointer.viewportX, y: releasePointer.viewportY },
+                  releaseGeo: { lat: g.lat, lng: g.lng },
+                  zoom: map.getZoom(),
+                })
+              onRouteDragEndRef.current?.(section, g.lat, g.lng, map.getZoom())
+            }
           }
         }
         map.addEventListener('dragstart', onDragStart)
