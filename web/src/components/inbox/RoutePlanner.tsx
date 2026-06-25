@@ -21,7 +21,7 @@ import {
   X,
 } from 'lucide-react'
 import { api, ApiError } from '../../lib/api'
-import { nearestRouteSection, routeCourseNear } from '../../lib/here/geo'
+import { bestInsertionIndex, nearestRouteSection, routeCourseNear } from '../../lib/here/geo'
 import { builtInPresets, deleteUserPreset, loadUserPresets, saveUserPreset } from '../../lib/here/truckPresets'
 import type { TruckPreset } from '../../lib/here/truckPresets'
 import HereMap from '../here/HereMap'
@@ -96,9 +96,12 @@ function truckSummary(form: TruckProfileForm): string {
   return parts.length ? parts.join(' · ') : 'Not set'
 }
 
+// Google-Maps-style km formatting, shared by the side-panel stat and the on-map
+// distance badge so the two always read identically: one decimal under 10 km
+// (3.4 km), rounded to a whole km at/above it (12 km, 84 km, 247 km).
 function formatDistance(metres: number): string {
   const km = metres / 1000
-  return km >= 100 ? `${Math.round(km)} km` : `${km.toFixed(1)} km`
+  return km < 10 ? `${km.toFixed(1)} km` : `${Math.round(km)} km`
 }
 
 function formatDuration(seconds: number): string {
@@ -342,13 +345,14 @@ export default function RoutePlanner({ onBack }: Props) {
   function setDestinationPoint(point: Omit<RoutePoint, 'role'>) {
     setPoints((prev) => [...prev.filter((p) => p.role !== 'destination'), { ...point, role: 'destination' }])
   }
-  // Add an intermediate stop. By default it lands at the END of the stop list —
-  // i.e. logically BEFORE the final destination (and after any existing stops) —
-  // so "Add stop" always keeps the start first and the finish last. `atIndex`
-  // overrides this only for the deliberate cases that need it: a route-line drag
-  // inserts the new stop into the exact leg that was grabbed, and "Add stop on
-  // route" inserts it at the nearest leg. Setting the start/finish is a separate
-  // action (setStart / setDestinationPoint), never this.
+  // Add an intermediate stop at `atIndex` (clamped into the stop list), always
+  // keeping the start first and the finish last. With no `atIndex` it appends
+  // before the destination. Callers pass an index for every deliberate case:
+  //   • "Add stop" (panel/map) → bestStopIndexFor(): the most LOGICAL position,
+  //     so a new stop slots into geographic order instead of just appending.
+  //   • route-line drag → the exact leg that was grabbed.
+  //   • "Add stop on route" → the nearest leg.
+  // Setting start/finish is a separate action (setStart / setDestinationPoint).
   function addStop(point: Omit<RoutePoint, 'role'>, atIndex?: number) {
     setPoints((prev) => {
       const s = prev.filter((p) => p.role === 'start')
@@ -359,6 +363,32 @@ export default function RoutePlanner({ onBack }: Props) {
       stps.splice(idx, 0, { ...point, role: 'stop' })
       return [...s, ...stps, ...d]
     })
+  }
+  // Most logical insertion slot for a NEW intermediate stop, keeping the start
+  // first and the finish last. Prefers the actual drawn route's geometry (drop
+  // the stop onto the road leg it sits nearest to — real path, not a straight
+  // line); falls back to least-added straight-line distance when there's no
+  // current route to measure against. Returns undefined ("just append") until
+  // both endpoints exist, since there's no start→finish span to order within.
+  //
+  // Auto-ordering runs ONLY when a stop is ADDED: existing stops keep their
+  // relative order and manual list/marker drags are never auto-reshuffled. This
+  // is the simpler, predictable rule — adding inserts logically, manual moves
+  // stick until the next add.
+  function bestStopIndexFor(coord: LatLng): number | undefined {
+    if (route && !dirty && sectionCoords.length) {
+      const near = nearestRouteSection(coord, sectionCoords)
+      if (near) return near.index
+    }
+    if (start && destination) {
+      return bestInsertionIndex(
+        coord,
+        start.coordinates,
+        stops.map((s) => s.coordinates),
+        destination.coordinates,
+      )
+    }
+    return undefined
   }
   function removePoint(id: string) {
     setPoints((prev) => prev.filter((p) => p.id !== id))
@@ -478,7 +508,9 @@ export default function RoutePlanner({ onBack }: Props) {
     const point = await resolveClicked(lat, lng, zoom)
     if (action === 'start') setStart(point)
     else if (action === 'destination') setDestinationPoint(point)
-    else if (action === 'add') addStop(point)
+    // Plain "Add stop": slot it into the most logical position. "Add stop on
+    // route" keeps using the exact leg the user clicked near.
+    else if (action === 'add') addStop(point, bestStopIndexFor(point.coordinates))
     else if (action === 'add-on-route') addStop(point, insertIndex ?? undefined)
     if (panelCollapsed) setPanelCollapsed(false)
   }
@@ -628,6 +660,8 @@ export default function RoutePlanner({ onBack }: Props) {
         <HereMap
           markers={markers}
           routePolylines={polylines}
+          // Total route distance, mid-line badge — same value as the panel stat.
+          routeDistanceLabel={route ? formatDistance(route.summary.length) : null}
           truckOverlay={truckOverlay}
           onTruckOverlayAvailabilityChange={setOverlayAvailable}
           onMapContextMenu={openMenu}
@@ -749,7 +783,8 @@ export default function RoutePlanner({ onBack }: Props) {
                       value={null}
                       onChange={(p) => {
                         if (p) {
-                          addStop(fromSearch(p))
+                          const sp = fromSearch(p)
+                          addStop(sp, bestStopIndexFor(sp.coordinates))
                           setAddingStop(false)
                         }
                       }}

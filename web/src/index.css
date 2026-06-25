@@ -314,6 +314,27 @@ button {
   cursor: default !important;
 }
 
+/* Route distance badge: a compact, dark pill placed on the route midpoint (HERE
+   DomMarker). `position: absolute` + translate(-50%, -50%) centres it on the
+   coordinate regardless of the marker wrapper's own positioning, and
+   `pointer-events: none` ensures it never blocks dragging the route line or
+   clicking a marker beneath it. */
+.route-distance-badge {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  white-space: nowrap;
+  background: rgba(20, 20, 20, 0.92);
+  color: #f5f5f5;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 9999px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.55;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+
 .modal-input {
   width: 100%;
   background: transparent;

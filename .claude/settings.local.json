@@ -250,7 +250,9 @@
       "Bash(git -C .. status --short)",
       "PowerShell(npx tsc -b)",
       "Bash(cd /c/Users/Home/Desktop/dispo-chatv2 && head -50 web/src/components/settings/ProfileSidebarPanel.tsx | grep -n \"return\\\\|className=\\\\\"\" | head -8; echo \"--- where mounted ---\"; grep -rn \"ProfileSidebarPanel\\\\|CompanySidebarPanel\" web/src/pages/Workspace.tsx)",
-      "Bash(rm -f /tmp/coordtest.mjs && echo cleaned)"
+      "Bash(rm -f /tmp/coordtest.mjs && echo cleaned)",
+      "PowerShell(npm run build 2>&1)",
+      "PowerShell(npx tsc -b 2>&1)"
     ]
   }
 }

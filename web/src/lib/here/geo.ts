@@ -79,6 +79,83 @@ export function nearestRouteSection(
   return best
 }
 
+// Great-circle distance in metres between two coordinates (haversine). Used as a
+// FALLBACK ordering signal when no real route geometry is available yet (see
+// bestInsertionIndex) — once a route exists, callers prefer nearestRouteSection,
+// which works off the actual road path.
+export function haversineMeters(a: LatLng, b: LatLng): number {
+  const dLat = toRad(b.lat - a.lat)
+  const dLng = toRad(b.lng - a.lng)
+  const lat1 = toRad(a.lat)
+  const lat2 = toRad(b.lat)
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)))
+}
+
+// Choose where to insert `p` among the ordered intermediate `stops`, keeping the
+// route's `start` first and `destination` last, so it adds the LEAST extra
+// straight-line distance to the sequence start → stops → destination. Returns an
+// index in [0, stops.length] (the stops-array position the new stop should take).
+//
+// This is the geometric fallback for the "logical stop ordering" feature: for a
+// new stop we test every gap between consecutive waypoints and pick the one where
+// inserting it grows the path the least (added = |prev→p| + |p→next| − |prev→next|).
+// Straight-line is only used when there's no drawn route to measure against;
+// when a route exists the caller uses nearestRouteSection (actual road geometry).
+export function bestInsertionIndex(
+  p: LatLng,
+  start: LatLng,
+  stops: LatLng[],
+  destination: LatLng,
+): number {
+  const seq = [start, ...stops, destination]
+  let bestIdx = stops.length
+  let bestAdded = Infinity
+  for (let k = 0; k + 1 < seq.length; k++) {
+    const prev = seq[k]
+    const next = seq[k + 1]
+    const added =
+      haversineMeters(prev, p) + haversineMeters(p, next) - haversineMeters(prev, next)
+    if (added < bestAdded) {
+      bestAdded = added
+      // Inserting between seq[k] and seq[k+1] == stops-array index k.
+      bestIdx = k
+    }
+  }
+  return bestIdx
+}
+
+// The point HALFWAY ALONG a path by travelled distance (not the mean of the
+// coordinates) — i.e. walk the polyline until half its total length is covered
+// and interpolate within the straddling segment. Used to anchor the route's
+// distance badge near the visual middle of the line. Returns null for an empty
+// path; the single point for a one-point path.
+export function pathMidpoint(path: LatLng[]): LatLng | null {
+  if (path.length === 0) return null
+  if (path.length === 1) return path[0]
+  const segs: number[] = []
+  let total = 0
+  for (let i = 0; i + 1 < path.length; i++) {
+    const d = haversineMeters(path[i], path[i + 1])
+    segs.push(d)
+    total += d
+  }
+  if (total === 0) return path[0]
+  let half = total / 2
+  for (let i = 0; i < segs.length; i++) {
+    if (half <= segs[i]) {
+      const t = segs[i] === 0 ? 0 : half / segs[i]
+      return {
+        lat: path[i].lat + (path[i + 1].lat - path[i].lat) * t,
+        lng: path[i].lng + (path[i + 1].lng - path[i].lng) * t,
+      }
+    }
+    half -= segs[i]
+  }
+  return path[path.length - 1]
+}
+
 // Compass bearing (degrees, 0–359, clockwise from north) of travel from a→b.
 export function bearing(a: LatLng, b: LatLng): number {
   const φ1 = toRad(a.lat)

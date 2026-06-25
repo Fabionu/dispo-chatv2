@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { decode } from '@here/flexpolyline'
 import { loadHere } from '../../lib/here/loadHere'
+import { pathMidpoint } from '../../lib/here/geo'
 import type { LatLng, RouteMarker, RouteMarkerKind } from '../../lib/here/types'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -10,6 +11,10 @@ type Props = {
   markers: RouteMarker[]
   // Encoded HERE flexible polylines, one per route section. Empty = no route.
   routePolylines: string[]
+  // Pre-formatted total route distance (e.g. "84 km"), shown as a small badge at
+  // the route's midpoint. Null/undefined = no badge. Reuses the same value the
+  // side panel displays so the two never disagree.
+  routeDistanceLabel?: string | null
   // Whether the HERE logistics / HGV truck-restriction overlay is enabled.
   truckOverlay: boolean
   // Reports whether the logistics overlay is actually available on this HERE
@@ -95,6 +100,7 @@ function iconFor(H: any, marker: RouteMarker): any {
 export default function HereMap({
   markers,
   routePolylines,
+  routeDistanceLabel,
   truckOverlay,
   onTruckOverlayAvailabilityChange,
   onMapContextMenu,
@@ -343,7 +349,7 @@ export default function HereMap({
   useEffect(() => {
     draw()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, markers, routePolylines])
+  }, [ready, markers, routePolylines, routeDistanceLabel])
 
   // ── Toggle the HGV / logistics overlay (no route recalculation) ───────────
   useEffect(() => {
@@ -410,6 +416,9 @@ export default function HereMap({
 
     // Accumulate every drawn point so we can frame them all at the end.
     const allPoints: LatLng[] = []
+    // The route path in travel order (all sections concatenated) — used to anchor
+    // the distance badge at the line's distance-weighted midpoint.
+    const routePath: LatLng[] = []
 
     // Route line: a thin coral stroke over a subtle dark casing so it stays
     // readable on the basemap without dominating it. One casing+main pair per
@@ -427,6 +436,7 @@ export default function HereMap({
       for (const [lat, lng] of coords) {
         line.pushPoint({ lat, lng })
         allPoints.push({ lat, lng })
+        routePath.push({ lat, lng })
       }
       const casing = new H.map.Polyline(line, {
         style: { lineWidth: 5, strokeColor: 'rgba(0,0,0,0.35)', lineJoin: 'round', lineCap: 'round' },
@@ -436,6 +446,14 @@ export default function HereMap({
       })
       for (const poly of [casing, main]) {
         poly.draggable = true
+        // Volatile for the SAME reason as the markers below: HERE only delivers
+        // drag gestures for objects it re-renders per frame. Without this the
+        // line is drawn into the static cache and `dragstart/drag/dragend` never
+        // fire for it, so the route line can't be grabbed. (This regressed when
+        // the hover listeners that used to keep it interactive were removed for
+        // the default-cursor change — volatility restores drag without any
+        // cursor styling, keeping the normal arrow cursor.)
+        poly.setVolatility(true)
         poly.setData({ section: sectionIndex })
         // No cursor change on hover — the map keeps the default arrow cursor
         // everywhere (enforced by the .here-map-surface CSS), so dragging the
@@ -458,6 +476,24 @@ export default function HereMap({
       // never grab/pointer).
       group.addObject(m)
       allPoints.push(marker.position)
+    }
+
+    // Distance badge — a small Google-Maps-style pill near the route midpoint.
+    // Rendered as a DOM overlay (H.map.DomMarker) so its CSS `pointer-events:
+    // none` lets every press/drag fall through to the route line and markers
+    // underneath; it never intercepts a gesture. Cleared with the group on each
+    // redraw, so it follows the route as stops/legs change.
+    if (routeDistanceLabel && routePath.length >= 2) {
+      const mid = pathMidpoint(routePath)
+      if (mid) {
+        const outer = document.createElement('div')
+        const pill = document.createElement('div')
+        pill.className = 'route-distance-badge'
+        pill.textContent = routeDistanceLabel
+        outer.appendChild(pill)
+        const badge = new H.map.DomMarker(mid, { icon: new H.map.DomIcon(outer) })
+        group.addObject(badge)
+      }
     }
 
     fitToPoints(H, map, allPoints)
