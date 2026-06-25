@@ -252,7 +252,9 @@
       "Bash(cd /c/Users/Home/Desktop/dispo-chatv2 && head -50 web/src/components/settings/ProfileSidebarPanel.tsx | grep -n \"return\\\\|className=\\\\\"\" | head -8; echo \"--- where mounted ---\"; grep -rn \"ProfileSidebarPanel\\\\|CompanySidebarPanel\" web/src/pages/Workspace.tsx)",
       "Bash(rm -f /tmp/coordtest.mjs && echo cleaned)",
       "PowerShell(npm run build 2>&1)",
-      "PowerShell(npx tsc -b 2>&1)"
+      "PowerShell(npx tsc -b 2>&1)",
+      "Bash(node -e \"const b=require\\('bcryptjs'\\); console.log\\('result:', b.compareSync\\('anything','account_deleted'\\)\\)\")",
+      "Bash(cd /c/Users/Home/Desktop/dispo-chatv2/server && grep -E '^\\(DATABASE_URL|DIRECT_DATABASE_URL|JWT_SECRET\\)=' .env | sed -E 's/\\(=.{0,18}\\).*/\\\\1…/')"
     ]
   }
 }

@@ -2,11 +2,12 @@ import { randomUUID } from 'node:crypto'
 import { Router } from 'express'
 import { z } from 'zod'
 import { pool } from '../db/pool.js'
-import { requireAuth } from '../auth.js'
-import { asyncHandler } from '../http.js'
+import { requireAuth, clearSession } from '../auth.js'
+import { asyncHandler, withTransaction } from '../http.js'
 import { uploadSingle, isImage, MAX_IMAGE_BYTES } from '../middleware/upload.js'
 import { saveBuffer, deleteFile } from '../storage.js'
 import { serveImageObject } from '../util/serveImage.js'
+import { anonymizeUser } from '../util/anonymizeUser.js'
 
 export const profileRouter = Router()
 profileRouter.use(requireAuth)
@@ -118,6 +119,25 @@ profileRouter.patch(
 
     const profile = await loadProfile(req.session!.userId)
     res.json({ profile })
+  }),
+)
+
+// ── DELETE /api/profile ──────────────────────────────────────────────────
+// Self-service account deletion. We do NOT remove the user row — messages,
+// DM threads and group history reference it — so we anonymize it in place
+// (scrub personal fields, disable login, flag deleted_at) and clear the
+// caller's session. Sessions are stateless JWTs, so this only signs out THIS
+// browser immediately; any other device logs out on its next /api/auth/me
+// (which now rejects deleted users). The avatar object is removed only after
+// the DB scrub commits, so a storage hiccup can't strand the transaction.
+profileRouter.delete(
+  '/',
+  asyncHandler(async (req, res) => {
+    const userId = req.session!.userId
+    const { oldAvatarPath } = await withTransaction((client) => anonymizeUser(client, userId))
+    if (oldAvatarPath) await deleteFile(oldAvatarPath)
+    clearSession(res)
+    res.json({ ok: true })
   }),
 )
 

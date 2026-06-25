@@ -298,6 +298,10 @@ export const api = {
       return request<{ profile: Profile }>('/profile/avatar', { method: 'POST', body: form })
     },
     removeAvatar: () => request<{ profile: Profile }>('/profile/avatar', { method: 'DELETE' }),
+    // Self-service account deletion: anonymizes the account server-side (messages
+    // and conversations are kept; personal details are scrubbed) and clears the
+    // session cookie. The caller should sign out locally afterwards.
+    delete: () => request<{ ok: true }>('/profile', { method: 'DELETE' }),
   },
 
   company: {

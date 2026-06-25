@@ -47,6 +47,8 @@ connectionsRouter.get(
          join workspaces w on w.id = u.workspace_id
         where (c.user_a_id = $1 or c.user_b_id = $1)
           and c.status in ('accepted', 'pending')
+          -- Hide connections whose other party deleted their account.
+          and u.deleted_at is null
         order by coalesce(c.responded_at, c.requested_at) desc
         limit 500`,
       [userId],
@@ -103,7 +105,7 @@ connectionsRouter.post(
       // Connections only make sense across workspaces — same-workspace pairs
       // can DM directly.
       const { rows: target } = await client.query<{ workspace_id: string }>(
-        'select workspace_id from users where id = $1',
+        'select workspace_id from users where id = $1 and deleted_at is null',
         [toUserId],
       )
       if (target.length === 0) throw new HttpError(404, 'user_not_found')

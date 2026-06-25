@@ -212,7 +212,7 @@ groupsRouter.post(
         // Resolve the peer's workspace: same workspace → DM allowed outright;
         // cross-workspace → requires an accepted connection.
         const { rows: peerRows } = await client.query<{ workspace_id: string }>(
-          'select workspace_id from users where id = $1',
+          'select workspace_id from users where id = $1 and deleted_at is null',
           [otherUserId],
         )
         if (peerRows.length === 0) throw new HttpError(404, 'peer_not_found')
@@ -373,6 +373,10 @@ async function fetchGroupMembers(groupId: string) {
        join users u on u.id = gm.user_id
        left join workspaces w on w.id = u.workspace_id
       where gm.group_id = $1
+        -- A deleted member's group_members row is kept (so DM peer joins still
+        -- resolve), but they should not appear as an active member or in the
+        -- @-mention picker, both of which read this list.
+        and u.deleted_at is null
       order by (gm.role = 'admin') desc, u.display_name asc`,
     [groupId],
   )
@@ -1276,7 +1280,8 @@ groupsRouter.post(
           `select u.id, u.display_name
              from group_members gm
              join users u on u.id = gm.user_id
-            where gm.group_id = $1 and u.id = any($2::uuid[])`,
+            where gm.group_id = $1 and u.id = any($2::uuid[])
+              and u.deleted_at is null`,
           [groupId, requestedMentionIds],
         )
         if (validMembers.length > 0) {

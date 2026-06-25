@@ -1,0 +1,21 @@
+-- Soft-delete / anonymization for users.
+--
+-- A user is NEVER physically deleted: messages.author_id, the DM "peer" lateral
+-- join, and group history all reference users(id) with no ON DELETE CASCADE (by
+-- design — we must not lose conversations). Instead a deleted account is
+-- anonymized IN PLACE and flagged with deleted_at. The row stays, so every
+-- existing join keeps resolving — it now resolves to a scrubbed, anonymous
+-- identity (display_name → user_deleted_<n>, no avatar, no profile fields).
+--
+--   deleted_at  NULL      → active account.
+--               non-NULL  → anonymized. Active-user lists (workspace members,
+--                           directory search, group member/mention picker,
+--                           connections) filter on `deleted_at is null`; message
+--                           and DM-peer joins deliberately do NOT, so historical
+--                           authorship still renders (as the anonymized name).
+--
+-- The scrubbing itself (email placeholder, password disable, cleared profile
+-- fields, cancelled pending invites/connections) is done by the application —
+-- see server/src/util/anonymizeUser.ts. This migration only adds the flag.
+
+alter table users add column deleted_at timestamptz;

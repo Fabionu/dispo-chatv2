@@ -51,6 +51,7 @@ directoryRouter.get(
            on c.user_a_id = least($1::uuid, u.id)
           and c.user_b_id = greatest($1::uuid, u.id)
         where u.id <> $1
+          and u.deleted_at is null
           and (u.display_name ilike $3 or u.email ilike $3 or w.name ilike $3)
         order by same_workspace desc, u.display_name asc
         limit 25`,

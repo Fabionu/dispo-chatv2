@@ -104,7 +104,7 @@ authRouter.post(
       role: string
     }>(
       `select id, workspace_id, password_hash, display_name, role
-         from users where lower(email) = $1 limit 1`,
+         from users where lower(email) = $1 and deleted_at is null limit 1`,
       [email],
     )
 
@@ -269,10 +269,13 @@ authRouter.get(
          from users u
          join workspaces w on w.id = u.workspace_id
         where u.id = $1
+          and u.deleted_at is null
         limit 1`,
       [session.userId],
     )
     const u = rows[0]
+    // No row (or a soft-deleted/anonymized account) → treat the stale JWT as
+    // signed out so the client drops it on next load.
     if (!u) return res.status(401).json({ error: 'unauthenticated' })
 
     res.json({

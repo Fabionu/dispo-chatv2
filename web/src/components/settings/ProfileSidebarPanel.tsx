@@ -1,12 +1,14 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { ArrowLeft, Check, ChevronDown } from 'lucide-react'
+import { ArrowLeft, Check, ChevronDown, Loader2, Trash2 } from 'lucide-react'
 import type { AvailabilityStatus, Profile, Role } from '../../lib/types'
 import { api, type ProfilePatch } from '../../lib/api'
+import { useAuth } from '../../auth/AuthContext'
 import { avatarUrl, clearAvatarCache } from '../../lib/avatarCache'
 import { AVAILABILITY, AWAY, statusMeta } from '../../lib/availability'
 import Avatar from '../Avatar'
 import AvatarPhotoEditor from '../AvatarPhotoEditor'
 import EditableRow from '../EditableRow'
+import ConfirmDialog from '../ConfirmDialog'
 import AvatarCropModal from './AvatarCropModal'
 
 type Props = {
@@ -47,6 +49,11 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
   // The picked image awaiting crop confirmation. Set on selection (no immediate
   // upload); cleared on cancel or after a successful cropped upload.
   const [cropFile, setCropFile] = useState<File | null>(null)
+  // Account-deletion flow: a guarded, destructive action. `confirmDelete` shows
+  // the confirm dialog; `deleting` disables the trigger while the request runs.
+  const auth = useAuth()
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     // Seeded from the cache → render instantly, no fetch. Only fetch when we
@@ -111,6 +118,24 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
       onSaved(p, avatarVersion)
     } catch {
       setError('Could not update status.')
+    }
+  }
+
+  // Permanently anonymize the caller's own account. Messages and conversations
+  // are preserved server-side (the author shows as "user_deleted_…"); only the
+  // personal details are scrubbed. On success the server has already cleared the
+  // cookie — we sign out locally to drop to the signed-out screen. This unmounts
+  // the panel, so there's no success state to reset.
+  async function deleteAccount() {
+    setDeleting(true)
+    setError(null)
+    try {
+      await api.profile.delete()
+      await auth.signOut()
+    } catch {
+      setDeleting(false)
+      setConfirmDelete(false)
+      setError('Could not delete your account. Please try again.')
     }
   }
 
@@ -234,6 +259,32 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
             <Section label="Company">
               <EditableRow label="Workspace" value={profile.company} />
             </Section>
+
+            {/* Danger zone — account deletion. Anonymizes the account; chat
+                history is preserved but personal details are removed. */}
+            <Section label="Danger zone">
+              <div className="rounded-card border border-alert/20 bg-alert/[0.04] px-3.5 py-3">
+                <div className="text-[12.5px] text-text font-medium leading-tight">
+                  Delete account
+                </div>
+                <p className="text-[11.5px] text-faint mt-1 leading-[1.45]">
+                  Permanently removes your name, photo and profile details. Your messages stay in
+                  conversations but show as a deleted user. This can’t be undone.
+                </p>
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  disabled={deleting}
+                  className="mt-3 inline-flex items-center gap-1.5 h-8 px-3 rounded-btn border border-alert/40 text-alert text-[12px] font-semibold hover:bg-alert/10 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {deleting ? (
+                    <Loader2 size={13} strokeWidth={2.2} className="animate-spin" />
+                  ) : (
+                    <Trash2 size={13} strokeWidth={1.9} />
+                  )}
+                  Delete my account
+                </button>
+              </div>
+            </Section>
           </div>
         )}
       </div>
@@ -243,6 +294,17 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
           file={cropFile}
           onCancel={() => setCropFile(null)}
           onConfirm={uploadCroppedAvatar}
+        />
+      )}
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete your account?"
+          message="This permanently removes your name, photo and profile details. Your messages stay in conversations but will show as a deleted user. This can’t be undone."
+          confirmLabel="Delete account"
+          tone="alert"
+          onConfirm={deleteAccount}
+          onCancel={() => setConfirmDelete(false)}
         />
       )}
     </>

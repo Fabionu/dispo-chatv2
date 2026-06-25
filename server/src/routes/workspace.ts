@@ -25,6 +25,7 @@ workspaceRouter.get(
          from users
         where workspace_id = $1
           and id <> $2
+          and deleted_at is null
         order by display_name asc
         limit 500`,
       [workspaceId, userId],
