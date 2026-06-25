@@ -196,11 +196,14 @@ function parseZoom(raw: unknown): number {
 async function streetSnap(apiKey: string, at: HerePosition, zoom: number): Promise<SnapResult | null> {
   // "Zoomed-out-ness" in [0,1]: 1 at zoom ≤8, 0 at zoom ≥14.
   const out = Math.max(0, Math.min(1, (14 - zoom) / 6))
-  // Max distance we'll accept a snap from: ~80 m zoomed in → ~2 km zoomed out.
-  const maxSnapMeters = 80 + out * 1920
+  // Max distance we'll accept a snap from: ~80 m zoomed in → ~2.5 km zoomed out.
+  const maxSnapMeters = 80 + out * 2420
   // How strongly to favour a major road over a closer minor one when zoomed out.
-  const majorBias = out * 4
-  const limit = out > 0 ? 15 : 6
+  // score = dist / (1 + bias), so at full zoom-out (bias 6) a highway up to ~7×
+  // farther than the nearest side street still wins — matching the user's intent
+  // that a released point land on the visible motorway, not a closer field road.
+  const majorBias = out * 6
+  const limit = out > 0 ? 20 : 6
 
   const url = new URL(revgeocodeBase)
   url.searchParams.set('apiKey', apiKey)
@@ -283,16 +286,29 @@ hereRouter.get(
   }),
 )
 
+// Max metres a routing refinement may move a chosen STREET snap. routeSnap()
+// snaps to the nearest routable road from a point; we only trust it to nudge a
+// street snap onto its routable centreline, NOT to drag it onto a different
+// (usually smaller) road — that guard is what stops a zoomed-out release from
+// jumping off the intended main road onto a closer field track.
+const ROUTE_REFINE_METERS = 70
+
 // ── GET /api/here/snap?at=lat,lng[&zoom=Z] ───────────────────────────────
-// The CENTRAL road-snap every add/drag/release path uses. Two-stage so a stop
-// never lands in a field while still preferring proper/main roads:
-//   1) Street reverse-geocode (zoom-aware, biased toward major roads). If it
-//      finds a clearly-major road, use it — that's the "prefer main roads" win.
-//   2) Otherwise snap onto the nearest ROUTABLE road via routeSnap(), so the
-//      point sits on a real road rather than a field/driveway-that-isn't-a-road.
-//      We reuse the street label (same road, usually) so the address stays
-//      consistent with the snapped coordinate.
-// Falls back gracefully: street result → routed road → raw click ({place:null}).
+// The CENTRAL road-snap every add/drag/release path uses. The STREET snap is
+// authoritative: it's zoom-aware and biases toward major roads, so when the
+// user releases from a zoomed-out view near a highway it picks that visible main
+// road over a closer minor one (instead of the raw cursor coordinate). Routing
+// is then used only to keep the point on a real, ROUTABLE road:
+//   1) streetSnap() → best nearby street (major-biased, radius scales with zoom).
+//   2) refine it with routeSnap(streetPos): if routing lands within
+//      ROUTE_REFINE_METERS, use that (guarantees routability) — else keep the
+//      street coordinate. The guard prevents routing from yanking the snap onto
+//      a different, smaller road.
+//   3) no street at all → routeSnap(raw click) as an on-road fallback.
+//   4) nothing routable → {place:null} so the client keeps the raw coordinate.
+// The previous bug: step 2 used routeSnap(RAW click), which from a zoomed-out,
+// imprecise release snapped to whatever road was nearest the cursor — typically
+// a field track / side road — discarding the major-biased street snap entirely.
 hereRouter.get(
   '/snap',
   asyncHandler(async (req, res) => {
@@ -301,17 +317,24 @@ hereRouter.get(
     const zoom = parseZoom(req.query.zoom)
 
     const street = await streetSnap(apiKey, at, zoom)
-    // A clearly-major road nearby is the best "main road" snap — take it.
-    if (street?.major) return res.json({ place: street })
-
-    // Otherwise guarantee an on-road coordinate via routing.
-    const routed = await routeSnap(apiKey, at)
-    if (routed) {
-      return res.json({ place: { label: street?.label ?? '', position: routed, major: false } })
+    if (street) {
+      // Refine the major-biased street snap onto its routable centreline, but
+      // only accept the routed point when it stays close (don't jump roads).
+      const routed = await routeSnap(apiKey, street.position)
+      const position =
+        routed && metersBetween(routed, street.position) <= ROUTE_REFINE_METERS
+          ? routed
+          : street.position
+      return res.json({ place: { label: street.label, position, major: street.major } })
     }
 
-    // No routable road found — fall back to the street result if any, else null.
-    res.json({ place: street ?? null })
+    // No street found near the click — guarantee an on-road coordinate from the
+    // raw point so a stop still lands on a road rather than in a field.
+    const routed = await routeSnap(apiKey, at)
+    if (routed) return res.json({ place: { label: '', position: routed, major: false } })
+
+    // Nothing routable nearby — let the client keep the raw coordinate.
+    res.json({ place: null })
   }),
 )
 

@@ -314,14 +314,17 @@ button {
   cursor: default !important;
 }
 
-/* Route distance badge: a compact, dark pill placed on the route midpoint (HERE
-   DomMarker). `position: absolute` + translate(-50%, -50%) centres it on the
-   coordinate regardless of the marker wrapper's own positioning, and
+/* Route distance badge: a compact, dark pill anchored at the route midpoint
+   (HERE DomMarker). It sits just ABOVE the line — `translate(-50%, calc(-100% -
+   8px))` lifts it clear of the route so it never covers it — with a small tail
+   (::after) pointing back down at the segment, Google-Maps style.
    `pointer-events: none` ensures it never blocks dragging the route line or
    clicking a marker beneath it. */
 .route-distance-badge {
   position: absolute;
-  transform: translate(-50%, -50%);
+  left: 0;
+  top: 0;
+  transform: translate(-50%, calc(-100% - 8px));
   pointer-events: none;
   white-space: nowrap;
   background: rgba(20, 20, 20, 0.92);
@@ -333,6 +336,20 @@ button {
   font-weight: 600;
   line-height: 1.55;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+/* Tail: a small triangle hanging off the badge's bottom edge, its tip reaching
+   down to the route midpoint the badge describes. */
+.route-distance-badge::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 7px solid rgba(20, 20, 20, 0.92);
 }
 
 .modal-input {
