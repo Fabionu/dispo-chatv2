@@ -93,6 +93,29 @@ const truckRouteSchema = z.object({
     .optional(),
 })
 
+// One screen-sampled snap candidate: a geo coordinate obtained by converting a
+// pixel near the cursor back to lat/lng, tagged with `px` = its screen-pixel
+// distance from the release point (0 = the exact release pixel). The candidate
+// snap evaluates several of these so the stop lands on the road actually rendered
+// under the cursor, not merely the nearest road to the single raw coordinate.
+const screenCandidateSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  px: z.number().min(0).max(100000),
+})
+
+const snapCandidatesSchema = z.object({
+  candidates: z.array(screenCandidateSchema).min(1).max(40),
+  // Current map zoom (logging/diagnostics only — `px` already carries scale).
+  zoom: z.number().min(0).max(22).optional(),
+  // Route travel heading here (deg) → direction-aware carriageway refinement.
+  course: z.number().min(0).max(359).optional(),
+  // The neighbouring waypoints of the leg this stop slots into, for detour-aware
+  // ranking (prefer the candidate that adds least to prev→here→next).
+  prev: coordinateSchema.optional(),
+  next: coordinateSchema.optional(),
+})
+
 function requireHereKey() {
   if (!env.HERE_API_KEY) throw new HttpError(503, 'here_not_configured')
   return env.HERE_API_KEY
@@ -353,6 +376,60 @@ async function routeSnap(apiKey: string, at: HerePosition, course?: number): Pro
   }
 }
 
+// The single NEAREST street to a point (reverse geocode, limit 1), with its name
+// (for grouping), label, snapped position, distance and major-road flag. This is
+// the per-pixel probe behind the screen-space candidate snap: one call per
+// sampled candidate, run in parallel. Returns null when HERE has no street there.
+async function nearestStreet(
+  apiKey: string,
+  at: HerePosition,
+): Promise<{ name: string; label: string; pos: HerePosition; dist: number; major: boolean } | null> {
+  const url = new URL(revgeocodeBase)
+  url.searchParams.set('apiKey', apiKey)
+  url.searchParams.set('at', `${at.lat},${at.lng}`)
+  url.searchParams.set('lang', 'en-US')
+  url.searchParams.set('limit', '1')
+  url.searchParams.set('types', 'street')
+  const data = await hereJson<HereRevgeocodeResponse>(url).catch(() => null)
+  const item = data?.items?.find((i) => i.position)
+  if (!item?.position) return null
+  return {
+    name: (item.address?.street ?? item.title ?? '').trim(),
+    label: item.address?.label ?? item.title ?? '',
+    pos: item.position,
+    dist: item.distance ?? metersBetween(at, item.position),
+    major: isMajorRoad(item),
+  }
+}
+
+// Total length (metres) of a CAR route origin→(via)→destination, or null on
+// failure. Used only as a RELATIVE detour signal when ranking snap candidates
+// (how much does routing through this candidate lengthen the leg?), so car/fast
+// — cheaper and more permissive than truck — is exactly right here.
+async function routeLength(
+  apiKey: string,
+  origin: HerePosition,
+  via: HerePosition[],
+  destination: HerePosition,
+): Promise<number | null> {
+  try {
+    const url = new URL(routeBase)
+    url.searchParams.set('apiKey', apiKey)
+    url.searchParams.set('transportMode', 'car')
+    url.searchParams.set('routingMode', 'fast')
+    url.searchParams.set('origin', `${origin.lat},${origin.lng}`)
+    url.searchParams.set('destination', `${destination.lat},${destination.lng}`)
+    for (const v of via) url.searchParams.append('via', `${v.lat},${v.lng}`)
+    url.searchParams.set('return', 'summary')
+    const data = await hereJson<HereRouteResponse>(url)
+    const secs = data.routes?.[0]?.sections
+    if (!secs?.length) return null
+    return secs.reduce((acc, s) => acc + (s.summary?.length ?? 0), 0)
+  } catch {
+    return null
+  }
+}
+
 // ── GET /api/here/revgeocode?at=lat,lng[&zoom=Z] ─────────────────────────
 // Street-only reverse geocode (kept for label/lookup use). Returns
 // { place: null } when HERE has no street result for the spot.
@@ -436,6 +513,148 @@ hereRouter.get(
 
     // Nothing routable nearby — let the client keep the raw coordinate.
     res.json({ place: null })
+  }),
+)
+
+// ── Screen-space candidate scoring weights (see /snap/candidates) ────────────
+// All expressed in "screen-pixel equivalents" so they trade off directly against
+// each candidate road's closest sampled pixel (minPx).
+//   VOTE_WEIGHT  — each EXTRA sampled pixel that landed on a road counts as this
+//                  many px closer. Votes ≈ how much of the cursor's neighbourhood
+//                  the road covers on screen = its visual prominence. This is the
+//                  signal that makes a wide visible highway beat a thin parallel
+//                  lane that happens to sit a hair nearer the exact release pixel.
+//   MAJOR_BONUS  — a major/through road counts as this many px closer (a mild
+//                  class preference on top of the prominence vote).
+//   DETOUR_WEIGHT— score added per KM a candidate lengthens prev→here→next, so a
+//                  parallel road that would force a U-turn/detour loses.
+const VOTE_WEIGHT = 2
+const MAJOR_BONUS = 14
+const DETOUR_WEIGHT = 6
+
+// ── POST /api/here/snap/candidates ───────────────────────────────────────────
+// The screen-space road-snap. The client samples the pixels around the cursor,
+// converts each to lat/lng, and posts them here (first = the exact release
+// pixel). We snap EACH to its nearest road in parallel, group the results by
+// road, and pick the road that is (a) closest to the cursor in screen space,
+// (b) most prominent (the most sampled pixels fell on it), and (c) ideally a
+// major/through road — i.e. the road the user actually SEES under the cursor,
+// not just the nearest road to one raw coordinate. An optional detour check
+// across the top roads (prev→here→next length) and a direction-aware routing
+// refinement (correct carriageway) finish the choice. `place` is null only when
+// nothing routable is near any candidate, so the client keeps the raw point.
+hereRouter.post(
+  '/snap/candidates',
+  asyncHandler(async (req, res) => {
+    const apiKey = requireHereKey()
+    const body = snapCandidatesSchema.parse(req.body)
+    const course = body.course
+    const center = body.candidates[0]
+
+    // 1) Snap EVERY sampled pixel to its nearest road, in parallel. Pixels that
+    //    landed on the visible highway snap onto it; pixels over a field/parallel
+    //    lane snap there — so the full set captures every road near the cursor.
+    const snaps = (
+      await Promise.all(
+        body.candidates.map(async (c) => {
+          const s = await nearestStreet(apiKey, { lat: c.lat, lng: c.lng })
+          return s ? { ...s, px: c.px } : null
+        }),
+      )
+    ).filter((s): s is NonNullable<typeof s> => Boolean(s))
+
+    // No road near ANY sample → guarantee an on-road point from the release via
+    // routing, else hand back null so the client keeps the raw coordinate.
+    if (snaps.length === 0) {
+      const routed = await routeSnap(apiKey, { lat: center.lat, lng: center.lng }, course)
+      return res.json({ place: routed ? { label: '', position: routed, major: false } : null })
+    }
+
+    // 2) Group snaps by road (street name; position-cluster fallback when a road
+    //    has no name). votes = how many sampled pixels hit the road; the closest
+    //    sampled pixel to the cursor gives the road's best on-road point.
+    type Group = { key: string; label: string; pos: HerePosition; minPx: number; votes: number; major: boolean }
+    const groups = new Map<string, Group>()
+    for (const s of snaps) {
+      const key = s.name
+        ? s.name.toLowerCase().replace(/\s+/g, ' ')
+        : `@${s.pos.lat.toFixed(3)},${s.pos.lng.toFixed(3)}`
+      const g = groups.get(key)
+      if (!g) {
+        groups.set(key, { key, label: s.label, pos: s.pos, minPx: s.px, votes: 1, major: s.major })
+      } else {
+        g.votes += 1
+        g.major = g.major || s.major
+        if (s.px < g.minPx) {
+          g.minPx = s.px
+          g.pos = s.pos
+          g.label = s.label
+        }
+      }
+    }
+
+    // 3) Score (lower = better): the closest sampled pixel dominates, then visual
+    //    prominence (votes) and major-road class pull toward the big visible road.
+    const scored = [...groups.values()]
+      .map((g) => ({ g, score: g.minPx - VOTE_WEIGHT * (g.votes - 1) - (g.major ? MAJOR_BONUS : 0) }))
+      .sort((a, b) => a.score - b.score)
+
+    // 4) Detour-aware tiebreaker across the top roads: prefer the one that adds
+    //    the least to prev→here→next (so a parallel carriageway that forces a big
+    //    detour/U-turn loses). Bounded to the top 3, run in parallel, and purely
+    //    additive — a routing hiccup just leaves the screen-space ranking intact.
+    const prev = body.prev
+    const next = body.next
+    let ranked = scored
+    if (prev && next && scored.length >= 2) {
+      const top = scored.slice(0, 3)
+      const [base, ...lens] = await Promise.all([
+        routeLength(apiKey, prev, [], next),
+        ...top.map((s) => routeLength(apiKey, prev, [s.g.pos], next)),
+      ])
+      if (base != null) {
+        const withDetour = top
+          .map((s, i) => {
+            const added = lens[i] != null ? Math.max(0, (lens[i] as number) - base) : 0
+            return { g: s.g, score: s.score + DETOUR_WEIGHT * (added / 1000) }
+          })
+          .sort((a, b) => a.score - b.score)
+        ranked = [...withDetour, ...scored.slice(3)]
+      }
+    }
+
+    const chosen = ranked[0].g
+
+    // 5) Direction-aware refinement: pull the chosen point onto a real ROUTABLE
+    //    centreline and, when a travel direction is known, the correct
+    //    carriageway — but only when that stays near the chosen road (no jump).
+    let position = chosen.pos
+    if (course !== undefined) {
+      const routed = await routeSnap(apiKey, chosen.pos, course)
+      if (routed && metersBetween(routed, chosen.pos) <= DIRECTION_REFINE_METERS) position = routed
+    } else {
+      const routed = await routeSnap(apiKey, chosen.pos)
+      if (routed && metersBetween(routed, chosen.pos) <= ROUTE_REFINE_METERS) position = routed
+    }
+
+    if (SNAP_DEBUG) {
+      console.log('[snap] candidates', {
+        zoom: body.zoom,
+        course,
+        samples: snaps.length,
+        groups: scored.map((s) => ({
+          road: s.g.key,
+          votes: s.g.votes,
+          minPx: s.g.minPx,
+          major: s.g.major,
+          score: Math.round(s.score),
+        })),
+        chosen: chosen.key,
+        position,
+      })
+    }
+
+    res.json({ place: { label: chosen.label, position, major: chosen.major } })
   }),
 )
 

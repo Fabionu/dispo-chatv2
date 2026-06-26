@@ -101,3 +101,12 @@ export type RoutePoint = {
 // A routing waypoint sent to the proxy: a coordinate plus an optional `course`
 // (desired travel heading) so HERE snaps to the correct direction/carriageway.
 export type RouteWaypoint = LatLng & { course?: number }
+
+// A screen-space snap candidate: a geographic point produced by converting ONE
+// sampled screen pixel near the cursor back to lat/lng, tagged with `px` — its
+// pixel distance from the release point. The candidate snap (api.here
+// .snapCandidates) evaluates several of these so a dropped stop lands on the road
+// actually rendered under the cursor, not just the nearest road to the single raw
+// release coordinate (which, zoomed out, can be a different/parallel road). The
+// first candidate is always the exact release pixel (px 0).
+export type ScreenGeoCandidate = { lat: number; lng: number; px: number }

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { decode } from '@here/flexpolyline'
 import { loadHere } from '../../lib/here/loadHere'
 import { pathMidpoint } from '../../lib/here/geo'
-import type { LatLng, RouteMarker, RouteMarkerKind } from '../../lib/here/types'
+import type { LatLng, RouteMarker, RouteMarkerKind, ScreenGeoCandidate } from '../../lib/here/types'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -20,15 +20,24 @@ type Props = {
   // Reports whether the logistics overlay is actually available on this HERE
   // plan/SDK, so the parent can disable the toggle when it isn't.
   onTruckOverlayAvailabilityChange?: (available: boolean) => void
-  // Right-click on the map → the geo coordinate under the cursor plus the
-  // cursor position RELATIVE TO THE MAP CONTAINER (for placing a context menu)
-  // and the current map zoom (for zoom-aware snapping).
-  onMapContextMenu?: (info: { lat: number; lng: number; x: number; y: number; zoom: number }) => void
+  // Right-click on the map → the geo coordinate under the cursor, the cursor
+  // position RELATIVE TO THE MAP CONTAINER (for placing a context menu), the
+  // current map zoom, and screen-space snap candidates sampled around the cursor
+  // (so an added stop can land on the road actually rendered under it).
+  onMapContextMenu?: (info: {
+    lat: number
+    lng: number
+    x: number
+    y: number
+    zoom: number
+    candidates: ScreenGeoCandidate[]
+  }) => void
   // The map view started changing (pan/zoom) — used to dismiss menus/popovers.
   onMapViewChange?: () => void
-  // A waypoint marker finished being dragged → its id + the dropped coordinate +
-  // the current zoom (for zoom-aware snapping).
-  onMarkerDragEnd?: (id: string, lat: number, lng: number, zoom: number) => void
+  // A waypoint marker finished being dragged → its id, the screen-space snap
+  // candidates sampled around the drop, and the current zoom. The candidates
+  // (first = the exact drop pixel) let the snap target the visible road.
+  onMarkerDragEnd?: (id: string, candidates: ScreenGeoCandidate[], zoom: number) => void
   // A waypoint marker was clicked (not dragged) → its id, kind, and screen
   // position within the container, so the parent can open a marker popover.
   onMarkerClick?: (info: {
@@ -38,9 +47,9 @@ type Props = {
     y: number
   }) => void
   // The route line was dragged (drag-to-add-stop) → the section index that was
-  // grabbed + the released coordinate + zoom, so the parent can insert a snapped
-  // stop into that segment and recalculate.
-  onRouteDragEnd?: (sectionIndex: number, lat: number, lng: number, zoom: number) => void
+  // grabbed + the screen-space snap candidates sampled around the release + zoom,
+  // so the parent can insert a snapped stop into that segment and recalculate.
+  onRouteDragEnd?: (sectionIndex: number, candidates: ScreenGeoCandidate[], zoom: number) => void
   // Width (px) of the floating panel overlapping the map's LEFT edge, so the
   // smart fit can keep the route clear of it. 0 when the panel is collapsed.
   panelInsetPx?: number
@@ -64,6 +73,48 @@ function snapDebug(): boolean {
   } catch {
     return false
   }
+}
+
+// Convert the release pixel — and a ring of nearby pixels — back to geo
+// coordinates, so the snap can weigh the roads actually rendered AROUND the
+// cursor instead of only the single release point. The user aims at a road drawn
+// on screen; zoomed out, one pixel can span a kilometre, so the exact release
+// pixel may sit just BESIDE the highway while a pixel a few px toward it lands ON
+// it. Sampling a small ring recovers that intent. `vx,vy` are viewport (map-
+// container) pixels — exactly what `screenToGeo` expects, so no offset math here.
+// The first entry is always the exact release pixel (px 0). Near-duplicate geos
+// (common when zoomed in, where the ring is sub-metre) are de-duplicated.
+function sampleScreenCandidates(map: any, vx: number, vy: number, zoom: number): ScreenGeoCandidate[] {
+  // 8 compass directions; diagonals unit-normalised so every sample on a ring is
+  // the same pixel distance from the cursor.
+  const D = 0.7071
+  const dirs: [number, number][] = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+    [D, D],
+    [D, -D],
+    [-D, D],
+    [-D, -D],
+  ]
+  // Zoomed in the release is already precise → one tight ring. Zoomed out it's
+  // imprecise and the visible roads are far apart → sample wider, on two rings.
+  const radii = zoom >= 13 ? [10] : [12, 24]
+  const offsets: [number, number][] = [[0, 0]]
+  for (const r of radii) for (const [ux, uy] of dirs) offsets.push([ux * r, uy * r])
+
+  const out: ScreenGeoCandidate[] = []
+  const seen = new Set<string>()
+  for (const [ox, oy] of offsets) {
+    const g = map.screenToGeo(vx + ox, vy + oy)
+    if (!g || typeof g.lat !== 'number' || typeof g.lng !== 'number') continue
+    const key = `${g.lat.toFixed(6)},${g.lng.toFixed(6)}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({ lat: g.lat, lng: g.lng, px: Math.round(Math.hypot(ox, oy)) })
+  }
+  return out
 }
 
 // ── Marker icons ───────────────────────────────────────────────────────────
@@ -223,7 +274,17 @@ export default function HereMap({
           const y = e.clientY - rect.top
           const geo = map.screenToGeo(x, y)
           if (!geo) return
-          onContextMenuRef.current({ lat: geo.lat, lng: geo.lng, x, y, zoom: map.getZoom() })
+          const zoom = map.getZoom()
+          const candidates = sampleScreenCandidates(map, x, y, zoom)
+          if (snapDebug())
+            // eslint-disable-next-line no-console
+            console.log('[routeSnap] map right-click', {
+              pixel: { x, y },
+              rawGeo: { lat: geo.lat, lng: geo.lng },
+              zoom,
+              candidates: candidates.length,
+            })
+          onContextMenuRef.current({ lat: geo.lat, lng: geo.lng, x, y, zoom, candidates })
         }
         container.addEventListener('contextmenu', onContextMenu)
 
@@ -274,34 +335,46 @@ export default function HereMap({
         }
         const onDragEnd = (ev: any) => {
           const t = ev.target
-          // Resolve the FINAL release coordinate from the dragend pointer itself
-          // (HERE viewport coords → geo), not the last `drag` frame, so we never
-          // use a slightly stale position. Falls back to the object geometry if
-          // the event carries no pointer.
+          // Resolve the FINAL release pixel from the dragend pointer itself, not
+          // the last `drag` frame, so we never use a slightly stale position.
           const releasePointer = ev.currentPointer
+          const zoom = map.getZoom()
           if (t instanceof H.map.Marker) {
             behavior.enable()
             const data = t.getData?.()
             let g = t.getGeometry?.()
+            // The marker's ANCHOR pixel at release = cursor minus the grab offset,
+            // so sampling centres on where the marker actually sits (not the spot
+            // on its icon the user happened to grab).
+            let relX = 0
+            let relY = 0
+            let havePixel = false
             if (didDragRef.current && releasePointer && t.__dragOffset) {
-              const fresh = map.screenToGeo(
-                releasePointer.viewportX - t.__dragOffset.x,
-                releasePointer.viewportY - t.__dragOffset.y,
-              )
+              relX = releasePointer.viewportX - t.__dragOffset.x
+              relY = releasePointer.viewportY - t.__dragOffset.y
+              havePixel = true
+              const fresh = map.screenToGeo(relX, relY)
               if (fresh) g = fresh
             }
             if (didDragRef.current) {
-              // A real drag → report the dropped coordinate for snap + recalc.
+              // A real drag → report screen-space candidates for snap + recalc.
               if (data?.id && g) {
+                if (!havePixel) {
+                  const s = map.geoToScreen(g)
+                  relX = s?.x ?? 0
+                  relY = s?.y ?? 0
+                }
+                const candidates = sampleScreenCandidates(map, relX, relY, zoom)
                 if (snapDebug())
                   // eslint-disable-next-line no-console
                   console.log('[routeSnap] marker drag release', {
                     id: data.id,
-                    viewport: releasePointer && { x: releasePointer.viewportX, y: releasePointer.viewportY },
-                    releaseGeo: { lat: g.lat, lng: g.lng },
-                    zoom: map.getZoom(),
+                    pixel: { x: relX, y: relY },
+                    rawGeo: { lat: g.lat, lng: g.lng },
+                    zoom,
+                    candidates: candidates.length,
                   })
-                onMarkerDragEndRef.current?.(data.id, g.lat, g.lng, map.getZoom())
+                onMarkerDragEndRef.current?.(data.id, candidates, zoom)
               }
             } else if (data?.id && data?.kind && g) {
               // Press-release with no movement = a click. HERE may consume the
@@ -311,27 +384,41 @@ export default function HereMap({
               if (screen) onMarkerClickRef.current?.({ id: data.id, kind: data.kind, x: screen.x, y: screen.y })
             }
           }
-          // Route-line drag release — drop the ghost, report the section + point.
+          // Route-line drag release — drop the ghost, sample around the release,
+          // report the section + candidates.
           if (routeDragRef.current.active) {
             const { ghost, section } = routeDragRef.current
             behavior.enable()
             let g = ghost?.getGeometry?.()
+            let relX = 0
+            let relY = 0
+            let havePixel = false
             if (releasePointer) {
-              const fresh = map.screenToGeo(releasePointer.viewportX, releasePointer.viewportY)
+              relX = releasePointer.viewportX
+              relY = releasePointer.viewportY
+              havePixel = true
+              const fresh = map.screenToGeo(relX, relY)
               if (fresh) g = fresh
             }
             if (ghost) map.removeObject(ghost)
             routeDragRef.current = { active: false, section: -1, ghost: null }
             if (g) {
+              if (!havePixel) {
+                const s = map.geoToScreen(g)
+                relX = s?.x ?? 0
+                relY = s?.y ?? 0
+              }
+              const candidates = sampleScreenCandidates(map, relX, relY, zoom)
               if (snapDebug())
                 // eslint-disable-next-line no-console
                 console.log('[routeSnap] route drag release', {
                   section,
-                  viewport: releasePointer && { x: releasePointer.viewportX, y: releasePointer.viewportY },
-                  releaseGeo: { lat: g.lat, lng: g.lng },
-                  zoom: map.getZoom(),
+                  pixel: { x: relX, y: relY },
+                  rawGeo: { lat: g.lat, lng: g.lng },
+                  zoom,
+                  candidates: candidates.length,
                 })
-              onRouteDragEndRef.current?.(section, g.lat, g.lng, map.getZoom())
+              onRouteDragEndRef.current?.(section, candidates, zoom)
             }
           }
         }

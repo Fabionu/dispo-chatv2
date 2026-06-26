@@ -14,7 +14,7 @@ import type {
   WorkspaceInviteCreated,
   WorkspaceMember,
 } from './types'
-import type { HerePlace, LatLng, RouteWaypoint, TruckProfile, TruckRoute } from './here/types'
+import type { HerePlace, LatLng, RouteWaypoint, ScreenGeoCandidate, TruckProfile, TruckRoute } from './here/types'
 import type { VehicleOps } from './vehicleOps'
 
 // Editable subsets sent to PATCH endpoints (all fields optional).
@@ -392,6 +392,25 @@ export const api = {
         `/here/snap?at=${lat},${lng}${zoom !== undefined ? `&zoom=${zoom}` : ''}${
           course !== undefined ? `&course=${Math.round(course)}` : ''
         }`,
+      ),
+
+    // Screen-space road-snap — the snap used for every drag/release/add. Given
+    // several candidate coordinates sampled from the pixels AROUND the cursor
+    // (first = the exact release pixel), it returns the single best on-road point:
+    // the road visually under the cursor, preferring the prominent/major road and
+    // (with `course`) the correct carriageway. `prev`/`next` (the leg's
+    // neighbouring waypoints) let it reject a candidate that would force a detour.
+    // `place` is null only when nothing routable is near any candidate.
+    snapCandidates: (input: {
+      candidates: ScreenGeoCandidate[]
+      zoom?: number
+      course?: number
+      prev?: LatLng
+      next?: LatLng
+    }) =>
+      request<{ place: { label: string; position: LatLng; major?: boolean } | null }>(
+        '/here/snap/candidates',
+        { method: 'POST', body: JSON.stringify(input) },
       ),
 
     // Truck route (HERE Routing v8, transportMode=truck). `via` is the ordered

@@ -33,6 +33,7 @@ import type {
   RouteMarker,
   RoutePoint,
   RoutePointRole,
+  ScreenGeoCandidate,
   TruckProfile,
   TruckProfileForm,
   TruckRoute,
@@ -160,7 +161,7 @@ function snappedFromRoute(
   return { origin, stops, destination }
 }
 
-type MenuState = { x: number; y: number; lat: number; lng: number; zoom: number }
+type MenuState = { x: number; y: number; lat: number; lng: number; zoom: number; candidates: ScreenGeoCandidate[] }
 // Popover anchored to a clicked waypoint marker (remove / copy / clear).
 type MarkerMenuState = { id: string; role: RoutePointRole; x: number; y: number }
 
@@ -257,6 +258,15 @@ export default function RoutePlanner({ onBack }: Props) {
       if (id === reqIdRef.current) {
         setRoute(res.route)
         setCalculatedSig(sig)
+        if (snapDebug())
+          // eslint-disable-next-line no-console
+          console.log('[routeSnap] route result', {
+            // HERE's road-snapped section boundaries — where the recalc actually
+            // placed each waypoint. Compare with the chosen stop coordinate logged
+            // on release to confirm the route landed on the intended road.
+            sections: res.route.sections.map((s) => ({ departure: s.departure, arrival: s.arrival })),
+            lengthMeters: res.route.summary.length,
+          })
       }
     } catch (err) {
       if (id === reqIdRef.current) {
@@ -284,14 +294,20 @@ export default function RoutePlanner({ onBack }: Props) {
 
   // Route-line drag released → insert a snapped stop into the grabbed segment,
   // then recalc. `section` maps to the stops-array insertion index (section i
-  // joins waypoint i and i+1, so the new stop becomes waypoint i+1).
-  async function handleRouteDragEnd(section: number, lat: number, lng: number, zoom: number) {
+  // joins waypoint i and i+1, so the new stop becomes waypoint i+1). The snap
+  // weighs the SCREEN-space candidates sampled around the release so the stop
+  // lands on the road actually rendered under the cursor.
+  async function handleRouteDragEnd(section: number, candidates: ScreenGeoCandidate[], zoom: number) {
+    const release = candidates[0]
+    if (!release) return
     // Heading of the grabbed section at the release point → drives BOTH the
     // direction-aware snap (correct carriageway, not the oncoming road) and the
     // recalc waypoint course. Computed before the snap so the snap can use it.
     const seg = sectionCoords[section]
-    const course = seg ? routeCourseNear({ lat, lng }, [seg]) ?? undefined : undefined
-    const resolved = await resolveClicked(lat, lng, zoom, course)
+    const course = seg ? routeCourseNear(release, [seg]) ?? undefined : undefined
+    // The grabbed leg's endpoints bracket the new stop → detour-aware ranking.
+    const { prev, next } = neighborsForStopIndex(section)
+    const resolved = await resolveClickedFromCandidates(candidates, zoom, course, prev, next)
     addStop({ ...resolved, source: 'drag' }, section)
     recalcAfterDragRef.current = true
   }
@@ -327,6 +343,25 @@ export default function RoutePlanner({ onBack }: Props) {
       }
     })
   }, [route])
+
+  // The route's waypoints in travel order [start, ...stops, destination]. Route
+  // section i runs between orderedWaypoints[i] and [i+1], so this also gives the
+  // neighbours bracketing any leg — used for detour-aware snap ranking.
+  const orderedWaypoints = useMemo<RoutePoint[]>(() => {
+    const out: RoutePoint[] = []
+    if (start) out.push(start)
+    out.push(...stops)
+    if (destination) out.push(destination)
+    return out
+  }, [start, stops, destination])
+
+  // The coordinates bracketing a NEW stop inserted at stops-index `k`, passed to
+  // the snap as detour context (prefer the candidate that adds least to
+  // prev→here→next). A stop at stops-index k sits between orderedWaypoints[k] and
+  // [k+1] (since orderedWaypoints[0] is the start).
+  function neighborsForStopIndex(k: number): { prev?: LatLng; next?: LatLng } {
+    return { prev: orderedWaypoints[k]?.coordinates, next: orderedWaypoints[k + 1]?.coordinates }
+  }
 
   const displayCoord = (p: RoutePoint): LatLng => {
     if (!activeSnap) return p.coordinates
@@ -453,74 +488,82 @@ export default function RoutePlanner({ onBack }: Props) {
     source: 'search',
   })
 
-  // ── Central road-snap ──────────────────────────────────────────────────────
-  // The ONE place every add/drag/release path snaps a raw map coordinate to a
-  // road. Calls the server's /snap (prefers a nearby main road, else snaps onto
-  // the nearest routable road via a HERE route preview), and is debug-safe: any
-  // failure or empty result falls back to the raw coordinate so adding a stop is
-  // never blocked. `zoom` biases the snap toward visible major roads when zoomed
-  // out. The returned label stays consistent with the returned coordinate.
-  // `course` (route travel heading here) makes the snap DIRECTION-AWARE so the
-  // point lands on the correct carriageway of a divided road, not the contraflow
-  // side. Undefined when there's no route direction to reference (e.g. the very
-  // first points, or a click far from any route).
-  async function snapCoordinate(
-    lat: number,
-    lng: number,
+  // ── Central road-snap (screen-space candidates) ─────────────────────────────
+  // The ONE place every add/drag/release path snaps to a road. It posts the
+  // screen-sampled candidates (pixels around the cursor → geo; first = the exact
+  // release pixel) to /snap/candidates, which returns the best on-road point: the
+  // road visually under the cursor, major/through-road preferred, on the correct
+  // carriageway when a `course` is known, and rejecting a candidate that would
+  // force a detour through `prev`/`next`. Debug-safe: any failure/empty result
+  // falls back to the exact release pixel so adding a stop is never blocked.
+  async function snapCandidatesToRoad(
+    candidates: ScreenGeoCandidate[],
     zoom?: number,
     course?: number,
+    prev?: LatLng,
+    next?: LatLng,
   ): Promise<{ label: string; coordinates: LatLng; snapped: boolean }> {
+    const release: LatLng = candidates[0] ?? { lat: 0, lng: 0 }
     try {
-      const { place } = await api.here.snap(lat, lng, zoom, course)
+      const { place } = await api.here.snapCandidates({ candidates, zoom, course, prev, next })
       if (place?.position) {
         setSnapNote(null)
         if (snapDebug())
           // eslint-disable-next-line no-console
-          console.log('[routeSnap] snapped', {
-            raw: { lat, lng },
-            snapped: place.position,
-            movedMeters: Math.round(haversineMeters({ lat, lng }, place.position)),
-            course,
+          console.log('[routeSnap] chosen', {
+            release,
+            chosen: place.position,
+            movedMeters: Math.round(haversineMeters(release, place.position)),
             major: place.major,
             label: place.label,
+            course,
             zoom,
+            candidates: candidates.length,
           })
         return { label: place.label || fmtCoord(place.position), coordinates: place.position, snapped: true }
       }
     } catch {
-      /* fall through to the raw coordinate below */
+      /* fall through to the raw release coordinate below */
     }
     if (snapDebug())
       // eslint-disable-next-line no-console
-      console.log('[routeSnap] snap failed — using raw coordinate', { lat, lng, zoom, course })
+      console.log('[routeSnap] candidate snap failed — using raw release', { release, zoom, course })
     setSnapNote('Could not snap the point to a road — using the exact location.')
-    return { label: fmtCoord({ lat, lng }), coordinates: { lat, lng }, snapped: false }
+    return { label: fmtCoord(release), coordinates: release, snapped: false }
   }
 
-  // Resolve a clicked coordinate into a fresh route point (new id), road-snapped
-  // and (when `course` is known) on the correct carriageway. The course is kept
-  // on the point so the truck recalc routes through it in the same direction.
-  async function resolveClicked(
-    lat: number,
-    lng: number,
+  // Resolve screen-space candidates into a fresh route point (new id), road-
+  // snapped and (when `course` is known) on the correct carriageway. The course
+  // is kept on the point so the truck recalc routes through it the same way.
+  async function resolveClickedFromCandidates(
+    candidates: ScreenGeoCandidate[],
     zoom?: number,
     course?: number,
+    prev?: LatLng,
+    next?: LatLng,
   ): Promise<Omit<RoutePoint, 'role'>> {
-    const s = await snapCoordinate(lat, lng, zoom, course)
+    const s = await snapCandidatesToRoad(candidates, zoom, course, prev, next)
     return { id: uid(), label: s.label, coordinates: s.coordinates, source: 'map', snapped: s.snapped, course }
   }
 
   // ── Marker drag → snap to road + recalc ───────────────────────────────────
   // Updates the dragged point in place (keeping its id, role + order) via the
-  // SAME central snap, then recalcs immediately (like a route-line drag) so the
-  // route redraws through the moved point.
-  async function handleMarkerDragEnd(id: string, lat: number, lng: number, zoom: number) {
+  // SAME central screen-space snap, then recalcs immediately (like a route-line
+  // drag) so the route redraws through the moved point.
+  async function handleMarkerDragEnd(id: string, candidates: ScreenGeoCandidate[], zoom: number) {
+    const release = candidates[0]
+    if (!release) return
     // Travel direction of the route nearest the drop — computed BEFORE the snap
     // so the snap itself lands on the correct carriageway (not just the recalc).
-    const course = sectionCoords.length ? routeCourseNear({ lat, lng }, sectionCoords) ?? undefined : undefined
-    const s = await snapCoordinate(lat, lng, zoom, course)
-    setPoints((prev) =>
-      prev.map((p) =>
+    const course = sectionCoords.length ? routeCourseNear(release, sectionCoords) ?? undefined : undefined
+    // The dragged point's neighbours in the ordered route → detour-aware ranking.
+    const idx = orderedWaypoints.findIndex((p) => p.id === id)
+    const prev = idx > 0 ? orderedWaypoints[idx - 1]?.coordinates : undefined
+    const next =
+      idx >= 0 && idx < orderedWaypoints.length - 1 ? orderedWaypoints[idx + 1]?.coordinates : undefined
+    const s = await snapCandidatesToRoad(candidates, zoom, course, prev, next)
+    setPoints((cur) =>
+      cur.map((p) =>
         p.id === id
           ? { ...p, coordinates: s.coordinates, label: s.label, source: 'drag', snapped: s.snapped, course }
           : p,
@@ -540,17 +583,30 @@ export default function RoutePlanner({ onBack }: Props) {
 
   async function applyMenuAction(action: MenuAction) {
     if (!menu) return
-    const { lat, lng, zoom } = menu
+    const { lat, lng, zoom, candidates } = menu
     const insertIndex = nearOnRoute
     setMenu(null)
+    const isAdd = action === 'add' || action === 'add-on-route'
     // Direction-aware snap for intermediate stops added against an existing route
     // (use the route's travel heading near the click so it lands on the correct
     // carriageway). Endpoints have no inbound route direction yet → no course.
     const course =
-      (action === 'add' || action === 'add-on-route') && sectionCoords.length
-        ? routeCourseNear({ lat, lng }, sectionCoords) ?? undefined
-        : undefined
-    const point = await resolveClicked(lat, lng, zoom, course)
+      isAdd && sectionCoords.length ? routeCourseNear({ lat, lng }, sectionCoords) ?? undefined : undefined
+    // Detour-aware context: the leg the new stop will slot into. The raw-click
+    // slot is a fine approximation for ranking; the final insert index is
+    // recomputed from the snapped coordinate below.
+    let prev: LatLng | undefined
+    let next: LatLng | undefined
+    if (isAdd) {
+      const k =
+        action === 'add-on-route'
+          ? insertIndex ?? stops.length
+          : bestStopIndexFor({ lat, lng }) ?? stops.length
+      const n = neighborsForStopIndex(k)
+      prev = n.prev
+      next = n.next
+    }
+    const point = await resolveClickedFromCandidates(candidates, zoom, course, prev, next)
     if (action === 'start') setStart(point)
     else if (action === 'destination') setDestinationPoint(point)
     // Plain "Add stop": slot it into the most logical position. "Add stop on
@@ -583,14 +639,14 @@ export default function RoutePlanner({ onBack }: Props) {
     }
   }, [menu, markerMenu])
 
-  function openMenu(info: { lat: number; lng: number; x: number; y: number; zoom: number }) {
+  function openMenu(info: { lat: number; lng: number; x: number; y: number; zoom: number; candidates: ScreenGeoCandidate[] }) {
     const region = regionRef.current
     const w = region?.clientWidth ?? 0
     const h = region?.clientHeight ?? 0
     const x = Math.min(info.x, Math.max(0, w - 200))
     const y = Math.min(info.y, Math.max(0, h - 210))
     setMarkerMenu(null)
-    setMenu({ x, y, lat: info.lat, lng: info.lng, zoom: info.zoom })
+    setMenu({ x, y, lat: info.lat, lng: info.lng, zoom: info.zoom, candidates: info.candidates })
   }
 
   // ── Marker click → role-aware popover (remove stop / copy / clear) ─────────
