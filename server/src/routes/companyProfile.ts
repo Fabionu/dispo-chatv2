@@ -7,6 +7,12 @@ import { asyncHandler } from '../http.js'
 import { uploadSingle, isImage, MAX_IMAGE_BYTES } from '../middleware/upload.js'
 import { saveBuffer, deleteFile } from '../storage.js'
 import { serveImageObject } from '../util/serveImage.js'
+import {
+  LOCKED_COMPANY_FIELDS,
+  LOCK_ONCE_SET_COMPANY_FIELDS,
+  lockedFieldsInBody,
+  lockOnceSetViolations,
+} from '../util/identityLock.js'
 
 export const companyProfileRouter = Router()
 companyProfileRouter.use(requireAuth)
@@ -91,10 +97,13 @@ companyProfileRouter.get(
 )
 
 // ── PATCH /api/company-profile ───────────────────────────────────────────
-// Admins only. Updates the registration + dispatch details (and the display
-// name). Empty strings clear optional fields.
+// Admins only. Updates the registration + dispatch details. Identity fields are
+// LOCKED (see util/identityLock): the company name (captured at signup) is fully
+// immutable — not in the schema and rejected if sent — and the legal name +
+// dispatch email lock once they hold a value (settable while empty, then frozen).
+// Attempts to change a locked field are rejected with `identity_fields_locked`,
+// never silently dropped, so the lock can't be bypassed via the API.
 const patchSchema = z.object({
-  name: z.string().trim().min(1).max(120).optional(),
   legalName: z.string().trim().max(160).nullable().optional(),
   vatId: z.string().trim().max(40).nullable().optional(),
   country: z.string().trim().max(80).nullable().optional(),
@@ -106,7 +115,6 @@ const patchSchema = z.object({
 })
 
 const COLUMN: Record<string, string> = {
-  name: 'name',
   legalName: 'legal_name',
   vatId: 'vat_id',
   country: 'country',
@@ -121,8 +129,38 @@ companyProfileRouter.patch(
   '/',
   requireAdmin,
   asyncHandler(async (req, res) => {
+    // Company name is captured at signup and is the official company identity —
+    // immutable for everyone (no verified rename flow exists).
+    const lockedNow = lockedFieldsInBody(req.body, LOCKED_COMPANY_FIELDS)
+    if (lockedNow.length > 0) {
+      return res.status(403).json({ error: 'identity_fields_locked', fields: lockedNow })
+    }
+
     const parsed = patchSchema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: 'invalid_input' })
+
+    // Lock-once-set: legal name + dispatch email may be set while empty, but once
+    // a value exists they can't be changed or cleared. Compare against the stored
+    // values before writing.
+    const touchingLockOnce = LOCK_ONCE_SET_COMPANY_FIELDS.some((k) => k in parsed.data)
+    if (touchingLockOnce) {
+      const { rows } = await pool.query<{ legal_name: string | null; dispatch_email: string | null }>(
+        'select legal_name, dispatch_email from workspaces where id = $1',
+        [req.session!.workspaceId],
+      )
+      const current = {
+        legalName: rows[0]?.legal_name ?? null,
+        dispatchEmail: rows[0]?.dispatch_email ?? null,
+      }
+      const violations = lockOnceSetViolations(
+        LOCK_ONCE_SET_COMPANY_FIELDS,
+        current,
+        parsed.data as Record<string, unknown>,
+      )
+      if (violations.length > 0) {
+        return res.status(403).json({ error: 'identity_fields_locked', fields: violations })
+      }
+    }
 
     const sets: string[] = []
     const values: unknown[] = []

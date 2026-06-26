@@ -254,7 +254,8 @@
       "PowerShell(npm run build 2>&1)",
       "PowerShell(npx tsc -b 2>&1)",
       "Bash(node -e \"const b=require\\('bcryptjs'\\); console.log\\('result:', b.compareSync\\('anything','account_deleted'\\)\\)\")",
-      "Bash(cd /c/Users/Home/Desktop/dispo-chatv2/server && grep -E '^\\(DATABASE_URL|DIRECT_DATABASE_URL|JWT_SECRET\\)=' .env | sed -E 's/\\(=.{0,18}\\).*/\\\\1…/')"
+      "Bash(cd /c/Users/Home/Desktop/dispo-chatv2/server && grep -E '^\\(DATABASE_URL|DIRECT_DATABASE_URL|JWT_SECRET\\)=' .env | sed -E 's/\\(=.{0,18}\\).*/\\\\1…/')",
+      "Bash(cd /c/Users/Home/Desktop/dispo-chatv2/web && echo \"--- viewMode.ts mtime ---\"; stat -c '%y' src/lib/viewMode.ts 2>/dev/null; echo \"--- dist exists? ---\"; ls -la dist 2>/dev/null | head -5 || echo \"no dist dir\"; echo \"--- dist assets mtime ---\"; ls -la dist/assets 2>/dev/null | head -8 || echo \"no dist/assets\")"
     ]
   }
 }

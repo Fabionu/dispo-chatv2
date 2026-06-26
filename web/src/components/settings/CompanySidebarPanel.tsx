@@ -129,18 +129,17 @@ export default function CompanySidebarPanel({ onBack, onSaved }: Props) {
 
           {/* Registration */}
           <Section label="Registration">
-            <EditableRow
-              label="Company name"
-              value={company.name}
-              editable={canEdit}
-              required
-              onSave={(v) => saveField({ name: v })}
-            />
+            {/* Company name is the official identity captured at signup — locked
+                after creation for everyone (no verified rename flow). Read-only. */}
+            <EditableRow label="Company name" value={company.name} hint="Set at signup" />
+            {/* Legal name locks ONCE SET: an admin can fill it in while empty, but
+                once saved it becomes the official entity name and can't change. */}
             <EditableRow
               label="Legal name"
               value={company.legalName}
-              editable={canEdit}
+              editable={canEdit && !company.legalName}
               placeholder="Registered legal entity"
+              hint={company.legalName ? 'Locked once set' : undefined}
               onSave={(v) => saveField({ legalName: v || null })}
             />
             <EditableRow
@@ -186,11 +185,14 @@ export default function CompanySidebarPanel({ onBack, onSaved }: Props) {
 
           {/* Dispatch */}
           <Section label="Dispatch">
+            {/* Dispatch email is a company contact identity → locks ONCE SET:
+                settable while empty, then frozen (anti-impersonation). */}
             <EditableRow
               label="Dispatch email"
               value={company.dispatchEmail}
-              editable={canEdit}
+              editable={canEdit && !company.dispatchEmail}
               placeholder="dispatch@…"
+              hint={company.dispatchEmail ? 'Locked once set' : undefined}
               onSave={(v) => saveField({ dispatchEmail: v || null })}
             />
             <EditableRow

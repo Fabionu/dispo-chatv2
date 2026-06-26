@@ -199,13 +199,9 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
 
             {/* Work details — each editable row changes on its own. */}
             <Section label="Work details">
-              <EditableRow
-                label="Display name"
-                value={profile.displayName}
-                editable
-                required
-                onSave={(v) => savePatch({ displayName: v })}
-              />
+              {/* Display name is identity — captured at signup and locked after
+                  creation (identity consistency / anti-abuse). Read-only. */}
+              <EditableRow label="Display name" value={profile.displayName} hint="Set at signup" />
               {/* Role is permission-based — read-only. */}
               <EditableRow label="Role" value={ROLE_LABEL[profile.role]} hint="Set by an admin" />
               <EditableRow

@@ -18,8 +18,10 @@ import type { HerePlace, LatLng, RouteWaypoint, TruckProfile, TruckRoute } from 
 import type { VehicleOps } from './vehicleOps'
 
 // Editable subsets sent to PATCH endpoints (all fields optional).
+// NOTE: identity fields locked after creation (display name, email, company
+// name) are intentionally absent — they are not editable via the API. The
+// server also rejects them defensively (see util/identityLock on the backend).
 export type ProfilePatch = Partial<{
-  displayName: string
   jobTitle: string | null
   workPhone: string | null
   nativeLanguage: string | null
@@ -28,7 +30,7 @@ export type ProfilePatch = Partial<{
 }>
 
 export type CompanyProfilePatch = Partial<{
-  name: string
+  // legalName + dispatchEmail are "lock once set": accepted only while empty.
   legalName: string | null
   vatId: string | null
   country: string | null

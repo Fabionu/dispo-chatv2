@@ -22,6 +22,7 @@ import type {
   IncomingMessage,
   Profile,
   ReplyToPreview,
+  WorkspaceMember,
 } from '../lib/types'
 import { groupHasUnread, groupLabel, groupPreview, tractorPlate } from '../lib/types'
 import { getOps, tripSummary } from '../lib/vehicleOps'
@@ -118,6 +119,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   const [logoVersion, setLogoVersion] = useState(0)
   const [groups, setGroups] = useState<Group[]>([])
   const [loadingGroups, setLoadingGroups] = useState(true)
+  // Active members of the caller's own company (internal/trusted contacts).
+  const [members, setMembers] = useState<WorkspaceMember[]>([])
   const [selection, setSelection] = useState<Selection>(null)
   // Sidebar quick-filter text. Filters the conversation lists by name (and a
   // vehicle's tractor plate) so "Jump to…" actually narrows the rail.
@@ -165,6 +168,23 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   useEffect(() => {
     refreshGroups().finally(() => setLoadingGroups(false))
   }, [refreshGroups])
+
+  // Internal company contacts. Same-workspace members are trusted contacts you
+  // can DM directly (no connection handshake — that's cross-company only), so we
+  // surface the roster in the rail. The endpoint already excludes the caller and
+  // deleted/anonymized users. Refetched live when a colleague joins (socket).
+  const refreshMembers = useCallback(async () => {
+    try {
+      const { members } = await api.workspace.members()
+      setMembers(members)
+    } catch {
+      /* leave the previous roster in place; the rail keeps working */
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshMembers()
+  }, [refreshMembers])
 
   // Warm the cache for the few most-recent conversations once the rail is up,
   // so opening them is instant. Lightweight + idempotent: prefetch skips groups
@@ -274,18 +294,25 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
       if (openGroupIdRef.current === p.groupId) setSelection(null)
       void refreshGroups()
     }
+    // A colleague joined (or left) the company → refresh the internal contact
+    // roster so the new person shows up in the rail without a reload.
+    function onMembersChanged() {
+      void refreshMembers()
+    }
 
     socket.on('message:new', onMessageNew)
     socket.on('group:unread', onGroupUnread)
     socket.on('group:added', onGroupAdded)
     socket.on('group:removed', onGroupRemoved)
+    socket.on('workspace:members_changed', onMembersChanged)
     return () => {
       socket.off('message:new', onMessageNew)
       socket.off('group:unread', onGroupUnread)
       socket.off('group:added', onGroupAdded)
       socket.off('group:removed', onGroupRemoved)
+      socket.off('workspace:members_changed', onMembersChanged)
     }
-  }, [refreshGroups, user.id])
+  }, [refreshGroups, refreshMembers, user.id])
 
   // Connections: load once, then refetch whenever a connection event fires.
   // Refetching (rather than patching) keeps the three buckets consistent.
@@ -420,6 +447,24 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     [openGroupOptimistically],
   )
 
+  // Open (or create) a DM with a company colleague from the contacts list.
+  // Same-workspace DMs need no connection, so this always succeeds; the row
+  // then moves from "Company" into "Direct messages" once refreshGroups runs.
+  const openDirectWithMember = useCallback(
+    async (member: WorkspaceMember) => {
+      const { group } = await api.groups.createDirect(member.id)
+      openGroupOptimistically(
+        optimisticDirectGroup(group.id, {
+          id: member.id,
+          displayName: member.displayName,
+          email: member.email,
+          workspace: { id: workspace.id, name: workspace.name },
+        }),
+      )
+    },
+    [openGroupOptimistically, workspace.id, workspace.name],
+  )
+
   // Navigate to a private DM opened from a message action ("Reply privately"
   // / "Send message in private"). ChatView has already created the group
   // server-side; we drop an optimistic row in and reconcile in the background.
@@ -498,6 +543,16 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   const vehicleGroups = useMemo(() => groups.filter((g) => g.type === 'vehicle'), [groups])
   const directGroups = useMemo(() => groups.filter((g) => g.type === 'direct'), [groups])
 
+  // Company contacts = same-workspace members you don't already have an open DM
+  // with. Dedup against existing direct-group peers so a colleague never appears
+  // both as a "Direct messages" conversation and a "Company" contact.
+  const companyContacts = useMemo(() => {
+    const peerIds = new Set(
+      directGroups.map((g) => g.directPeer?.id).filter((id): id is string => Boolean(id)),
+    )
+    return members.filter((m) => !peerIds.has(m.id))
+  }, [members, directGroups])
+
   // Apply the quick-filter. Empty query → full lists. A vehicle also matches on
   // its tractor plate so you can jump by registration number.
   const q = query.trim().toLowerCase()
@@ -517,6 +572,10 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   const filteredDirects = useMemo(
     () => directGroups.filter(matchesQuery),
     [directGroups, matchesQuery],
+  )
+  const filteredContacts = useMemo(
+    () => (q ? companyContacts.filter((m) => m.displayName.toLowerCase().includes(q)) : companyContacts),
+    [companyContacts, q],
   )
   const searching = q.length > 0
 
@@ -739,7 +798,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           ) : searching ? (
             // While searching, show only matching conversations (no requests,
             // no create hints) so the rail reads as pure search results.
-            filteredVehicles.length === 0 && filteredDirects.length === 0 ? (
+            filteredVehicles.length === 0 &&
+            filteredDirects.length === 0 &&
+            filteredContacts.length === 0 ? (
               <EmptyHint>No conversations match “{query.trim()}”.</EmptyHint>
             ) : (
               <>
@@ -767,6 +828,18 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                         currentUserId={user.id}
                         selected={selection?.kind === 'group' && selection.id === g.id}
                         onClick={() => setSelection({ kind: 'group', id: g.id })}
+                      />
+                    ))}
+                  </ChannelGroup>
+                )}
+                {filteredContacts.length > 0 && (
+                  <ChannelGroup label="Company">
+                    {filteredContacts.map((m) => (
+                      <ContactRow
+                        key={m.id}
+                        member={m}
+                        size={sidebarAvatar}
+                        onClick={() => void openDirectWithMember(m)}
                       />
                     ))}
                   </ChannelGroup>
@@ -821,6 +894,23 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                       currentUserId={user.id}
                       selected={selection?.kind === 'group' && selection.id === g.id}
                       onClick={() => setSelection({ kind: 'group', id: g.id })}
+                    />
+                  ))
+                )}
+              </ChannelGroup>
+
+              {/* Company colleagues you can message directly. Clicking one opens
+                  (or creates) a DM, after which they move into Direct messages. */}
+              <ChannelGroup label="Company">
+                {companyContacts.length === 0 ? (
+                  <EmptyHint>No other company members yet.</EmptyHint>
+                ) : (
+                  companyContacts.map((m) => (
+                    <ContactRow
+                      key={m.id}
+                      member={m}
+                      size={sidebarAvatar}
+                      onClick={() => void openDirectWithMember(m)}
                     />
                   ))
                 )}
@@ -1219,6 +1309,41 @@ function GroupRow({
           {unreadCount > 99 ? '99+' : unreadCount}
         </span>
       )}
+    </button>
+  )
+}
+
+// One company colleague in the "Company" contacts section. Visually a quiet
+// people-row (avatar + name) matching the rail's row metrics; clicking it opens
+// or creates a DM. No unread/presence affordances — it's a directory entry, not
+// a live conversation (those move to "Direct messages" once started).
+function ContactRow({
+  member,
+  size,
+  onClick,
+}: {
+  member: WorkspaceMember
+  size: number
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={`Message ${member.displayName}`}
+      style={{
+        minHeight: 'var(--sidebar-row-height)',
+        gap: 'var(--sidebar-row-gap)',
+        paddingLeft: 'var(--sidebar-row-pad-x)',
+        paddingRight: 'var(--sidebar-row-pad-x)',
+        paddingTop: 'var(--sidebar-row-pad-y)',
+        paddingBottom: 'var(--sidebar-row-pad-y)',
+      }}
+      className="w-full flex items-center rounded-chip text-left text-muted hover:bg-white/[0.025] hover:text-text transition-colors"
+    >
+      <Avatar userId={member.id} name={member.displayName} size={size} />
+      <span className="min-w-0 flex-1 truncate" style={{ fontSize: 'var(--sidebar-row-font-size)' }}>
+        {member.displayName}
+      </span>
     </button>
   )
 }

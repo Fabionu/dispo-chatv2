@@ -46,9 +46,9 @@
      — bubble view and the composer keep --chat-msg-font-size. */
   --chat-plain-font-size: calc(var(--chat-msg-font-size) + 1px);
   --header-height: 60px;
-  --sidebar-width: 500px;
+  --sidebar-width: 520px;
   --composer-size: 28px;
-  --chat-max-width: 1560px;
+  --chat-max-width: 1120px;
   --chat-gutter: 20px;
   /* Width of our custom scrollbar — reserved on the scroller AND added to the
      composer's right so both centred columns share the exact same content box
@@ -77,7 +77,7 @@
   --header-height: 56px;
   --sidebar-width: 440px;
   --composer-size: 26px;
-  --chat-max-width: 1280px;
+  --chat-max-width: 1040px;
   --chat-gutter: 16px;
 
   --sidebar-title-font-size: 16px;
@@ -100,9 +100,9 @@
   --app-font-size: 15px;
   --chat-msg-font-size: 14px;
   --header-height: 60px;
-  --sidebar-width: 500px;
+  --sidebar-width: 520px;
   --composer-size: 28px;
-  --chat-max-width: 1560px;
+  --chat-max-width: 1120px;
   --chat-gutter: 20px;
 
   --sidebar-title-font-size: 16.5px;
@@ -126,9 +126,9 @@
   --app-font-size: 16.5px;
   --chat-msg-font-size: 15px;
   --header-height: 66px;
-  --sidebar-width: 540px;
+  --sidebar-width: 600px;
   --composer-size: 30px;
-  --chat-max-width: 1840px;
+  --chat-max-width: 1240px;
   --chat-gutter: 24px;
 
   --sidebar-title-font-size: 18px;
@@ -157,7 +157,7 @@
     --header-height: 56px;
     --sidebar-width: 440px;
     --composer-size: 26px;
-    --chat-max-width: 1280px;
+    --chat-max-width: 1040px;
     --chat-gutter: 16px;
 
     --sidebar-title-font-size: 16px;
@@ -180,9 +180,9 @@
     --app-font-size: 16.5px;
     --chat-msg-font-size: 15px;
     --header-height: 66px;
-    --sidebar-width: 540px;
+    --sidebar-width: 600px;
     --composer-size: 30px;
-    --chat-max-width: 1840px;
+    --chat-max-width: 1240px;
     --chat-gutter: 24px;
 
     --sidebar-title-font-size: 18px;

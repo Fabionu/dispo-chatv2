@@ -8,6 +8,7 @@ import { uploadSingle, isImage, MAX_IMAGE_BYTES } from '../middleware/upload.js'
 import { saveBuffer, deleteFile } from '../storage.js'
 import { serveImageObject } from '../util/serveImage.js'
 import { anonymizeUser } from '../util/anonymizeUser.js'
+import { LOCKED_PROFILE_FIELDS, lockedFieldsInBody } from '../util/identityLock.js'
 
 export const profileRouter = Router()
 profileRouter.use(requireAuth)
@@ -73,10 +74,12 @@ profileRouter.get(
 )
 
 // ── PATCH /api/profile ───────────────────────────────────────────────────
-// Update the caller's own editable fields. Email is identity (read-only here)
-// and role is permission-based (admin-managed) — neither is accepted.
+// Update the caller's own editable fields. Identity fields captured at signup —
+// display name and email — are LOCKED after creation (see util/identityLock):
+// they're not in the schema, and an attempt to send them is rejected outright
+// (not silently dropped) so the rule is honest and can't be bypassed via the API.
+// Role is permission-based (admin-managed) and likewise not accepted.
 const patchSchema = z.object({
-  displayName: z.string().trim().min(1).max(100).optional(),
   jobTitle: z.string().trim().max(120).nullable().optional(),
   workPhone: z.string().trim().max(40).nullable().optional(),
   nativeLanguage: z.string().trim().max(40).nullable().optional(),
@@ -87,7 +90,6 @@ const patchSchema = z.object({
 // Map camelCase API fields → snake_case columns. Empty strings on nullable
 // text fields become NULL so "clearing" a field works.
 const COLUMN: Record<string, string> = {
-  displayName: 'display_name',
   jobTitle: 'job_title',
   workPhone: 'work_phone',
   nativeLanguage: 'native_language',
@@ -98,6 +100,12 @@ const COLUMN: Record<string, string> = {
 profileRouter.patch(
   '/',
   asyncHandler(async (req, res) => {
+    // Reject any attempt to change locked identity fields (display name / email).
+    const locked = lockedFieldsInBody(req.body, LOCKED_PROFILE_FIELDS)
+    if (locked.length > 0) {
+      return res.status(403).json({ error: 'identity_fields_locked', fields: locked })
+    }
+
     const parsed = patchSchema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: 'invalid_input' })
 

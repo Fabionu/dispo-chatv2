@@ -101,6 +101,13 @@ export function roomForUser(userId: string): string {
   return `user:${userId}`
 }
 
+// All sockets of every member of one workspace/company. Used for workspace-wide
+// fan-out such as "a new colleague joined" so existing members refresh their
+// internal contact list without a page reload.
+export function roomForWorkspace(workspaceId: string): string {
+  return `workspace:${workspaceId}`
+}
+
 export async function initRealtime(httpServer: HttpServer) {
   io = new IOServer(httpServer, {
     // In production the web bundle is served from the same origin as the API,
@@ -175,6 +182,10 @@ export async function initRealtime(httpServer: HttpServer) {
     // like "you've been added to a group" (server emits to user room, all
     // open tabs/devices of that user receive it).
     socket.join(roomForUser(userId))
+
+    // Also join the workspace room so company-wide events (e.g. a new colleague
+    // joining via invite) reach every current member's open tabs.
+    socket.join(roomForWorkspace(socket.data.workspaceId))
 
     // Pre-subscribe to every group the user is currently a member of, so
     // messages broadcast to group rooms reach them without an explicit join.

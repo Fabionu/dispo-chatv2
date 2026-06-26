@@ -6,6 +6,7 @@ import { clearSession, issueSession, readSession } from '../auth.js'
 import { signinLimiter, signupLimiter } from '../middleware/rateLimit.js'
 import { asyncHandler, HttpError, withTransaction } from '../http.js'
 import { hashInviteToken } from '../util/workspaceInvites.js'
+import { getIOIfReady, roomForWorkspace } from '../realtime.js'
 
 export const authRouter = Router()
 
@@ -237,6 +238,14 @@ authRouter.post(
     })
 
     issueSession(res, { userId: result.userId, workspaceId: result.workspaceId })
+
+    // Tell existing members (already connected) that the company roster changed,
+    // so their sidebar contact list picks up the new colleague without a reload.
+    // The new user isn't connected yet — they fetch members fresh on first load.
+    getIOIfReady()
+      ?.to(roomForWorkspace(result.workspaceId))
+      .emit('workspace:members_changed', { workspaceId: result.workspaceId })
+
     res.status(201).json({
       user: {
         id: result.userId,
