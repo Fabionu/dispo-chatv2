@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { MoreVertical, UserPlus, X } from 'lucide-react'
 import type { Group, GroupMember, GroupPendingInvitee, Role } from '../lib/types'
 import { groupLabel, tractorPlate, trailerPlate } from '../lib/types'
@@ -13,6 +13,7 @@ import {
   type VehicleStop,
 } from '../lib/vehicleOps'
 import { api, ApiError } from '../lib/api'
+import { getSocket } from '../lib/socket'
 import { avatarUrl, clearAvatarCache } from '../lib/avatarCache'
 import { statusMeta, OFFLINE } from '../lib/availability'
 import { usePresence } from '../hooks/usePresence'
@@ -237,6 +238,33 @@ export default function GroupInfoPanel({
       cancelled = true
     }
   }, [group.id, canManage])
+
+  // Silent refetch (no spinner flash) for the live socket refresh below.
+  const refetchPending = useCallback(() => {
+    if (!canManage) return
+    api.groups
+      .pendingInvites(group.id)
+      .then((r) => setPending(r.invites))
+      .catch(() => {})
+  }, [group.id, canManage])
+
+  // Live: the group's invite set changed (a new invite was sent, or one was
+  // accepted / declined / cancelled — here or on another client). The server
+  // emits `group:invites_changed` to the group room, so refresh the pending
+  // list and it never goes stale while the panel is open. Scoped to THIS group;
+  // the listener is removed on unmount / group change (no leak). New MEMBERS flow
+  // in separately via the parent's `group:members_changed` refetch (props).
+  useEffect(() => {
+    if (!canManage) return
+    const socket = getSocket()
+    function onInvitesChanged(p: { groupId: string }) {
+      if (p.groupId === group.id) refetchPending()
+    }
+    socket.on('group:invites_changed', onInvitesChanged)
+    return () => {
+      socket.off('group:invites_changed', onInvitesChanged)
+    }
+  }, [group.id, canManage, refetchPending])
 
   // Persist one detail field. Throws on failure so the row keeps its editor
   // open and shows a retryable error.

@@ -62,6 +62,18 @@ type Props = {
 
 type NewGroupKind = 'vehicle' | 'direct'
 
+// Sidebar pill filter — which slice of the single unified list is shown.
+//   'all'    → vehicle rooms + direct messages + company contacts
+//   'groups' → vehicle/group rooms only
+//   'dms'    → direct messages + company contacts
+type SidebarFilter = 'all' | 'groups' | 'dms'
+
+// One entry in the unified rail list: either a real conversation (vehicle room
+// or DM Group) or a company colleague you don't have a DM with yet.
+type SidebarRowItem =
+  | { kind: 'group'; key: string; group: Group }
+  | { kind: 'contact'; key: string; member: WorkspaceMember }
+
 // What the main pane is currently showing. A group chat, a pending request, a
 // pending invite, or the Inbox / workspace-home tools area. `null` is treated
 // the same as `inbox` — both render the Inbox view (it's the default home).
@@ -125,6 +137,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // Sidebar quick-filter text. Filters the conversation lists by name (and a
   // vehicle's tractor plate) so "Jump to…" actually narrows the rail.
   const [query, setQuery] = useState('')
+  // Sidebar pill filter — the single list below shows everything / only groups /
+  // only DMs depending on this. Replaces the old visible section grouping.
+  const [filter, setFilter] = useState<SidebarFilter>('all')
   const [connections, setConnections] = useState<ConnectionsResponse>(EMPTY_CONNECTIONS)
   // Connection-request fetch status, surfaced as compact rail states. `loading`
   // only drives a visible hint on the very first load (no data yet); `error`
@@ -448,8 +463,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   )
 
   // Open (or create) a DM with a company colleague from the contacts list.
-  // Same-workspace DMs need no connection, so this always succeeds; the row
-  // then moves from "Company" into "Direct messages" once refreshGroups runs.
+  // Same-workspace DMs need no connection, so this always succeeds; the colleague
+  // stays in the "Company" section, just upgraded from a directory row to a full
+  // conversation row once the DM exists (refreshGroups reconciles).
   const openDirectWithMember = useCallback(
     async (member: WorkspaceMember) => {
       const { group } = await api.groups.createDirect(member.id)
@@ -540,12 +556,12 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     )
   }, [])
 
-  const vehicleGroups = useMemo(() => groups.filter((g) => g.type === 'vehicle'), [groups])
   const directGroups = useMemo(() => groups.filter((g) => g.type === 'direct'), [groups])
 
-  // Company contacts = same-workspace members you don't already have an open DM
-  // with. Dedup against existing direct-group peers so a colleague never appears
-  // both as a "Direct messages" conversation and a "Company" contact.
+  // Company colleagues you don't YET have an open DM with → shown as quiet
+  // directory rows. A member who already has a DM renders as a full conversation
+  // row instead (their direct Group), so dedup against existing direct-group
+  // peers to keep a person in the list exactly once — never duplicated.
   const companyContacts = useMemo(() => {
     const peerIds = new Set(
       directGroups.map((g) => g.directPeer?.id).filter((id): id is string => Boolean(id)),
@@ -556,6 +572,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // Apply the quick-filter. Empty query → full lists. A vehicle also matches on
   // its tractor plate so you can jump by registration number.
   const q = query.trim().toLowerCase()
+  const searching = q.length > 0
   const matchesQuery = useCallback(
     (g: Group) => {
       if (!q) return true
@@ -565,21 +582,44 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     },
     [q],
   )
-  const filteredVehicles = useMemo(
-    () => vehicleGroups.filter(matchesQuery),
-    [vehicleGroups, matchesQuery],
-  )
-  const filteredDirects = useMemo(
-    () => directGroups.filter(matchesQuery),
-    [directGroups, matchesQuery],
-  )
-  const filteredContacts = useMemo(
-    () => (q ? companyContacts.filter((m) => m.displayName.toLowerCase().includes(q)) : companyContacts),
-    [companyContacts, q],
-  )
-  const searching = q.length > 0
+
+  // Company contacts (no DM yet) matching the search, sorted by name so the
+  // directory reads predictably. Surfaced in the All + DMs filters.
+  const filteredContacts = useMemo(() => {
+    const base = q
+      ? companyContacts.filter((m) => m.displayName.toLowerCase().includes(q))
+      : companyContacts
+    return [...base].sort((a, b) => a.displayName.localeCompare(b.displayName))
+  }, [companyContacts, q])
+
+  // The unified, recency-ordered rail list for the active pill filter. `groups`
+  // is already sorted newest-activity-first (byRecent), so conversation rows
+  // inherit that order; photo-less company contacts (no thread yet) trail the
+  // live conversations. 'groups' → vehicle rooms; 'dms' → DMs + contacts.
+  const conversationItems = useMemo<SidebarRowItem[]>(() => {
+    const items: SidebarRowItem[] = []
+    for (const g of groups) {
+      if (filter === 'groups' && g.type !== 'vehicle') continue
+      if (filter === 'dms' && g.type !== 'direct') continue
+      if (!matchesQuery(g)) continue
+      items.push({ kind: 'group', key: g.id, group: g })
+    }
+    if (filter !== 'groups') {
+      for (const m of filteredContacts) {
+        items.push({ kind: 'contact', key: `contact:${m.id}`, member: m })
+      }
+    }
+    return items
+  }, [groups, filter, matchesQuery, filteredContacts])
 
   const pendingReceived = connections.pendingReceived
+
+  const emptyListCopy =
+    filter === 'groups'
+      ? 'Create a vehicle chat to coordinate loads, documents, and updates over time.'
+      : filter === 'dms'
+        ? 'No direct messages or contacts yet.'
+        : 'No conversations yet.'
 
   const selectedGroup = useMemo<Group | null>(() => {
     if (selection?.kind !== 'group') return null
@@ -784,9 +824,29 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           </div>
         </div>
 
-        {/* Group + requests list */}
+        {/* Pill filters — compact, theme-native toggles under search that switch
+            the single list below between everything / vehicle rooms / direct
+            conversations. They replace the old visible section grouping. */}
+        <div className="px-3 pb-2 flex items-center gap-1">
+          <FilterPill active={filter === 'all'} onClick={() => setFilter('all')}>
+            All
+          </FilterPill>
+          <FilterPill active={filter === 'groups'} onClick={() => setFilter('groups')}>
+            Groups
+          </FilterPill>
+          <FilterPill active={filter === 'dms'} onClick={() => setFilter('dms')}>
+            Direct
+          </FilterPill>
+        </div>
+
+        {/* Rail list. Pending actionable items keep their OWN separated,
+            collapsible sections (Connection requests / Group invites) at the top
+            — unchanged from before — followed by ONE pill-filtered, recency-
+            ordered conversation + contact stream (no per-type section headers).
+            Sections use the larger inter-section gap; the unified list inside its
+            wrapper stays tight. */}
         <nav
-          className="flex-1 overflow-y-auto px-2 pt-2 pb-2 flex flex-col"
+          className="flex-1 overflow-y-auto px-2 pt-1 pb-2 flex flex-col"
           style={{ gap: 'var(--sidebar-section-gap)' }}
         >
           {loadingGroups ? (
@@ -795,126 +855,59 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             <div className="h-full flex items-center justify-center">
               <Spinner variant="md" />
             </div>
-          ) : searching ? (
-            // While searching, show only matching conversations (no requests,
-            // no create hints) so the rail reads as pure search results.
-            filteredVehicles.length === 0 &&
-            filteredDirects.length === 0 &&
-            filteredContacts.length === 0 ? (
-              <EmptyHint>No conversations match “{query.trim()}”.</EmptyHint>
-            ) : (
-              <>
-                {filteredVehicles.length > 0 && (
-                  <ChannelGroup label="Vehicles">
-                    {filteredVehicles.map((g) => (
-                      <GroupRow
-                        key={g.id}
-                        group={g}
-                        online={onlineIds}
-                        currentUserId={user.id}
-                        selected={selection?.kind === 'group' && selection.id === g.id}
-                        onClick={() => setSelection({ kind: 'group', id: g.id })}
-                      />
-                    ))}
-                  </ChannelGroup>
-                )}
-                {filteredDirects.length > 0 && (
-                  <ChannelGroup label="Direct messages">
-                    {filteredDirects.map((g) => (
-                      <GroupRow
-                        key={g.id}
-                        group={g}
-                        online={onlineIds}
-                        currentUserId={user.id}
-                        selected={selection?.kind === 'group' && selection.id === g.id}
-                        onClick={() => setSelection({ kind: 'group', id: g.id })}
-                      />
-                    ))}
-                  </ChannelGroup>
-                )}
-                {filteredContacts.length > 0 && (
-                  <ChannelGroup label="Company">
-                    {filteredContacts.map((m) => (
-                      <ContactRow
-                        key={m.id}
-                        member={m}
-                        size={sidebarAvatar}
-                        onClick={() => void openDirectWithMember(m)}
-                      />
-                    ))}
-                  </ChannelGroup>
-                )}
-              </>
-            )
           ) : (
             <>
-              <ConnectionRequestsSection
-                pendingReceived={pendingReceived}
-                loading={loadingConnections}
-                error={connectionsError}
-                onRetry={() => void refreshConnections()}
-                selectedId={selection?.kind === 'request' ? selection.id : null}
-                onSelect={(id) => setSelection({ kind: 'request', id })}
-              />
+              {/* Separated pending sections — shown above the list regardless of
+                  the active pill, hidden only while searching so results read as
+                  pure matches. */}
+              {!searching && (
+                <ConnectionRequestsSection
+                  pendingReceived={pendingReceived}
+                  loading={loadingConnections}
+                  error={connectionsError}
+                  onRetry={() => void refreshConnections()}
+                  selectedId={selection?.kind === 'request' ? selection.id : null}
+                  onSelect={(id) => setSelection({ kind: 'request', id })}
+                />
+              )}
+              {!searching && (
+                <GroupInvitesSection
+                  invites={groupInvites}
+                  selectedId={selection?.kind === 'invite' ? selection.id : null}
+                  onSelect={(id) => setSelection({ kind: 'invite', id })}
+                />
+              )}
 
-              <GroupInvitesSection
-                invites={groupInvites}
-                selectedId={selection?.kind === 'invite' ? selection.id : null}
-                onSelect={(id) => setSelection({ kind: 'invite', id })}
-              />
-
-              <ChannelGroup label="Vehicles">
-                {vehicleGroups.length === 0 ? (
-                  <EmptyHint>
-                    Create a vehicle chat to coordinate loads, documents, and updates over time.
-                  </EmptyHint>
+              {/* The unified conversation + contact stream for the active filter. */}
+              <div className="flex flex-col gap-0.5">
+                {conversationItems.length === 0 ? (
+                  searching ? (
+                    <EmptyHint>No conversations match “{query.trim()}”.</EmptyHint>
+                  ) : (
+                    <EmptyHint>{emptyListCopy}</EmptyHint>
+                  )
                 ) : (
-                  vehicleGroups.map((g) => (
-                    <GroupRow
-                      key={g.id}
-                      group={g}
-                      online={onlineIds}
-                      currentUserId={user.id}
-                      selected={selection?.kind === 'group' && selection.id === g.id}
-                      onClick={() => setSelection({ kind: 'group', id: g.id })}
-                    />
-                  ))
+                  conversationItems.map((item) =>
+                    item.kind === 'group' ? (
+                      <GroupRow
+                        key={item.key}
+                        group={item.group}
+                        online={onlineIds}
+                        currentUserId={user.id}
+                        selected={selection?.kind === 'group' && selection.id === item.group.id}
+                        onClick={() => setSelection({ kind: 'group', id: item.group.id })}
+                      />
+                    ) : (
+                      <ContactRow
+                        key={item.key}
+                        member={item.member}
+                        size={sidebarAvatar}
+                        onClick={() => void openDirectWithMember(item.member)}
+                      />
+                    ),
+                  )
                 )}
-              </ChannelGroup>
-
-              <ChannelGroup label="Direct messages">
-                {directGroups.length === 0 ? (
-                  <EmptyHint>No direct messages.</EmptyHint>
-                ) : (
-                  directGroups.map((g) => (
-                    <GroupRow
-                      key={g.id}
-                      group={g}
-                      online={onlineIds}
-                      currentUserId={user.id}
-                      selected={selection?.kind === 'group' && selection.id === g.id}
-                      onClick={() => setSelection({ kind: 'group', id: g.id })}
-                    />
-                  ))
-                )}
-              </ChannelGroup>
-
-              {/* Company colleagues you can message directly. Clicking one opens
-                  (or creates) a DM, after which they move into Direct messages. */}
-              <ChannelGroup label="Company">
-                {companyContacts.length === 0 ? (
-                  <EmptyHint>No other company members yet.</EmptyHint>
-                ) : (
-                  companyContacts.map((m) => (
-                    <ContactRow
-                      key={m.id}
-                      member={m}
-                      size={sidebarAvatar}
-                      onClick={() => void openDirectWithMember(m)}
-                    />
-                  ))
-                )}
-              </ChannelGroup>
+              </div>
             </>
           )}
         </nav>
@@ -1131,8 +1124,8 @@ function GroupRow({
   // Leading identity slot depends on the VIEW MODE:
   //  - compact (default): the original small type glyph — CircleUser for a DM,
   //    Users for a vehicle room — kept faint so the name stays the focus. Dense.
-  //  - normal: a larger avatar-like slot (DM photo/initials, generated vehicle
-  //    icon), sized to the density tier — the future preview-ready layout.
+  //  - normal: a larger avatar-like slot (DM photo or generic contact icon,
+  //    generated vehicle icon), sized to the density tier — preview-ready layout.
   const viewMode = useViewMode()
   const TypeIcon = group.type === 'direct' ? CircleUser : Users
 
@@ -1161,7 +1154,11 @@ function GroupRow({
       >
         <span className="relative shrink-0 flex">
           {group.type === 'direct' ? (
-            <Avatar userId={peer?.id ?? ''} name={peer?.name ?? groupLabel(group)} size={NORMAL_AVATAR} />
+            <Avatar
+              userId={peer?.id ?? ''}
+              name={peer?.name ?? groupLabel(group)}
+              size={NORMAL_AVATAR}
+            />
           ) : (
             <GroupAvatar groupId={group.id} hasAvatar={Boolean(group.hasAvatar)} size={NORMAL_AVATAR} />
           )}
@@ -1313,10 +1310,11 @@ function GroupRow({
   )
 }
 
-// One company colleague in the "Company" contacts section. Visually a quiet
-// people-row (avatar + name) matching the rail's row metrics; clicking it opens
-// or creates a DM. No unread/presence affordances — it's a directory entry, not
-// a live conversation (those move to "Direct messages" once started).
+// One company colleague who has no open DM yet, shown inline in the unified rail
+// list (All + DMs filters). Visually a quiet people-row (avatar + name) matching
+// the rail's row metrics; clicking it opens or creates a DM. No unread/presence
+// affordances — it's a directory entry. Once a DM exists the colleague renders as
+// a full conversation row (GroupRow) instead, so they never appear twice.
 function ContactRow({
   member,
   size,
@@ -1348,16 +1346,30 @@ function ContactRow({
   )
 }
 
-function ChannelGroup({ label, children }: { label: string; children: React.ReactNode }) {
+// Compact pill toggle for the rail's unified-list filter. Theme-native: no
+// border, a subtle filled state when active, quiet hover otherwise. Sized off
+// the rail's meta-font token so it scales with display density.
+function FilterPill({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
   return (
-    <div>
-      <div className="px-2 mb-1.5">
-        <span className="eyebrow" style={{ fontSize: 'var(--sidebar-section-font-size)' }}>
-          {label}
-        </span>
-      </div>
-      <div className="space-y-0.5">{children}</div>
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      style={{ fontSize: 'var(--sidebar-meta-font-size)' }}
+      className={`h-7 px-3 rounded-full font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+        active ? 'bg-white/[0.08] text-text' : 'text-muted hover:text-text hover:bg-white/[0.04]'
+      }`}
+    >
+      {children}
+    </button>
   )
 }
 

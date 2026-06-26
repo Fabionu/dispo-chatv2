@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Search } from 'lucide-react'
 import type { DirectoryUser, Group } from '../lib/types'
 import { api, ApiError } from '../lib/api'
+import Avatar from './Avatar'
 import Modal from './Modal'
 
 type Props = {
@@ -163,9 +164,7 @@ function ResultRow({
 
   return (
     <div className="flex items-center gap-2.5 px-2 py-2 rounded-chip hover:bg-white/[0.02] transition-colors">
-      <div className="h-7 w-7 rounded-full bg-active/30 border border-active/40 flex items-center justify-center shrink-0 text-[10px] font-semibold uppercase font-mono">
-        {initials(user.displayName)}
-      </div>
+      <Avatar userId={user.id} name={user.displayName} size={28} />
       <div className="min-w-0 flex-1">
         <div className="text-[12.5px] truncate">{user.displayName}</div>
         <div className="text-[11px] text-faint truncate">
@@ -214,9 +213,4 @@ function RowButton({
       {children}
     </button>
   )
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).slice(0, 2)
-  return parts.map((p) => p[0] ?? '').join('').toUpperCase() || '?'
 }

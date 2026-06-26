@@ -570,6 +570,12 @@ groupsRouter.post(
     for (const uid of result.created) {
       io.to(roomForUser(uid)).emit('group_invite:created', { groupId })
     }
+    // If anything was actually created, tell the GROUP room so invite-capable
+    // members viewing Group Info / the invite picker refresh their pending list
+    // live (the per-invitee event above only reaches the invited users).
+    if (result.created.length > 0) {
+      io.to(roomForGroup(groupId)).emit('group:invites_changed', { groupId })
+    }
 
     res.status(201).json({ invited: result.created, skipped: result.skipped })
   }),

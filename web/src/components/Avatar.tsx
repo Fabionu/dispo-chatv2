@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { initials } from './messages/messageUtils'
+import { User } from 'lucide-react'
 import {
   avatarUrl,
   isAvatarFailed,
@@ -19,10 +19,17 @@ type Props = {
   className?: string
 }
 
-// User avatar: the stored image when one exists, initials otherwise. The image
-// URL 404s when the user has no avatar, which flips us to the initials fallback
-// — so callers don't need to know in advance whether an avatar exists.
-export default function Avatar({ userId, name, size = 28, version, className = '' }: Props) {
+// User avatar: the stored image when one exists, otherwise a generic white
+// contact glyph on a neutral dark disc — never initials. The image URL 404s when
+// the user has no avatar, which flips us to the fallback, so callers don't need
+// to know in advance whether an avatar exists.
+export default function Avatar({
+  userId,
+  name,
+  size = 28,
+  version,
+  className = '',
+}: Props) {
   const [failed, setFailed] = useState(() => !userId || isAvatarFailed('user', userId, version))
   const [loaded, setLoaded] = useState(() => Boolean(userId) && isAvatarLoaded('user', userId, version))
   // Retry the image when the user or version changes (e.g. after an upload).
@@ -36,21 +43,25 @@ export default function Avatar({ userId, name, size = 28, version, className = '
   }, [userId, version])
 
   const style = { width: size, height: size }
-  const fallback = (
+  // No-photo fallback: a white generic-contact glyph on a neutral dark-grey disc
+  // (`bg` — darker than the rail/panels), with only a hairline neutral border so
+  // the circle stays defined even on the equally-dark chat header. No warm tint,
+  // no initials — a photo-less person reads as a person, consistently everywhere.
+  const fallbackNode = (
     <span
       style={style}
-      className={`rounded-full bg-active/30 border border-active/40 flex items-center justify-center shrink-0 font-semibold uppercase font-mono leading-none ${className}`}
+      className={`rounded-full bg-bg border border-white/[0.08] flex items-center justify-center shrink-0 text-text ${className}`}
     >
-      <span style={{ fontSize: Math.max(9, Math.round(size * 0.4)) }}>{initials(name)}</span>
+      <User size={Math.max(13, Math.round(size * 0.58))} strokeWidth={1.7} />
     </span>
   )
 
-  if (failed || !userId) return fallback
+  if (failed || !userId) return fallbackNode
 
   const src = avatarUrl('user', userId, version)
   return (
     <span style={style} className={`relative inline-flex shrink-0 ${className}`}>
-      {fallback}
+      {fallbackNode}
       <img
         src={src}
         alt={name}

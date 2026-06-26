@@ -1076,12 +1076,15 @@ export default function ChatView({
             <Avatar
               userId={group.directPeer?.id ?? ''}
               name={group.directPeer?.name ?? groupLabel(group)}
-              size={40}
+              size={56}
             />
           ) : (
             // Vehicle identity — the same circular slot as a DM avatar: the
             // group's uploaded image when set, else the generated generic icon.
-            <GroupAvatar groupId={group.id} hasAvatar={Boolean(group.hasAvatar)} size={40} />
+            // Larger (56px) than the sidebar rows for header prominence; it still
+            // centers within the fixed h-16 header (4px slack each side), so the
+            // header height/padding are unchanged.
+            <GroupAvatar groupId={group.id} hasAvatar={Boolean(group.hasAvatar)} size={56} />
           )}
           <div className="min-w-0">
             <div className="text-[16px] font-semibold truncate leading-tight">{groupLabel(group)}</div>

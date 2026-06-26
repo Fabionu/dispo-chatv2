@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
 import { api, ApiError } from '../../lib/api'
+import { getSocket } from '../../lib/socket'
+import Avatar from '../Avatar'
 import Modal from '../Modal'
 import Spinner from '../Spinner'
 
@@ -89,6 +91,29 @@ export default function InviteMembersModal({
       cancelled = true
     }
   }, [groupId])
+
+  // Live: keep the "Invited" state in sync if the group's invite set changes
+  // while this picker is open — another admin invites someone, or an invite is
+  // accepted / declined / cancelled. The server emits `group:invites_changed` to
+  // the group room; we refetch the pending set so rows reconcile (a just-accepted
+  // person also flips to "Member" via the parent-refreshed existingMemberIds).
+  const refetchPending = useCallback(() => {
+    api.groups
+      .pendingInvites(groupId)
+      .then((r) => setPending(new Set(r.invites.map((i) => i.userId))))
+      .catch(() => {})
+  }, [groupId])
+
+  useEffect(() => {
+    const socket = getSocket()
+    function onInvitesChanged(p: { groupId: string }) {
+      if (p.groupId === groupId) refetchPending()
+    }
+    socket.on('group:invites_changed', onInvitesChanged)
+    return () => {
+      socket.off('group:invites_changed', onInvitesChanged)
+    }
+  }, [groupId, refetchPending])
 
   const q = query.trim().toLowerCase()
   const filtered = useMemo(
@@ -193,9 +218,7 @@ function ResultRow({
   const detail = person.external ? person.company ?? person.email : person.email
   return (
     <div className="flex items-center gap-2.5 px-2 py-2 rounded-chip hover:bg-white/[0.02] transition-colors">
-      <div className="h-7 w-7 rounded-full bg-active/30 border border-active/40 flex items-center justify-center shrink-0 text-[10px] font-semibold uppercase font-mono">
-        {initials(person.displayName)}
-      </div>
+      <Avatar userId={person.id} name={person.displayName} size={28} />
       <div className="min-w-0 flex-1">
         <div className="text-[12.5px] truncate">{person.displayName}</div>
         <div className="text-[11px] text-faint truncate">{detail}</div>
@@ -222,9 +245,4 @@ function ResultRow({
       )}
     </div>
   )
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).slice(0, 2)
-  return parts.map((p) => p[0] ?? '').join('').toUpperCase() || '?'
 }

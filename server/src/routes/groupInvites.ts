@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { pool } from '../db/pool.js'
 import { requireAuth } from '../auth.js'
-import { getIO, roomForUser, subscribeUserToGroup } from '../realtime.js'
+import { getIO, roomForGroup, roomForUser, subscribeUserToGroup } from '../realtime.js'
 import { asyncHandler, HttpError, withTransaction } from '../http.js'
 import { insertSystemMessage, emitSystemMessage } from '../util/messages.js'
 
@@ -147,6 +147,12 @@ groupInvitesRouter.post(
       id: inviteId,
       groupId: result.groupId,
     })
+    // A new member just joined → tell the GROUP room so existing members'
+    // rosters (Group Info members list) and admins' pending-invite lists update
+    // live, no refresh. The joiner is now subscribed (above) so they get these
+    // too — harmless (their own fetch on open is authoritative).
+    io.to(roomForGroup(result.groupId)).emit('group:members_changed', { groupId: result.groupId })
+    io.to(roomForGroup(result.groupId)).emit('group:invites_changed', { groupId: result.groupId })
     // Broadcast the "X joined the group" activity row to the group room now that
     // the joiner is subscribed (so they and existing members see it live).
     if (result.systemId) await emitSystemMessage(result.systemId, result.groupId)
@@ -163,13 +169,14 @@ groupInvitesRouter.post(
     const { userId } = req.session!
     const inviteId = req.params.id
 
-    const invitedBy = await withTransaction(async (client) => {
+    const { invitedBy, groupId } = await withTransaction(async (client) => {
       const { rows } = await client.query<{
+        group_id: string
         invited_user_id: string
         invited_by_user_id: string
         status: string
       }>(
-        `select invited_user_id, invited_by_user_id, status
+        `select group_id, invited_user_id, invited_by_user_id, status
            from group_invitations where id = $1 for update`,
         [inviteId],
       )
@@ -181,12 +188,14 @@ groupInvitesRouter.post(
         `update group_invitations set status = 'declined', responded_at = now() where id = $1`,
         [inviteId],
       )
-      return row.invited_by_user_id
+      return { invitedBy: row.invited_by_user_id, groupId: row.group_id }
     })
 
     const io = getIO()
     io.to(roomForUser(userId)).emit('group_invite:declined', { id: inviteId })
     io.to(roomForUser(invitedBy)).emit('group_invite:declined', { id: inviteId })
+    // The group's pending-invite set changed → refresh admins viewing Group Info.
+    io.to(roomForGroup(groupId)).emit('group:invites_changed', { groupId })
     res.json({ ok: true })
   }),
 )
@@ -200,7 +209,7 @@ groupInvitesRouter.post(
     const { userId } = req.session!
     const inviteId = req.params.id
 
-    const invitedUser = await withTransaction(async (client) => {
+    const { invitedUser, groupId } = await withTransaction(async (client) => {
       const { rows } = await client.query<{
         group_id: string
         invited_user_id: string
@@ -235,10 +244,13 @@ groupInvitesRouter.post(
         `update group_invitations set status = 'cancelled', responded_at = now() where id = $1`,
         [inviteId],
       )
-      return row.invited_user_id
+      return { invitedUser: row.invited_user_id, groupId: row.group_id }
     })
 
-    getIO().to(roomForUser(invitedUser)).emit('group_invite:cancelled', { id: inviteId })
+    const io = getIO()
+    io.to(roomForUser(invitedUser)).emit('group_invite:cancelled', { id: inviteId })
+    // The group's pending-invite set changed → refresh admins viewing Group Info.
+    io.to(roomForGroup(groupId)).emit('group:invites_changed', { groupId })
     res.json({ ok: true })
   }),
 )
