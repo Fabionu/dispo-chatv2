@@ -413,25 +413,16 @@ export function parseCountryCode(s: VehicleStop): string | null {
   return fromText(s.country) ?? fromText(s.cityLine)
 }
 
-// Regional-indicator emoji flag for a 2-letter ISO code ("DE" → 🇩🇪). On
-// platforms without flag-emoji support the indicators fall back to the two
-// letters (a clean, code-revealing fallback). Returns '' for invalid input.
-export function countryFlag(code: string | null | undefined): string {
-  if (!code || !/^[A-Za-z]{2}$/.test(code)) return ''
-  const cc = code.toUpperCase()
-  return String.fromCodePoint(0x1f1e6 + cc.charCodeAt(0) - 65, 0x1f1e6 + cc.charCodeAt(1) - 65)
-}
-
-// A compact place for the room header: a flag (by country code) + the postal/city
-// text (the country code is conveyed by the flag, so it's dropped from `text`).
-export type TripPlace = { flag: string; code: string | null; text: string }
+// A compact place for the room header: the detected country code (for the flag,
+// rendered by the CountryFlag SVG component) plus the address text — the full
+// "ES 11201 Algeciras" line (country code + postal + city), so the code shows
+// even where the flag can't.
+export type TripPlace = { code: string | null; text: string }
 
 export function stopPlace(s: VehicleStop): TripPlace {
   const code = parseCountryCode(s)
-  let text = [s.postalCode, s.city].map((v) => v?.trim()).filter(Boolean).join(' ')
-  if (!text) text = (s.cityLine?.trim() ?? '').replace(/^[A-Za-z]{2}[,\s]+/, '')
-  if (!text) text = s.city?.trim() || s.company?.trim() || stopFullAddress(s)
-  return { flag: countryFlag(code), code, text }
+  const text = stopCityLine(s) || s.company?.trim() || stopFullAddress(s)
+  return { code, text }
 }
 
 // ── Compact summaries (header + sidebar) ─────────────────────────────────────

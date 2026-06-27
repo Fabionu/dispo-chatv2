@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowRight, Info, MapPin, MessageSquare, Search, Upload, X } from 'lucide-react'
+import { ArrowDown, Info, MapPin, MessageSquare, Search, Upload, X } from 'lucide-react'
 import type { Attachment, Group, GroupMember, IncomingMessage, ReplyToPreview } from '../lib/types'
 import { groupLabel, trailerPlate } from '../lib/types'
 import { fileError } from './attachments/attachmentUtils'
@@ -17,6 +17,7 @@ import GroupInfoPanel from './GroupInfoPanel'
 import HeaderIconButton from './HeaderIconButton'
 import AddTripPanel from './vehicle/AddTripPanel'
 import StopLocationMap from './vehicle/StopLocationMap'
+import CountryFlag from './CountryFlag'
 import { StatusChip } from './vehicle/opsControls'
 import { getOps, tripSummary, type TripPlace, type VehicleOps } from '../lib/vehicleOps'
 import { persistOpsWithRoute } from '../lib/tripRoute'
@@ -1097,13 +1098,42 @@ export default function ChatView({
           design: a fixed compact height
           (smaller than the shared --header-height used by the sidebar seam, which
           we intentionally don't touch) gives the message area more room. The
-          identity (avatar + name + subtitle) is CENTERED as one compact cluster;
-          symmetric padding keeps it visually centered while the vehicle "Group
-          info" action floats at the right edge. Same structure for every type.
-          Comfortable (not oversized) height + padding give the identity room to
-          breathe; avatar/title/subtitle/actions are scaled up in step. */}
-      <header className="relative h-16 flex items-center justify-center px-24 shrink-0 overflow-hidden">
-        <div className="min-w-0 flex items-center gap-3">
+          identity (avatar + name + trip/subtitle) is LEFT-ALIGNED at the start of
+          the header; `pr-24` reserves room for the search / group-info actions
+          floated at the right edge so a long title/place never runs under them.
+          Same structure for every type (DM + vehicle). The message column's own
+          centering (`.chat-column`) is separate and unaffected. */}
+      <header className="relative h-16 flex items-center gap-2 px-4 shrink-0 overflow-hidden">
+        {/* LEFT — the trip status + stops banner in its OWN left-edge column,
+            independent of the centered identity (never attached to the title).
+            Vehicle rooms with an active trip only; nothing for DMs / trip-less
+            rooms. The stop lines hide on narrow widths (md:) so they never crowd
+            the centered title or the right actions — the status pill always
+            stays. Truncates within its column. */}
+        <div className="flex-1 min-w-0 flex items-center">
+          {trip && (
+            <div className="flex items-start gap-2 min-w-0">
+              <span className="shrink-0 mt-px">
+                <StatusChip tone={trip.statusTone} label={trip.statusLabel} />
+              </span>
+              {(trip.loadingPlaces.length > 0 || trip.unloadingPlaces.length > 0) && (
+                <div className="hidden md:flex min-w-0 flex-col gap-0.5 leading-tight">
+                  {trip.loadingPlaces[0] && (
+                    <HeaderPlace place={trip.loadingPlaces[0]} extra={trip.loadingPlaces.length - 1} />
+                  )}
+                  {trip.unloadingPlaces[0] && (
+                    <HeaderPlace place={trip.unloadingPlaces[0]} extra={trip.unloadingPlaces.length - 1} />
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* CENTER — group identity (avatar + name + subtitle), centered between
+            the left banner and the right actions. Unchanged for DMs and vehicles;
+            the trip details live in the left banner, never on the title row. */}
+        <div className="flex items-center gap-3 min-w-0">
           {group.type === 'direct' ? (
             <Avatar
               userId={group.directPeer?.id ?? ''}
@@ -1111,58 +1141,20 @@ export default function ChatView({
               size={56}
             />
           ) : (
-            // Vehicle identity — the same circular slot as a DM avatar: the
-            // group's uploaded image when set, else the generated generic icon.
-            // Larger (56px) than the sidebar rows for header prominence; it still
-            // centers within the fixed h-16 header (4px slack each side), so the
-            // header height/padding are unchanged.
+            // Vehicle identity — the group's uploaded image when set, else the
+            // generated generic icon, in the same circular 56px slot as a DM.
             <GroupAvatar groupId={group.id} hasAvatar={Boolean(group.hasAvatar)} size={56} />
           )}
           <div className="min-w-0">
-            {/* Title row — name with the active-trip status pill beside it (only
-                for a vehicle room with a trip; DMs show just the name). */}
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="text-[16px] font-semibold truncate leading-tight">{groupLabel(group)}</div>
-              {trip && (
-                <span className="shrink-0">
-                  <StatusChip tone={trip.statusTone} label={trip.statusLabel} />
-                </span>
-              )}
-            </div>
-            {/* Second line — the trip's loading → unloading places (country flag +
-                postal/city, from the stops); falls back to order # / next stop,
-                then the static subtitle. One line, truncating, so the header
-                stays slim (no extra height/padding). */}
-            {trip && (trip.loadingPlaces.length > 0 || trip.unloadingPlaces.length > 0) ? (
-              <div className="flex items-center gap-1.5 min-w-0 leading-tight mt-0.5">
-                {trip.loadingPlaces[0] && (
-                  <HeaderPlace place={trip.loadingPlaces[0]} extra={trip.loadingPlaces.length - 1} />
-                )}
-                {trip.loadingPlaces.length > 0 && trip.unloadingPlaces.length > 0 && (
-                  <ArrowRight size={12} strokeWidth={2} className="shrink-0 text-faint" />
-                )}
-                {trip.unloadingPlaces[0] && (
-                  <HeaderPlace place={trip.unloadingPlaces[0]} extra={trip.unloadingPlaces.length - 1} />
-                )}
-              </div>
-            ) : trip && (trip.reference || trip.nextLabel) ? (
-              <div className="flex items-center gap-1.5 min-w-0 leading-tight mt-0.5">
-                {trip.reference && (
-                  <span className="shrink-0 text-[12.5px] text-muted truncate max-w-[45%]">
-                    Order #{trip.reference}
-                  </span>
-                )}
-                {trip.nextLabel && (
-                  <span className="min-w-0 truncate text-[12px] text-faint">
-                    {trip.reference ? '· ' : ''}Next: {trip.nextLabel}
-                  </span>
-                )}
-              </div>
-            ) : (
-              <div className="text-[13px] text-muted truncate leading-tight">{subtitle}</div>
-            )}
+            <div className="text-[16px] font-semibold truncate leading-tight">{groupLabel(group)}</div>
+            <div className="text-[13px] text-muted truncate leading-tight mt-0.5">{subtitle}</div>
           </div>
         </div>
+
+        {/* RIGHT — spacer that balances the centre column; the search / group-info
+            actions below float over it (absolute) so the search field can expand
+            without shifting the centered identity. */}
+        <div className="flex-1 min-w-0" />
         {/* Borderless toolbar-style actions floated at the right edge so the
             identity cluster stays centered. Search is offered in EVERY
             conversation (DM + vehicle); Group info stays vehicle-only. Same
@@ -1567,18 +1559,13 @@ export default function ChatView({
   )
 }
 
-// A compact loading/unloading place in the room header: the country flag (emoji
-// regional indicators — zero assets; degrades to the 2-letter code on platforms
-// without flag glyphs) followed by the postal/city text, with a "+N" when more
-// stops of that role exist.
+// A compact loading/unloading place in the room header: an inline-SVG country
+// flag (when a code is detected) + the "ES 11201 Algeciras" text, with a "+N"
+// when more stops of that role exist. The flag renders nothing for unknown codes.
 function HeaderPlace({ place, extra }: { place: TripPlace; extra: number }) {
   return (
-    <span className="inline-flex items-center gap-1 min-w-0 text-[12px] text-muted">
-      {place.flag && (
-        <span className="shrink-0 leading-none" aria-hidden>
-          {place.flag}
-        </span>
-      )}
+    <span className="inline-flex items-center gap-1.5 min-w-0 text-[12px] text-muted">
+      <CountryFlag code={place.code} />
       <span className="truncate">{place.text || place.code || '—'}</span>
       {extra > 0 && <span className="shrink-0 text-faint">+{extra}</span>}
     </span>
