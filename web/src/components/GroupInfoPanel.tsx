@@ -26,15 +26,15 @@ import Spinner from './Spinner'
 import { StatusChip } from './vehicle/opsControls'
 import VehicleInfoTab from './vehicle/VehicleInfoTab'
 import TripTab from './vehicle/TripTab'
-import StopsTab from './vehicle/StopsTab'
 import DocumentsTab from './vehicle/DocumentsTab'
 
-// The operational tabs in the vehicle-room info panel.
-type PanelTab = 'info' | 'trip' | 'stops' | 'docs' | 'members'
+// The operational tabs in the vehicle-room info panel. Stops are managed inside
+// the Trip tab (no separate Stops tab) so there's a single place to manage a
+// trip and its stops.
+type PanelTab = 'info' | 'trip' | 'docs' | 'members'
 const PANEL_TABS: ReadonlyArray<{ id: PanelTab; label: string }> = [
   { id: 'info', label: 'Info' },
   { id: 'trip', label: 'Trip' },
-  { id: 'stops', label: 'Stops' },
   { id: 'docs', label: 'Docs' },
   { id: 'members', label: 'Members' },
 ]
@@ -419,9 +419,9 @@ export default function GroupInfoPanel({
                 canManage={canManage}
                 onSaveTrip={saveTrip}
                 onClearTrip={clearTrip}
+                onSaveStops={saveStops}
               />
             )}
-            {tab === 'stops' && <StopsTab stops={ops.stops} canManage={canManage} onSaveStops={saveStops} />}
             {tab === 'docs' && <DocumentsTab />}
             {tab === 'members' && (
               <div className="space-y-5">

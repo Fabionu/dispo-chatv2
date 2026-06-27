@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import EditableRow from '../EditableRow'
+import StopCard from './StopCard'
+import StopEditor from './StopEditor'
 import { SelectRow, StatusChip, SubHeading } from './opsControls'
 import {
   TRIP_STATUSES,
   labelOf,
   loadingStops,
   stopFullAddress,
+  stopId,
   tripStatusTone,
   unloadingStops,
   type ActiveTrip,
@@ -16,13 +19,17 @@ import {
 type Props = {
   trip: ActiveTrip | null
   // The trip's stops — loading/unloading addresses and the route derive from
-  // these (added/edited in the Stops tab), not from the legacy free-text fields.
+  // these (managed in the Stops section below), not from the legacy free-text
+  // fields.
   stops: VehicleStop[]
   canManage: boolean
   // Merge a patch into the active trip (creates the trip if none exists yet).
   onSaveTrip: (patch: Partial<ActiveTrip>) => Promise<void>
   // Remove the active trip entirely.
   onClearTrip: () => Promise<void>
+  // Persist the full, edited stop list. Coordinate changes recompute the trip
+  // route in the background (handled by the panel's save handler).
+  onSaveStops: (next: VehicleStop[]) => Promise<void>
 }
 
 // Active Trip tab: ONE manually-managed trip per vehicle room. Loading/unloading
@@ -32,8 +39,10 @@ type Props = {
 // is computed from the stop coordinates (planning data — no live GPS). Every
 // editable field uses the shared integrated edit control, with notes the only
 // multiline field so heights stay consistent.
-export default function TripTab({ trip, stops, canManage, onSaveTrip, onClearTrip }: Props) {
+export default function TripTab({ trip, stops, canManage, onSaveTrip, onClearTrip, onSaveStops }: Props) {
   const [busy, setBusy] = useState(false)
+  // Which stop is being edited: an id, 'new' for the add form, or null.
+  const [editingStop, setEditingStop] = useState<string | 'new' | null>(null)
 
   async function run(fn: () => Promise<void>) {
     setBusy(true)
@@ -42,6 +51,18 @@ export default function TripTab({ trip, stops, canManage, onSaveTrip, onClearTri
     } finally {
       setBusy(false)
     }
+  }
+
+  async function addStop(draft: Omit<VehicleStop, 'id'>) {
+    await onSaveStops([...stops, { ...draft, id: stopId() }])
+    setEditingStop(null)
+  }
+  async function updateStop(id: string, draft: Omit<VehicleStop, 'id'>) {
+    await onSaveStops(stops.map((s) => (s.id === id ? { ...draft, id } : s)))
+    setEditingStop(null)
+  }
+  async function removeStop(id: string) {
+    await onSaveStops(stops.filter((s) => s.id !== id))
   }
 
   if (!trip) {
@@ -202,6 +223,55 @@ export default function TripTab({ trip, stops, canManage, onSaveTrip, onClearTri
         placeholder="Notes about this trip (internal)"
         onSave={(v) => onSaveTrip({ notes: v || undefined })}
       />
+
+      {/* Stops — the trip's full stop list, using the shared card style. Adding,
+          editing or removing a stop persists immediately; when coordinates change
+          the trip route above is recomputed in the background by the panel's save
+          handler (so distance/duration stay in sync with the stops). */}
+      <div className="mt-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="eyebrow">Stops{stops.length ? ` · ${stops.length}` : ''}</span>
+          {canManage && editingStop !== 'new' && (
+            <button
+              onClick={() => setEditingStop('new')}
+              className="inline-flex items-center gap-1 text-[11.5px] text-muted hover:text-text transition-colors"
+            >
+              <Plus size={12} strokeWidth={1.8} /> Add stop
+            </button>
+          )}
+        </div>
+
+        {editingStop === 'new' && (
+          <div className="mb-1.5">
+            <StopEditor onCancel={() => setEditingStop(null)} onSave={addStop} />
+          </div>
+        )}
+
+        {stops.length === 0 && editingStop !== 'new' ? (
+          <div className="text-[12px] text-faint py-4 text-center">No stops yet.</div>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {stops.map((stop) =>
+              editingStop === stop.id ? (
+                <StopEditor
+                  key={stop.id}
+                  initial={stop}
+                  onCancel={() => setEditingStop(null)}
+                  onSave={(draft) => updateStop(stop.id, draft)}
+                />
+              ) : (
+                <StopCard
+                  key={stop.id}
+                  stop={stop}
+                  canManage={canManage}
+                  onEdit={() => setEditingStop(stop.id)}
+                  onRemove={() => void removeStop(stop.id)}
+                />
+              ),
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

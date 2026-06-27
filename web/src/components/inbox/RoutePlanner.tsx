@@ -65,6 +65,12 @@ const uid = () =>
 
 const fmtCoord = (c: LatLng) => `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}`
 
+// A point only routes when it carries finite coordinates. Guards the route
+// request so a stop without valid coordinates is never submitted as an empty
+// address (the request would otherwise fail asking for it).
+const isValidCoord = (c?: LatLng | null): c is LatLng =>
+  !!c && Number.isFinite(c.lat) && Number.isFinite(c.lng)
+
 // Opt-in drag/snap tracing (mirrors HereMap): `localStorage.routeSnapDebug = '1'`
 // in the console logs the raw release coordinate, the snapped point, and how far
 // the snap moved it. Silent + off by default.
@@ -252,7 +258,11 @@ export default function RoutePlanner({ onBack }: Props) {
         // correct carriageway/direction instead of snapping to the oncoming road.
         origin: { ...start.coordinates, course: start.course },
         destination: { ...destination.coordinates, course: destination.course },
-        via: stops.map((s) => ({ ...s.coordinates, course: s.course })),
+        // Only stops with valid coordinates become via points — a removed/empty
+        // stop is filtered out, never submitted as a blank address.
+        via: stops
+          .filter((s) => isValidCoord(s.coordinates))
+          .map((s) => ({ ...s.coordinates, course: s.course })),
         truck: toTruckProfile(truck),
       })
       if (id === reqIdRef.current) {
@@ -439,6 +449,14 @@ export default function RoutePlanner({ onBack }: Props) {
   }
   function removePoint(id: string) {
     setPoints((prev) => prev.filter((p) => p.id !== id))
+  }
+  // Remove an intermediate stop (from the list row OR the map popover): drop it
+  // entirely — never leave an empty stop behind — and, when a route is already
+  // drawn, recalc immediately through the remaining stops so the line redraws and
+  // the marker numbers renumber without waiting for the Update button.
+  function removeStop(id: string) {
+    removePoint(id)
+    if (route) recalcAfterDragRef.current = true
   }
   // Drag-and-drop reorder across the WHOLE route (start → stops → destination,
   // which is exactly the order `points` is kept in). Moves the dragged point to
@@ -677,8 +695,7 @@ export default function RoutePlanner({ onBack }: Props) {
   // Remove a stop from the map popover, then recalc through the remaining points.
   function removeStopFromMap(id: string) {
     setMarkerMenu(null)
-    removePoint(id)
-    recalcAfterDragRef.current = true
+    removeStop(id)
   }
 
   // Clear start/destination from the popover (explicit action, never a stray
@@ -871,7 +888,7 @@ export default function RoutePlanner({ onBack }: Props) {
                   if (dragId && dragId !== s.id) reorder(dragId, s.id)
                 }}
                 onDragEndRow={() => setDragId(null)}
-                onClear={() => removePoint(s.id)}
+                onClear={() => removeStop(s.id)}
               />
             ))}
 
