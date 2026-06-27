@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeft, Trash2, Upload } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { ArrowLeft } from 'lucide-react'
 import type { CompanyProfile } from '../../lib/types'
 import { api, type CompanyProfilePatch } from '../../lib/api'
 import CompanyLogo from '../CompanyLogo'
+import AvatarPhotoEditor from '../AvatarPhotoEditor'
 import EditableRow from '../EditableRow'
 
 type Props = {
@@ -11,8 +12,6 @@ type Props = {
   // immediately. `version` busts the logo image cache.
   onSaved: (company: CompanyProfile, logoVersion: number) => void
 }
-
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 // Company / workspace profile as a sidebar drawer — consistent with "My
 // profile" (replaces the conversation list; the chat stays on the right) and
@@ -26,7 +25,6 @@ export default function CompanySidebarPanel({ onBack, onSaved }: Props) {
   const [company, setCompany] = useState<CompanyProfile | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [logoVersion, setLogoVersion] = useState(0)
-  const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     api.company
@@ -46,12 +44,9 @@ export default function CompanySidebarPanel({ onBack, onSaved }: Props) {
     onSaved(c, logoVersion)
   }
 
-  async function onPickLogo(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
-    if (!file.type.startsWith('image/')) return setError('Please choose an image file.')
-    if (file.size > MAX_IMAGE_BYTES) return setError('Image too large (max 10MB).')
+  // The file is already type/size-validated by AvatarPhotoEditor before it
+  // reaches here. There's no crop step for logos — upload directly.
+  async function uploadLogo(file: File) {
     setError(null)
     try {
       const { company: c } = await api.company.uploadLogo(file)
@@ -97,31 +92,29 @@ export default function CompanySidebarPanel({ onBack, onSaved }: Props) {
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
-          {/* Logo + name — the logo is the hero, integrated into the card. */}
+          {/* Logo + name — the logo is the hero, integrated into the card. The
+              logo previews in a lightbox (View); admins also change/remove it via
+              the hover three-dots menu in the logo's corner (no form-style
+              buttons). Non-admins can view but not manage. */}
           <div className="flex flex-col items-center text-center pt-1">
-            <CompanyLogo size={72} version={logoVersion} className="!rounded-card" />
+            <AvatarPhotoEditor
+              size={72}
+              shape="circle"
+              hasImage={company.hasLogo}
+              canEdit={canEdit}
+              noun="logo"
+              viewSrc={
+                company.hasLogo ? `/api/company-profile/logo?v=${logoVersion}` : undefined
+              }
+              viewTitle={company.name}
+              onFile={uploadLogo}
+              onRemove={removeLogo}
+              onError={setError}
+            >
+              <CompanyLogo size={72} version={logoVersion} className="!rounded-full" />
+            </AvatarPhotoEditor>
             <div className="mt-2.5 text-[16px] font-semibold tracking-[-0.2px]">{company.name}</div>
-            {canEdit ? (
-              <div className="mt-3 flex items-center gap-1.5">
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/gif"
-                  onChange={onPickLogo}
-                  className="hidden"
-                />
-                <SmallButton onClick={() => fileRef.current?.click()}>
-                  <Upload size={12} strokeWidth={1.8} />
-                  {company.hasLogo ? 'Change' : 'Upload'}
-                </SmallButton>
-                {company.hasLogo && (
-                  <SmallButton onClick={removeLogo} tone="danger">
-                    <Trash2 size={12} strokeWidth={1.8} />
-                    Remove
-                  </SmallButton>
-                )}
-              </div>
-            ) : (
+            {!canEdit && (
               <div className="mt-1 text-[11px] text-faint">Managed by a workspace admin</div>
             )}
             {error && <div className="text-[11.5px] text-alert mt-2">{error}</div>}
@@ -218,28 +211,5 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
       <div className="eyebrow mb-2">{label}</div>
       {children}
     </div>
-  )
-}
-
-function SmallButton({
-  children,
-  onClick,
-  tone = 'default',
-}: {
-  children: ReactNode
-  onClick: () => void
-  tone?: 'default' | 'danger'
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`h-7 px-2.5 inline-flex items-center gap-1.5 rounded-btn border text-[11.5px] transition-colors ${
-        tone === 'danger'
-          ? 'border-white/[0.12] text-muted hover:text-alert hover:border-alert/40'
-          : 'border-white/[0.14] text-text hover:bg-white/[0.04]'
-      }`}
-    >
-      {children}
-    </button>
   )
 }

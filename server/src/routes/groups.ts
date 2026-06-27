@@ -778,6 +778,17 @@ const opsSchema = z.object({
         .optional(),
       eta: opsStr(80),
       notes: opsStr(2000),
+      // Route summary computed from the stop coordinates (manual planning data,
+      // never live GPS). Geometry polylines are stored for a future driver app.
+      route: z
+        .object({
+          status: z.enum(['ok', 'incomplete', 'failed']).optional(),
+          distanceText: opsStr(40),
+          durationText: opsStr(40),
+          polylines: z.array(z.string().max(8000)).max(60).optional(),
+          computedAt: opsStr(40),
+        })
+        .optional(),
     })
     .nullable()
     .default(null),
@@ -796,6 +807,19 @@ const opsSchema = z.object({
           'break',
           'other',
         ]),
+        // Structured address: company/site, street, and the split
+        // country/postal/city fields. `cityLine` is the legacy combined
+        // "country, postal code and city" line, kept so old stops still load.
+        company: opsStr(160),
+        street: opsStr(300),
+        cityLine: opsStr(300),
+        country: opsStr(8),
+        postalCode: opsStr(20),
+        city: opsStr(160),
+        coordinates: opsStr(160),
+        lat: z.number().optional(),
+        lng: z.number().optional(),
+        // Legacy single-line address from before the structured fields existed.
         location: opsStr(300),
         plannedAt: opsStr(80),
         notes: opsStr(1000),

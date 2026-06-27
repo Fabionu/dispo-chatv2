@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Check, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { StatusChip } from './opsControls'
+import { DateField, TimeField, joinPlannedAt, splitPlannedAt } from '../DateTimeField'
 import {
   STOP_STATUSES,
   STOP_TYPES,
   labelOf,
   parseCoordinates,
+  stopCityLine,
   stopId,
   stopStatusTone,
   type StopStatus,
@@ -129,7 +131,7 @@ function StopRow({
       {(() => {
         // Structured address lines, falling back to the legacy single-line
         // `location` for stops created before the structured fields existed.
-        const lines = [stop.company, stop.street, stop.cityLine]
+        const lines = [stop.company, stop.street, stopCityLine(stop)]
           .map((v) => v?.trim())
           .filter((v): v is string => Boolean(v))
         if (lines.length === 0 && stop.location?.trim()) lines.push(stop.location.trim())
@@ -170,15 +172,29 @@ function StopEditor({
     !initial.company &&
     !initial.street &&
     !initial.cityLine &&
+    !initial.country &&
+    !initial.postalCode &&
+    !initial.city &&
     !initial.coordinates &&
     !!initial.location
+  // A stop with only the legacy combined `cityLine` (no split fields yet):
+  // migrate that text into the City field so it stays editable and re-saves as
+  // structured, mirroring how a legacy `location` migrates into Street.
+  const cityLegacy =
+    initial?.cityLine && !initial.country && !initial.postalCode && !initial.city
+      ? initial.cityLine
+      : ''
   const [type, setType] = useState<StopType>(initial?.type ?? 'other')
   const [status, setStatus] = useState<StopStatus>(initial?.status ?? 'planned')
   const [company, setCompany] = useState(initial?.company ?? '')
   const [street, setStreet] = useState(initial?.street ?? (legacyOnly ? initial!.location! : ''))
-  const [cityLine, setCityLine] = useState(initial?.cityLine ?? '')
+  const [country, setCountry] = useState(initial?.country ?? '')
+  const [postalCode, setPostalCode] = useState(initial?.postalCode ?? '')
+  const [city, setCity] = useState(initial?.city ?? cityLegacy)
   const [coordinates, setCoordinates] = useState(initial?.coordinates ?? '')
-  const [plannedAt, setPlannedAt] = useState(initial?.plannedAt ?? '')
+  const initialPlanned = splitPlannedAt(initial?.plannedAt)
+  const [plannedDate, setPlannedDate] = useState(initialPlanned.date)
+  const [plannedTime, setPlannedTime] = useState(initialPlanned.time)
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(false)
@@ -198,11 +214,13 @@ function StopEditor({
         status,
         company: trimOrUndef(company),
         street: trimOrUndef(street),
-        cityLine: trimOrUndef(cityLine),
+        country: trimOrUndef(country),
+        postalCode: trimOrUndef(postalCode),
+        city: trimOrUndef(city),
         coordinates: trimOrUndef(coordinates),
         lat: coordParsed?.lat,
         lng: coordParsed?.lng,
-        plannedAt: trimOrUndef(plannedAt),
+        plannedAt: trimOrUndef(joinPlannedAt(plannedDate, plannedTime)),
         notes: trimOrUndef(notes),
       })
     } catch {
@@ -254,13 +272,38 @@ function StopEditor({
         placeholder="Enter street name, number or industrial area..."
         className="modal-input"
       />
-      <input
-        value={cityLine}
-        onChange={(e) => setCityLine(e.target.value)}
-        aria-label="Country, postal code and city"
-        placeholder="Enter country, postal code and city..."
-        className="modal-input"
-      />
+      {/* Country / postal code / city — three fields on one row. Country is a
+          short code (DE, IT, FR…), kept compact and centered. */}
+      <div className="flex gap-2">
+        <div className="w-[58px] shrink-0">
+          <input
+            value={country}
+            onChange={(e) => setCountry(e.target.value.toUpperCase())}
+            aria-label="Country code"
+            placeholder="DE"
+            maxLength={3}
+            className="modal-input text-center uppercase placeholder:normal-case"
+          />
+        </div>
+        <div className="flex-1 min-w-0">
+          <input
+            value={postalCode}
+            onChange={(e) => setPostalCode(e.target.value)}
+            aria-label="Postal code"
+            placeholder="Postal code"
+            className="modal-input"
+          />
+        </div>
+        <div className="flex-[1.6] min-w-0">
+          <input
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            aria-label="City"
+            placeholder="City"
+            className="modal-input"
+          />
+        </div>
+      </div>
       <div className="flex flex-col gap-1">
         <input
           value={coordinates}
@@ -275,15 +318,13 @@ function StopEditor({
           </span>
         )}
       </div>
-      <label className="flex flex-col gap-1">
-        <span className="text-[11px] text-muted">Planned time</span>
-        <input
-          value={plannedAt}
-          onChange={(e) => setPlannedAt(e.target.value)}
-          placeholder="e.g. 18 Jun, 12:30"
-          className="modal-input"
-        />
-      </label>
+      <div className="flex flex-col gap-1">
+        <span className="text-[11px] text-muted">Planned date &amp; time</span>
+        <div className="flex gap-2">
+          <DateField value={plannedDate} onChange={setPlannedDate} className="flex-1 min-w-0" />
+          <TimeField value={plannedTime} onChange={setPlannedTime} className="w-[116px] shrink-0" />
+        </div>
+      </div>
       <label className="flex flex-col gap-1">
         <span className="text-[11px] text-muted">Notes</span>
         <textarea

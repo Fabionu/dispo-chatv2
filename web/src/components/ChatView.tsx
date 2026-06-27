@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, Info, Search, Upload, X } from 'lucide-react'
+import { ArrowDown, ArrowRight, Info, MapPin, MessageSquare, Search, Upload, X } from 'lucide-react'
 import type { Attachment, Group, GroupMember, IncomingMessage, ReplyToPreview } from '../lib/types'
 import { groupLabel, trailerPlate } from '../lib/types'
 import { fileError } from './attachments/attachmentUtils'
@@ -16,8 +16,10 @@ import GroupAvatar from './GroupAvatar'
 import GroupInfoPanel from './GroupInfoPanel'
 import HeaderIconButton from './HeaderIconButton'
 import AddTripPanel from './vehicle/AddTripPanel'
+import StopLocationMap from './vehicle/StopLocationMap'
 import { StatusChip } from './vehicle/opsControls'
-import { getOps, tripSummary, type VehicleOps } from '../lib/vehicleOps'
+import { getOps, tripSummary, type TripPlace, type VehicleOps } from '../lib/vehicleOps'
+import { persistOpsWithRoute } from '../lib/tripRoute'
 import ConversationSearch from './ConversationSearch'
 import MessageRow from './messages/MessageRow'
 import SystemMessageRow from './messages/SystemMessageRow'
@@ -147,6 +149,27 @@ export default function ChatView({
   // Whether the "Add trip" modal is open (vehicle groups only). Opened from the
   // composer's add (+) menu.
   const [addTripOpen, setAddTripOpen] = useState(false)
+  // Chat-window tool tabs. Today there's one tool — the stop-location Map, a
+  // request from the Add-trip panel to pick a stop's coordinates on a HERE map.
+  // `mapPick` carries the seed query + the write-back callback (null = closed);
+  // `activeTool` flips the chat-window body between the conversation and the open
+  // tool without closing either. Structured so more tools can be added later.
+  const [mapPick, setMapPick] = useState<{
+    query: string
+    onConfirm: (coords: string) => void
+  } | null>(null)
+  const [activeTool, setActiveTool] = useState<'chat' | 'map'>('chat')
+  const openMapPick = useCallback(
+    (req: { query: string; onConfirm: (coords: string) => void }) => {
+      setMapPick(req)
+      setActiveTool('map')
+    },
+    [],
+  )
+  const closeMapPick = useCallback(() => {
+    setMapPick(null)
+    setActiveTool('chat')
+  }, [])
   // In-conversation search (DMs + vehicle groups). The query lives here so the
   // header's inline search field owns it while the results render as a separate
   // floating overlay (ConversationSearch) — no full-width banner that would push
@@ -167,6 +190,14 @@ export default function ChatView({
   useEffect(() => {
     closeSearch()
   }, [group.id, closeSearch])
+  // The map tool writes back into the Add-trip panel's draft, so it can't outlive
+  // that panel or the conversation — close it when either goes away.
+  useEffect(() => {
+    if (!addTripOpen) closeMapPick()
+  }, [addTripOpen, closeMapPick])
+  useEffect(() => {
+    closeMapPick()
+  }, [group.id, closeMapPick])
   // Escape closes search from anywhere; a click outside the search UI (the
   // header field, its toggle button, or the results dropdown — all tagged with
   // data-search-region) closes it too. Matches the rest of the app's overlays.
@@ -964,8 +995,9 @@ export default function ChatView({
   // sidebar, and group-info panel all re-derive from the same source of truth.
   // Used by the Add-trip modal; the server enforces the manage permission.
   async function saveTripOps(next: VehicleOps) {
-    const { group: updated } = await api.groups.update(group.id, { ops: next })
-    onGroupUpdated?.(group.id, { meta: updated.meta })
+    // Persists immediately, then computes route data from the stop coordinates in
+    // the background (non-blocking; never fails the create).
+    await persistOpsWithRoute(group.id, next, (meta) => onGroupUpdated?.(group.id, { meta }))
   }
 
   // ── Drag-and-drop attachments ───────────────────────────────────────────
@@ -1087,24 +1119,42 @@ export default function ChatView({
             <GroupAvatar groupId={group.id} hasAvatar={Boolean(group.hasAvatar)} size={56} />
           )}
           <div className="min-w-0">
-            <div className="text-[16px] font-semibold truncate leading-tight">{groupLabel(group)}</div>
-            {/* When a trip is active, the second line becomes a compact trip
-                summary (order # · status chip · next stop); otherwise it keeps the
-                static vehicle/DM subtitle. Single line, truncating, so it stays
-                clean on both wide and narrow layouts. */}
-            {trip ? (
+            {/* Title row — name with the active-trip status pill beside it (only
+                for a vehicle room with a trip; DMs show just the name). */}
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="text-[16px] font-semibold truncate leading-tight">{groupLabel(group)}</div>
+              {trip && (
+                <span className="shrink-0">
+                  <StatusChip tone={trip.statusTone} label={trip.statusLabel} />
+                </span>
+              )}
+            </div>
+            {/* Second line — the trip's loading → unloading places (country flag +
+                postal/city, from the stops); falls back to order # / next stop,
+                then the static subtitle. One line, truncating, so the header
+                stays slim (no extra height/padding). */}
+            {trip && (trip.loadingPlaces.length > 0 || trip.unloadingPlaces.length > 0) ? (
+              <div className="flex items-center gap-1.5 min-w-0 leading-tight mt-0.5">
+                {trip.loadingPlaces[0] && (
+                  <HeaderPlace place={trip.loadingPlaces[0]} extra={trip.loadingPlaces.length - 1} />
+                )}
+                {trip.loadingPlaces.length > 0 && trip.unloadingPlaces.length > 0 && (
+                  <ArrowRight size={12} strokeWidth={2} className="shrink-0 text-faint" />
+                )}
+                {trip.unloadingPlaces[0] && (
+                  <HeaderPlace place={trip.unloadingPlaces[0]} extra={trip.unloadingPlaces.length - 1} />
+                )}
+              </div>
+            ) : trip && (trip.reference || trip.nextLabel) ? (
               <div className="flex items-center gap-1.5 min-w-0 leading-tight mt-0.5">
                 {trip.reference && (
                   <span className="shrink-0 text-[12.5px] text-muted truncate max-w-[45%]">
                     Order #{trip.reference}
                   </span>
                 )}
-                <span className="shrink-0">
-                  <StatusChip tone={trip.statusTone} label={trip.statusLabel} />
-                </span>
                 {trip.nextLabel && (
                   <span className="min-w-0 truncate text-[12px] text-faint">
-                    · Next: {trip.nextLabel}
+                    {trip.reference ? '· ' : ''}Next: {trip.nextLabel}
                   </span>
                 )}
               </div>
@@ -1168,7 +1218,38 @@ export default function ChatView({
         </div>
       </header>
 
-      {pdfPreview ? (
+      {/* Tool tabs — a compact banner under the header, shown ONLY when a chat-
+          window tool is open (today: the stop-location Map). Lets the user flip
+          between Chat and the tool without losing either; the × closes the tool.
+          No banner at all when only chat is open. */}
+      {mapPick && (
+        <div className="shrink-0 h-9 px-3 flex items-center gap-1 border-b border-white/[0.04]">
+          <ToolTab
+            active={activeTool === 'chat'}
+            icon={<MessageSquare size={12} strokeWidth={2} />}
+            label="Chat"
+            onClick={() => setActiveTool('chat')}
+          />
+          <ToolTab
+            active={activeTool === 'map'}
+            icon={<MapPin size={12} strokeWidth={2} />}
+            label="Map"
+            onClick={() => setActiveTool('map')}
+            onClose={closeMapPick}
+          />
+        </div>
+      )}
+
+      {mapPick && activeTool === 'map' ? (
+        <StopLocationMap
+          initialQuery={mapPick.query}
+          onConfirm={(coords) => {
+            mapPick.onConfirm(coords)
+            closeMapPick()
+          }}
+          onCancel={closeMapPick}
+        />
+      ) : pdfPreview ? (
         <InlinePdfPreview
           attachment={pdfPreview.attachment}
           message={pdfPreview.message}
@@ -1453,6 +1534,7 @@ export default function ChatView({
           ops={ops ?? { vehicle: {}, trip: null, stops: [] }}
           onClose={() => setAddTripOpen(false)}
           onCreate={saveTripOps}
+          onPickLocation={openMapPick}
         />
       )}
 
@@ -1480,6 +1562,64 @@ export default function ChatView({
           onConfirm={confirmPendingDelete}
           onCancel={() => setPendingDelete(null)}
         />
+      )}
+    </div>
+  )
+}
+
+// A compact loading/unloading place in the room header: the country flag (emoji
+// regional indicators — zero assets; degrades to the 2-letter code on platforms
+// without flag glyphs) followed by the postal/city text, with a "+N" when more
+// stops of that role exist.
+function HeaderPlace({ place, extra }: { place: TripPlace; extra: number }) {
+  return (
+    <span className="inline-flex items-center gap-1 min-w-0 text-[12px] text-muted">
+      {place.flag && (
+        <span className="shrink-0 leading-none" aria-hidden>
+          {place.flag}
+        </span>
+      )}
+      <span className="truncate">{place.text || place.code || '—'}</span>
+      {extra > 0 && <span className="shrink-0 text-faint">+{extra}</span>}
+    </span>
+  )
+}
+
+// One tab in the chat-window tool banner. A compact pill: a subtle filled state
+// when active, quiet hover otherwise. An optional × (for closeable tools like the
+// Map) sits inside the pill without triggering the tab's own click.
+function ToolTab({
+  active,
+  icon,
+  label,
+  onClick,
+  onClose,
+}: {
+  active: boolean
+  icon: React.ReactNode
+  label: string
+  onClick: () => void
+  onClose?: () => void
+}) {
+  return (
+    <div
+      className={`h-7 inline-flex items-center gap-1.5 rounded-full pl-2.5 text-[12px] font-medium transition-colors ${
+        onClose ? 'pr-1.5' : 'pr-2.5'
+      } ${active ? 'bg-white/[0.07] text-text' : 'text-muted hover:text-text hover:bg-white/[0.04]'}`}
+    >
+      <button type="button" onClick={onClick} className="inline-flex items-center gap-1.5">
+        {icon}
+        {label}
+      </button>
+      {onClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={`Close ${label}`}
+          className="h-4 w-4 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.08] transition-colors"
+        >
+          <X size={11} strokeWidth={2.2} />
+        </button>
       )}
     </div>
   )

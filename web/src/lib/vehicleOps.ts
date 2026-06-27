@@ -210,11 +210,30 @@ export type VehicleInfo = {
   notes?: string
 }
 
+// Route summary computed from the trip's stop coordinates (manual planning data,
+// never live GPS). Stored on the trip so the Trip tab can show distance/duration
+// and a future driver app can navigate the saved geometry. `status` separates a
+// real route from "not enough coordinates yet" and "routing failed".
+export type TripRoute = {
+  status: 'ok' | 'incomplete' | 'failed'
+  /** Pre-formatted total distance, e.g. "842 km". */
+  distanceText?: string
+  /** Pre-formatted driving time, e.g. "9 h 40 min". */
+  durationText?: string
+  /** HERE flexible polylines, one per section — route geometry for future nav. */
+  polylines?: string[]
+  /** When the route was last computed (ISO). */
+  computedAt?: string
+}
+
 export type ActiveTrip = {
   reference?: string
+  /** @deprecated Legacy free-text loading address. New trips derive loading from
+   *  the first Loading stop; kept so older trips still display. */
   loadingAddress?: string
   /** Manual loading date/time as free text (no calendar/GPS coupling). */
   loadingAt?: string
+  /** @deprecated Legacy free-text unloading address — see `loadingAddress`. */
   unloadingAddress?: string
   unloadingAt?: string
   client?: string
@@ -225,6 +244,8 @@ export type ActiveTrip = {
   /** Manual ETA — typed by the dispatcher, never computed from a map/route. */
   eta?: string
   notes?: string
+  /** Route data computed from the stop coordinates (best-effort, non-blocking). */
+  route?: TripRoute
 }
 
 export type VehicleStop = {
@@ -234,7 +255,15 @@ export type VehicleStop = {
   company?: string
   /** Street name + number (free text). */
   street?: string
-  /** Combined "Country, postal code and city" line (free text). */
+  /** Country code / initials (e.g. "DE", "IT", "FR"). */
+  country?: string
+  /** Postal / ZIP code. */
+  postalCode?: string
+  /** City / town name. */
+  city?: string
+  /** @deprecated Legacy combined "Country, postal code and city" line, kept so
+   *  stops created before the country/postalCode/city split still display. New
+   *  stops set the structured fields above instead. */
   cityLine?: string
   /** Raw coordinates exactly as the dispatcher typed them (e.g.
    *  "48.99280 N, 21.24404 E"). Kept verbatim even when it doesn't parse, so
@@ -319,11 +348,90 @@ function parseCoordComponent(part: string): number | null {
 export function stopLocationLabel(s: VehicleStop): string {
   return (
     s.company?.trim() ||
-    s.cityLine?.trim() ||
+    stopCityLine(s) ||
     s.street?.trim() ||
     s.location?.trim() ||
     ''
   )
+}
+
+// Compose the "country postal city" line from the structured fields (e.g.
+// "DE 10115 Berlin"), falling back to the legacy combined `cityLine` for stops
+// created before the split. Empty string when there's nothing to show.
+export function stopCityLine(s: VehicleStop): string {
+  const structured = [s.country, s.postalCode, s.city]
+    .map((v) => v?.trim())
+    .filter((v): v is string => Boolean(v))
+    .join(' ')
+  return structured || s.cityLine?.trim() || ''
+}
+
+// Stops of a given role, in dispatcher-entered order.
+export function loadingStops(stops: VehicleStop[]): VehicleStop[] {
+  return stops.filter((s) => s.type === 'loading')
+}
+export function unloadingStops(stops: VehicleStop[]): VehicleStop[] {
+  return stops.filter((s) => s.type === 'unloading')
+}
+
+// Full comma-joined address for a stop (company · street · country/postal/city),
+// used by the Trip tab's loading/unloading summary. Falls back to legacy fields.
+export function stopFullAddress(s: VehicleStop): string {
+  const parts = [s.company, s.street, stopCityLine(s)]
+    .map((v) => v?.trim())
+    .filter((v): v is string => Boolean(v))
+  return parts.length ? parts.join(', ') : (s.location?.trim() ?? '')
+}
+
+// ── Country code + flag ──────────────────────────────────────────────────────
+// A small name→ISO map covers the common cases where a dispatcher typed a country
+// name instead of a code; a bare 2-letter token is taken as the code directly.
+const COUNTRY_NAME_CODE: Record<string, string> = {
+  germany: 'DE', deutschland: 'DE', france: 'FR', italy: 'IT', italia: 'IT',
+  romania: 'RO', spain: 'ES', españa: 'ES', poland: 'PL', polska: 'PL',
+  netherlands: 'NL', holland: 'NL', belgium: 'BE', austria: 'AT', österreich: 'AT',
+  switzerland: 'CH', hungary: 'HU', czechia: 'CZ', 'czech republic': 'CZ',
+  slovakia: 'SK', slovenia: 'SI', croatia: 'HR', bulgaria: 'BG', greece: 'GR',
+  portugal: 'PT', denmark: 'DK', sweden: 'SE', norway: 'NO', finland: 'FI',
+  ireland: 'IE', 'united kingdom': 'GB', uk: 'GB', england: 'GB', luxembourg: 'LU',
+  turkey: 'TR', türkiye: 'TR', serbia: 'RS', ukraine: 'UA', lithuania: 'LT',
+  latvia: 'LV', estonia: 'EE', moldova: 'MD',
+}
+
+// Best-effort 2-letter country code for a stop. Reads the structured `country`
+// field first (a 2-letter code, or a known country name), then the leading token
+// of the legacy combined `cityLine` ("DE, 33333 Berlin" / "Germany, …"). Returns
+// null when nothing usable is present — never throws.
+export function parseCountryCode(s: VehicleStop): string | null {
+  const fromText = (raw: string | undefined): string | null => {
+    const t = raw?.trim()
+    if (!t) return null
+    const first = t.split(/[,\s]+/)[0]
+    if (/^[A-Za-z]{2}$/.test(first)) return first.toUpperCase()
+    return COUNTRY_NAME_CODE[t.toLowerCase()] ?? COUNTRY_NAME_CODE[first.toLowerCase()] ?? null
+  }
+  return fromText(s.country) ?? fromText(s.cityLine)
+}
+
+// Regional-indicator emoji flag for a 2-letter ISO code ("DE" → 🇩🇪). On
+// platforms without flag-emoji support the indicators fall back to the two
+// letters (a clean, code-revealing fallback). Returns '' for invalid input.
+export function countryFlag(code: string | null | undefined): string {
+  if (!code || !/^[A-Za-z]{2}$/.test(code)) return ''
+  const cc = code.toUpperCase()
+  return String.fromCodePoint(0x1f1e6 + cc.charCodeAt(0) - 65, 0x1f1e6 + cc.charCodeAt(1) - 65)
+}
+
+// A compact place for the room header: a flag (by country code) + the postal/city
+// text (the country code is conveyed by the flag, so it's dropped from `text`).
+export type TripPlace = { flag: string; code: string | null; text: string }
+
+export function stopPlace(s: VehicleStop): TripPlace {
+  const code = parseCountryCode(s)
+  let text = [s.postalCode, s.city].map((v) => v?.trim()).filter(Boolean).join(' ')
+  if (!text) text = (s.cityLine?.trim() ?? '').replace(/^[A-Za-z]{2}[,\s]+/, '')
+  if (!text) text = s.city?.trim() || s.company?.trim() || stopFullAddress(s)
+  return { flag: countryFlag(code), code, text }
 }
 
 // ── Compact summaries (header + sidebar) ─────────────────────────────────────
@@ -343,6 +451,12 @@ export type TripSummary = {
   statusTone: ChipTone
   /** "Customs, Nadlac" — the next planned stop's type + location. */
   nextLabel?: string
+  /** Loading / unloading places (flag + postal/city), derived from the stops, for
+   *  the room header. Empty arrays when there are no such stops. */
+  loadingPlaces: TripPlace[]
+  unloadingPlaces: TripPlace[]
+  /** Route summary computed from the stop coordinates (may be undefined). */
+  route?: TripRoute
 }
 
 export function tripSummary(ops: VehicleOps): TripSummary | null {
@@ -357,5 +471,8 @@ export function tripSummary(ops: VehicleOps): TripSummary | null {
     statusLabel: labelOf(TRIP_STATUSES, t.status) || 'Planned',
     statusTone: tripStatusTone(t.status),
     nextLabel,
+    loadingPlaces: loadingStops(ops.stops).map(stopPlace),
+    unloadingPlaces: unloadingStops(ops.stops).map(stopPlace),
+    route: t.route,
   }
 }

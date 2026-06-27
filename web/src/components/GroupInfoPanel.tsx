@@ -13,6 +13,7 @@ import {
   type VehicleStop,
 } from '../lib/vehicleOps'
 import { api, ApiError } from '../lib/api'
+import { persistOpsWithRoute } from '../lib/tripRoute'
 import { getSocket } from '../lib/socket'
 import { avatarUrl, clearAvatarCache } from '../lib/avatarCache'
 import { statusMeta, OFFLINE } from '../lib/availability'
@@ -290,7 +291,10 @@ export default function GroupInfoPanel({
   const saveTrip = (patch: Partial<ActiveTrip>) =>
     saveOps({ ...ops, trip: { ...(ops.trip ?? {}), ...patch } })
   const clearTrip = () => saveOps({ ...ops, trip: null })
-  const saveStops = (stops: VehicleStop[]) => saveOps({ ...ops, stops })
+  // Stops carry the coordinates the route is built from, so persist + recompute
+  // the route (in the background) whenever they change.
+  const saveStops = (stops: VehicleStop[]) =>
+    persistOpsWithRoute(group.id, { ...ops, stops }, (meta) => onGroupUpdated({ meta }))
 
   async function cancelInvite(inviteId: string) {
     const prev = pending
@@ -409,7 +413,13 @@ export default function GroupInfoPanel({
               />
             )}
             {tab === 'trip' && (
-              <TripTab trip={ops.trip} canManage={canManage} onSaveTrip={saveTrip} onClearTrip={clearTrip} />
+              <TripTab
+                trip={ops.trip}
+                stops={ops.stops}
+                canManage={canManage}
+                onSaveTrip={saveTrip}
+                onClearTrip={clearTrip}
+              />
             )}
             {tab === 'stops' && <StopsTab stops={ops.stops} canManage={canManage} onSaveStops={saveStops} />}
             {tab === 'docs' && <DocumentsTab />}

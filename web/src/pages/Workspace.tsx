@@ -102,6 +102,11 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // take a numeric size, so they can't read the CSS density tokens directly).
   const density = useDensity()
   const sidebarAvatar = SIDEBAR_AVATAR_SIZE[density]
+  // The workspace header logo reads larger than the rail's avatar metric, while
+  // the header's padding/height (--header-height) stay fixed — it's still
+  // vertically centered, just a bigger image. Footer avatar + collapsed rail keep
+  // the standard `sidebarAvatar` size.
+  const headerLogoSize = sidebarAvatar + 9
   // Auto-away presence: grey "Away" on the footer status dot when idle / tab
   // hidden. Doesn't change the stored (manual) status — presence only.
   const away = useIdle()
@@ -679,7 +684,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               inboxActive ? 'bg-white/[0.025]' : ''
             }`}
           >
-            <CompanyLogo size={sidebarAvatar} version={logoVersion} />
+            <CompanyLogo size={sidebarAvatar} version={logoVersion} className="!rounded-full" />
           </button>
           <div className="flex-1" />
           <button
@@ -744,7 +749,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             // everything below it instead of being indented on its own.
             className="flex-1 min-w-0 flex items-center gap-3 px-3 text-left"
           >
-            <CompanyLogo size={sidebarAvatar} version={logoVersion} />
+            <CompanyLogo size={headerLogoSize} version={logoVersion} className="!rounded-full" />
             <div className="min-w-0 flex-1">
               <div
                 className="font-semibold tracking-[-0.2px] leading-tight truncate"
@@ -945,6 +950,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               </MenuItem>
               <MenuItem
                 icon={<LogOut size={13} strokeWidth={1.6} />}
+                tone="danger"
                 onClick={() => {
                   setUserMenuOpen(false)
                   void onSignOut()
@@ -1171,20 +1177,19 @@ function GroupRow({
           )}
         </span>
         <span className="flex-1 min-w-0 flex flex-col gap-0.5">
+          {/* Line 1 — just the name. No company/timestamp here: the timestamp
+              sits with the preview on line 2, keeping the name row clean. The
+              vehicle's active-trip status chip is the one small indicator that
+              belongs on the title line. */}
           <span className="flex items-center gap-2">
             <span className={`flex-1 truncate text-[13.5px] ${unread ? 'text-text font-semibold' : 'text-text/90'}`}>
               {groupLabel(group)}
             </span>
-            {/* Active vehicle trip → a compact colored status chip on the title
-                line. ADDITIONAL to the preview (line 2 still shows the latest
-                message), so the room's operational state is scannable without
-                losing the conversation preview. */}
             {trip && (
               <span className="shrink-0" title={tripLineFull ?? trip.statusLabel}>
                 <StatusChip tone={trip.statusTone} label={trip.statusLabel} />
               </span>
             )}
-            {time && <span className="shrink-0 text-[10.5px] text-faint tabular-nums">{time}</span>}
           </span>
           <span className="flex items-center gap-2">
             {/* Latest-message preview — always shown (incl. vehicle rooms with an
@@ -1212,6 +1217,9 @@ function GroupRow({
                 {unreadCount > 99 ? '99+' : unreadCount}
               </span>
             )}
+            {/* Last-activity stamp — lives on the preview line (right side), not
+                the name line, so all rows share the same metadata baseline. */}
+            {time && <span className="shrink-0 text-[10.5px] text-faint tabular-nums">{time}</span>}
           </span>
         </span>
       </button>
@@ -1324,6 +1332,37 @@ function ContactRow({
   size: number
   onClick: () => void
 }) {
+  const viewMode = useViewMode()
+
+  // ── Normal view: the same breathable row as a DM/GroupRow ──────────────────
+  // 40px avatar, clean name on line 1, a quiet role subtitle on line 2. No
+  // company name and no timestamp (a contact has no thread yet), so the name
+  // row stays clean and the preview line's right side is simply empty.
+  if (viewMode === 'normal') {
+    const NORMAL_AVATAR = 40
+    const role = member.role ? member.role.charAt(0).toUpperCase() + member.role.slice(1) : ''
+    return (
+      <button
+        onClick={onClick}
+        title={`Message ${member.displayName}`}
+        className="w-full flex items-center gap-2.5 px-2.5 py-2 min-h-[56px] rounded-chip text-left text-muted hover:bg-white/[0.025] hover:text-text transition-colors"
+      >
+        <Avatar userId={member.id} name={member.displayName} size={NORMAL_AVATAR} />
+        <span className="flex-1 min-w-0 flex flex-col gap-0.5">
+          <span className="flex items-center gap-2">
+            <span className="flex-1 truncate text-[13.5px] text-text/90">{member.displayName}</span>
+          </span>
+          {role && (
+            <span className="flex items-center gap-2">
+              <span className="flex-1 truncate text-[12px] text-faint">{role}</span>
+            </span>
+          )}
+        </span>
+      </button>
+    )
+  }
+
+  // ── Compact view: the original quiet single-line directory entry ───────────
   return (
     <button
       onClick={onClick}
@@ -1388,17 +1427,24 @@ function MenuItem({
   icon,
   onClick,
   children,
+  tone = 'default',
 }: {
   icon: React.ReactNode
   onClick: () => void
   children: React.ReactNode
+  // 'danger' renders the row (icon + label) in the alert colour, with a subtle
+  // red hover — used for destructive actions like Sign out.
+  tone?: 'default' | 'danger'
 }) {
+  const danger = tone === 'danger'
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[12.5px] hover:bg-white/[0.03] transition-colors text-left"
+      className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-[12.5px] transition-colors text-left ${
+        danger ? 'text-alert hover:bg-alert/10' : 'hover:bg-white/[0.03]'
+      }`}
     >
-      <span className="text-muted">{icon}</span>
+      <span className={danger ? 'text-alert' : 'text-muted'}>{icon}</span>
       {children}
     </button>
   )

@@ -1,5 +1,7 @@
 import { CircleUser } from 'lucide-react'
 import type { Connection } from '../../lib/types'
+import { useViewMode } from '../../lib/viewMode'
+import Avatar from '../Avatar'
 
 type Props = {
   connection: Connection
@@ -10,6 +12,46 @@ type Props = {
 // Pending requests always read as unread until handled — the dot persists
 // even on the selected row so the operational state stays clear.
 export default function ConnectionRequestRow({ connection, selected, onClick }: Props) {
+  const viewMode = useViewMode()
+  const peer = connection.otherUser
+
+  // ── Normal view: the same breathable two-line row as a DM/GroupRow ─────────
+  // 40px avatar; clean requester name on line 1 (no company), a quiet person
+  // subtitle (email) on line 2 with the compact "Request" pill in the right-side
+  // metadata slot — aligned to the same baseline as a DM's timestamp.
+  if (viewMode === 'normal') {
+    const NORMAL_AVATAR = 40
+    return (
+      <button
+        onClick={onClick}
+        className={`w-full flex items-center gap-2.5 px-2.5 py-2 min-h-[56px] rounded-chip text-left transition-colors ${
+          selected ? 'bg-white/[0.06] text-text' : 'text-muted hover:bg-white/[0.025] hover:text-text'
+        }`}
+      >
+        <span className="relative shrink-0 flex">
+          <Avatar userId={peer.id} name={peer.displayName} size={NORMAL_AVATAR} />
+        </span>
+        <span className="flex-1 min-w-0 flex flex-col gap-0.5">
+          {/* Line 1 — just the requester name, kept clean. */}
+          <span className="flex items-center gap-2">
+            <span className="flex-1 truncate text-[13.5px] text-text font-semibold">
+              {peer.displayName}
+            </span>
+          </span>
+          {/* Line 2 — quiet person subtitle on the left; the "Request" pill on
+              the right, where a DM row shows its timestamp. */}
+          <span className="flex items-center gap-2">
+            <span className="flex-1 truncate text-[12px] text-faint">{peer.email}</span>
+            <span className="shrink-0 h-[18px] px-1.5 rounded-full bg-active/15 text-active text-[10px] font-semibold leading-none flex items-center justify-center">
+              Request
+            </span>
+          </span>
+        </span>
+      </button>
+    )
+  }
+
+  // ── Compact view: the original dense single line (unchanged) ───────────────
   return (
     <button
       onClick={onClick}
@@ -41,13 +83,13 @@ export default function ConnectionRequestRow({ connection, selected, onClick }: 
         className="flex-1 truncate text-text font-medium"
         style={{ fontSize: 'var(--sidebar-row-font-size)' }}
       >
-        {connection.otherUser.displayName}
+        {peer.displayName}
       </span>
       <span
         className="text-faint shrink-0 truncate max-w-[96px]"
         style={{ fontSize: 'var(--sidebar-meta-font-size)' }}
       >
-        {connection.otherUser.workspace.name}
+        {peer.workspace.name}
       </span>
     </button>
   )

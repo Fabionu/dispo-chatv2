@@ -2,10 +2,22 @@ import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import EditableRow from '../EditableRow'
 import { SelectRow, StatusChip, SubHeading } from './opsControls'
-import { TRIP_STATUSES, labelOf, tripStatusTone, type ActiveTrip } from '../../lib/vehicleOps'
+import {
+  TRIP_STATUSES,
+  labelOf,
+  loadingStops,
+  stopFullAddress,
+  tripStatusTone,
+  unloadingStops,
+  type ActiveTrip,
+  type VehicleStop,
+} from '../../lib/vehicleOps'
 
 type Props = {
   trip: ActiveTrip | null
+  // The trip's stops — loading/unloading addresses and the route derive from
+  // these (added/edited in the Stops tab), not from the legacy free-text fields.
+  stops: VehicleStop[]
   canManage: boolean
   // Merge a patch into the active trip (creates the trip if none exists yet).
   onSaveTrip: (patch: Partial<ActiveTrip>) => Promise<void>
@@ -13,11 +25,14 @@ type Props = {
   onClearTrip: () => Promise<void>
 }
 
-// Active Trip tab: ONE manually-managed trip per vehicle room. Every field is
-// typed by a dispatcher — including the ETA, which is deliberately manual (no
-// map/route/GPS calculation). Each field edits individually like the rest of
-// the panel; "Clear trip" removes it so a new load can be entered.
-export default function TripTab({ trip, canManage, onSaveTrip, onClearTrip }: Props) {
+// Active Trip tab: ONE manually-managed trip per vehicle room. Loading/unloading
+// addresses are DERIVED from the trip's Loading/Unloading stops (managed in the
+// Stops tab) so they match what was entered in Add-trip; older trips that still
+// carry the legacy free-text address fields fall back to those. The route summary
+// is computed from the stop coordinates (planning data — no live GPS). Every
+// editable field uses the shared integrated edit control, with notes the only
+// multiline field so heights stay consistent.
+export default function TripTab({ trip, stops, canManage, onSaveTrip, onClearTrip }: Props) {
   const [busy, setBusy] = useState(false)
 
   async function run(fn: () => Promise<void>) {
@@ -49,6 +64,10 @@ export default function TripTab({ trip, canManage, onSaveTrip, onClearTrip }: Pr
     )
   }
 
+  const loads = loadingStops(stops)
+  const unloads = unloadingStops(stops)
+  const route = trip.route
+
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
@@ -73,12 +92,6 @@ export default function TripTab({ trip, canManage, onSaveTrip, onClearTrip }: Pr
         />
       </div>
 
-      {/* TODO(driver/mobile): drivers will advance this status from their phone
-          in the vehicle room (e.g. a big "Update progress" control). The status
-          is already a plain manual field persisted in meta.ops — only a
-          driver-facing, permission-relaxed control needs adding here; nothing is
-          ever derived from GPS/maps. The same status drives the room header and
-          sidebar summaries. */}
       <SelectRow
         label="Trip status"
         value={trip.status}
@@ -103,46 +116,57 @@ export default function TripTab({ trip, canManage, onSaveTrip, onClearTrip }: Pr
         onSave={(v) => onSaveTrip({ client: v || undefined })}
       />
 
-      <SubHeading>Loading</SubHeading>
-      <EditableRow
-        label="Loading address"
-        value={trip.loadingAddress}
-        editable={canManage}
-        multiline
-        placeholder="Pickup address"
-        onSave={(v) => onSaveTrip({ loadingAddress: v || undefined })}
+      {/* Loading / Unloading derive from the stops. Read-only here — the addresses
+          live on the stops (Stops tab); legacy trips with the old free-text fields
+          fall back to an editable field so nothing is lost. */}
+      <StopGroup
+        heading="Loading"
+        stops={loads}
+        legacyValue={trip.loadingAddress}
+        legacyAt={trip.loadingAt}
+        legacyLabel="Loading address"
+        legacyAtLabel="Loading date & time"
+        canManage={canManage}
+        onSaveAddress={(v) => onSaveTrip({ loadingAddress: v || undefined })}
+        onSaveAt={(v) => onSaveTrip({ loadingAt: v || undefined })}
       />
-      <EditableRow
-        label="Loading date &amp; time"
-        value={trip.loadingAt}
-        editable={canManage}
-        placeholder="e.g. 18 Jun, 08:00"
-        onSave={(v) => onSaveTrip({ loadingAt: v || undefined })}
+      <StopGroup
+        heading="Unloading"
+        stops={unloads}
+        legacyValue={trip.unloadingAddress}
+        legacyAt={trip.unloadingAt}
+        legacyLabel="Unloading address"
+        legacyAtLabel="Unloading date & time"
+        canManage={canManage}
+        onSaveAddress={(v) => onSaveTrip({ unloadingAddress: v || undefined })}
+        onSaveAt={(v) => onSaveTrip({ unloadingAt: v || undefined })}
       />
 
-      <SubHeading>Unloading</SubHeading>
-      <EditableRow
-        label="Unloading address"
-        value={trip.unloadingAddress}
-        editable={canManage}
-        multiline
-        placeholder="Delivery address"
-        onSave={(v) => onSaveTrip({ unloadingAddress: v || undefined })}
-      />
-      <EditableRow
-        label="Unloading date &amp; time"
-        value={trip.unloadingAt}
-        editable={canManage}
-        placeholder="e.g. 19 Jun, 14:00"
-        onSave={(v) => onSaveTrip({ unloadingAt: v || undefined })}
-      />
+      <SubHeading>Route</SubHeading>
+      {route?.status === 'ok' ? (
+        <div className="flex items-stretch gap-6 py-2 border-b border-white/[0.04]">
+          <div>
+            <div className="text-[11px] text-muted">Distance</div>
+            <div className="text-[12.5px] text-text mt-0.5 tabular-nums">{route.distanceText}</div>
+          </div>
+          <div>
+            <div className="text-[11px] text-muted">Driving time</div>
+            <div className="text-[12.5px] text-text mt-0.5 tabular-nums">{route.durationText}</div>
+          </div>
+        </div>
+      ) : (
+        <div className="py-2 border-b border-white/[0.04] text-[11.5px] text-faint leading-[1.45]">
+          {route?.status === 'failed'
+            ? "Route couldn't be calculated — the trip is saved; check the stop coordinates."
+            : 'Route unavailable — add coordinates to at least two stops to build a route.'}
+        </div>
+      )}
 
       <SubHeading>Cargo</SubHeading>
       <EditableRow
         label="Cargo description"
         value={trip.cargo}
         editable={canManage}
-        multiline
         placeholder="What is being transported"
         onSave={(v) => onSaveTrip({ cargo: v || undefined })}
       />
@@ -167,12 +191,9 @@ export default function TripTab({ trip, canManage, onSaveTrip, onClearTrip }: Pr
         value={trip.eta}
         editable={canManage}
         hint="Manual"
-        placeholder="e.g. 19 Jun, 13:30"
+        placeholder="e.g. 19/06/2025 13:30"
         onSave={(v) => onSaveTrip({ eta: v || undefined })}
       />
-      {/* TODO(maps/live-tracking): when a mobile driver app exists, an ETA could
-          be suggested here from a route/GPS feed. For now it is strictly manual —
-          no map, route, or coordinate is read. */}
       <EditableRow
         label="Internal trip notes"
         value={trip.notes}
@@ -182,5 +203,68 @@ export default function TripTab({ trip, canManage, onSaveTrip, onClearTrip }: Pr
         onSave={(v) => onSaveTrip({ notes: v || undefined })}
       />
     </div>
+  )
+}
+
+// A loading/unloading section: the derived stop address(es) when stops of that
+// type exist (read-only — edited in the Stops tab), otherwise the legacy editable
+// free-text fields for backwards compatibility.
+function StopGroup({
+  heading,
+  stops,
+  legacyValue,
+  legacyAt,
+  legacyLabel,
+  legacyAtLabel,
+  canManage,
+  onSaveAddress,
+  onSaveAt,
+}: {
+  heading: string
+  stops: VehicleStop[]
+  legacyValue?: string
+  legacyAt?: string
+  legacyLabel: string
+  legacyAtLabel: string
+  canManage: boolean
+  onSaveAddress: (v: string) => Promise<void>
+  onSaveAt: (v: string) => Promise<void>
+}) {
+  if (stops.length > 0) {
+    const first = stops[0]
+    return (
+      <>
+        <SubHeading>{heading}</SubHeading>
+        <EditableRow label={`${heading} address`} value={stopFullAddress(first)} hint="From stops" />
+        {first.plannedAt && (
+          <EditableRow label={`${heading} date & time`} value={first.plannedAt} hint="From stops" />
+        )}
+        {stops.length > 1 && (
+          <div className="py-1.5 text-[11px] text-faint border-b border-white/[0.04]">
+            +{stops.length - 1} more {heading.toLowerCase()} stop{stops.length - 1 === 1 ? '' : 's'} — see the
+            Stops tab.
+          </div>
+        )}
+      </>
+    )
+  }
+  return (
+    <>
+      <SubHeading>{heading}</SubHeading>
+      <EditableRow
+        label={legacyLabel}
+        value={legacyValue}
+        editable={canManage}
+        placeholder={`Add a ${heading.toLowerCase()} stop in the Stops tab`}
+        onSave={onSaveAddress}
+      />
+      <EditableRow
+        label={legacyAtLabel}
+        value={legacyAt}
+        editable={canManage}
+        placeholder="e.g. 18/06/2025 08:00"
+        onSave={onSaveAt}
+      />
+    </>
   )
 }

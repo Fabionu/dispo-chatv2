@@ -53,6 +53,11 @@ type Props = {
   // Width (px) of the floating panel overlapping the map's LEFT edge, so the
   // smart fit can keep the route clear of it. 0 when the panel is collapsed.
   panelInsetPx?: number
+  // Optional external recenter request: whenever this changes to a coordinate,
+  // the map pans/zooms to it. Independent of the route auto-fit (which only
+  // frames structural route changes), so a single picked point can center the
+  // map. Used by the stop-location picker; the route planner never sets it.
+  center?: LatLng | null
   className?: string
 }
 
@@ -171,6 +176,7 @@ export default function HereMap({
   onMarkerClick,
   onRouteDragEnd,
   panelInsetPx = 0,
+  center,
   className,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -507,6 +513,16 @@ export default function HereMap({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, truckOverlay])
+
+  // ── External recenter (stop-location picker) ──────────────────────────────
+  // Pan/zoom to `center` whenever it changes to a coordinate. Kept separate from
+  // the route auto-fit so picking a single point reliably centers the map.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!ready || !map || !center) return
+    map.getViewModel().setLookAtData({ position: { lat: center.lat, lng: center.lng }, zoom: 14 })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, center?.lat, center?.lng])
 
   // Enable the logistics style's "vehicle restrictions" feature once. The only
   // combo the v3.2 SDK accepts is feature 'vehicle restrictions' + mode

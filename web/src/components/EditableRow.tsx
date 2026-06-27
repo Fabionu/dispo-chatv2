@@ -105,7 +105,11 @@ export default function EditableRow({
           {label}
           {required && <span className="text-faint"> *</span>}
         </label>
-        <div className="flex items-start gap-1.5">
+        {/* Integrated edit control: a single pill-shaped field whose radius matches
+            the circular Save/Cancel buttons that sit inside its right edge,
+            vertically centered. The input's own right padding keeps long text
+            from sliding under the buttons. */}
+        <div className="flex items-center gap-1 rounded-full border border-white/[0.06] bg-white/[0.04] pr-0.5 transition-colors focus-within:border-white/[0.12] focus-within:bg-white/[0.05]">
           {multiline ? (
             <textarea
               ref={inputRef}
@@ -114,7 +118,7 @@ export default function EditableRow({
               onKeyDown={onKeyDown}
               rows={2}
               placeholder={placeholder}
-              className="modal-input resize-none flex-1"
+              className="flex-1 min-w-0 resize-none bg-transparent pl-4 pr-1 py-2 text-[12.5px] text-text placeholder:text-faint outline-none"
             />
           ) : (
             <input
@@ -123,7 +127,7 @@ export default function EditableRow({
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={onKeyDown}
               placeholder={placeholder}
-              className="modal-input flex-1"
+              className="flex-1 min-w-0 bg-transparent pl-4 pr-1 py-2 text-[12.5px] text-text placeholder:text-faint outline-none"
             />
           )}
           <button
@@ -131,7 +135,7 @@ export default function EditableRow({
             disabled={saving}
             aria-label={`Save ${label}`}
             title="Save"
-            className="h-8 w-8 shrink-0 flex items-center justify-center rounded-btn bg-text text-bg hover:bg-text/90 disabled:opacity-50 transition-colors"
+            className="h-8 w-8 shrink-0 flex items-center justify-center rounded-full bg-text text-bg hover:bg-text/90 disabled:opacity-50 transition-colors"
           >
             <Check size={14} strokeWidth={2.2} />
           </button>
@@ -140,7 +144,7 @@ export default function EditableRow({
             disabled={saving}
             aria-label={`Cancel editing ${label}`}
             title="Cancel"
-            className="h-8 w-8 shrink-0 flex items-center justify-center rounded-btn border border-white/[0.12] text-muted hover:text-text hover:bg-white/[0.04] disabled:opacity-50 transition-colors"
+            className="h-8 w-8 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] disabled:opacity-50 transition-colors"
           >
             <X size={14} strokeWidth={2} />
           </button>

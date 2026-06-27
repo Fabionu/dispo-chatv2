@@ -42,7 +42,7 @@ const TONE_DOT: Record<ChipTone, string> = {
 export function StatusChip({ tone, label }: { tone: ChipTone; label: string }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-chip bg-white/[0.05] px-1.5 py-0.5 text-[10.5px] font-medium ${TONE_TEXT[tone]}`}
+      className={`inline-flex items-center gap-1.5 rounded-full bg-white/[0.05] px-2 py-0.5 text-[10.5px] font-medium ${TONE_TEXT[tone]}`}
     >
       <span className={`h-1.5 w-1.5 rounded-full ${TONE_DOT[tone]}`} />
       {label}

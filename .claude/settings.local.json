@@ -259,7 +259,8 @@
       "Bash(node -e \"const p=require\\('./web/package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\)\")",
       "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\)\")",
       "Bash(node -e \"const p=require\\('/c/Users/Home/Desktop/dispo-chatv2/package.json'\\); console.log\\(JSON.stringify\\(p.scripts||{},null,2\\)\\)\")",
-      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{try{const p=JSON.parse\\(s\\);console.log\\('scripts:',JSON.stringify\\(p.scripts,null,2\\)\\)}catch\\(e\\){console.log\\('parse fail'\\)}}\\)\")"
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{try{const p=JSON.parse\\(s\\);console.log\\('scripts:',JSON.stringify\\(p.scripts,null,2\\)\\)}catch\\(e\\){console.log\\('parse fail'\\)}}\\)\")",
+      "Bash(cd /c/Users/Home/Desktop/dispo-chatv2/web && cat package.json | grep -A15 '\"scripts\"')"
     ]
   }
 }
