@@ -219,33 +219,40 @@ export default function ImagePreviewModal({
       }
       onClick={embedded ? undefined : onClose}
     >
-      {/* Top action row. In a tab the filename lives in the tab label, so it's
-          omitted here (no redundant banner) and the actions sit right-aligned. */}
-      <div
-        className={`flex items-center gap-3 px-3 py-2 shrink-0 ${
-          embedded ? 'justify-end' : 'justify-between'
-        }`}
-        onClick={stop}
-      >
-        {!embedded && (
+      {/* Modal-only top bar: filename + in-flow actions. In a tab the filename is
+          in the tab label and the actions FLOAT over the image (below), so no
+          height is reserved here. */}
+      {!embedded && (
+        <div className="flex items-center justify-between gap-3 px-3 py-2 shrink-0" onClick={stop}>
           <div className="text-[12.5px] text-text truncate flex-1 min-w-0">
             {attachment.originalName}
           </div>
-        )}
-        <PreviewActionBar
-          attachment={attachment}
-          message={message}
-          onReply={onReply}
-          onForward={onForward}
-          onClose={onClose}
-          onOpenInTab={onOpenInTab}
-        />
-      </div>
+          <PreviewActionBar
+            attachment={attachment}
+            message={message}
+            onReply={onReply}
+            onForward={onForward}
+            onClose={onClose}
+            onOpenInTab={onOpenInTab}
+          />
+        </div>
+      )}
 
       <div
         ref={containerRef}
         className="flex-1 min-h-0 relative overflow-hidden flex items-center justify-center select-none"
       >
+        {/* Floating action cluster (tab mode) — top-right over the image. */}
+        {embedded && (
+          <PreviewActionBar
+            attachment={attachment}
+            message={message}
+            onReply={onReply}
+            onForward={onForward}
+            onClose={onClose}
+            floating
+          />
+        )}
         <img
           src={attachment.url}
           alt={attachment.originalName}
@@ -270,10 +277,13 @@ export default function ImagePreviewModal({
         />
 
         {/* Floating zoom controls — icon-only, themed tooltips. Clicks here
-            mustn't close the modal. */}
+            mustn't close the modal. In a tab they sit on a dark translucent pill
+            so they stay readable over a light image. */}
         <div
           onClick={stop}
-          className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5"
+          className={`absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 ${
+            embedded ? 'rounded-full bg-black/40 backdrop-blur-sm px-1 py-0.5' : ''
+          }`}
         >
           <IconButton
             label="Zoom out"

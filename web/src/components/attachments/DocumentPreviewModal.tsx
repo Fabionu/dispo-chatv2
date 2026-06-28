@@ -45,24 +45,28 @@ export default function DocumentPreviewModal({
       aria-label={attachment.originalName}
       className={
         embedded
-          ? 'flex-1 min-h-0 flex flex-col bg-bg'
+          ? 'flex-1 min-h-0 flex flex-col bg-bg relative'
           : 'fixed inset-0 z-50 bg-black/85 flex flex-col p-4'
       }
       onClick={embedded ? undefined : onClose}
     >
-      <div
-        className="flex items-center justify-end px-3 py-2 shrink-0"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <PreviewActionBar
-          attachment={attachment}
-          message={message}
-          onReply={onReply}
-          onForward={onForward}
-          onClose={onClose}
-          onOpenInTab={onOpenInTab}
-        />
-      </div>
+      {/* Modal-only top action row; in a tab the actions FLOAT (below) so no
+          height is reserved and the card uses the full area. */}
+      {!embedded && (
+        <div
+          className="flex items-center justify-end px-3 py-2 shrink-0"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <PreviewActionBar
+            attachment={attachment}
+            message={message}
+            onReply={onReply}
+            onForward={onForward}
+            onClose={onClose}
+            onOpenInTab={onOpenInTab}
+          />
+        </div>
+      )}
 
       <div className="flex-1 min-h-0 flex items-center justify-center">
         <div onClick={(e) => e.stopPropagation()}>
@@ -73,6 +77,18 @@ export default function DocumentPreviewModal({
           />
         </div>
       </div>
+
+      {/* Floating action cluster (tab mode) — top-right over the card. */}
+      {embedded && (
+        <PreviewActionBar
+          attachment={attachment}
+          message={message}
+          onReply={onReply}
+          onForward={onForward}
+          onClose={onClose}
+          floating
+        />
+      )}
     </div>
   )
 }

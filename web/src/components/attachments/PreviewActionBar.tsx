@@ -13,6 +13,11 @@ type Props = {
   // as a chat-window tab. Omitted when the surface IS already a tab (no point
   // re-opening itself).
   onOpenInTab?: () => void
+  // Float the cluster over the preview content (top-right) on a compact dark
+  // translucent pill, instead of sitting in an in-flow row that reserves height.
+  // Used by the embedded (tab) previews; the parent must be a positioning
+  // context. Buttons + actions are otherwise identical.
+  floating?: boolean
 }
 
 // Compact, themed action bar shared by every attachment preview surface (image
@@ -27,9 +32,16 @@ export default function PreviewActionBar({
   onForward,
   onClose,
   onOpenInTab,
+  floating = false,
 }: Props) {
   return (
-    <div className="flex items-center gap-1.5 shrink-0">
+    <div
+      className={
+        floating
+          ? 'absolute top-2 right-2 z-10 flex items-center gap-0.5 rounded-full bg-black/40 backdrop-blur-sm p-0.5'
+          : 'flex items-center gap-1.5 shrink-0'
+      }
+    >
       <IconButton label="Reply" onClick={() => onReply(message)}>
         <Reply size={18} strokeWidth={1.8} />
       </IconButton>
