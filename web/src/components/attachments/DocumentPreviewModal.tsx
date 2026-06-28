@@ -78,7 +78,8 @@ export default function DocumentPreviewModal({
         </div>
       </div>
 
-      {/* Floating action cluster (tab mode) — top-right over the card. */}
+      {/* Floating action cluster (tab mode) — top-right. The pill carries its own
+          dark surface, so it stays readable without any scrim. */}
       {embedded && (
         <PreviewActionBar
           attachment={attachment}

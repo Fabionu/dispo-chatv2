@@ -242,7 +242,8 @@ export default function ImagePreviewModal({
         ref={containerRef}
         className="flex-1 min-h-0 relative overflow-hidden flex items-center justify-center select-none"
       >
-        {/* Floating action cluster (tab mode) — top-right over the image. */}
+        {/* Floating action cluster (tab mode) — top-right over the image. The pill
+            carries its own dark surface, so it stays readable without any scrim. */}
         {embedded && (
           <PreviewActionBar
             attachment={attachment}
@@ -282,7 +283,9 @@ export default function ImagePreviewModal({
         <div
           onClick={stop}
           className={`absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 ${
-            embedded ? 'rounded-full bg-black/40 backdrop-blur-sm px-1 py-0.5' : ''
+            embedded
+              ? 'rounded-full bg-[rgba(24,24,24,0.92)] px-1 py-0.5 shadow-[0_2px_10px_rgba(0,0,0,0.45)]'
+              : ''
           }`}
         >
           <IconButton

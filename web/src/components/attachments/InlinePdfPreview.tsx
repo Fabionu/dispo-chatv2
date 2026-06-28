@@ -66,8 +66,8 @@ export default function InlinePdfPreview({
       {/* Page content rendered by pdf.js into a themed, scrollable surface — our
           own canvas + scrollbar, never the browser's PDF toolbar. Falls back to
           the themed document card only if rendering fails. */}
-      <div className={`flex-1 min-h-0 bg-bg ${embedded ? 'p-2' : 'p-3'}`}>
-        <div className="relative mx-auto h-full w-full max-w-[900px] rounded-card border border-white/[0.08] overflow-hidden bg-bg">
+      <div className={`flex-1 min-h-0 bg-bg ${embedded ? 'relative p-2' : 'p-3'}`}>
+        <div className="mx-auto h-full w-full max-w-[900px] rounded-card border border-white/[0.08] overflow-hidden bg-bg">
           <PdfDocumentView
             url={attachment.url}
             fallback={
@@ -78,18 +78,19 @@ export default function InlinePdfPreview({
               />
             }
           />
-          {/* Floating action cluster (tab mode) — top-right over the page. */}
-          {embedded && (
-            <PreviewActionBar
-              attachment={attachment}
-              message={message}
-              onReply={onReply}
-              onForward={onForward}
-              onClose={onClose}
-              floating
-            />
-          )}
         </div>
+        {/* Floating action cluster (tab mode) — top-right over the page. The pill
+            carries its own dark surface, so it stays readable without any scrim. */}
+        {embedded && (
+          <PreviewActionBar
+            attachment={attachment}
+            message={message}
+            onReply={onReply}
+            onForward={onForward}
+            onClose={onClose}
+            floating
+          />
+        )}
       </div>
     </div>
   )
