@@ -13,6 +13,9 @@ type Props = {
   onForward: (m: LocalMessage) => void
   onClose: () => void
   onOpenInTab?: () => void
+  // Rendered inside a chat-window tab: drop the gray filename banner (the name is
+  // already in the tab label) and keep just the action bar; no Esc close.
+  embedded?: boolean
 }
 
 // PDF preview rendered INLINE inside the chat pane — fills the area that
@@ -25,36 +28,52 @@ export default function InlinePdfPreview({
   onForward,
   onClose,
   onOpenInTab,
+  embedded = false,
 }: Props) {
   useEffect(() => {
+    if (embedded) return
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, embedded])
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      {/* Themed top bar: PDF glyph + filename on the left, icon-only actions on
-          the right. Shorter than the chat header so the two read as a hierarchy,
-          not a duplicate. */}
-      <div className="h-12 flex items-center justify-between gap-3 px-4 border-b border-white/[0.06] bg-rail shrink-0">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <FileText size={15} strokeWidth={1.6} className="text-muted shrink-0" />
-          <div className="text-[12.5px] text-text truncate min-w-0">
-            {attachment.originalName}
-          </div>
+      {embedded ? (
+        // In a tab the filename is already in the tab label, so drop the gray
+        // banner and keep only the action bar (right-aligned, no heavy chrome).
+        <div className="flex items-center justify-end px-3 py-2 shrink-0">
+          <PreviewActionBar
+            attachment={attachment}
+            message={message}
+            onReply={onReply}
+            onForward={onForward}
+            onClose={onClose}
+          />
         </div>
-        <PreviewActionBar
-          attachment={attachment}
-          message={message}
-          onReply={onReply}
-          onForward={onForward}
-          onClose={onClose}
-          onOpenInTab={onOpenInTab}
-        />
-      </div>
+      ) : (
+        // Themed top bar: PDF glyph + filename on the left, icon-only actions on
+        // the right. Shorter than the chat header so the two read as a hierarchy,
+        // not a duplicate.
+        <div className="h-12 flex items-center justify-between gap-3 px-4 border-b border-white/[0.06] bg-rail shrink-0">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <FileText size={15} strokeWidth={1.6} className="text-muted shrink-0" />
+            <div className="text-[12.5px] text-text truncate min-w-0">
+              {attachment.originalName}
+            </div>
+          </div>
+          <PreviewActionBar
+            attachment={attachment}
+            message={message}
+            onReply={onReply}
+            onForward={onForward}
+            onClose={onClose}
+            onOpenInTab={onOpenInTab}
+          />
+        </div>
+      )}
 
       {/* Page content rendered by pdf.js into a themed, scrollable surface — our
           own canvas + scrollbar, never the browser's PDF toolbar. Falls back to

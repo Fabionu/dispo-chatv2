@@ -11,6 +11,9 @@ type Props = {
   onForward: (m: LocalMessage) => void
   onClose: () => void
   onOpenInTab?: () => void
+  // Render INLINE inside a chat-window tab instead of as a fullscreen modal: no
+  // backdrop and no Esc/click-away close, but the same action bar + document card.
+  embedded?: boolean
 }
 
 // Preview modal for non-previewable documents (anything that isn't an image or
@@ -24,25 +27,31 @@ export default function DocumentPreviewModal({
   onForward,
   onClose,
   onOpenInTab,
+  embedded = false,
 }: Props) {
   useEffect(() => {
+    if (embedded) return
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, embedded])
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
+      role={embedded ? undefined : 'dialog'}
+      aria-modal={embedded ? undefined : true}
       aria-label={attachment.originalName}
-      className="fixed inset-0 z-50 bg-black/85 flex flex-col p-4"
-      onClick={onClose}
+      className={
+        embedded
+          ? 'flex-1 min-h-0 flex flex-col bg-bg'
+          : 'fixed inset-0 z-50 bg-black/85 flex flex-col p-4'
+      }
+      onClick={embedded ? undefined : onClose}
     >
       <div
-        className="flex items-center justify-end px-2 py-1.5 shrink-0"
+        className="flex items-center justify-end px-3 py-2 shrink-0"
         onClick={(e) => e.stopPropagation()}
       >
         <PreviewActionBar

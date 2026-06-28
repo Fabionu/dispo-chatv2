@@ -12,6 +12,10 @@ type Props = {
   onForward: (m: LocalMessage) => void
   onClose: () => void
   onOpenInTab?: () => void
+  // Render INLINE inside a chat-window tab instead of as a fullscreen modal: no
+  // backdrop, no filename banner (it's in the tab label), no Esc/click-away
+  // close — but the full zoom/pan + action bar are kept identical.
+  embedded?: boolean
 }
 
 const MIN_SCALE = 1
@@ -34,6 +38,7 @@ export default function ImagePreviewModal({
   onForward,
   onClose,
   onOpenInTab,
+  embedded = false,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [naturalSize, setNaturalSize] = useState({ w: 0, h: 0 })
@@ -50,14 +55,16 @@ export default function ImagePreviewModal({
     setNaturalSize({ w: 0, h: 0 })
   }, [attachment.id])
 
-  // Esc closes the modal.
+  // Esc closes the modal — only in modal mode. In a tab the × / Close action
+  // handles dismissal, and a global Esc would clash with the chat's own handlers.
   useEffect(() => {
+    if (embedded) return
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, embedded])
 
   // Track the live container dimensions so the fit math reacts to viewport /
   // window resizes.
@@ -202,19 +209,29 @@ export default function ImagePreviewModal({
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
+      role={embedded ? undefined : 'dialog'}
+      aria-modal={embedded ? undefined : true}
       aria-label={attachment.originalName}
-      className="fixed inset-0 z-50 bg-black/85 flex flex-col p-4"
-      onClick={onClose}
+      className={
+        embedded
+          ? 'flex-1 min-h-0 flex flex-col bg-bg'
+          : 'fixed inset-0 z-50 bg-black/85 flex flex-col p-4'
+      }
+      onClick={embedded ? undefined : onClose}
     >
+      {/* Top action row. In a tab the filename lives in the tab label, so it's
+          omitted here (no redundant banner) and the actions sit right-aligned. */}
       <div
-        className="flex items-center justify-between gap-3 px-2 py-1.5"
+        className={`flex items-center gap-3 px-3 py-2 shrink-0 ${
+          embedded ? 'justify-end' : 'justify-between'
+        }`}
         onClick={stop}
       >
-        <div className="text-[12.5px] text-text truncate flex-1 min-w-0">
-          {attachment.originalName}
-        </div>
+        {!embedded && (
+          <div className="text-[12.5px] text-text truncate flex-1 min-w-0">
+            {attachment.originalName}
+          </div>
+        )}
         <PreviewActionBar
           attachment={attachment}
           message={message}
