@@ -11,6 +11,7 @@ type Props = {
   onReply: (m: LocalMessage) => void
   onForward: (m: LocalMessage) => void
   onClose: () => void
+  onOpenInTab?: () => void
 }
 
 const MIN_SCALE = 1
@@ -32,6 +33,7 @@ export default function ImagePreviewModal({
   onReply,
   onForward,
   onClose,
+  onOpenInTab,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [naturalSize, setNaturalSize] = useState({ w: 0, h: 0 })
@@ -219,6 +221,7 @@ export default function ImagePreviewModal({
           onReply={onReply}
           onForward={onForward}
           onClose={onClose}
+          onOpenInTab={onOpenInTab}
         />
       </div>
 

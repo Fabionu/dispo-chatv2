@@ -12,6 +12,7 @@ type Props = {
   onReply: (m: LocalMessage) => void
   onForward: (m: LocalMessage) => void
   onClose: () => void
+  onOpenInTab?: () => void
 }
 
 // PDF preview rendered INLINE inside the chat pane — fills the area that
@@ -23,6 +24,7 @@ export default function InlinePdfPreview({
   onReply,
   onForward,
   onClose,
+  onOpenInTab,
 }: Props) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -50,6 +52,7 @@ export default function InlinePdfPreview({
           onReply={onReply}
           onForward={onForward}
           onClose={onClose}
+          onOpenInTab={onOpenInTab}
         />
       </div>
 

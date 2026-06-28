@@ -38,13 +38,27 @@ const TONE_DOT: Record<ChipTone, string> = {
 }
 // Compact status pill: a coloured dot + label on the app's neutral grey pill
 // surface. Used wherever a status needs to be scannable at a glance (hero, stop
-// rows, trip header, sidebar). Stays small/elegant — never a card.
-export function StatusChip({ tone, label }: { tone: ChipTone; label: string }) {
+// rows, trip header, sidebar). Stays small/elegant — never a card. The optional
+// `size="lg"` variant is a touch bigger + more prominent (taller pill, larger
+// text, bigger dot, subtle border) for the conversation header, where the trip
+// status needs to stand out; the default stays small for dense surfaces.
+export function StatusChip({
+  tone,
+  label,
+  size = 'sm',
+}: {
+  tone: ChipTone
+  label: string
+  size?: 'sm' | 'lg'
+}) {
+  const pill =
+    size === 'lg'
+      ? 'h-7 gap-2 px-3 text-[13px] font-semibold bg-white/[0.08] border border-white/[0.06]'
+      : 'gap-1.5 px-2 py-0.5 text-[10.5px] font-medium bg-white/[0.05]'
+  const dot = size === 'lg' ? 'h-2 w-2' : 'h-1.5 w-1.5'
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full bg-white/[0.05] px-2 py-0.5 text-[10.5px] font-medium ${TONE_TEXT[tone]}`}
-    >
-      <span className={`h-1.5 w-1.5 rounded-full ${TONE_DOT[tone]}`} />
+    <span className={`inline-flex items-center rounded-full ${pill} ${TONE_TEXT[tone]}`}>
+      <span className={`${dot} rounded-full ${TONE_DOT[tone]}`} />
       {label}
     </span>
   )

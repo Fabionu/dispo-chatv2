@@ -1,5 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, Info, MapPin, MessageSquare, Route, Search, Upload, X } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  FileText,
+  Image as ImageIcon,
+  Info,
+  MapPin,
+  MessageSquare,
+  Route,
+  Search,
+  Upload,
+  X,
+} from 'lucide-react'
 import type { Attachment, Group, GroupMember, IncomingMessage, ReplyToPreview } from '../lib/types'
 import { groupLabel, trailerPlate } from '../lib/types'
 import { fileError } from './attachments/attachmentUtils'
@@ -9,6 +22,7 @@ import { getSocket } from '../lib/socket'
 import ImagePreviewModal from './attachments/ImagePreviewModal'
 import InlinePdfPreview from './attachments/InlinePdfPreview'
 import AttachmentSendPreviewModal from './attachments/AttachmentSendPreviewModal'
+import AttachmentTabView from './attachments/AttachmentTabView'
 import DocumentPreviewModal from './attachments/DocumentPreviewModal'
 import ChatComposer, { type ChatComposerHandle, type EditContext } from './composer/ChatComposer'
 import Avatar from './Avatar'
@@ -164,7 +178,14 @@ export default function ChatView({
   // active, routable trip). Independent of the stop-pick map above — both are
   // tabs in the same chat-window tool banner.
   const [tripRouteOpen, setTripRouteOpen] = useState(false)
-  const [activeTool, setActiveTool] = useState<'chat' | 'map' | 'route'>('chat')
+  // Attachment preview tabs: images / PDFs / documents the user pinned via the
+  // preview's "Open in tab" (+) action. Each is keyed by attachment id (opening
+  // the same attachment again just focuses its existing tab). Cleared on group
+  // switch. They live alongside the map/route tools in the same tab banner.
+  const [attachmentTabs, setAttachmentTabs] = useState<AttachmentContext[]>([])
+  // The active chat-window surface: chat, a tool (map/route), or one of the
+  // attachment tabs (`att:<attachmentId>`).
+  const [activeTool, setActiveTool] = useState<'chat' | 'map' | 'route' | `att:${string}`>('chat')
   const openMapPick = useCallback(
     (req: { query: string; onConfirm: (coords: string) => void }) => {
       setMapPick(req)
@@ -183,6 +204,22 @@ export default function ChatView({
   const closeTripRoute = useCallback(() => {
     setTripRouteOpen(false)
     setActiveTool((t) => (t === 'route' ? 'chat' : t))
+  }, [])
+  // Pin an attachment as a chat-window tab (from a preview's "Open in tab" +).
+  // Leaves any open modal/inline preview and focuses the tab; a duplicate of the
+  // same attachment just re-focuses the existing tab instead of stacking.
+  const openAttachmentTab = useCallback((ctx: AttachmentContext) => {
+    setImagePreview(null)
+    setPdfPreview(null)
+    setDocPreview(null)
+    setAttachmentTabs((prev) =>
+      prev.some((t) => t.attachment.id === ctx.attachment.id) ? prev : [...prev, ctx],
+    )
+    setActiveTool(`att:${ctx.attachment.id}`)
+  }, [])
+  const closeAttachmentTab = useCallback((id: string) => {
+    setAttachmentTabs((prev) => prev.filter((t) => t.attachment.id !== id))
+    setActiveTool((t) => (t === `att:${id}` ? 'chat' : t))
   }, [])
   // In-conversation search (DMs + vehicle groups). The query lives here so the
   // header's inline search field owns it while the results render as a separate
@@ -212,6 +249,9 @@ export default function ChatView({
   useEffect(() => {
     closeMapPick()
     closeTripRoute()
+    // Attachment tabs belong to the conversation — drop them on switch.
+    setAttachmentTabs([])
+    setActiveTool('chat')
   }, [group.id, closeMapPick, closeTripRoute])
   // Escape closes search from anywhere; a click outside the search UI (the
   // header field, its toggle button, or the results dropdown — all tagged with
@@ -1015,6 +1055,12 @@ export default function ChatView({
     if (tripRouteOpen && !routeMapAvailable) closeTripRoute()
   }, [tripRouteOpen, routeMapAvailable, closeTripRoute])
 
+  // The attachment tab currently shown in the chat-window body (null unless an
+  // `att:<id>` surface is active).
+  const activeAttachmentTab = activeTool.startsWith('att:')
+    ? attachmentTabs.find((t) => `att:${t.attachment.id}` === activeTool) ?? null
+    : null
+
   // Persist the whole ops blob and flow the updated meta back up so the header,
   // sidebar, and group-info panel all re-derive from the same source of truth.
   // Used by the Add-trip modal; the server enforces the manage permission.
@@ -1135,17 +1181,25 @@ export default function ChatView({
             stays. Truncates within its column. */}
         <div className="flex-1 min-w-0 flex items-center">
           {trip && (
-            <div className="flex items-start gap-2 min-w-0">
-              <span className="shrink-0 mt-px">
-                <StatusChip tone={trip.statusTone} label={trip.statusLabel} />
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="shrink-0">
+                <StatusChip tone={trip.statusTone} label={trip.statusLabel} size="lg" />
               </span>
               {(trip.loadingPlaces.length > 0 || trip.unloadingPlaces.length > 0) && (
                 <div className="hidden md:flex min-w-0 flex-col gap-0.5 leading-tight">
                   {trip.loadingPlaces[0] && (
-                    <HeaderPlace place={trip.loadingPlaces[0]} extra={trip.loadingPlaces.length - 1} />
+                    <HeaderPlace
+                      kind="loading"
+                      place={trip.loadingPlaces[0]}
+                      extra={trip.loadingPlaces.length - 1}
+                    />
                   )}
                   {trip.unloadingPlaces[0] && (
-                    <HeaderPlace place={trip.unloadingPlaces[0]} extra={trip.unloadingPlaces.length - 1} />
+                    <HeaderPlace
+                      kind="unloading"
+                      place={trip.unloadingPlaces[0]}
+                      extra={trip.unloadingPlaces.length - 1}
+                    />
                   )}
                 </div>
               )}
@@ -1248,8 +1302,8 @@ export default function ChatView({
           window tool is open (today: the stop-location Map). Lets the user flip
           between Chat and the tool without losing either; the × closes the tool.
           No banner at all when only chat is open. */}
-      {(mapPick || tripRouteOpen) && (
-        <div className="shrink-0 h-9 px-3 flex items-center gap-1 border-b border-white/[0.04]">
+      {(mapPick || tripRouteOpen || attachmentTabs.length > 0) && (
+        <div className="shrink-0 h-9 px-3 flex items-center gap-1 border-b border-white/[0.04] overflow-x-auto [scrollbar-width:none]">
           <ToolTab
             active={activeTool === 'chat'}
             icon={<MessageSquare size={12} strokeWidth={2} />}
@@ -1274,6 +1328,22 @@ export default function ChatView({
               onClose={closeTripRoute}
             />
           )}
+          {attachmentTabs.map((t) => (
+            <ToolTab
+              key={t.attachment.id}
+              active={activeTool === `att:${t.attachment.id}`}
+              icon={
+                t.attachment.mimeType.startsWith('image/') ? (
+                  <ImageIcon size={12} strokeWidth={2} />
+                ) : (
+                  <FileText size={12} strokeWidth={2} />
+                )
+              }
+              label={attachmentTabLabel(t.attachment)}
+              onClick={() => setActiveTool(`att:${t.attachment.id}`)}
+              onClose={() => closeAttachmentTab(t.attachment.id)}
+            />
+          ))}
         </div>
       )}
 
@@ -1288,6 +1358,14 @@ export default function ChatView({
         />
       ) : tripRouteOpen && activeTool === 'route' ? (
         <TripRouteMap stops={ops?.stops ?? []} route={ops?.trip?.route} />
+      ) : activeAttachmentTab ? (
+        <AttachmentTabView
+          attachment={activeAttachmentTab.attachment}
+          message={activeAttachmentTab.message}
+          onReply={replyFromPreview}
+          onForward={forwardFromPreview}
+          onClose={() => closeAttachmentTab(activeAttachmentTab.attachment.id)}
+        />
       ) : pdfPreview ? (
         <InlinePdfPreview
           attachment={pdfPreview.attachment}
@@ -1295,6 +1373,7 @@ export default function ChatView({
           onReply={replyFromPreview}
           onForward={forwardFromPreview}
           onClose={() => setPdfPreview(null)}
+          onOpenInTab={() => openAttachmentTab(pdfPreview)}
         />
       ) : (
         <>
@@ -1529,6 +1608,7 @@ export default function ChatView({
           onReply={replyFromPreview}
           onForward={forwardFromPreview}
           onClose={() => setImagePreview(null)}
+          onOpenInTab={() => openAttachmentTab(imagePreview)}
         />
       )}
 
@@ -1539,6 +1619,7 @@ export default function ChatView({
           onReply={replyFromPreview}
           onForward={forwardFromPreview}
           onClose={() => setDocPreview(null)}
+          onOpenInTab={() => openAttachmentTab(docPreview)}
         />
       )}
 
@@ -1606,17 +1687,46 @@ export default function ChatView({
   )
 }
 
-// A compact loading/unloading place in the room header: an inline-SVG country
-// flag (when a code is detected) + the "ES 11201 Algeciras" text, with a "+N"
-// when more stops of that role exist. The flag renders nothing for unknown codes.
-function HeaderPlace({ place, extra }: { place: TripPlace; extra: number }) {
+// A compact loading/unloading place in the room header. A small role marker
+// (coloured directional icon + short "Load"/"Unload" label, fixed-width so the
+// two lines align) distinguishes loading from unloading at a glance, followed by
+// the inline-SVG country flag (when a code is detected) + the "ES 11201
+// Algeciras" text, with a "+N" when more stops of that role exist. The flag
+// renders nothing for unknown codes.
+function HeaderPlace({
+  kind,
+  place,
+  extra,
+}: {
+  kind: 'loading' | 'unloading'
+  place: TripPlace
+  extra: number
+}) {
+  const loading = kind === 'loading'
+  const RoleIcon = loading ? ArrowUpFromLine : ArrowDownToLine
   return (
-    <span className="inline-flex items-center gap-1.5 min-w-0 text-[12px] text-muted">
+    <span className="inline-flex items-center gap-2 min-w-0 text-[12.5px]">
+      <span
+        className={`shrink-0 w-[58px] inline-flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wide ${
+          loading ? 'text-[#5fae72]' : 'text-[#d68a52]'
+        }`}
+      >
+        <RoleIcon size={12} strokeWidth={2.2} className="shrink-0" />
+        {loading ? 'Load' : 'Unload'}
+      </span>
       <CountryFlag code={place.code} />
-      <span className="truncate">{place.text || place.code || '—'}</span>
+      <span className="truncate text-muted">{place.text || place.code || '—'}</span>
       {extra > 0 && <span className="shrink-0 text-faint">+{extra}</span>}
     </span>
   )
+}
+
+// Short label for an attachment tab pill: the filename (trimmed), or a generic
+// fallback by kind. Kept compact so the tab banner doesn't grow wide.
+function attachmentTabLabel(a: Attachment): string {
+  const name = a.originalName?.trim()
+  if (name) return name.length > 22 ? `${name.slice(0, 21)}…` : name
+  return a.mimeType.startsWith('image/') ? 'Image' : 'Document'
 }
 
 // One tab in the chat-window tool banner. A compact pill: a subtle filled state

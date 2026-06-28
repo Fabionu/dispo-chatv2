@@ -10,6 +10,7 @@ type Props = {
   onReply: (m: LocalMessage) => void
   onForward: (m: LocalMessage) => void
   onClose: () => void
+  onOpenInTab?: () => void
 }
 
 // Preview modal for non-previewable documents (anything that isn't an image or
@@ -22,6 +23,7 @@ export default function DocumentPreviewModal({
   onReply,
   onForward,
   onClose,
+  onOpenInTab,
 }: Props) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -49,6 +51,7 @@ export default function DocumentPreviewModal({
           onReply={onReply}
           onForward={onForward}
           onClose={onClose}
+          onOpenInTab={onOpenInTab}
         />
       </div>
 
