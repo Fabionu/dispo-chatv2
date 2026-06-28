@@ -12,7 +12,9 @@ export type { TripRoute }
 
 // Decimal-degree points for the stops that have usable coordinates, in order.
 // Prefers the parsed lat/lng; falls back to parsing the raw `coordinates` text.
-function routablePoints(stops: VehicleStop[]): { lat: number; lng: number }[] {
+// Exported so the Trip tab's route-availability check and the trip-route map read
+// coordinates exactly the way the route calculation does (single source of truth).
+export function routablePoints(stops: VehicleStop[]): { lat: number; lng: number }[] {
   const pts: { lat: number; lng: number }[] = []
   for (const s of stops) {
     if (typeof s.lat === 'number' && typeof s.lng === 'number') {

@@ -447,16 +447,31 @@ export default function RoutePlanner({ onBack }: Props) {
     }
     return undefined
   }
+  // Remove ANY point (start, stop, or finish) and RE-DERIVE every role from the
+  // resulting order, so a deletion never leaves an empty required slot behind:
+  //   • ≥2 points remain → first = start, last = finish, the rest = stops. So
+  //     deleting the start PROMOTES the next point to start, deleting the finish
+  //     promotes the previous point to finish, and an intermediate just drops out
+  //     while the stops renumber.
+  //   • <2 points remain → keep the lone point's role as-is so a proper empty
+  //     start/finish state shows and no route is calculated (the endpoints effect
+  //     drops the drawn route).
+  // Course hints are cleared (the travel direction through the points may have
+  // changed); when a route is already drawn and ≥2 points remain it recalcs
+  // through the new ordering (no stale leg, markers/badges follow the roles).
   function removePoint(id: string) {
-    setPoints((prev) => prev.filter((p) => p.id !== id))
-  }
-  // Remove an intermediate stop (from the list row OR the map popover): drop it
-  // entirely — never leave an empty stop behind — and, when a route is already
-  // drawn, recalc immediately through the remaining stops so the line redraws and
-  // the marker numbers renumber without waiting for the Update button.
-  function removeStop(id: string) {
-    removePoint(id)
-    if (route) recalcAfterDragRef.current = true
+    const remaining = points.length - 1
+    setPoints((prev) => {
+      const next = prev.filter((p) => p.id !== id)
+      if (next.length < 2) return next
+      return next.map((p, i) => {
+        const role: RoutePointRole =
+          i === 0 ? 'start' : i === next.length - 1 ? 'destination' : 'stop'
+        if (p.role === role && p.course === undefined) return p
+        return { ...p, role, course: undefined }
+      })
+    })
+    if (route && remaining >= 2) recalcAfterDragRef.current = true
   }
   // Drag-and-drop reorder across the WHOLE route (start → stops → destination,
   // which is exactly the order `points` is kept in). Moves the dragged point to
@@ -695,7 +710,7 @@ export default function RoutePlanner({ onBack }: Props) {
   // Remove a stop from the map popover, then recalc through the remaining points.
   function removeStopFromMap(id: string) {
     setMarkerMenu(null)
-    removeStop(id)
+    removePoint(id)
   }
 
   // Clear start/destination from the popover (explicit action, never a stray
@@ -888,7 +903,7 @@ export default function RoutePlanner({ onBack }: Props) {
                   if (dragId && dragId !== s.id) reorder(dragId, s.id)
                 }}
                 onDragEndRow={() => setDragId(null)}
-                onClear={() => removeStop(s.id)}
+                onClear={() => removePoint(s.id)}
               />
             ))}
 

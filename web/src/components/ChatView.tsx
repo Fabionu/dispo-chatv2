@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, Info, MapPin, MessageSquare, Search, Upload, X } from 'lucide-react'
+import { ArrowDown, Info, MapPin, MessageSquare, Route, Search, Upload, X } from 'lucide-react'
 import type { Attachment, Group, GroupMember, IncomingMessage, ReplyToPreview } from '../lib/types'
 import { groupLabel, trailerPlate } from '../lib/types'
 import { fileError } from './attachments/attachmentUtils'
@@ -17,10 +17,11 @@ import GroupInfoPanel from './GroupInfoPanel'
 import HeaderIconButton from './HeaderIconButton'
 import AddTripPanel from './vehicle/AddTripPanel'
 import StopLocationMap from './vehicle/StopLocationMap'
+import TripRouteMap from './vehicle/TripRouteMap'
 import CountryFlag from './CountryFlag'
 import { StatusChip } from './vehicle/opsControls'
 import { getOps, tripSummary, type TripPlace, type VehicleOps } from '../lib/vehicleOps'
-import { persistOpsWithRoute } from '../lib/tripRoute'
+import { canRouteStops, persistOpsWithRoute } from '../lib/tripRoute'
 import ConversationSearch from './ConversationSearch'
 import MessageRow from './messages/MessageRow'
 import SystemMessageRow from './messages/SystemMessageRow'
@@ -159,7 +160,11 @@ export default function ChatView({
     query: string
     onConfirm: (coords: string) => void
   } | null>(null)
-  const [activeTool, setActiveTool] = useState<'chat' | 'map'>('chat')
+  // Whether the read-only "Trip route" map tab is open (vehicle rooms with an
+  // active, routable trip). Independent of the stop-pick map above — both are
+  // tabs in the same chat-window tool banner.
+  const [tripRouteOpen, setTripRouteOpen] = useState(false)
+  const [activeTool, setActiveTool] = useState<'chat' | 'map' | 'route'>('chat')
   const openMapPick = useCallback(
     (req: { query: string; onConfirm: (coords: string) => void }) => {
       setMapPick(req)
@@ -169,7 +174,15 @@ export default function ChatView({
   )
   const closeMapPick = useCallback(() => {
     setMapPick(null)
-    setActiveTool('chat')
+    setActiveTool((t) => (t === 'map' ? 'chat' : t))
+  }, [])
+  const openTripRoute = useCallback(() => {
+    setTripRouteOpen(true)
+    setActiveTool('route')
+  }, [])
+  const closeTripRoute = useCallback(() => {
+    setTripRouteOpen(false)
+    setActiveTool((t) => (t === 'route' ? 'chat' : t))
   }, [])
   // In-conversation search (DMs + vehicle groups). The query lives here so the
   // header's inline search field owns it while the results render as a separate
@@ -198,7 +211,8 @@ export default function ChatView({
   }, [addTripOpen, closeMapPick])
   useEffect(() => {
     closeMapPick()
-  }, [group.id, closeMapPick])
+    closeTripRoute()
+  }, [group.id, closeMapPick, closeTripRoute])
   // Escape closes search from anywhere; a click outside the search UI (the
   // header field, its toggle button, or the results dropdown — all tagged with
   // data-search-region) closes it too. Matches the rest of the app's overlays.
@@ -991,6 +1005,15 @@ export default function ChatView({
   // shows a compact trip line instead of the static vehicle subtitle.
   const ops = group.type === 'vehicle' ? getOps(group) : null
   const trip = ops ? tripSummary(ops) : null
+  // The header "Trip route" button shows only for vehicle rooms with an active
+  // trip whose stops carry ≥2 valid coordinates (enough to draw a route).
+  const routeMapAvailable = Boolean(ops?.trip) && Boolean(ops && canRouteStops(ops.stops))
+
+  // Close the trip-route tab if the trip stops being routable while it's open
+  // (trip cleared, or its stops dropped below two valid coordinates).
+  useEffect(() => {
+    if (tripRouteOpen && !routeMapAvailable) closeTripRoute()
+  }, [tripRouteOpen, routeMapAvailable, closeTripRoute])
 
   // Persist the whole ops blob and flow the updated meta back up so the header,
   // sidebar, and group-info panel all re-derive from the same source of truth.
@@ -1202,6 +1225,17 @@ export default function ChatView({
           >
             <Search size={19} strokeWidth={1.8} />
           </HeaderIconButton>
+          {routeMapAvailable && (
+            <HeaderIconButton
+              label="Trip route"
+              active={tripRouteOpen && activeTool === 'route'}
+              onClick={() =>
+                tripRouteOpen && activeTool === 'route' ? closeTripRoute() : openTripRoute()
+              }
+            >
+              <Route size={19} strokeWidth={1.8} />
+            </HeaderIconButton>
+          )}
           {group.type === 'vehicle' && (
             <HeaderIconButton label="Group info" onClick={() => setGroupInfoOpen(true)}>
               <Info size={20} strokeWidth={1.8} />
@@ -1214,7 +1248,7 @@ export default function ChatView({
           window tool is open (today: the stop-location Map). Lets the user flip
           between Chat and the tool without losing either; the × closes the tool.
           No banner at all when only chat is open. */}
-      {mapPick && (
+      {(mapPick || tripRouteOpen) && (
         <div className="shrink-0 h-9 px-3 flex items-center gap-1 border-b border-white/[0.04]">
           <ToolTab
             active={activeTool === 'chat'}
@@ -1222,13 +1256,24 @@ export default function ChatView({
             label="Chat"
             onClick={() => setActiveTool('chat')}
           />
-          <ToolTab
-            active={activeTool === 'map'}
-            icon={<MapPin size={12} strokeWidth={2} />}
-            label="Map"
-            onClick={() => setActiveTool('map')}
-            onClose={closeMapPick}
-          />
+          {mapPick && (
+            <ToolTab
+              active={activeTool === 'map'}
+              icon={<MapPin size={12} strokeWidth={2} />}
+              label="Map"
+              onClick={() => setActiveTool('map')}
+              onClose={closeMapPick}
+            />
+          )}
+          {tripRouteOpen && (
+            <ToolTab
+              active={activeTool === 'route'}
+              icon={<Route size={12} strokeWidth={2} />}
+              label="Trip route"
+              onClick={() => setActiveTool('route')}
+              onClose={closeTripRoute}
+            />
+          )}
         </div>
       )}
 
@@ -1241,6 +1286,8 @@ export default function ChatView({
           }}
           onCancel={closeMapPick}
         />
+      ) : tripRouteOpen && activeTool === 'route' ? (
+        <TripRouteMap stops={ops?.stops ?? []} route={ops?.trip?.route} />
       ) : pdfPreview ? (
         <InlinePdfPreview
           attachment={pdfPreview.attachment}

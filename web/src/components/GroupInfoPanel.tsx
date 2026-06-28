@@ -290,7 +290,12 @@ export default function GroupInfoPanel({
     saveOps({ ...ops, vehicle: { ...ops.vehicle, ...patch } })
   const saveTrip = (patch: Partial<ActiveTrip>) =>
     saveOps({ ...ops, trip: { ...(ops.trip ?? {}), ...patch } })
-  const clearTrip = () => saveOps({ ...ops, trip: null })
+  // Start a brand-new, CLEAN trip: a fresh Planned trip with NO carried-over
+  // fields and NO stops (stops belong to the trip, so a new trip starts empty).
+  const addTrip = () => saveOps({ ...ops, trip: { status: 'planned' }, stops: [] })
+  // Clearing a trip also drops its stops — they belong to the trip, so leaving
+  // them behind would resurface on the next trip as stale data.
+  const clearTrip = () => saveOps({ ...ops, trip: null, stops: [] })
   // Stops carry the coordinates the route is built from, so persist + recompute
   // the route (in the background) whenever they change.
   const saveStops = (stops: VehicleStop[]) =>
@@ -418,6 +423,7 @@ export default function GroupInfoPanel({
                 stops={ops.stops}
                 canManage={canManage}
                 onSaveTrip={saveTrip}
+                onAddTrip={addTrip}
                 onClearTrip={clearTrip}
                 onSaveStops={saveStops}
               />
