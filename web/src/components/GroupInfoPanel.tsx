@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { MoreVertical, UserPlus, X } from 'lucide-react'
-import type { Group, GroupMember, GroupPendingInvitee, Role } from '../lib/types'
+import type { Group, GroupMember, GroupPendingInvitee } from '../lib/types'
 import { groupLabel, tractorPlate, trailerPlate } from '../lib/types'
 import {
   getOps,
@@ -13,7 +13,7 @@ import {
   type VehicleStop,
 } from '../lib/vehicleOps'
 import { api, ApiError } from '../lib/api'
-import { persistOpsWithRoute } from '../lib/tripRoute'
+import { persistOpsWithRoute, persistTripRoute } from '../lib/tripRoute'
 import { getSocket } from '../lib/socket'
 import { avatarUrl, clearAvatarCache } from '../lib/avatarCache'
 import { statusMeta, OFFLINE } from '../lib/availability'
@@ -58,13 +58,10 @@ type Props = {
   onMessageMember: (member: GroupMember) => Promise<void>
   // Patch the parent group after a details edit so the header reflects it live.
   onGroupUpdated: (partial: Partial<Group>) => void
-}
-
-const ROLE_LABEL: Record<Role, string> = {
-  admin: 'Admin',
-  dispatcher: 'Dispatcher',
-  driver: 'Driver',
-  partner: 'Partner',
+  // Open the read-only trip route map tool (owned by ChatView, shown in the chat
+  // body). Undefined when the active trip isn't routable (no/too-few coordinates)
+  // — the Trip tab's "Edit route" control is hidden in that case.
+  onOpenRouteMap?: () => void
 }
 
 // Right-side panel with a vehicle group's operational details and membership.
@@ -90,6 +87,7 @@ export default function GroupInfoPanel({
   onMembersChanged,
   onMessageMember,
   onGroupUpdated,
+  onOpenRouteMap,
 }: Props) {
   const [error, setError] = useState<string | null>(null)
   // The member whose role is currently being changed (drives the row spinner).
@@ -300,6 +298,17 @@ export default function GroupInfoPanel({
   // the route (in the background) whenever they change.
   const saveStops = (stops: VehicleStop[]) =>
     persistOpsWithRoute(group.id, { ...ops, stops }, (meta) => onGroupUpdated({ meta }))
+  // Explicit "Calculate route" — a foreground recompute from the current stops,
+  // saved without the edit flag (a first calculation is quiet, no activity row).
+  const calculateRoute = async () => {
+    await persistTripRoute(group.id, ops, (meta) => onGroupUpdated({ meta }))
+  }
+  // Explicit "Edit route" — open the map tool, then recompute + save flagged as a
+  // deliberate edit so the server logs "Route was edited" when the route changed.
+  const editRoute = async () => {
+    onOpenRouteMap?.()
+    await persistTripRoute(group.id, ops, (meta) => onGroupUpdated({ meta }), { flagAsEdit: true })
+  }
 
   async function cancelInvite(inviteId: string) {
     const prev = pending
@@ -426,6 +435,8 @@ export default function GroupInfoPanel({
                 onAddTrip={addTrip}
                 onClearTrip={clearTrip}
                 onSaveStops={saveStops}
+                onCalculateRoute={calculateRoute}
+                onEditRoute={onOpenRouteMap ? editRoute : undefined}
               />
             )}
             {tab === 'docs' && <DocumentsTab />}
@@ -586,9 +597,9 @@ function MemberRow({
   // Mirrors the sidebar DM dots so both reflect the same state simultaneously.
   const showDot = member.userRole !== 'driver'
   const dot = online ? statusMeta(member.availabilityStatus ?? 'available') : OFFLINE
-  // Secondary line: the member's WORKSPACE role (distinct from the group role
-  // badge on the right), so the two are never confused.
-  const roleLabel = member.userRole ? ROLE_LABEL[member.userRole] : null
+  // Secondary line: the member's role IN THIS GROUP (admin / member) — NOT their
+  // company/workspace role. Plain text under the name (no badge).
+  const groupRoleLabel = isAdmin ? 'Admin' : 'Member'
 
   function run(fn: () => void) {
     setMenuOpen(false)
@@ -602,6 +613,18 @@ function MemberRow({
   const actions: MemberAction[] = []
   if (!isSelf) {
     actions.push({ label: 'Send private message', onClick: () => run(() => onMessage(member)) })
+  }
+  // Self-service leave for non-managers (managers reach the same action through
+  // their own "Remove from group" below). The server logs a "X left the group"
+  // activity row. A sole admin can't leave (it would orphan the group).
+  if (isSelf && !canManageRoles) {
+    actions.push({
+      label: 'Leave group',
+      onClick: () => run(() => onRemove(member.id)),
+      tone: 'danger',
+      disabled: isAdmin && isLastAdmin,
+      hint: isAdmin && isLastAdmin ? 'Last admin' : undefined,
+    })
   }
   if (canManageRoles) {
     if (isAdmin) {
@@ -646,19 +669,9 @@ function MemberRow({
           {member.displayName}
           {isSelf && <span className="text-faint"> (you)</span>}
         </div>
-        {roleLabel && <div className="text-[11px] text-faint truncate">{roleLabel}</div>}
+        {/* Group role (admin / member) as plain text — never the workspace role. */}
+        <div className="text-[11px] text-faint truncate">{groupRoleLabel}</div>
       </div>
-
-      {/* Group-role badge (distinct from the workspace role above). */}
-      <span
-        className={`shrink-0 text-[10px] rounded-chip px-1.5 py-0.5 border ${
-          isAdmin
-            ? 'text-active border-active/30 bg-active/10'
-            : 'text-muted border-white/[0.08]'
-        }`}
-      >
-        {isAdmin ? 'Admin' : 'Member'}
-      </span>
 
       {/* Compact text-based actions menu. The small ⋮ trigger keeps the row
           clean (no always-visible buttons); a row spinner replaces it while a

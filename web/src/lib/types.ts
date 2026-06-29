@@ -92,6 +92,13 @@ export type Group = {
   /** How many of those unread messages @-mention me. Drives the sidebar's
    *  separate "@" badge. Optional for forward-compat with older responses. */
   unreadMentionCount?: number
+  /** Per-user conversation prefs (migration 0023), set via the sidebar row menu.
+   *  All optional for forward-compat with older responses / optimistic rows.
+   *  `archivedAt` → in the Archived filter (hidden from All/Groups/Direct);
+   *  `pinnedAt` → sorts to the top of its list; `muted` → notifications muted. */
+  archivedAt?: string | null
+  pinnedAt?: string | null
+  muted?: boolean
   directPeer: DirectPeer | null
   /** Compact preview of the latest USER message (matches `lastMessageAt`), for
    *  the Normal-view sidebar row's second line. Null when the thread has no
@@ -242,7 +249,10 @@ export type Message = {
   systemPayload?: {
     userId?: string
     userName?: string
-    tripLabel?: string
+    tripLabel?: string | null
+    /** trip_status_changed: the previous / next TripStatus codes. */
+    from?: string | null
+    to?: string | null
   } | null
   /** Users @-mentioned in this message. Drives the highlighted mention tokens
    *  in the bubble. Absent/empty when the message mentions no one. */

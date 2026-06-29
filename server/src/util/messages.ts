@@ -170,9 +170,14 @@ export async function loadMessage(id: string) {
 export type SystemEvent =
   | 'group_joined' // a user joined (accepted an invite)
   | 'group_member_added' // an actor added another user (payload.userName)
+  | 'group_member_removed' // an actor removed another user (payload.userName)
+  | 'group_member_left' // a member left the group themselves (actor = the leaver)
   | 'message_pinned' // targetMessageId set
   | 'message_unpinned' // targetMessageId set
-  | 'trip_created' // future: payload.tripLabel
+  | 'trip_created' // legacy — superseded by trip_added
+  | 'trip_added' // a trip was added to the room (payload.tripLabel = reference)
+  | 'trip_status_changed' // payload.from / payload.to = TripStatus codes
+  | 'route_edited' // the trip route was (re)computed/edited
 
 // Insert a system row in a group's timeline. Returns the new message id (load +
 // emit it post-commit via emitSystemMessage). Deliberately does NOT touch

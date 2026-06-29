@@ -1646,6 +1646,7 @@ export default function ChatView({
           onMembersChanged={refetchMembers}
           onMessageMember={messageMember}
           onGroupUpdated={(partial) => onGroupUpdated?.(group.id, partial)}
+          onOpenRouteMap={routeMapAvailable ? openTripRoute : undefined}
         />
       )}
 

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { LocalMessage } from './types'
 import DayDivider from './DayDivider'
+import { TRIP_STATUSES, labelOf, type TripStatus } from '../../lib/vehicleOps'
 
 // Compact, centered timeline entry for persisted activity (joins, member adds,
 // pin/unpin, trips, …). No avatar, no bubble, no actions menu — just muted
@@ -48,6 +49,12 @@ function Detail({ children }: { children: ReactNode }) {
   return <span className="text-muted font-medium">{children}</span>
 }
 
+// Human label for a TripStatus code carried in a trip_status_changed payload.
+// Falls back to "Planned" (the implicit default) when the code is missing/unknown.
+function tripStatusLabel(code: string | null | undefined): string {
+  return labelOf(TRIP_STATUSES, (code ?? undefined) as TripStatus | undefined) || 'Planned'
+}
+
 // Build the sentence for one activity row. Unknown events degrade to a neutral
 // "updated the conversation" rather than leaking an internal event code.
 function renderActivity(
@@ -80,6 +87,17 @@ function renderActivity(
           {actor} added {payload.userName ? <Detail>{payload.userName}</Detail> : 'someone'}
         </>
       )
+    case 'group_member_removed':
+      // The row names the REMOVED person (from the payload), not the actor.
+      return (
+        <>
+          {payload.userName ? <Detail>{payload.userName}</Detail> : 'A member'} was removed from the
+          group
+        </>
+      )
+    case 'group_member_left':
+      // Actor IS the person who left, so author_name reads correctly.
+      return <>{actor} left the group</>
     case 'message_pinned':
       return <>{actor} pinned {messageLink}</>
     case 'message_unpinned':
@@ -91,6 +109,23 @@ function renderActivity(
           {payload.tripLabel ? <>trip <Detail>{payload.tripLabel}</Detail></> : 'a trip'}
         </>
       )
+    case 'trip_added':
+      // Operational event — phrased without an actor prefix to match the rest of
+      // the trip activity wording ("Trip 1893 005 was added.").
+      return payload.tripLabel ? (
+        <>Trip <Detail>{payload.tripLabel}</Detail> was added</>
+      ) : (
+        <>A trip was added</>
+      )
+    case 'trip_status_changed':
+      return (
+        <>
+          Trip status changed from <Detail>{tripStatusLabel(payload.from)}</Detail> to{' '}
+          <Detail>{tripStatusLabel(payload.to)}</Detail>
+        </>
+      )
+    case 'route_edited':
+      return <>Route was edited</>
     default:
       return <>{actor} updated the conversation</>
   }

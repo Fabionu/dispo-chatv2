@@ -18,7 +18,7 @@ export type Density = 'compact' | 'default' | 'comfortable'
 export const SIDEBAR_AVATAR_SIZE: Record<Density, number> = {
   compact: 31,
   default: 33,
-  comfortable: 37,
+  comfortable: 40,
 }
 
 const STORAGE_KEY = 'dispo:density'

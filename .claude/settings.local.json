@@ -261,7 +261,12 @@
       "Bash(node -e \"const p=require\\('/c/Users/Home/Desktop/dispo-chatv2/package.json'\\); console.log\\(JSON.stringify\\(p.scripts||{},null,2\\)\\)\")",
       "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{try{const p=JSON.parse\\(s\\);console.log\\('scripts:',JSON.stringify\\(p.scripts,null,2\\)\\)}catch\\(e\\){console.log\\('parse fail'\\)}}\\)\")",
       "Bash(cd /c/Users/Home/Desktop/dispo-chatv2/web && cat package.json | grep -A15 '\"scripts\"')",
-      "Bash(cd /c/Users/Home/Desktop/dispo-chatv2/web && cat package.json | grep -A20 '\"scripts\"')"
+      "Bash(cd /c/Users/Home/Desktop/dispo-chatv2/web && cat package.json | grep -A20 '\"scripts\"')",
+      "Bash(echo \"===SERVER EXIT $?===\")",
+      "Bash(echo \"===WEB EXIT $?===\")",
+      "Bash(grep -rn '\"lint\"' package.json web/package.json server/package.json)",
+      "Bash(ls eslint.config.* web/eslint.config.*)",
+      "Bash(node -e \"console.log\\(require\\('tailwindcss/package.json'\\).version\\)\")"
     ]
   }
 }

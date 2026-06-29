@@ -1,14 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Archive,
+  ArchiveRestore,
+  Bell,
+  BellOff,
   Building2,
   ChevronDown,
   CircleUser,
   LogOut,
+  MailOpen,
+  Pin,
+  PinOff,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
   Search,
   Settings,
+  Trash2,
   Users,
   X,
 } from 'lucide-react'
@@ -37,6 +45,7 @@ import GroupInvitesSection from '../components/invites/GroupInvitesSection'
 import GroupInviteView from '../components/invites/GroupInviteView'
 import Avatar from '../components/Avatar'
 import GroupAvatar from '../components/GroupAvatar'
+import ConversationRowMenu, { type RowMenuAction } from '../components/ConversationRowMenu'
 import Spinner from '../components/Spinner'
 import CompanyLogo from '../components/CompanyLogo'
 import CreateVehicleGroupModal from '../components/CreateVehicleGroupModal'
@@ -63,10 +72,12 @@ type Props = {
 type NewGroupKind = 'vehicle' | 'direct'
 
 // Sidebar pill filter — which slice of the single unified list is shown.
-//   'all'    → vehicle rooms + direct messages + company contacts
-//   'groups' → vehicle/group rooms only
-//   'dms'    → direct messages + company contacts
-type SidebarFilter = 'all' | 'groups' | 'dms'
+//   'all'      → active (non-archived) vehicle rooms + DMs + company contacts
+//   'archived' → archived conversations only (no contacts)
+//   'groups'   → active vehicle/group rooms only
+//   'dms'      → active direct messages + company contacts
+// Archive/pin/mute/hide are per-user prefs (see group_members, migration 0023).
+type SidebarFilter = 'all' | 'archived' | 'groups' | 'dms'
 
 // One entry in the unified rail list: either a real conversation (vehicle room
 // or DM Group) or a company colleague you don't have a DM with yet.
@@ -181,8 +192,16 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   }, [])
 
   const refreshGroups = useCallback(async () => {
-    const { groups } = await api.groups.list()
-    setGroups([...groups].sort(byRecent))
+    try {
+      const { groups } = await api.groups.list()
+      setGroups([...groups].sort(byRecent))
+    } catch (err) {
+      // A failed groups fetch must never silently EMPTY the rail (which would
+      // hide every conversation + cross-workspace contact and leave the list
+      // looking broken). Keep whatever's already shown and surface the error for
+      // diagnosis — same graceful-degradation as the contacts roster above.
+      console.error('Failed to refresh conversations', err)
+    }
   }, [])
 
   useEffect(() => {
@@ -319,17 +338,42 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     function onMembersChanged() {
       void refreshMembers()
     }
+    // Conversation prefs changed on another tab/device (archive/pin/mute, or a
+    // "delete for me"). Keep this client in lockstep: a hide drops + deselects
+    // the row; otherwise patch the per-user flags in place.
+    function onGroupPrefs(p: {
+      groupId: string
+      archivedAt: string | null
+      pinnedAt: string | null
+      muted: boolean
+      hiddenAt: string | null
+    }) {
+      if (p.hiddenAt) {
+        if (openGroupIdRef.current === p.groupId) setSelection(null)
+        setGroups((prev) => prev.filter((g) => g.id !== p.groupId))
+        return
+      }
+      setGroups((prev) =>
+        prev.map((g) =>
+          g.id === p.groupId
+            ? { ...g, archivedAt: p.archivedAt, pinnedAt: p.pinnedAt, muted: p.muted }
+            : g,
+        ),
+      )
+    }
 
     socket.on('message:new', onMessageNew)
     socket.on('group:unread', onGroupUnread)
     socket.on('group:added', onGroupAdded)
     socket.on('group:removed', onGroupRemoved)
+    socket.on('group:prefs', onGroupPrefs)
     socket.on('workspace:members_changed', onMembersChanged)
     return () => {
       socket.off('message:new', onMessageNew)
       socket.off('group:unread', onGroupUnread)
       socket.off('group:added', onGroupAdded)
       socket.off('group:removed', onGroupRemoved)
+      socket.off('group:prefs', onGroupPrefs)
       socket.off('workspace:members_changed', onMembersChanged)
     }
   }, [refreshGroups, refreshMembers, user.id])
@@ -561,6 +605,83 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     )
   }, [])
 
+  // ── Per-conversation row actions (sidebar ⋮ menu) ─────────────────────────
+  // Each applies the change OPTIMISTICALLY (patchGroup) for an instant response,
+  // then persists it; on failure we refetch the rail to reconcile rather than
+  // leave it drifted. All prefs are per-user (group_members, migration 0023).
+  const applyPrefs = useCallback(
+    async (
+      groupId: string,
+      optimistic: Partial<Group>,
+      body: Partial<{ archived: boolean; pinned: boolean; muted: boolean }>,
+    ) => {
+      patchGroup(groupId, optimistic)
+      try {
+        await api.groups.setPrefs(groupId, body)
+      } catch {
+        void refreshGroups()
+      }
+    },
+    [patchGroup, refreshGroups],
+  )
+
+  const togglePin = useCallback(
+    (group: Group, pinned: boolean) =>
+      void applyPrefs(group.id, { pinnedAt: pinned ? new Date().toISOString() : null }, { pinned }),
+    [applyPrefs],
+  )
+  const toggleArchive = useCallback(
+    (group: Group, archived: boolean) =>
+      void applyPrefs(
+        group.id,
+        { archivedAt: archived ? new Date().toISOString() : null },
+        { archived },
+      ),
+    [applyPrefs],
+  )
+  const toggleMute = useCallback(
+    (group: Group, muted: boolean) => void applyPrefs(group.id, { muted }, { muted }),
+    [applyPrefs],
+  )
+
+  const handleMarkRead = useCallback(
+    async (group: Group) => {
+      markGroupRead(group.id)
+      try {
+        await api.groups.markRead(group.id)
+      } catch {
+        void refreshGroups()
+      }
+    },
+    [markGroupRead, refreshGroups],
+  )
+  const handleMarkUnread = useCallback(
+    async (group: Group) => {
+      patchGroup(group.id, { unreadCount: Math.max(group.unreadCount ?? 0, 1) })
+      try {
+        await api.groups.markUnread(group.id)
+      } catch {
+        void refreshGroups()
+      }
+    },
+    [patchGroup, refreshGroups],
+  )
+  // "Delete conversation" = delete FOR ME (hidden). Never removes the group or
+  // touches anyone else's view; it reappears on the next message. Drop + deselect
+  // optimistically, then persist.
+  const handleDeleteConversation = useCallback(
+    async (group: Group) => {
+      if (openGroupIdRef.current === group.id) setSelection(null)
+      setGroups((prev) => prev.filter((g) => g.id !== group.id))
+      try {
+        await api.groups.setPrefs(group.id, { hidden: true })
+      } catch {
+        void refreshGroups()
+      }
+    },
+    [refreshGroups],
+  )
+
   const directGroups = useMemo(() => groups.filter((g) => g.type === 'direct'), [groups])
 
   // Company colleagues you don't YET have an open DM with → shown as quiet
@@ -602,14 +723,30 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // inherit that order; photo-less company contacts (no thread yet) trail the
   // live conversations. 'groups' → vehicle rooms; 'dms' → DMs + contacts.
   const conversationItems = useMemo<SidebarRowItem[]>(() => {
-    const items: SidebarRowItem[] = []
+    // First collect the groups that belong in the active filter. Archived
+    // conversations live ONLY in the Archived filter; every other filter shows
+    // active (non-archived) ones. `groups` is already recency-ordered.
+    const matched: Group[] = []
     for (const g of groups) {
-      if (filter === 'groups' && g.type !== 'vehicle') continue
-      if (filter === 'dms' && g.type !== 'direct') continue
+      const archived = Boolean(g.archivedAt)
+      if (filter === 'archived') {
+        if (!archived) continue
+      } else {
+        if (archived) continue
+        if (filter === 'groups' && g.type !== 'vehicle') continue
+        if (filter === 'dms' && g.type !== 'direct') continue
+      }
       if (!matchesQuery(g)) continue
-      items.push({ kind: 'group', key: g.id, group: g })
+      matched.push(g)
     }
-    if (filter !== 'groups') {
+    // Pinned conversations float to the top, preserving recency within the pinned
+    // and the unpinned groups (Array.sort is stable). Contacts always trail.
+    matched.sort((a, b) => Number(Boolean(b.pinnedAt)) - Number(Boolean(a.pinnedAt)))
+
+    const items: SidebarRowItem[] = matched.map((g) => ({ kind: 'group', key: g.id, group: g }))
+    // Company contacts (no DM yet) are directory entries, not conversations — so
+    // they appear only in the All / Direct filters, never in Groups or Archived.
+    if (filter === 'all' || filter === 'dms') {
       for (const m of filteredContacts) {
         items.push({ kind: 'contact', key: `contact:${m.id}`, member: m })
       }
@@ -624,7 +761,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
       ? 'Create a vehicle chat to coordinate loads, documents, and updates over time.'
       : filter === 'dms'
         ? 'No direct messages or contacts yet.'
-        : 'No conversations yet.'
+        : filter === 'archived'
+          ? 'No archived conversations.'
+          : 'No conversations yet.'
 
   const selectedGroup = useMemo<Group | null>(() => {
     if (selection?.kind !== 'group') return null
@@ -836,6 +975,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           <FilterPill active={filter === 'all'} onClick={() => setFilter('all')}>
             All
           </FilterPill>
+          <FilterPill active={filter === 'archived'} onClick={() => setFilter('archived')}>
+            Archived
+          </FilterPill>
           <FilterPill active={filter === 'groups'} onClick={() => setFilter('groups')}>
             Groups
           </FilterPill>
@@ -863,9 +1005,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           ) : (
             <>
               {/* Separated pending sections — shown above the list regardless of
-                  the active pill, hidden only while searching so results read as
-                  pure matches. */}
-              {!searching && (
+                  the active pill, hidden while searching so results read as pure
+                  matches, and hidden in the Archived view (pure archived list). */}
+              {!searching && filter !== 'archived' && (
                 <ConnectionRequestsSection
                   pendingReceived={pendingReceived}
                   loading={loadingConnections}
@@ -875,7 +1017,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                   onSelect={(id) => setSelection({ kind: 'request', id })}
                 />
               )}
-              {!searching && (
+              {!searching && filter !== 'archived' && (
                 <GroupInvitesSection
                   invites={groupInvites}
                   selectedId={selection?.kind === 'invite' ? selection.id : null}
@@ -901,6 +1043,12 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                         currentUserId={user.id}
                         selected={selection?.kind === 'group' && selection.id === item.group.id}
                         onClick={() => setSelection({ kind: 'group', id: item.group.id })}
+                        onTogglePin={togglePin}
+                        onToggleArchive={toggleArchive}
+                        onToggleMute={toggleMute}
+                        onMarkRead={handleMarkRead}
+                        onMarkUnread={handleMarkUnread}
+                        onDelete={handleDeleteConversation}
                       />
                     ) : (
                       <ContactRow
@@ -1100,6 +1248,12 @@ function GroupRow({
   online,
   currentUserId,
   onClick,
+  onTogglePin,
+  onToggleArchive,
+  onToggleMute,
+  onMarkRead,
+  onMarkUnread,
+  onDelete,
 }: {
   group: Group
   selected: boolean
@@ -1108,6 +1262,14 @@ function GroupRow({
   // Viewing user — decides the "You:" / name prefix on the Normal-view preview.
   currentUserId: string
   onClick: () => void
+  // Per-conversation row actions (the hover ⋮ menu). Each takes the row's group
+  // plus the desired next state where it's a toggle.
+  onTogglePin: (group: Group, pinned: boolean) => void
+  onToggleArchive: (group: Group, archived: boolean) => void
+  onToggleMute: (group: Group, muted: boolean) => void
+  onMarkRead: (group: Group) => void
+  onMarkUnread: (group: Group) => void
+  onDelete: (group: Group) => void
 }) {
   // A DM peer's dot: their declared status colour when online, dim grey when
   // offline (signed out / app closed). Live via socket presence.
@@ -1144,6 +1306,71 @@ function GroupRow({
     ? [trip.statusLabel, trip.nextLabel && `Next: ${trip.nextLabel}`].filter(Boolean).join(' · ')
     : null
 
+  // ── Per-conversation row actions (hover ⋮ menu) ────────────────────────────
+  const archived = Boolean(group.archivedAt)
+  const pinned = Boolean(group.pinnedAt)
+  const muted = Boolean(group.muted)
+  // The menu's read/unread label reflects the ACTUAL stored unread, not the
+  // selected→0 view used for the badge.
+  const actuallyUnread = (group.unreadCount ?? 0) > 0
+  const ICON = { size: 13, strokeWidth: 1.7 } as const
+  const menuActions: RowMenuAction[] = [
+    {
+      key: 'pin',
+      label: pinned ? 'Unpin' : 'Pin',
+      icon: pinned ? <PinOff {...ICON} /> : <Pin {...ICON} />,
+      onSelect: () => onTogglePin(group, !pinned),
+    },
+    {
+      key: 'read',
+      label: actuallyUnread ? 'Mark as read' : 'Mark as unread',
+      icon: <MailOpen {...ICON} />,
+      onSelect: () => (actuallyUnread ? onMarkRead(group) : onMarkUnread(group)),
+    },
+    {
+      key: 'mute',
+      label: muted ? 'Unmute notifications' : 'Mute notifications',
+      icon: muted ? <Bell {...ICON} /> : <BellOff {...ICON} />,
+      onSelect: () => onToggleMute(group, !muted),
+    },
+    {
+      key: 'archive',
+      label: archived ? 'Unarchive' : 'Archive',
+      icon: archived ? <ArchiveRestore {...ICON} /> : <Archive {...ICON} />,
+      onSelect: () => onToggleArchive(group, !archived),
+    },
+    {
+      key: 'delete',
+      label: 'Delete conversation',
+      icon: <Trash2 {...ICON} />,
+      danger: true,
+      confirmLabel: 'Confirm delete',
+      onSelect: () => onDelete(group),
+    },
+  ]
+  // On-hover/focus overlay holding the ⋮ menu, anchored to the row's right edge,
+  // vertically centred over the WHOLE row. The conflicting right-side metadata
+  // (trip badge + timestamp/counts) fades out on hover (see the matching
+  // group-hover/row:opacity-0 below) so the button sits cleanly on its own at the
+  // far right instead of wedged between the badge and the timestamp. pointer-
+  // events stay off until revealed so the hidden trigger never blocks a click on
+  // the row beneath it; it stays visible while its menu is open (focus-within).
+  const rowActions = (
+    <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10 opacity-0 pointer-events-none transition-opacity group-hover/row:opacity-100 group-hover/row:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto">
+      <ConversationRowMenu actions={menuActions} ariaLabel={`Conversation actions for ${groupLabel(group)}`} />
+    </div>
+  )
+  // Small muted indicator shared by both view densities. Fades with the rest of
+  // the right-side metadata on hover so the action button owns the far right.
+  const mutedIcon = muted ? (
+    <BellOff
+      size={11}
+      strokeWidth={1.7}
+      className="shrink-0 text-faint transition-opacity group-hover/row:opacity-0"
+      aria-label="Muted"
+    />
+  ) : null
+
   // ── Normal view: breathable two-line rows with a last-message preview ──────
   // Larger avatar, more padding, name on line 1 (+ time), preview on line 2 (+
   // unread/mention badges). Compact view is left exactly as it was below.
@@ -1152,6 +1379,7 @@ function GroupRow({
     const preview = groupPreview(group, currentUserId)
     const time = relTime(group.lastMessageAt)
     return (
+      <div className="relative group/row">
       <button
         onClick={onClick}
         className={`w-full flex items-center gap-2.5 px-2.5 py-2 min-h-[56px] rounded-chip text-left transition-colors ${
@@ -1186,7 +1414,10 @@ function GroupRow({
               {groupLabel(group)}
             </span>
             {trip && (
-              <span className="shrink-0" title={tripLineFull ?? trip.statusLabel}>
+              <span
+                className="shrink-0 transition-opacity group-hover/row:opacity-0"
+                title={tripLineFull ?? trip.statusLabel}
+              >
                 <StatusChip tone={trip.statusTone} label={trip.statusLabel} />
               </span>
             )}
@@ -1200,33 +1431,41 @@ function GroupRow({
               )}
               {preview.text}
             </span>
-            {hasUnreadMention && (
-              <span
-                aria-label="You were mentioned"
-                title="You were mentioned"
-                className="shrink-0 h-4 min-w-4 px-1 rounded-full bg-active/20 text-active text-[10px] font-bold leading-none flex items-center justify-center"
-              >
-                @
-              </span>
-            )}
-            {unread && hasCount && unreadCount > 0 && (
-              <span
-                aria-label={`${unreadCount} unread`}
-                className="shrink-0 h-4 min-w-4 px-1.5 rounded-full bg-active text-bg text-[10px] font-semibold leading-none flex items-center justify-center"
-              >
-                {unreadCount > 99 ? '99+' : unreadCount}
-              </span>
-            )}
-            {/* Last-activity stamp — lives on the preview line (right side), not
-                the name line, so all rows share the same metadata baseline. */}
-            {time && <span className="shrink-0 text-[10.5px] text-faint tabular-nums">{time}</span>}
+            {/* Right-side metadata cluster — fades out on row hover so the action
+                button can take the far-right slot without crowding it. */}
+            <span className="flex items-center gap-2 shrink-0 transition-opacity group-hover/row:opacity-0">
+              {hasUnreadMention && (
+                <span
+                  aria-label="You were mentioned"
+                  title="You were mentioned"
+                  className="h-4 min-w-4 px-1 rounded-full bg-active/20 text-active text-[10px] font-bold leading-none flex items-center justify-center"
+                >
+                  @
+                </span>
+              )}
+              {unread && hasCount && unreadCount > 0 && (
+                <span
+                  aria-label={`${unreadCount} unread`}
+                  className="h-4 min-w-4 px-1.5 rounded-full bg-active text-bg text-[10px] font-semibold leading-none flex items-center justify-center"
+                >
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+              {muted && mutedIcon}
+              {/* Last-activity stamp — lives on the preview line (right side), not
+                  the name line, so all rows share the same metadata baseline. */}
+              {time && <span className="text-[10.5px] text-faint tabular-nums">{time}</span>}
+            </span>
           </span>
         </span>
       </button>
+      {rowActions}
+      </div>
     )
   }
 
   return (
+    <div className="relative group/row">
     <button
       onClick={onClick}
       style={{
@@ -1281,12 +1520,13 @@ function GroupRow({
       {peer?.workspace && (
         <span
           title={peer.workspace}
-          className="shrink truncate text-right text-faint"
+          className="shrink truncate text-right text-faint transition-opacity group-hover/row:opacity-0"
           style={{ fontSize: 'var(--sidebar-meta-font-size)', maxWidth: '46%' }}
         >
           {peer.workspace}
         </span>
       )}
+      {muted && mutedIcon}
       {hasUnreadMention && (
         <span
           aria-label="You were mentioned"
@@ -1296,7 +1536,7 @@ function GroupRow({
             width: 'var(--sidebar-badge-size)',
             fontSize: 'var(--sidebar-meta-font-size)',
           }}
-          className="shrink-0 rounded-full bg-active/20 text-active font-bold leading-none flex items-center justify-center"
+          className="shrink-0 rounded-full bg-active/20 text-active font-bold leading-none flex items-center justify-center transition-opacity group-hover/row:opacity-0"
         >
           @
         </span>
@@ -1309,12 +1549,14 @@ function GroupRow({
             height: 'var(--sidebar-badge-size)',
             fontSize: 'var(--sidebar-meta-font-size)',
           }}
-          className="shrink-0 px-1.5 rounded-full bg-active text-bg font-semibold leading-none flex items-center justify-center"
+          className="shrink-0 px-1.5 rounded-full bg-active text-bg font-semibold leading-none flex items-center justify-center transition-opacity group-hover/row:opacity-0"
         >
           {unreadCount > 99 ? '99+' : unreadCount}
         </span>
       )}
     </button>
+    {rowActions}
+    </div>
   )
 }
 

@@ -33,6 +33,7 @@ import {
   loadMessage,
   insertSystemMessage,
   emitSystemMessage,
+  type SystemEvent,
 } from '../util/messages.js'
 
 export const groupsRouter = Router()
@@ -77,6 +78,10 @@ groupsRouter.get(
       member_count: number
       unread_count: number
       unread_mention_count: number
+      // Per-user conversation prefs (migration 0023).
+      archived_at: string | null
+      pinned_at: string | null
+      muted: boolean
       peer_id: string | null
       peer_name: string | null
       peer_workspace: string | null
@@ -94,6 +99,8 @@ groupsRouter.get(
               -- Denormalized counters (migration 0020), maintained on write.
               gm.unread_count,
               gm.unread_mention_count,
+              -- Per-user conversation prefs (migration 0023).
+              gm.archived_at, gm.pinned_at, gm.muted,
               peer.peer_id, peer.peer_name, peer.peer_workspace, peer.peer_availability,
               -- Latest USER message (matches last_message_at, which system rows
               -- don't bump) for the sidebar preview. Skips messages the caller
@@ -130,6 +137,12 @@ groupsRouter.get(
             limit 1
          ) lm on true
         where g.archived_at is null
+          -- "Delete for me" (migration 0023): stay hidden until a NEWER message
+          -- bumps last_message_at past the hide point, then reappear.
+          and not (
+            gm.hidden_at is not null
+            and coalesce(g.last_message_at, g.created_at) <= gm.hidden_at
+          )
         order by g.last_message_at desc nulls last, g.created_at desc
         limit 200`,
       [userId],
@@ -149,6 +162,9 @@ groupsRouter.get(
         memberCount: r.member_count,
         unreadCount: r.unread_count,
         unreadMentionCount: r.unread_mention_count,
+        archivedAt: r.archived_at,
+        pinnedAt: r.pinned_at,
+        muted: r.muted,
         directPeer:
           r.type === 'direct' && r.peer_id
             ? {
@@ -674,25 +690,51 @@ groupsRouter.patch(
 )
 
 // ── DELETE /api/groups/:id/members/:userId ───────────────────────────────
-// Remove a member from a vehicle group. Authorised to group admins / workspace
-// admins only (the same boundary as role changes — both are privileged "manage
-// membership" actions). The last remaining admin can never be removed — this
-// also blocks a sole admin from removing themselves, which would orphan the
-// group's management. Returns the refreshed member list.
+// Remove a member from a vehicle group, OR leave it yourself. Two cases share
+// this endpoint:
+//   • Removal (target ≠ caller): authorised to group admins / workspace admins
+//     only (the same boundary as role changes — a privileged "manage membership"
+//     action). Logs a "X was removed from the group" activity row.
+//   • Leaving (target = caller): any member may remove THEMSELVES. Logs a
+//     "X left the group" activity row.
+// The last remaining admin can never be removed (or leave) — that would orphan
+// the group's management. Returns the refreshed member list. Vehicle-only, so a
+// DM (fixed pair) never produces a membership activity row.
 groupsRouter.delete(
   '/:id/members/:userId',
   asyncHandler(async (req, res) => {
     const { userId } = req.session!
     const groupId = req.params.id
     const targetId = req.params.userId
+    const isSelf = targetId === userId
 
-    await withTransaction(async (client) => {
-      await authorizeRoleManager(client, groupId, userId)
+    const systemId = await withTransaction(async (client) => {
+      if (isSelf) {
+        // Leaving: the caller must be a member of a VEHICLE group (DMs have no
+        // "leave"). No manager permission needed to remove yourself.
+        const { rows } = await client.query<{ type: 'vehicle' | 'direct' }>(
+          `select g.type
+             from group_members gm
+             join groups g on g.id = gm.group_id
+            where gm.group_id = $1 and gm.user_id = $2`,
+          [groupId, userId],
+        )
+        if (rows.length === 0) throw new HttpError(403, 'not_a_member')
+        if (rows[0].type !== 'vehicle') throw new HttpError(400, 'not_a_vehicle_group')
+      } else {
+        await authorizeRoleManager(client, groupId, userId)
+      }
 
-      // Lock the target's membership row + count admins in one snapshot so a
-      // concurrent removal/demotion can't slip the last admin out.
-      const { rows: target } = await client.query<{ role: string }>(
-        `select role from group_members where group_id = $1 and user_id = $2 for update`,
+      // Lock the target's membership row + read their display name + count admins
+      // in one snapshot so a concurrent removal/demotion can't slip the last
+      // admin out, and so the activity row carries a stable name (safe even if
+      // the user is later anonymized).
+      const { rows: target } = await client.query<{ role: string; display_name: string }>(
+        `select gm.role, u.display_name
+           from group_members gm
+           join users u on u.id = gm.user_id
+          where gm.group_id = $1 and gm.user_id = $2
+          for update of gm`,
         [groupId, targetId],
       )
       if (target.length === 0) throw new HttpError(404, 'not_a_member')
@@ -711,6 +753,17 @@ groupsRouter.delete(
         `delete from group_members where group_id = $1 and user_id = $2`,
         [groupId, targetId],
       )
+
+      // Activity timeline. Leaving → actor is the leaver (renderer reads the name
+      // from author_name → "X left the group"). Removal → actor is the manager,
+      // but the row names the REMOVED person, so carry their (snapshotted) name
+      // in the payload → "X was removed from the group".
+      return insertSystemMessage(client, {
+        groupId,
+        actorId: userId,
+        event: isSelf ? 'group_member_left' : 'group_member_removed',
+        payload: isSelf ? null : { userId: targetId, userName: target[0].display_name },
+      })
     })
 
     // Drop the removed user's live room subscription, tell remaining members to
@@ -719,6 +772,10 @@ groupsRouter.delete(
     unsubscribeUserFromGroup(targetId, groupId)
     getIO().to(roomForGroup(groupId)).emit('group:members_changed', { groupId })
     getIO().to(roomForUser(targetId)).emit('group:removed', { groupId })
+    // Broadcast the activity row to the group room. The removed/left user is now
+    // unsubscribed, so only the remaining members receive it live — it persists
+    // for everyone either way.
+    await emitSystemMessage(systemId, groupId)
 
     res.json({ members: await fetchGroupMembers(groupId) })
   }),
@@ -837,7 +894,64 @@ const updateGroupSchema = z.object({
   trailerPlate: z.string().trim().max(20).nullable().optional(),
   // Operational blob (vehicle/trip/stops) for the vehicle room's side panel.
   ops: opsSchema.optional(),
+  // Set by the client only when this save is an explicit "Edit route" action
+  // (never on the automatic background route recompute), so the server logs a
+  // "Route was edited" activity row only for a deliberate edit — and even then
+  // only when the route data actually changed (see the diff below).
+  routeEdited: z.boolean().optional(),
 })
+
+// Minimal shape of the ops blob we diff for activity rows (the zod schema owns
+// the full validation). Only the trip status/reference and the route summary
+// participate in the diff.
+type OpsLite = {
+  trip?: {
+    status?: string
+    reference?: string
+    route?: { status?: string; distanceText?: string; durationText?: string; polylines?: string[] }
+  } | null
+} | null
+
+type TripActivity = { event: SystemEvent; payload: Record<string, unknown> | null }
+
+// Build the activity rows implied by an ops change: a trip being added, its
+// status changing, and/or its route being edited. Pure and side-effect free, so
+// it naturally dedupes — an unchanged save yields []. trip_added and a status
+// change are mutually exclusive; a route edit can accompany either.
+function tripActivityEvents(
+  oldOps: OpsLite | null,
+  newOps: OpsLite,
+  routeEdited: boolean,
+): TripActivity[] {
+  const out: TripActivity[] = []
+  const oldTrip = oldOps?.trip ?? null
+  const newTrip = newOps?.trip ?? null
+
+  if (!oldTrip && newTrip) {
+    out.push({ event: 'trip_added', payload: { tripLabel: newTrip.reference ?? null } })
+  } else if (oldTrip && newTrip && (oldTrip.status ?? null) !== (newTrip.status ?? null)) {
+    out.push({
+      event: 'trip_status_changed',
+      payload: { from: oldTrip.status ?? null, to: newTrip.status ?? null },
+    })
+  }
+
+  // Route edit: only when the client flagged a deliberate edit AND the resulting
+  // route actually differs from what was stored (re-saving an identical route is
+  // silent).
+  if (routeEdited && newTrip?.route) {
+    const a = oldTrip?.route
+    const b = newTrip.route
+    const changed =
+      a?.status !== b.status ||
+      a?.distanceText !== b.distanceText ||
+      a?.durationText !== b.durationText ||
+      JSON.stringify(a?.polylines ?? []) !== JSON.stringify(b.polylines ?? [])
+    if (changed) out.push({ event: 'route_edited', payload: null })
+  }
+
+  return out
+}
 
 groupsRouter.patch(
   '/:id',
@@ -849,8 +963,20 @@ groupsRouter.patch(
     const groupId = req.params.id
     const data = parsed.data
 
-    const group = await withTransaction(async (client) => {
+    const { group, systemIds } = await withTransaction(async (client) => {
       await authorizeInviter(client, groupId, userId)
+
+      // Snapshot the ops BEFORE the write (and lock the row) so a trip/route diff
+      // against the incoming ops is consistent under concurrent saves. Only read
+      // when the caller is actually changing ops — plate/name edits don't need it.
+      let oldOps: OpsLite | null = null
+      if (data.ops !== undefined) {
+        const { rows: pre } = await client.query<{ meta: Record<string, unknown> | null }>(
+          'select meta from groups where id = $1 for update',
+          [groupId],
+        )
+        oldOps = (pre[0]?.meta?.ops as OpsLite | undefined) ?? null
+      }
 
       const sets: string[] = []
       const values: unknown[] = []
@@ -896,6 +1022,17 @@ groupsRouter.patch(
         await client.query(`update groups set ${sets.join(', ')} where id = $${values.length}`, values)
       }
 
+      // Operational activity rows (vehicle rooms only — authorizeInviter already
+      // rejected DMs). Derived from the old→new ops diff so the same save repeated
+      // without real changes never duplicates a row. trip_added / status-change
+      // are mutually exclusive; a route edit can accompany either.
+      const systemIds: string[] = []
+      if (data.ops !== undefined) {
+        for (const ev of tripActivityEvents(oldOps, data.ops as OpsLite, data.routeEdited === true)) {
+          systemIds.push(await insertSystemMessage(client, { groupId, actorId: userId, ...ev }))
+        }
+      }
+
       const { rows } = await client.query<{
         id: string
         name: string | null
@@ -903,8 +1040,11 @@ groupsRouter.patch(
         meta: Record<string, unknown>
         avatar_path: string | null
       }>('select id, name, description, meta, avatar_path from groups where id = $1', [groupId])
-      return rows[0]
+      return { group: rows[0], systemIds }
     })
+
+    // Broadcast any activity rows now that the transaction has committed.
+    for (const id of systemIds) await emitSystemMessage(id, groupId)
 
     res.json({
       group: {
@@ -1959,5 +2099,116 @@ groupsRouter.post(
     })
 
     res.json({ ok: true, lastReadAt })
+  }),
+)
+
+// ── POST /api/groups/:id/unread ──────────────────────────────────────────
+// Mark the conversation UNREAD for the caller (the sidebar "Mark as unread"
+// action) — a personal flag, the inverse of /read. We only bump this user's
+// denormalized unread_count to at least 1 so the badge shows and persists; we
+// deliberately DON'T move last_read_at backwards, so the per-message read
+// receipts other members already saw aren't retracted (it's a personal reminder,
+// not a claim the message was un-seen). Opening the conversation clears it again
+// via /read. No-op safe when the group has no messages.
+groupsRouter.post(
+  '/:id/unread',
+  asyncHandler(async (req, res) => {
+    const { userId } = req.session!
+    const groupId = req.params.id
+
+    const { rows } = await pool.query<{ unread_count: number; unread_mention_count: number }>(
+      `update group_members gm
+          set unread_count = greatest(gm.unread_count, 1)
+        where gm.group_id = $1 and gm.user_id = $2
+          and exists (
+            select 1 from messages m
+             where m.group_id = $1 and m.kind = 'user' and m.deleted_at is null
+          )
+        returning gm.unread_count, gm.unread_mention_count`,
+      [groupId, userId],
+    )
+    // Either not a member, or the group has no user messages to be unread about.
+    // Both are safe no-ops from the caller's perspective; report the current state.
+    if (rows.length === 0) {
+      const { rows: member } = await pool.query(
+        'select 1 from group_members where group_id = $1 and user_id = $2 limit 1',
+        [groupId, userId],
+      )
+      if (member.length === 0) return res.status(403).json({ error: 'not_a_member' })
+      return res.json({ ok: true, unreadCount: 0, unreadMentionCount: 0 })
+    }
+
+    const { unread_count, unread_mention_count } = rows[0]
+    // Sync the caller's OTHER tabs/devices so the badge appears everywhere.
+    getIO().to(roomForUser(userId)).emit('group:unread', {
+      groupId,
+      unreadCount: unread_count,
+      unreadMentionCount: unread_mention_count,
+    })
+    res.json({ ok: true, unreadCount: unread_count, unreadMentionCount: unread_mention_count })
+  }),
+)
+
+// ── PATCH /api/groups/:id/prefs ──────────────────────────────────────────
+// Update the caller's PER-USER conversation preferences (migration 0023):
+// archive, pin, mute, and "delete for me" (hidden). All are scoped to this
+// user's group_members row — never global — and any member of the conversation
+// may set their own. Each field is optional; only the provided ones change.
+const prefsSchema = z
+  .object({
+    archived: z.boolean().optional(),
+    pinned: z.boolean().optional(),
+    muted: z.boolean().optional(),
+    // "Delete conversation" = hide for me. true hides; false un-hides (restores).
+    hidden: z.boolean().optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: 'no_fields' })
+
+groupsRouter.patch(
+  '/:id/prefs',
+  asyncHandler(async (req, res) => {
+    const parsed = prefsSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'invalid_input' })
+
+    const { userId } = req.session!
+    const groupId = req.params.id
+    const data = parsed.data
+
+    const sets: string[] = []
+    const values: unknown[] = []
+    // Timestamp flags store now()/null; muted is a plain boolean.
+    if (data.archived !== undefined) sets.push(`archived_at = ${data.archived ? 'now()' : 'null'}`)
+    if (data.pinned !== undefined) sets.push(`pinned_at = ${data.pinned ? 'now()' : 'null'}`)
+    if (data.hidden !== undefined) sets.push(`hidden_at = ${data.hidden ? 'now()' : 'null'}`)
+    if (data.muted !== undefined) {
+      values.push(data.muted)
+      sets.push(`muted = $${values.length}`)
+    }
+
+    values.push(groupId, userId)
+    const { rows } = await pool.query<{
+      archived_at: string | null
+      pinned_at: string | null
+      muted: boolean
+      hidden_at: string | null
+    }>(
+      `update group_members
+          set ${sets.join(', ')}
+        where group_id = $${values.length - 1} and user_id = $${values.length}
+        returning archived_at, pinned_at, muted, hidden_at`,
+      values,
+    )
+    if (rows.length === 0) return res.status(403).json({ error: 'not_a_member' })
+
+    const r = rows[0]
+    const prefs = {
+      archivedAt: r.archived_at,
+      pinnedAt: r.pinned_at,
+      muted: r.muted,
+      hiddenAt: r.hidden_at,
+    }
+    // Sync the caller's other tabs/devices so the row's state stays consistent.
+    getIO().to(roomForUser(userId)).emit('group:prefs', { groupId, ...prefs })
+    res.json({ ok: true, prefs })
   }),
 )

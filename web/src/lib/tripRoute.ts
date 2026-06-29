@@ -68,6 +68,31 @@ export async function computeTripRoute(stops: VehicleStop[]): Promise<TripRoute>
   }
 }
 
+// Foreground route (re)calculation for the active trip, triggered by an explicit
+// user action (the Trip tab's Calculate / Edit route). Computes the route from
+// the current stop coordinates and saves it onto the trip, awaiting the result
+// so the caller can show a busy state and surface the fresh distance/time. When
+// `flagAsEdit` is set (the "Edit route" action), the save is marked so the server
+// logs a "Route was edited" activity row — but ONLY when the route data actually
+// changed (the server dedupes), so re-editing an unchanged route is silent. The
+// plain Calculate action leaves the flag off, so a first calculation is quiet.
+export async function persistTripRoute(
+  groupId: string,
+  ops: VehicleOps,
+  applyMeta: (meta: Record<string, unknown>) => void,
+  opts: { flagAsEdit?: boolean } = {},
+): Promise<TripRoute> {
+  const route = await computeTripRoute(ops.stops)
+  const trip = ops.trip
+  if (!trip) return route
+  const { group } = await api.groups.update(groupId, {
+    ops: { ...ops, trip: { ...trip, route } },
+    ...(opts.flagAsEdit ? { routeEdited: true } : {}),
+  })
+  applyMeta(group.meta)
+  return route
+}
+
 // Save the ops blob, then (when it has a trip) compute its route from the stop
 // coordinates and save that too — in the BACKGROUND, so the trip persists and the
 // caller returns immediately regardless of routing. Route failures are captured

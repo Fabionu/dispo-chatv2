@@ -185,6 +185,10 @@ export const api = {
         trailerPlate: string | null
         // Manual operational blob (vehicle/trip/stops) — replaced wholesale.
         ops: VehicleOps
+        // Flags this save as a deliberate "Edit route" so the server logs a
+        // "Route was edited" activity row (only when the route actually changed).
+        // Never set on the automatic background recompute.
+        routeEdited: boolean
       }>,
     ) =>
       request<{
@@ -258,6 +262,32 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(upTo ? { upTo } : {}),
       }),
+
+    // Mark a conversation UNREAD for the caller (sidebar "Mark as unread"). A
+    // personal flag — bumps this user's unread badge without retracting read
+    // receipts. No-op when the group has no messages.
+    markUnread: (groupId: string) =>
+      request<{ ok: true; unreadCount: number; unreadMentionCount: number }>(
+        `/groups/${groupId}/unread`,
+        { method: 'POST' },
+      ),
+
+    // Update the caller's per-user conversation preferences (archive / pin /
+    // mute / "delete for me" = hidden). Per-user, never global; any member may
+    // set their own. Only the provided fields change; returns the new prefs.
+    setPrefs: (
+      groupId: string,
+      prefs: Partial<{ archived: boolean; pinned: boolean; muted: boolean; hidden: boolean }>,
+    ) =>
+      request<{
+        ok: true
+        prefs: {
+          archivedAt: string | null
+          pinnedAt: string | null
+          muted: boolean
+          hiddenAt: string | null
+        }
+      }>(`/groups/${groupId}/prefs`, { method: 'PATCH', body: JSON.stringify(prefs) }),
   },
 
   workspace: {

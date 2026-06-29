@@ -120,30 +120,33 @@
   --sidebar-section-gap: 28px;
 }
 
-/* comfortable — 2K/QHD and larger: a touch more air so the UI doesn't read as
-   a miniature, while staying dense enough for dispatch work. */
+/* comfortable — 2K/QHD and larger: noticeably more scale so a 2560×1440 (and up)
+   display reads clearly instead of as a miniature, while staying dense enough for
+   dispatch work. Tuned against a 2560-wide @100% monitor (the common QHD case).
+   Keep in sync with the no-JS @media(min-width:2200px) fallback below AND
+   SIDEBAR_AVATAR_SIZE.comfortable in lib/density.ts. */
 [data-density='comfortable'] {
-  --app-font-size: 16.5px;
-  --chat-msg-font-size: 15px;
-  --header-height: 66px;
-  --sidebar-width: 600px;
-  --composer-size: 30px;
-  --chat-max-width: 1240px;
-  --chat-gutter: 24px;
+  --app-font-size: 17.5px;
+  --chat-msg-font-size: 16px;
+  --header-height: 72px;
+  --sidebar-width: 640px;
+  --composer-size: 32px;
+  --chat-max-width: 1360px;
+  --chat-gutter: 28px;
 
-  --sidebar-title-font-size: 18px;
-  --sidebar-row-font-size: 15.5px;
-  --sidebar-meta-font-size: 13.5px;
-  --sidebar-section-font-size: 11.5px;
-  --sidebar-icon-size: 22px;
-  --sidebar-user-avatar-size: 37px;
-  --sidebar-search-height: 40px;
-  --sidebar-row-height: 44px;
-  --sidebar-badge-size: 22px;
-  --sidebar-row-gap: 13px;
-  --sidebar-row-pad-x: 13px;
-  --sidebar-row-pad-y: 10px;
-  --sidebar-section-gap: 32px;
+  --sidebar-title-font-size: 19px;
+  --sidebar-row-font-size: 16.5px;
+  --sidebar-meta-font-size: 14px;
+  --sidebar-section-font-size: 12px;
+  --sidebar-icon-size: 23px;
+  --sidebar-user-avatar-size: 40px;
+  --sidebar-search-height: 44px;
+  --sidebar-row-height: 48px;
+  --sidebar-badge-size: 23px;
+  --sidebar-row-gap: 14px;
+  --sidebar-row-pad-x: 14px;
+  --sidebar-row-pad-y: 11px;
+  --sidebar-section-gap: 34px;
 }
 
 /* No-JS / pre-hydration fallback: follow the display size when no explicit
@@ -177,27 +180,27 @@
 }
 @media (min-width: 2200px) {
   :root:not([data-density]) {
-    --app-font-size: 16.5px;
-    --chat-msg-font-size: 15px;
-    --header-height: 66px;
-    --sidebar-width: 600px;
-    --composer-size: 30px;
-    --chat-max-width: 1240px;
-    --chat-gutter: 24px;
+    --app-font-size: 17.5px;
+    --chat-msg-font-size: 16px;
+    --header-height: 72px;
+    --sidebar-width: 640px;
+    --composer-size: 32px;
+    --chat-max-width: 1360px;
+    --chat-gutter: 28px;
 
-    --sidebar-title-font-size: 18px;
-    --sidebar-row-font-size: 15.5px;
-    --sidebar-meta-font-size: 13.5px;
-    --sidebar-section-font-size: 11.5px;
-    --sidebar-icon-size: 22px;
-    --sidebar-user-avatar-size: 37px;
-    --sidebar-search-height: 40px;
-    --sidebar-row-height: 44px;
-    --sidebar-badge-size: 22px;
-    --sidebar-row-gap: 13px;
-    --sidebar-row-pad-x: 13px;
-    --sidebar-row-pad-y: 10px;
-    --sidebar-section-gap: 32px;
+    --sidebar-title-font-size: 19px;
+    --sidebar-row-font-size: 16.5px;
+    --sidebar-meta-font-size: 14px;
+    --sidebar-section-font-size: 12px;
+    --sidebar-icon-size: 23px;
+    --sidebar-user-avatar-size: 40px;
+    --sidebar-search-height: 44px;
+    --sidebar-row-height: 48px;
+    --sidebar-badge-size: 23px;
+    --sidebar-row-gap: 14px;
+    --sidebar-row-pad-x: 14px;
+    --sidebar-row-pad-y: 11px;
+    --sidebar-section-gap: 34px;
   }
 }
 
