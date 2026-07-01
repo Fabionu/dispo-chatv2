@@ -266,7 +266,8 @@
       "Bash(echo \"===WEB EXIT $?===\")",
       "Bash(grep -rn '\"lint\"' package.json web/package.json server/package.json)",
       "Bash(ls eslint.config.* web/eslint.config.*)",
-      "Bash(node -e \"console.log\\(require\\('tailwindcss/package.json'\\).version\\)\")"
+      "Bash(node -e \"console.log\\(require\\('tailwindcss/package.json'\\).version\\)\")",
+      "PowerShell(\\(Get-Content \"C:\\\\Users\\\\Home\\\\Desktop\\\\dispo-chatv2\\\\web\\\\src\\\\pages\\\\Workspace.tsx\" | Measure-Object -Line\\).Lines)"
     ]
   }
 }

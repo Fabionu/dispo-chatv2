@@ -9,11 +9,11 @@ import {
   CircleUser,
   LogOut,
   MailOpen,
+  MoreVertical,
   Pin,
   PinOff,
   PanelLeftClose,
   PanelLeftOpen,
-  Plus,
   Search,
   Settings,
   Trash2,
@@ -45,7 +45,10 @@ import GroupInvitesSection from '../components/invites/GroupInvitesSection'
 import GroupInviteView from '../components/invites/GroupInviteView'
 import Avatar from '../components/Avatar'
 import GroupAvatar from '../components/GroupAvatar'
-import ConversationRowMenu, { type RowMenuAction } from '../components/ConversationRowMenu'
+import ConversationRowMenu, {
+  type ConversationRowMenuHandle,
+  type RowMenuAction,
+} from '../components/ConversationRowMenu'
 import Spinner from '../components/Spinner'
 import CompanyLogo from '../components/CompanyLogo'
 import CreateVehicleGroupModal from '../components/CreateVehicleGroupModal'
@@ -655,6 +658,24 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     },
     [markGroupRead, refreshGroups],
   )
+  // Mark every conversation read at once (sidebar options menu). Clears all rows
+  // optimistically, then persists each previously-unread one; reconciles on
+  // failure. No-op when nothing is unread.
+  const handleMarkAllRead = useCallback(async () => {
+    const unreadIds = groups
+      .filter((g) => (g.unreadCount ?? 0) > 0 || groupHasUnread(g))
+      .map((g) => g.id)
+    if (!unreadIds.length) return
+    setGroups((prev) =>
+      prev.map((g) => ({ ...g, lastReadAt: new Date().toISOString(), unreadCount: 0, unreadMentionCount: 0 })),
+    )
+    try {
+      await Promise.all(unreadIds.map((id) => api.groups.markRead(id)))
+    } catch {
+      void refreshGroups()
+    }
+  }, [groups, refreshGroups])
+
   const handleMarkUnread = useCallback(
     async (group: Group) => {
       patchGroup(group.id, { unreadCount: Math.max(group.unreadCount ?? 0, 1) })
@@ -944,7 +965,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           <div className="relative shrink-0" ref={newMenuRef}>
             <button
               onClick={() => setNewMenuOpen((v) => !v)}
-              aria-label="Create a new conversation"
+              aria-label="Conversation list options"
               aria-haspopup="menu"
               aria-expanded={newMenuOpen}
               className={`h-[var(--sidebar-search-height)] w-[var(--sidebar-search-height)] flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
@@ -953,16 +974,28 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                   : 'text-muted hover:text-text hover:bg-white/[0.05]'
               }`}
             >
-              <Plus size={18} strokeWidth={2.25} />
+              <MoreVertical size={18} strokeWidth={2} />
             </button>
 
             {newMenuOpen && (
               <div
                 role="menu"
-                className="absolute right-0 top-[calc(100%+6px)] w-[200px] rounded-card border border-white/[0.08] bg-surface overflow-hidden z-20 py-1"
+                // Hug the widest label exactly. Inline width:max-content (rather
+                // than a utility class) is immune to purge/override and to the
+                // abs-positioning shrink-to-fit of the narrow button wrapper.
+                style={{ width: 'max-content', maxWidth: 220 }}
+                className="absolute right-0 top-[calc(100%+6px)] rounded-card border border-white/[0.08] bg-surface overflow-hidden z-20 py-1"
               >
                 <CreateMenuItem label="Vehicle chat" onClick={() => startCreate('vehicle')} />
-                <CreateMenuItem label="Search for a connection" onClick={() => startCreate('direct')} />
+                <CreateMenuItem label="Add connection" onClick={() => startCreate('direct')} />
+                <div className="my-1 border-t border-white/[0.06]" />
+                <CreateMenuItem
+                  label="Mark all as read"
+                  onClick={() => {
+                    setNewMenuOpen(false)
+                    void handleMarkAllRead()
+                  }}
+                />
               </div>
             )}
           </div>
@@ -1307,9 +1340,25 @@ function GroupRow({
     : null
 
   // ── Per-conversation row actions (hover ⋮ menu) ────────────────────────────
+  // While the ⋮ menu is open the row stays in its "actions active" state — the
+  // trigger stays visible and the right-side metadata stays hidden — even after
+  // the cursor leaves the row, so the timestamp/status never reappears behind the
+  // open menu. Reset when the menu closes (then hover alone governs again).
+  const [menuOpen, setMenuOpen] = useState(false)
+  // Right-clicking anywhere on the row opens the SAME actions menu at the cursor,
+  // via the menu's imperative handle (a desktop affordance alongside the ⋮ button).
+  const rowMenuRef = useRef<ConversationRowMenuHandle>(null)
+  const openMenuAtCursor = (e: React.MouseEvent) => {
+    e.preventDefault()
+    rowMenuRef.current?.openAt(e.clientX, e.clientY)
+  }
   const archived = Boolean(group.archivedAt)
   const pinned = Boolean(group.pinnedAt)
   const muted = Boolean(group.muted)
+  // Class fragment shared by every right-side metadata element: it fades on row
+  // hover AND while the menu is open (kept hidden so nothing peeks out from
+  // behind/around the popover).
+  const metaFade = `transition-opacity group-hover/row:opacity-0${menuOpen ? ' opacity-0' : ''}`
   // The menu's read/unread label reflects the ACTUAL stored unread, not the
   // selected→0 view used for the badge.
   const actuallyUnread = (group.unreadCount ?? 0) > 0
@@ -1356,19 +1405,40 @@ function GroupRow({
   // events stay off until revealed so the hidden trigger never blocks a click on
   // the row beneath it; it stays visible while its menu is open (focus-within).
   const rowActions = (
-    <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10 opacity-0 pointer-events-none transition-opacity group-hover/row:opacity-100 group-hover/row:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto">
-      <ConversationRowMenu actions={menuActions} ariaLabel={`Conversation actions for ${groupLabel(group)}`} />
+    <div
+      className={`absolute right-2 top-1/2 -translate-y-1/2 z-10 transition-opacity group-hover/row:opacity-100 group-hover/row:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto ${
+        menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+      }`}
+    >
+      <ConversationRowMenu
+        ref={rowMenuRef}
+        actions={menuActions}
+        ariaLabel={`Conversation actions for ${groupLabel(group)}`}
+        onOpenChange={setMenuOpen}
+      />
     </div>
   )
   // Small muted indicator shared by both view densities. Fades with the rest of
   // the right-side metadata on hover so the action button owns the far right.
   const mutedIcon = muted ? (
-    <BellOff
-      size={11}
-      strokeWidth={1.7}
-      className="shrink-0 text-faint transition-opacity group-hover/row:opacity-0"
-      aria-label="Muted"
-    />
+    <BellOff size={11} strokeWidth={1.7} className={`shrink-0 text-faint ${metaFade}`} aria-label="Muted" />
+  ) : null
+  // Pinned indicator — a prominent pin on the row's RIGHT edge (the same area the
+  // metadata/actions live), vertically centred over the whole row. It stays
+  // visible at all times; on hover/focus — or while the actions menu is open — it
+  // slides left so the ⋮ actions button can take the far-right slot without
+  // overlapping it. Decorative + pointer-events-none so it never blocks the row
+  // click. The Pin/Unpin menu action and the top-of-list sort live elsewhere.
+  // Applies to both DMs and groups/vehicle rooms; rendered in each view below.
+  const pinnedOverlay = pinned ? (
+    <div
+      title="Pinned"
+      className={`pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 z-0 text-muted transition-transform duration-200 ease-out group-hover/row:-translate-x-9 group-focus-within/row:-translate-x-9 ${
+        menuOpen ? '-translate-x-9' : ''
+      }`}
+    >
+      <Pin size={15} strokeWidth={1.8} aria-label="Pinned" />
+    </div>
   ) : null
 
   // ── Normal view: breathable two-line rows with a last-message preview ──────
@@ -1379,12 +1449,12 @@ function GroupRow({
     const preview = groupPreview(group, currentUserId)
     const time = relTime(group.lastMessageAt)
     return (
-      <div className="relative group/row">
+      <div className="relative group/row" onContextMenu={openMenuAtCursor}>
       <button
         onClick={onClick}
         className={`w-full flex items-center gap-2.5 px-2.5 py-2 min-h-[56px] rounded-chip text-left transition-colors ${
-          selected ? 'bg-white/[0.06] text-text' : 'text-muted hover:bg-white/[0.025] hover:text-text'
-        }`}
+          pinned ? 'pr-7' : ''
+        } ${selected ? 'bg-white/[0.06] text-text' : 'text-muted hover:bg-white/[0.025] hover:text-text'}`}
       >
         <span className="relative shrink-0 flex">
           {group.type === 'direct' ? (
@@ -1414,10 +1484,7 @@ function GroupRow({
               {groupLabel(group)}
             </span>
             {trip && (
-              <span
-                className="shrink-0 transition-opacity group-hover/row:opacity-0"
-                title={tripLineFull ?? trip.statusLabel}
-              >
+              <span className={`shrink-0 ${metaFade}`} title={tripLineFull ?? trip.statusLabel}>
                 <StatusChip tone={trip.statusTone} label={trip.statusLabel} />
               </span>
             )}
@@ -1433,7 +1500,7 @@ function GroupRow({
             </span>
             {/* Right-side metadata cluster — fades out on row hover so the action
                 button can take the far-right slot without crowding it. */}
-            <span className="flex items-center gap-2 shrink-0 transition-opacity group-hover/row:opacity-0">
+            <span className={`flex items-center gap-2 shrink-0 ${metaFade}`}>
               {hasUnreadMention && (
                 <span
                   aria-label="You were mentioned"
@@ -1459,20 +1526,23 @@ function GroupRow({
           </span>
         </span>
       </button>
+      {pinnedOverlay}
       {rowActions}
       </div>
     )
   }
 
   return (
-    <div className="relative group/row">
+    <div className="relative group/row" onContextMenu={openMenuAtCursor}>
     <button
       onClick={onClick}
       style={{
         minHeight: 'var(--sidebar-row-height)',
         gap: 'var(--sidebar-row-gap)',
         paddingLeft: 'var(--sidebar-row-pad-x)',
-        paddingRight: 'var(--sidebar-row-pad-x)',
+        // Reserve room on the right for the pinned indicator so it never sits on
+        // top of the workspace label / unread badge in the resting state.
+        paddingRight: pinned ? 'calc(var(--sidebar-row-pad-x) + 22px)' : 'var(--sidebar-row-pad-x)',
         paddingTop: 'var(--sidebar-row-pad-y)',
         paddingBottom: 'var(--sidebar-row-pad-y)',
       }}
@@ -1520,7 +1590,7 @@ function GroupRow({
       {peer?.workspace && (
         <span
           title={peer.workspace}
-          className="shrink truncate text-right text-faint transition-opacity group-hover/row:opacity-0"
+          className={`shrink truncate text-right text-faint ${metaFade}`}
           style={{ fontSize: 'var(--sidebar-meta-font-size)', maxWidth: '46%' }}
         >
           {peer.workspace}
@@ -1536,7 +1606,7 @@ function GroupRow({
             width: 'var(--sidebar-badge-size)',
             fontSize: 'var(--sidebar-meta-font-size)',
           }}
-          className="shrink-0 rounded-full bg-active/20 text-active font-bold leading-none flex items-center justify-center transition-opacity group-hover/row:opacity-0"
+          className={`shrink-0 rounded-full bg-active/20 text-active font-bold leading-none flex items-center justify-center ${metaFade}`}
         >
           @
         </span>
@@ -1549,12 +1619,13 @@ function GroupRow({
             height: 'var(--sidebar-badge-size)',
             fontSize: 'var(--sidebar-meta-font-size)',
           }}
-          className="shrink-0 px-1.5 rounded-full bg-active text-bg font-semibold leading-none flex items-center justify-center transition-opacity group-hover/row:opacity-0"
+          className={`shrink-0 px-1.5 rounded-full bg-active text-bg font-semibold leading-none flex items-center justify-center ${metaFade}`}
         >
           {unreadCount > 99 ? '99+' : unreadCount}
         </span>
       )}
     </button>
+    {pinnedOverlay}
     {rowActions}
     </div>
   )
@@ -1697,7 +1768,7 @@ function CreateMenuItem({ label, onClick }: { label: string; onClick: () => void
     <button
       onClick={onClick}
       role="menuitem"
-      className="w-full px-3 py-2 text-[12.5px] hover:bg-white/[0.03] transition-colors text-left"
+      className="w-full px-2.5 py-2 text-[12.5px] hover:bg-white/[0.03] transition-colors text-left whitespace-nowrap"
     >
       {label}
     </button>

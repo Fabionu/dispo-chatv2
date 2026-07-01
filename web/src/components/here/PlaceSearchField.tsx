@@ -18,14 +18,19 @@ type Props = {
   value: HerePlace | null
   onChange: (place: HerePlace | null) => void
   placeholder?: string
+  // Seed the query box (no selected value) — used when editing an existing point
+  // so the field opens pre-populated with the current address, ready to replace.
+  initialQuery?: string
+  // Focus the input on mount (inline edit / "add stop" reveal).
+  autoFocus?: boolean
 }
 
 // Address/location autocomplete backed by HERE Discover (via /api/here/search).
 // Debounced; selecting a result locks the field to that place's label, with a
 // clear (×) button to pick again. Stays deliberately simple — no keyboard
 // arrow-nav yet, just click/tap selection.
-export default function PlaceSearchField({ label, value, onChange, placeholder }: Props) {
-  const [query, setQuery] = useState('')
+export default function PlaceSearchField({ label, value, onChange, placeholder, initialQuery, autoFocus }: Props) {
+  const [query, setQuery] = useState(initialQuery ?? '')
   const [items, setItems] = useState<HerePlace[]>([])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -107,7 +112,7 @@ export default function PlaceSearchField({ label, value, onChange, placeholder }
 
       {value ? (
         // Selected state — locked chip with the chosen place + clear button.
-        <div className="flex items-center gap-2 rounded-lg border border-white/[0.1] bg-white/[0.03] px-3 h-10">
+        <div className="flex items-center gap-2 rounded-xl border border-white/[0.1] bg-white/[0.03] px-3 h-10">
           <MapPin size={15} className="shrink-0 text-active" strokeWidth={1.8} />
           <span className="flex-1 truncate text-[13px]" title={value.label}>
             {value.label || value.title}
@@ -139,7 +144,8 @@ export default function PlaceSearchField({ label, value, onChange, placeholder }
           aria-expanded={open}
           aria-controls={listboxId}
           autoComplete="off"
-          className="h-10 rounded-lg border border-white/[0.1] bg-white/[0.03] px-3 text-[13px] outline-none focus:border-white/[0.25] placeholder:text-muted/70"
+          autoFocus={autoFocus}
+          className="h-10 rounded-xl border border-white/[0.1] bg-white/[0.03] px-3 text-[13px] outline-none focus:border-white/[0.25] placeholder:text-muted/70"
         />
       )}
 
@@ -150,7 +156,7 @@ export default function PlaceSearchField({ label, value, onChange, placeholder }
         <ul
           id={listboxId}
           role="listbox"
-          className="absolute z-20 top-full mt-1 w-full rounded-lg border border-white/[0.1] bg-rail shadow-xl"
+          className="absolute z-20 top-full mt-1 w-full rounded-xl border border-white/[0.1] bg-rail shadow-xl"
         >
           {coord ? (
             <li role="option" aria-selected={false}>
@@ -180,7 +186,7 @@ export default function PlaceSearchField({ label, value, onChange, placeholder }
         <ul
           id={listboxId}
           role="listbox"
-          className="absolute z-20 top-full mt-1 w-full max-h-72 overflow-y-auto rounded-lg border border-white/[0.1] bg-rail shadow-xl"
+          className="absolute z-20 top-full mt-1 w-full max-h-72 overflow-y-auto rounded-xl border border-white/[0.1] bg-rail shadow-xl"
         >
           {loading && items.length === 0 && (
             <li className="px-3 py-2.5 text-[12px] text-muted">Searching…</li>

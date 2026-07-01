@@ -13,6 +13,7 @@ import {
   GripVertical,
   MapPin,
   Navigation,
+  Pencil,
   Plus,
   Route as RouteIcon,
   Trash2,
@@ -194,6 +195,10 @@ export default function RoutePlanner({ onBack }: Props) {
   const [panelCollapsed, setPanelCollapsed] = useState(false)
   const [truckOpen, setTruckOpen] = useState(false)
   const [addingStop, setAddingStop] = useState(false)
+  // Id of the point (start/stop/destination) whose address is being edited inline
+  // — the row swaps to a pre-populated search field until the user picks a new
+  // place or cancels (keeping the old address/coordinates).
+  const [editingId, setEditingId] = useState<string | null>(null)
   // Id of the stop currently being dragged in the list (for reorder + ghosting).
   const [dragId, setDragId] = useState<string | null>(null)
   const [menu, setMenu] = useState<MenuState | null>(null)
@@ -521,6 +526,29 @@ export default function RoutePlanner({ onBack }: Props) {
     source: 'search',
   })
 
+  // Edit an existing point's address in place: keep its id, role and order, just
+  // swap in the newly geocoded coordinates/label. Any prior road-snap/course hint
+  // is cleared (the new address is a fresh geocode). When a route is already drawn
+  // it recalcs through the moved point immediately (same feel as a marker drag);
+  // with no route yet the user still drives the first draw via Create/Update.
+  function replacePoint(id: string, place: HerePlace) {
+    setPoints((cur) =>
+      cur.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              label: place.label || place.title,
+              coordinates: place.position,
+              source: 'search',
+              snapped: undefined,
+              course: undefined,
+            }
+          : p,
+      ),
+    )
+    if (route) recalcAfterDragRef.current = true
+  }
+
   // ── Central road-snap (screen-space candidates) ─────────────────────────────
   // The ONE place every add/drag/release path snaps to a road. It posts the
   // screen-sampled candidates (pixels around the cursor → geo; first = the exact
@@ -770,6 +798,37 @@ export default function RoutePlanner({ onBack }: Props) {
         : 'Route up to date'
   const routeButtonDisabled = !hasEndpoints || loading || routeUpToDate
 
+  // Inline address editor shown in place of a committed row while editing. Seeds
+  // the search box with the current address; picking a result replaces the point
+  // (keeping its role/order), cancelling leaves the old address untouched.
+  function editorRow(p: RoutePoint) {
+    return (
+      <div className="flex items-start gap-1.5">
+        <div className="flex-1 min-w-0">
+          <PlaceSearchField
+            value={null}
+            initialQuery={p.label}
+            autoFocus
+            onChange={(place) => {
+              if (place) {
+                replacePoint(p.id, place)
+                setEditingId(null)
+              }
+            }}
+            placeholder="Search address or place…"
+          />
+        </div>
+        <button
+          onClick={() => setEditingId(null)}
+          aria-label="Cancel edit"
+          className="h-10 w-8 flex items-center justify-center rounded text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
+        >
+          <X size={15} strokeWidth={2} />
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col h-full min-h-0">
       <header className="h-[var(--header-height)] flex items-center gap-3 px-4 shrink-0">
@@ -871,41 +930,51 @@ export default function RoutePlanner({ onBack }: Props) {
             {/* Start — draggable so it can be reordered into the route (drop it
                 lower and the next point becomes the new start). */}
             {start ? (
-              <PointRow
-                role="start"
-                point={start}
-                coord={displayCoord(start)}
-                draggable={canReorder}
-                dragging={dragId === start.id}
-                onDragStartRow={() => setDragId(start.id)}
-                onDragEnterRow={() => {
-                  if (dragId && dragId !== start.id) reorder(dragId, start.id)
-                }}
-                onDragEndRow={() => setDragId(null)}
-                onClear={() => removePoint(start.id)}
-              />
+              editingId === start.id ? (
+                editorRow(start)
+              ) : (
+                <PointRow
+                  role="start"
+                  point={start}
+                  coord={displayCoord(start)}
+                  draggable={canReorder}
+                  dragging={dragId === start.id}
+                  onDragStartRow={() => setDragId(start.id)}
+                  onDragEnterRow={() => {
+                    if (dragId && dragId !== start.id) reorder(dragId, start.id)
+                  }}
+                  onDragEndRow={() => setDragId(null)}
+                  onEdit={() => setEditingId(start.id)}
+                  onClear={() => removePoint(start.id)}
+                />
+              )
             ) : (
               <PlaceSearchField label="Start" value={null} onChange={(p) => p && setStart(fromSearch(p))} placeholder="Start address or place…" />
             )}
 
             {/* Stops — draggable to reorder anywhere in the route. */}
-            {stops.map((s, i) => (
-              <PointRow
-                key={s.id}
-                role="stop"
-                index={i + 1}
-                point={s}
-                coord={displayCoord(s)}
-                draggable={canReorder}
-                dragging={dragId === s.id}
-                onDragStartRow={() => setDragId(s.id)}
-                onDragEnterRow={() => {
-                  if (dragId && dragId !== s.id) reorder(dragId, s.id)
-                }}
-                onDragEndRow={() => setDragId(null)}
-                onClear={() => removePoint(s.id)}
-              />
-            ))}
+            {stops.map((s, i) =>
+              editingId === s.id ? (
+                <div key={s.id}>{editorRow(s)}</div>
+              ) : (
+                <PointRow
+                  key={s.id}
+                  role="stop"
+                  index={i + 1}
+                  point={s}
+                  coord={displayCoord(s)}
+                  draggable={canReorder}
+                  dragging={dragId === s.id}
+                  onDragStartRow={() => setDragId(s.id)}
+                  onDragEnterRow={() => {
+                    if (dragId && dragId !== s.id) reorder(dragId, s.id)
+                  }}
+                  onDragEndRow={() => setDragId(null)}
+                  onEdit={() => setEditingId(s.id)}
+                  onClear={() => removePoint(s.id)}
+                />
+              ),
+            )}
 
             {/* Compact "add stop" — secondary action, not a permanent input. */}
             {stops.length < MAX_STOPS &&
@@ -944,19 +1013,24 @@ export default function RoutePlanner({ onBack }: Props) {
             {/* Destination — draggable too; drop it higher and it becomes a stop
                 while the last remaining point becomes the new finish. */}
             {destination ? (
-              <PointRow
-                role="destination"
-                point={destination}
-                coord={displayCoord(destination)}
-                draggable={canReorder}
-                dragging={dragId === destination.id}
-                onDragStartRow={() => setDragId(destination.id)}
-                onDragEnterRow={() => {
-                  if (dragId && dragId !== destination.id) reorder(dragId, destination.id)
-                }}
-                onDragEndRow={() => setDragId(null)}
-                onClear={() => removePoint(destination.id)}
-              />
+              editingId === destination.id ? (
+                editorRow(destination)
+              ) : (
+                <PointRow
+                  role="destination"
+                  point={destination}
+                  coord={displayCoord(destination)}
+                  draggable={canReorder}
+                  dragging={dragId === destination.id}
+                  onDragStartRow={() => setDragId(destination.id)}
+                  onDragEnterRow={() => {
+                    if (dragId && dragId !== destination.id) reorder(dragId, destination.id)
+                  }}
+                  onDragEndRow={() => setDragId(null)}
+                  onEdit={() => setEditingId(destination.id)}
+                  onClear={() => removePoint(destination.id)}
+                />
+              )
             ) : (
               <PlaceSearchField label="Destination" value={null} onChange={(p) => p && setDestinationPoint(fromSearch(p))} placeholder="End address or place…" />
             )}
@@ -1191,6 +1265,7 @@ function PointRow({
   point,
   coord,
   onClear,
+  onEdit,
   draggable = false,
   dragging = false,
   onDragStartRow,
@@ -1202,6 +1277,7 @@ function PointRow({
   point: RoutePoint
   coord: LatLng
   onClear: () => void
+  onEdit?: () => void
   draggable?: boolean
   dragging?: boolean
   onDragStartRow?: () => void
@@ -1254,7 +1330,7 @@ function PointRow({
       // (done on dragenter) sticks and the cursor reads as "movable".
       onDragOver={draggable ? (e) => e.preventDefault() : undefined}
       onDragEnd={draggable ? () => onDragEndRow?.() : undefined}
-      className={`flex items-center gap-2 rounded-lg border bg-white/[0.02] px-2 py-1.5 transition-[opacity,border-color] ${
+      className={`flex items-center gap-2 rounded-xl border bg-white/[0.02] px-2 py-1.5 transition-[opacity,border-color] ${
         dragging ? 'opacity-50 border-active/40' : 'border-white/[0.08]'
       }`}
     >
@@ -1269,9 +1345,19 @@ function PointRow({
       )}
       <div className="shrink-0">{badge}</div>
       <div className="min-w-0 flex-1">
-        <div className="text-[12.5px] leading-tight truncate" title={point.label}>
-          {point.label}
-        </div>
+        {onEdit ? (
+          <button
+            onClick={onEdit}
+            title="Edit address"
+            className="block w-full text-left text-[12.5px] leading-tight truncate hover:text-text transition-colors"
+          >
+            {point.label}
+          </button>
+        ) : (
+          <div className="text-[12.5px] leading-tight truncate" title={point.label}>
+            {point.label}
+          </div>
+        )}
         <button
           onClick={copyCoord}
           title="Copy coordinates"
@@ -1287,6 +1373,11 @@ function PointRow({
         </button>
       </div>
       <div className="flex items-center gap-0.5 shrink-0">
+        {onEdit && (
+          <IconBtn label="Edit address" onClick={onEdit}>
+            <Pencil size={13} strokeWidth={1.8} />
+          </IconBtn>
+        )}
         <IconBtn label="Remove" onClick={onClear}>
           <X size={14} strokeWidth={2} />
         </IconBtn>
