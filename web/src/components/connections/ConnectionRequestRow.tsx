@@ -20,11 +20,11 @@ export default function ConnectionRequestRow({ connection, selected, onClick }: 
   // subtitle (email) on line 2 with the compact "Request" pill in the right-side
   // metadata slot — aligned to the same baseline as a DM's timestamp.
   if (viewMode === 'normal') {
-    const NORMAL_AVATAR = 40
+    const NORMAL_AVATAR = 44
     return (
       <button
         onClick={onClick}
-        className={`w-full flex items-center gap-2.5 px-2.5 py-2 min-h-[56px] rounded-chip text-left transition-colors ${
+        className={`w-full flex items-center gap-3 px-3 py-2.5 min-h-[62px] rounded-chip text-left transition-colors ${
           selected ? 'bg-white/[0.06] text-text' : 'text-muted hover:bg-white/[0.025] hover:text-text'
         }`}
       >
@@ -34,15 +34,15 @@ export default function ConnectionRequestRow({ connection, selected, onClick }: 
         <span className="flex-1 min-w-0 flex flex-col gap-0.5">
           {/* Line 1 — just the requester name, kept clean. */}
           <span className="flex items-center gap-2">
-            <span className="flex-1 truncate text-[13.5px] text-text font-semibold">
+            <span className="flex-1 truncate text-[14.5px] text-text font-semibold">
               {peer.displayName}
             </span>
           </span>
           {/* Line 2 — quiet person subtitle on the left; the "Request" pill on
               the right, where a DM row shows its timestamp. */}
           <span className="flex items-center gap-2">
-            <span className="flex-1 truncate text-[12px] text-faint">{peer.email}</span>
-            <span className="shrink-0 h-[18px] px-1.5 rounded-full bg-active/15 text-active text-[10px] font-semibold leading-none flex items-center justify-center">
+            <span className="flex-1 truncate text-[13px] text-faint">{peer.email}</span>
+            <span className="shrink-0 h-[19px] px-2 rounded-full bg-active/15 text-active text-[10.5px] font-semibold leading-none flex items-center justify-center">
               Request
             </span>
           </span>

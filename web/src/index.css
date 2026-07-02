@@ -55,19 +55,19 @@
      (see .chat-column). Constant across tiers. */
   --chat-scrollbar-gutter: 10px;
 
-  --sidebar-title-font-size: 16.5px;
-  --sidebar-row-font-size: 14.5px;
-  --sidebar-meta-font-size: 12.5px;
-  --sidebar-section-font-size: 10.5px;
-  --sidebar-icon-size: 20px;
-  --sidebar-user-avatar-size: 33px;
-  --sidebar-search-height: 36px;
-  --sidebar-row-height: 40px;
-  --sidebar-badge-size: 20px;
-  --sidebar-row-gap: 11px;
-  --sidebar-row-pad-x: 11px;
-  --sidebar-row-pad-y: 8px;
-  --sidebar-section-gap: 28px;
+  --sidebar-title-font-size: 17.5px;
+  --sidebar-row-font-size: 15.5px;
+  --sidebar-meta-font-size: 13px;
+  --sidebar-section-font-size: 11px;
+  --sidebar-icon-size: 22px;
+  --sidebar-user-avatar-size: 36px;
+  --sidebar-search-height: 40px;
+  --sidebar-row-height: 46px;
+  --sidebar-badge-size: 21px;
+  --sidebar-row-gap: 12px;
+  --sidebar-row-pad-x: 12px;
+  --sidebar-row-pad-y: 10px;
+  --sidebar-section-gap: 30px;
 }
 
 /* compact — small laptops / dense preference (the previous base scale). */
@@ -80,19 +80,19 @@
   --chat-max-width: 1040px;
   --chat-gutter: 16px;
 
-  --sidebar-title-font-size: 16px;
-  --sidebar-row-font-size: 14px;
-  --sidebar-meta-font-size: 12px;
-  --sidebar-section-font-size: 10.5px;
-  --sidebar-icon-size: 19px;
-  --sidebar-user-avatar-size: 31px;
-  --sidebar-search-height: 34px;
-  --sidebar-row-height: 36px;
-  --sidebar-badge-size: 19px;
-  --sidebar-row-gap: 10px;
-  --sidebar-row-pad-x: 10px;
-  --sidebar-row-pad-y: 7px;
-  --sidebar-section-gap: 25px;
+  --sidebar-title-font-size: 17px;
+  --sidebar-row-font-size: 15px;
+  --sidebar-meta-font-size: 12.5px;
+  --sidebar-section-font-size: 11px;
+  --sidebar-icon-size: 21px;
+  --sidebar-user-avatar-size: 34px;
+  --sidebar-search-height: 38px;
+  --sidebar-row-height: 42px;
+  --sidebar-badge-size: 20px;
+  --sidebar-row-gap: 11px;
+  --sidebar-row-pad-x: 11px;
+  --sidebar-row-pad-y: 9px;
+  --sidebar-section-gap: 27px;
 }
 
 /* default — desktop / 1080p (current hand-tuned scale; matches :root). */
@@ -105,19 +105,19 @@
   --chat-max-width: 1120px;
   --chat-gutter: 20px;
 
-  --sidebar-title-font-size: 16.5px;
-  --sidebar-row-font-size: 14.5px;
-  --sidebar-meta-font-size: 12.5px;
-  --sidebar-section-font-size: 10.5px;
-  --sidebar-icon-size: 20px;
-  --sidebar-user-avatar-size: 33px;
-  --sidebar-search-height: 36px;
-  --sidebar-row-height: 40px;
-  --sidebar-badge-size: 20px;
-  --sidebar-row-gap: 11px;
-  --sidebar-row-pad-x: 11px;
-  --sidebar-row-pad-y: 8px;
-  --sidebar-section-gap: 28px;
+  --sidebar-title-font-size: 17.5px;
+  --sidebar-row-font-size: 15.5px;
+  --sidebar-meta-font-size: 13px;
+  --sidebar-section-font-size: 11px;
+  --sidebar-icon-size: 22px;
+  --sidebar-user-avatar-size: 36px;
+  --sidebar-search-height: 40px;
+  --sidebar-row-height: 46px;
+  --sidebar-badge-size: 21px;
+  --sidebar-row-gap: 12px;
+  --sidebar-row-pad-x: 12px;
+  --sidebar-row-pad-y: 10px;
+  --sidebar-section-gap: 30px;
 }
 
 /* comfortable — 2K/QHD and larger: noticeably more scale so a 2560×1440 (and up)
@@ -134,19 +134,19 @@
   --chat-max-width: 1360px;
   --chat-gutter: 28px;
 
-  --sidebar-title-font-size: 19px;
-  --sidebar-row-font-size: 16.5px;
-  --sidebar-meta-font-size: 14px;
-  --sidebar-section-font-size: 12px;
-  --sidebar-icon-size: 23px;
-  --sidebar-user-avatar-size: 40px;
-  --sidebar-search-height: 44px;
-  --sidebar-row-height: 48px;
-  --sidebar-badge-size: 23px;
-  --sidebar-row-gap: 14px;
-  --sidebar-row-pad-x: 14px;
-  --sidebar-row-pad-y: 11px;
-  --sidebar-section-gap: 34px;
+  --sidebar-title-font-size: 20px;
+  --sidebar-row-font-size: 17px;
+  --sidebar-meta-font-size: 14.5px;
+  --sidebar-section-font-size: 12.5px;
+  --sidebar-icon-size: 25px;
+  --sidebar-user-avatar-size: 43px;
+  --sidebar-search-height: 48px;
+  --sidebar-row-height: 54px;
+  --sidebar-badge-size: 24px;
+  --sidebar-row-gap: 15px;
+  --sidebar-row-pad-x: 15px;
+  --sidebar-row-pad-y: 12px;
+  --sidebar-section-gap: 36px;
 }
 
 /* No-JS / pre-hydration fallback: follow the display size when no explicit
@@ -163,19 +163,19 @@
     --chat-max-width: 1040px;
     --chat-gutter: 16px;
 
-    --sidebar-title-font-size: 16px;
-    --sidebar-row-font-size: 14px;
-    --sidebar-meta-font-size: 12px;
-    --sidebar-section-font-size: 10.5px;
-    --sidebar-icon-size: 19px;
-    --sidebar-user-avatar-size: 31px;
-    --sidebar-search-height: 34px;
-    --sidebar-row-height: 36px;
-    --sidebar-badge-size: 19px;
-    --sidebar-row-gap: 10px;
-    --sidebar-row-pad-x: 10px;
-    --sidebar-row-pad-y: 7px;
-    --sidebar-section-gap: 25px;
+    --sidebar-title-font-size: 17px;
+    --sidebar-row-font-size: 15px;
+    --sidebar-meta-font-size: 12.5px;
+    --sidebar-section-font-size: 11px;
+    --sidebar-icon-size: 21px;
+    --sidebar-user-avatar-size: 34px;
+    --sidebar-search-height: 38px;
+    --sidebar-row-height: 42px;
+    --sidebar-badge-size: 20px;
+    --sidebar-row-gap: 11px;
+    --sidebar-row-pad-x: 11px;
+    --sidebar-row-pad-y: 9px;
+    --sidebar-section-gap: 27px;
   }
 }
 @media (min-width: 2200px) {
@@ -188,19 +188,19 @@
     --chat-max-width: 1360px;
     --chat-gutter: 28px;
 
-    --sidebar-title-font-size: 19px;
-    --sidebar-row-font-size: 16.5px;
-    --sidebar-meta-font-size: 14px;
-    --sidebar-section-font-size: 12px;
-    --sidebar-icon-size: 23px;
-    --sidebar-user-avatar-size: 40px;
-    --sidebar-search-height: 44px;
-    --sidebar-row-height: 48px;
-    --sidebar-badge-size: 23px;
-    --sidebar-row-gap: 14px;
-    --sidebar-row-pad-x: 14px;
-    --sidebar-row-pad-y: 11px;
-    --sidebar-section-gap: 34px;
+    --sidebar-title-font-size: 20px;
+    --sidebar-row-font-size: 17px;
+    --sidebar-meta-font-size: 14.5px;
+    --sidebar-section-font-size: 12.5px;
+    --sidebar-icon-size: 25px;
+    --sidebar-user-avatar-size: 43px;
+    --sidebar-search-height: 48px;
+    --sidebar-row-height: 54px;
+    --sidebar-badge-size: 24px;
+    --sidebar-row-gap: 15px;
+    --sidebar-row-pad-x: 15px;
+    --sidebar-row-pad-y: 12px;
+    --sidebar-section-gap: 36px;
   }
 }
 

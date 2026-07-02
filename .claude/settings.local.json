@@ -267,7 +267,8 @@
       "Bash(grep -rn '\"lint\"' package.json web/package.json server/package.json)",
       "Bash(ls eslint.config.* web/eslint.config.*)",
       "Bash(node -e \"console.log\\(require\\('tailwindcss/package.json'\\).version\\)\")",
-      "PowerShell(\\(Get-Content \"C:\\\\Users\\\\Home\\\\Desktop\\\\dispo-chatv2\\\\web\\\\src\\\\pages\\\\Workspace.tsx\" | Measure-Object -Line\\).Lines)"
+      "PowerShell(\\(Get-Content \"C:\\\\Users\\\\Home\\\\Desktop\\\\dispo-chatv2\\\\web\\\\src\\\\pages\\\\Workspace.tsx\" | Measure-Object -Line\\).Lines)",
+      "PowerShell(\\(Test-NetConnection -ComputerName localhost -Port 3001 -WarningAction SilentlyContinue\\).TcpTestSucceeded)"
     ]
   }
 }

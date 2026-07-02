@@ -51,7 +51,7 @@ export default function ConnectionRequestsSection({
         className="w-full flex items-center gap-1.5 px-2 mb-1.5 py-0.5 rounded-chip hover:bg-white/[0.02] transition-colors"
       >
         <ChevronDown
-          size={10}
+          size={11}
           strokeWidth={2}
           className={`text-faint shrink-0 transition-transform ${open ? '' : '-rotate-90'}`}
         />
@@ -62,7 +62,7 @@ export default function ConnectionRequestsSection({
           Connection requests
         </span>
         {count > 0 && (
-          <span className="font-mono text-[10px] font-semibold bg-active text-bg rounded-full min-w-[16px] h-[16px] px-1 flex items-center justify-center shrink-0">
+          <span className="font-mono text-[10.5px] font-semibold bg-active text-bg rounded-full min-w-[17px] h-[17px] px-1 flex items-center justify-center shrink-0">
             {count}
           </span>
         )}
@@ -74,7 +74,7 @@ export default function ConnectionRequestsSection({
               first-load spinner-less hint, otherwise the empty copy. Existing
               rows below are kept regardless, so an error never hides data. */}
           {error ? (
-            <div className="flex items-center justify-between gap-2 px-2 py-1 text-[11.5px] leading-[1.45]">
+            <div className="flex items-center justify-between gap-2 px-2 py-1 text-[12px] leading-[1.45]">
               <span className="text-alert">Couldn’t load requests.</span>
               <button
                 type="button"
@@ -85,11 +85,11 @@ export default function ConnectionRequestsSection({
               </button>
             </div>
           ) : loading && count === 0 ? (
-            <div className="text-[11.5px] text-faint px-2 py-1 leading-[1.45]">
+            <div className="text-[12px] text-faint px-2 py-1 leading-[1.45]">
               Loading requests…
             </div>
           ) : count === 0 ? (
-            <div className="text-[11.5px] text-faint px-2 py-1 leading-[1.45]">
+            <div className="text-[12px] text-faint px-2 py-1 leading-[1.45]">
               No pending connection invitations.
             </div>
           ) : null}

@@ -392,50 +392,57 @@ function MessageRow({
               live up here next to the avatar/name — it sits INSIDE the content
               column, in a gutter on the message block (below the author header),
               so it aligns with the message text row and never shifts the avatar,
-              name, or body. */}
-          <div className="flex items-start gap-2.5">
-            {/* Avatar gutter — avatar only at a group start; empty (indent) on
-                following rows so the group stays visually anchored. */}
-            <div className="w-8 shrink-0 pt-0.5">
-              {startNewGroup && (
-                <Avatar userId={message.authorId} name={authorLabel} size={32} />
-              )}
-            </div>
+              name, or body. MY OWN messages are a bare right-aligned text block:
+              no avatar and no author header (right alignment alone marks
+              ownership, WhatsApp-style), so the text stays the visual anchor and
+              the row keeps the plain no-bubble structure. */}
+          <div className={`flex items-start gap-2.5 ${mine ? 'justify-end' : ''}`}>
+            {/* Avatar gutter (incoming only) — avatar at a group start; empty
+                (indent) on following rows so the group stays visually anchored.
+                My own rows have no gutter at all: the block hugs the right edge
+                with only the row/column padding keeping it off the pane edge. */}
+            {!mine && (
+              <div className="w-8 shrink-0 pt-0.5">
+                {startNewGroup && (
+                  <Avatar userId={message.authorId} name={authorLabel} size={32} />
+                )}
+              </div>
+            )}
 
-            {/* Content column — always left-aligned, capped for readability.
-                Carries the hover/jump highlight + `group/msg` so the affordances
+            {/* Content column — left-aligned for others, right-aligned (items-end)
+                for my own messages, capped for readability either way. Carries
+                the hover/jump highlight + `group/msg` so the affordances
                 (background, chevron, trailing time) reveal ONLY when the cursor
                 is over the actual content, not the empty horizontal space that
                 fills the rest of the row. It hugs its content (no `flex-1`) so
                 the highlight never stretches past the text; `-mx-1.5 px-1.5`
                 gives the pill breathing room without shifting the content. */}
             <div
-              className={`group/msg min-w-0 flex flex-col items-start max-w-[680px] -mx-1.5 px-1.5 rounded-md transition-colors duration-500 ${
+              className={`group/msg min-w-0 flex flex-col ${
+                mine ? 'items-end' : 'items-start'
+              } max-w-[680px] -mx-1.5 px-1.5 rounded-md transition-colors duration-500 ${
                 highlighted ? 'bg-active/10' : 'hover:bg-white/[0.02]'
               }`}
             >
-              {/* Author header: just the name. Mine reads in the warm `active`
-                  accent — that alone marks it as my message, so no "You" chip is
-                  needed. Kept clean — NO chevron and NO timestamp ever live on
-                  this row. It sits at the content-left edge, sharing its x with
-                  the chevron gutter below it. */}
-              {startNewGroup && (
+              {/* Author header: just the name — incoming messages only. My own
+                  rows carry no name (the right alignment is the ownership cue),
+                  so the text block stays the anchor. Kept clean — NO chevron and
+                  NO timestamp ever live on this row. It sits at the content-left
+                  edge, sharing its x with the chevron gutter below it. */}
+              {startNewGroup && !mine && (
                 <div className="flex items-center gap-1.5 mb-0.5 leading-none">
-                  <span
-                    className={`text-[13.5px] font-semibold ${mine ? 'text-active' : 'text-text'}`}
-                  >
-                    {authorLabel}
-                  </span>
+                  <span className="text-[13.5px] font-semibold text-text">{authorLabel}</span>
                 </div>
               )}
 
               {/* Message block — reply quote / pins / attachments / body, all
-                  left-aligned under the author name (no left indent). The actions
-                  chevron is NOT a separate gutter: it's rendered inline at the
-                  END of the text row, right after the body and just before the
-                  trailing timestamp / read-ticks (see metaCluster usages below),
-                  so it follows the text without interrupting reading. */}
-              <div className="min-w-0 w-full flex flex-col items-start">
+                  aligned under the author name on the row's own side (left for
+                  others, right for mine; no indent). The actions chevron is NOT
+                  a separate gutter: it's rendered inline at the END of the text
+                  row, right after the body and just before the trailing
+                  timestamp / read-ticks (see metaCluster usages below), so it
+                  follows the text without interrupting reading. */}
+              <div className={`min-w-0 w-full flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
                   {!deleted && message.replyTo && (
                     <ReplyQuote replyTo={message.replyTo} onJump={onJumpToMessage} />
                   )}
@@ -450,11 +457,13 @@ function MessageRow({
 
                   {!deleted && message.attachments && message.attachments.length > 0 && (
                     // Media + (for attachment-ONLY messages) the actions chevron
-                    // to the RIGHT of the media, top-aligned — never below it.
-                    // Captioned attachments omit the chevron here; it rides the
-                    // caption's text row instead (see the body branch below), so
-                    // there's never a duplicate.
-                    <div className="flex items-start gap-1.5 my-1 max-w-full">
+                    // on the media's OUTER-FLOW side, top-aligned — never below
+                    // it: to the right of the media on incoming rows, mirrored to
+                    // the left on my right-aligned rows (so it never collides
+                    // with the chat edge). Captioned attachments omit the chevron
+                    // here; it rides the caption's text row instead (see the body
+                    // branch below), so there's never a duplicate.
+                    <div className={`flex items-start gap-1.5 my-1 max-w-full ${mine ? 'flex-row-reverse' : ''}`}>
                       <div className="flex flex-col gap-1 min-w-0">
                         {message.attachments.map((a, i) => (
                           <AttachmentBlock

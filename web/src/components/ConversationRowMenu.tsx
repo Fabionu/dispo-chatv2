@@ -153,11 +153,11 @@ const ConversationRowMenu = forwardRef<
           e.preventDefault()
           setOpen((v) => !v)
         }}
-        className={`h-8 w-8 flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+        className={`h-9 w-9 flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
           open ? 'bg-white/[0.08] text-text' : 'text-muted hover:text-text hover:bg-white/[0.06]'
         }`}
       >
-        <MoreHorizontal size={16} strokeWidth={1.8} />
+        <MoreHorizontal size={17} strokeWidth={1.8} />
       </button>
 
       {open &&
@@ -191,7 +191,7 @@ const ConversationRowMenu = forwardRef<
                   e.stopPropagation()
                   select(a)
                 }}
-                className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 text-[12px] text-left whitespace-nowrap transition-colors ${
+                className={`w-full flex items-center gap-2.5 px-2.5 py-2 text-[12.5px] text-left whitespace-nowrap transition-colors ${
                   danger ? 'text-alert hover:bg-alert/10' : 'text-text hover:bg-white/[0.04]'
                 }`}
               >

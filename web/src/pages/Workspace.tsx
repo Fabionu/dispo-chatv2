@@ -831,7 +831,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             aria-label="Expand sidebar"
             className="h-9 w-9 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
           >
-            <PanelLeftOpen size={18} strokeWidth={1.8} />
+            <PanelLeftOpen size={19} strokeWidth={1.8} />
           </button>
           <button
             onClick={() => setSelection({ kind: 'inbox' })}
@@ -929,7 +929,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             aria-label="Collapse sidebar"
             className="self-center mr-1.5 h-9 w-9 flex items-center justify-center rounded-full text-muted hover:text-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 shrink-0"
           >
-            <PanelLeftClose size={18} strokeWidth={1.8} />
+            <PanelLeftClose size={19} strokeWidth={1.8} />
           </button>
         </div>
 
@@ -939,7 +939,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             htmlFor="rail-search"
             className="flex-1 h-[var(--sidebar-search-height)] flex items-center gap-2 px-3 rounded-[11px] border border-white/[0.06] bg-white/[0.02] focus-within:border-white/[0.16] hover:border-white/[0.10] transition-colors cursor-text"
           >
-            <Search size={12} strokeWidth={1.6} className="text-faint shrink-0" />
+            <Search size={14} strokeWidth={1.6} className="text-faint shrink-0" />
             <input
               id="rail-search"
               value={query}
@@ -957,7 +957,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 aria-label="Clear search"
                 className="text-faint hover:text-text shrink-0 transition-colors"
               >
-                <X size={12} strokeWidth={1.8} />
+                <X size={14} strokeWidth={1.8} />
               </button>
             )}
           </label>
@@ -974,7 +974,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                   : 'text-muted hover:text-text hover:bg-white/[0.05]'
               }`}
             >
-              <MoreVertical size={18} strokeWidth={2} />
+              <MoreVertical size={19} strokeWidth={2} />
             </button>
 
             {newMenuOpen && (
@@ -1103,7 +1103,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           {userMenuOpen && (
             <div className="absolute bottom-full left-2 w-[240px] max-w-[calc(100%-1rem)] mb-2 rounded-card border border-white/[0.08] bg-surface overflow-hidden">
               <MenuItem
-                icon={<CircleUser size={13} strokeWidth={1.6} />}
+                icon={<CircleUser size={14} strokeWidth={1.6} />}
                 onClick={() => {
                   setUserMenuOpen(false)
                   setProfilePanelOpen(true)
@@ -1112,7 +1112,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 My profile
               </MenuItem>
               <MenuItem
-                icon={<Building2 size={13} strokeWidth={1.6} />}
+                icon={<Building2 size={14} strokeWidth={1.6} />}
                 onClick={() => {
                   setUserMenuOpen(false)
                   setCompanyPanelOpen(true)
@@ -1121,7 +1121,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 Company profile
               </MenuItem>
               <MenuItem
-                icon={<Settings size={13} strokeWidth={1.6} />}
+                icon={<Settings size={14} strokeWidth={1.6} />}
                 onClick={() => {
                   setUserMenuOpen(false)
                   setSettingsPanelOpen(true)
@@ -1130,7 +1130,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 Workspace settings
               </MenuItem>
               <MenuItem
-                icon={<LogOut size={13} strokeWidth={1.6} />}
+                icon={<LogOut size={14} strokeWidth={1.6} />}
                 tone="danger"
                 onClick={() => {
                   setUserMenuOpen(false)
@@ -1153,7 +1153,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               {user.role !== 'driver' && cachedProfile && (
                 <span
                   title={away ? AWAY.label : statusMeta(cachedProfile.availabilityStatus).label}
-                  className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-rail"
+                  className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-rail"
                   style={{
                     backgroundColor: away
                       ? AWAY.color
@@ -1177,7 +1177,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               </div>
             </div>
             <ChevronDown
-              size={13}
+              size={14}
               strokeWidth={1.6}
               className={`text-muted shrink-0 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`}
             />
@@ -1421,7 +1421,7 @@ function GroupRow({
   // Small muted indicator shared by both view densities. Fades with the rest of
   // the right-side metadata on hover so the action button owns the far right.
   const mutedIcon = muted ? (
-    <BellOff size={11} strokeWidth={1.7} className={`shrink-0 text-faint ${metaFade}`} aria-label="Muted" />
+    <BellOff size={12} strokeWidth={1.7} className={`shrink-0 text-faint ${metaFade}`} aria-label="Muted" />
   ) : null
   // Pinned indicator — a prominent pin on the row's RIGHT edge (the same area the
   // metadata/actions live), vertically centred over the whole row. It stays
@@ -1437,7 +1437,7 @@ function GroupRow({
         menuOpen ? '-translate-x-9' : ''
       }`}
     >
-      <Pin size={15} strokeWidth={1.8} aria-label="Pinned" />
+      <Pin size={16} strokeWidth={1.8} aria-label="Pinned" />
     </div>
   ) : null
 
@@ -1445,14 +1445,14 @@ function GroupRow({
   // Larger avatar, more padding, name on line 1 (+ time), preview on line 2 (+
   // unread/mention badges). Compact view is left exactly as it was below.
   if (viewMode === 'normal') {
-    const NORMAL_AVATAR = 40
+    const NORMAL_AVATAR = 44
     const preview = groupPreview(group, currentUserId)
     const time = relTime(group.lastMessageAt)
     return (
       <div className="relative group/row" onContextMenu={openMenuAtCursor}>
       <button
         onClick={onClick}
-        className={`w-full flex items-center gap-2.5 px-2.5 py-2 min-h-[56px] rounded-chip text-left transition-colors ${
+        className={`w-full flex items-center gap-3 px-3 py-2.5 min-h-[62px] rounded-chip text-left transition-colors ${
           pinned ? 'pr-7' : ''
         } ${selected ? 'bg-white/[0.06] text-text' : 'text-muted hover:bg-white/[0.025] hover:text-text'}`}
       >
@@ -1469,7 +1469,7 @@ function GroupRow({
           {peerDot && (
             <span
               title={peerDot.label}
-              className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-rail"
+              className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-rail"
               style={{ backgroundColor: peerDot.color }}
             />
           )}
@@ -1480,7 +1480,7 @@ function GroupRow({
               vehicle's active-trip status chip is the one small indicator that
               belongs on the title line. */}
           <span className="flex items-center gap-2">
-            <span className={`flex-1 truncate text-[13.5px] ${unread ? 'text-text font-semibold' : 'text-text/90'}`}>
+            <span className={`flex-1 truncate text-[14.5px] ${unread ? 'text-text font-semibold' : 'text-text/90'}`}>
               {groupLabel(group)}
             </span>
             {trip && (
@@ -1492,7 +1492,7 @@ function GroupRow({
           <span className="flex items-center gap-2">
             {/* Latest-message preview — always shown (incl. vehicle rooms with an
                 active trip); the trip status lives in the chip on the title line. */}
-            <span className={`flex-1 truncate text-[12px] ${unread ? 'text-muted' : 'text-faint'}`}>
+            <span className={`flex-1 truncate text-[13px] ${unread ? 'text-muted' : 'text-faint'}`}>
               {preview.prefix && (
                 <span className={unread ? 'text-muted font-medium' : 'text-faint'}>{preview.prefix} </span>
               )}
@@ -1505,7 +1505,7 @@ function GroupRow({
                 <span
                   aria-label="You were mentioned"
                   title="You were mentioned"
-                  className="h-4 min-w-4 px-1 rounded-full bg-active/20 text-active text-[10px] font-bold leading-none flex items-center justify-center"
+                  className="h-[18px] min-w-[18px] px-1 rounded-full bg-active/20 text-active text-[10.5px] font-bold leading-none flex items-center justify-center"
                 >
                   @
                 </span>
@@ -1513,7 +1513,7 @@ function GroupRow({
               {unread && hasCount && unreadCount > 0 && (
                 <span
                   aria-label={`${unreadCount} unread`}
-                  className="h-4 min-w-4 px-1.5 rounded-full bg-active text-bg text-[10px] font-semibold leading-none flex items-center justify-center"
+                  className="h-[18px] min-w-[18px] px-1.5 rounded-full bg-active text-bg text-[10.5px] font-semibold leading-none flex items-center justify-center"
                 >
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
@@ -1521,7 +1521,7 @@ function GroupRow({
               {muted && mutedIcon}
               {/* Last-activity stamp — lives on the preview line (right side), not
                   the name line, so all rows share the same metadata baseline. */}
-              {time && <span className="text-[10.5px] text-faint tabular-nums">{time}</span>}
+              {time && <span className="text-[11.5px] text-faint tabular-nums">{time}</span>}
             </span>
           </span>
         </span>
@@ -1652,22 +1652,22 @@ function ContactRow({
   // company name and no timestamp (a contact has no thread yet), so the name
   // row stays clean and the preview line's right side is simply empty.
   if (viewMode === 'normal') {
-    const NORMAL_AVATAR = 40
+    const NORMAL_AVATAR = 44
     const role = member.role ? member.role.charAt(0).toUpperCase() + member.role.slice(1) : ''
     return (
       <button
         onClick={onClick}
         title={`Message ${member.displayName}`}
-        className="w-full flex items-center gap-2.5 px-2.5 py-2 min-h-[56px] rounded-chip text-left text-muted hover:bg-white/[0.025] hover:text-text transition-colors"
+        className="w-full flex items-center gap-3 px-3 py-2.5 min-h-[62px] rounded-chip text-left text-muted hover:bg-white/[0.025] hover:text-text transition-colors"
       >
         <Avatar userId={member.id} name={member.displayName} size={NORMAL_AVATAR} />
         <span className="flex-1 min-w-0 flex flex-col gap-0.5">
           <span className="flex items-center gap-2">
-            <span className="flex-1 truncate text-[13.5px] text-text/90">{member.displayName}</span>
+            <span className="flex-1 truncate text-[14.5px] text-text/90">{member.displayName}</span>
           </span>
           {role && (
             <span className="flex items-center gap-2">
-              <span className="flex-1 truncate text-[12px] text-faint">{role}</span>
+              <span className="flex-1 truncate text-[13px] text-faint">{role}</span>
             </span>
           )}
         </span>
@@ -1716,7 +1716,7 @@ function FilterPill({
       onClick={onClick}
       aria-pressed={active}
       style={{ fontSize: 'var(--sidebar-meta-font-size)' }}
-      className={`h-7 px-3 rounded-full font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+      className={`h-8 px-3.5 rounded-full font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
         active ? 'bg-white/[0.08] text-text' : 'text-muted hover:text-text hover:bg-white/[0.04]'
       }`}
     >
@@ -1753,7 +1753,7 @@ function MenuItem({
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-[12.5px] transition-colors text-left ${
+      className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-[13px] transition-colors text-left ${
         danger ? 'text-alert hover:bg-alert/10' : 'hover:bg-white/[0.03]'
       }`}
     >
@@ -1768,7 +1768,7 @@ function CreateMenuItem({ label, onClick }: { label: string; onClick: () => void
     <button
       onClick={onClick}
       role="menuitem"
-      className="w-full px-2.5 py-2 text-[12.5px] hover:bg-white/[0.03] transition-colors text-left whitespace-nowrap"
+      className="w-full px-2.5 py-2 text-[13px] hover:bg-white/[0.03] transition-colors text-left whitespace-nowrap"
     >
       {label}
     </button>

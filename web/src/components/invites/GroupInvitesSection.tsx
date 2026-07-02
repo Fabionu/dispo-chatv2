@@ -39,7 +39,7 @@ export default function GroupInvitesSection({ invites, selectedId, onSelect }: P
         className="w-full flex items-center gap-1.5 px-2 mb-1.5 py-0.5 rounded-chip hover:bg-white/[0.02] transition-colors"
       >
         <ChevronDown
-          size={10}
+          size={11}
           strokeWidth={2}
           className={`text-faint shrink-0 transition-transform ${open ? '' : '-rotate-90'}`}
         />
@@ -49,7 +49,7 @@ export default function GroupInvitesSection({ invites, selectedId, onSelect }: P
         >
           Group invites
         </span>
-        <span className="font-mono text-[10px] font-semibold bg-active text-bg rounded-full min-w-[16px] h-[16px] px-1 flex items-center justify-center shrink-0">
+        <span className="font-mono text-[10.5px] font-semibold bg-active text-bg rounded-full min-w-[17px] h-[17px] px-1 flex items-center justify-center shrink-0">
           {count}
         </span>
       </button>
