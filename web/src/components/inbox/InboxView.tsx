@@ -20,15 +20,15 @@ export default function InboxView({ workspaceName }: Props) {
   return (
     <>
       <header className="h-[var(--header-height)] flex flex-col justify-center px-5 shrink-0">
-        <div className="text-[15px] font-semibold tracking-[-0.2px] leading-tight">Workspace</div>
-        <div className="text-[12px] text-muted leading-tight mt-0.5">Operational tools for {workspaceName}.</div>
+        <div className="text-[0.9375rem] font-semibold tracking-[-0.2px] leading-tight">Workspace</div>
+        <div className="text-[0.75rem] text-muted leading-tight mt-0.5">Operational tools for {workspaceName}.</div>
       </header>
       <div className="flex-1 overflow-y-auto px-5 py-5">
-        <div className="max-w-[920px] mx-auto flex flex-col gap-4">
+        <div className="max-w-[57.5rem] mx-auto flex flex-col gap-4">
           {/* Auto-fill grid leaves room for future tools to flow in alongside. */}
-          <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(16.25rem,1fr))]">
             <ToolCard
-              icon={<Route size={26} strokeWidth={1.5} />}
+              icon={<Route size="1.625rem" strokeWidth={1.5} />}
               title="Route planner"
               subtitle="Truck routing, distance and ETA with HERE"
               onClick={() => setTool('route')}
@@ -60,8 +60,8 @@ function ToolCard({
         {icon}
       </span>
       <span className="block">
-        <span className="block text-[14px] font-semibold tracking-[-0.2px]">{title}</span>
-        <span className="block text-[12px] text-muted mt-1 leading-[1.5]">{subtitle}</span>
+        <span className="block text-[0.875rem] font-semibold tracking-[-0.2px]">{title}</span>
+        <span className="block text-[0.75rem] text-muted mt-1 leading-[1.5]">{subtitle}</span>
       </span>
     </button>
   )

@@ -53,8 +53,8 @@ export function StatusChip({
 }) {
   const pill =
     size === 'lg'
-      ? 'h-7 gap-2 px-3 text-[13px] font-semibold bg-white/[0.08] border border-white/[0.06]'
-      : 'gap-1.5 px-2 py-0.5 text-[10.5px] font-medium bg-white/[0.05]'
+      ? 'h-7 gap-2 px-3 text-[0.8125rem] font-semibold bg-white/[0.08] border border-white/[0.06]'
+      : 'gap-1.5 px-2 py-0.5 text-[0.65625rem] font-medium bg-white/[0.05]'
   const dot = size === 'lg' ? 'h-2 w-2' : 'h-1.5 w-1.5'
   return (
     <span className={`inline-flex items-center rounded-full ${pill} ${TONE_TEXT[tone]}`}>
@@ -105,13 +105,13 @@ export function SelectRow<T extends string>({
 
   return (
     <div className="py-2 border-b border-white/[0.04] last:border-0">
-      <label className="block text-[11px] text-muted mb-1">{label}</label>
+      <label className="block text-[0.6875rem] text-muted mb-1">{label}</label>
       {editable ? (
         <select
           value={value ?? ''}
           disabled={saving}
           onChange={(e) => void change((e.target.value || undefined) as T | undefined)}
-          className="h-8 w-full rounded-lg border border-white/[0.1] bg-white/[0.03] px-2 text-[12.5px] text-text outline-none focus:border-white/[0.25] disabled:opacity-50"
+          className="h-8 w-full rounded-lg border border-white/[0.1] bg-white/[0.03] px-2 text-[0.78125rem] text-text outline-none focus:border-white/[0.25] disabled:opacity-50"
         >
           <option value="">Not set</option>
           {options.map((o) => (
@@ -121,9 +121,9 @@ export function SelectRow<T extends string>({
           ))}
         </select>
       ) : (
-        <div className={`text-[12.5px] ${current ? 'text-text' : 'text-faint'}`}>{current ?? 'Not set'}</div>
+        <div className={`text-[0.78125rem] ${current ? 'text-text' : 'text-faint'}`}>{current ?? 'Not set'}</div>
       )}
-      {error && <div className="text-[11px] text-alert mt-1">Could not save. Try again.</div>}
+      {error && <div className="text-[0.6875rem] text-alert mt-1">Could not save. Try again.</div>}
     </div>
   )
 }

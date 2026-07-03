@@ -81,13 +81,13 @@ export default function CompanySidebarPanel({ onBack, onSaved }: Props) {
           aria-label="Back to inbox"
           className="h-8 w-8 flex items-center justify-center rounded-chip text-muted hover:text-text hover:bg-white/[0.04] transition-colors shrink-0"
         >
-          <ArrowLeft size={16} strokeWidth={1.8} />
+          <ArrowLeft size="1rem" strokeWidth={1.8} />
         </button>
-        <span className="text-[13px] font-semibold">Company profile</span>
+        <span className="text-[0.8125rem] font-semibold">Company profile</span>
       </div>
 
       {!company ? (
-        <div className="flex-1 flex items-center justify-center text-[12px] text-faint">
+        <div className="flex-1 flex items-center justify-center text-[0.75rem] text-faint">
           {error ?? 'Loading…'}
         </div>
       ) : (
@@ -113,11 +113,11 @@ export default function CompanySidebarPanel({ onBack, onSaved }: Props) {
             >
               <CompanyLogo size={72} version={logoVersion} className="!rounded-full" />
             </AvatarPhotoEditor>
-            <div className="mt-2.5 text-[16px] font-semibold tracking-[-0.2px]">{company.name}</div>
+            <div className="mt-2.5 text-[1rem] font-semibold tracking-[-0.2px]">{company.name}</div>
             {!canEdit && (
-              <div className="mt-1 text-[11px] text-faint">Managed by a workspace admin</div>
+              <div className="mt-1 text-[0.6875rem] text-faint">Managed by a workspace admin</div>
             )}
-            {error && <div className="text-[11.5px] text-alert mt-2">{error}</div>}
+            {error && <div className="text-[0.71875rem] text-alert mt-2">{error}</div>}
           </div>
 
           {/* Registration */}

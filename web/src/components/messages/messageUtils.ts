@@ -2,7 +2,13 @@
 export const DELETE_WINDOW_MS = 5 * 60 * 1000
 
 export function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  // 24-hour clock regardless of the browser locale — operational tools read
+  // dispatch times as 00–23 (hourCycle 'h23' never yields the h24 "24:00").
+  return new Date(iso).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  })
 }
 
 // Truncate to the minute (UTC ms / 60000) so two messages with different

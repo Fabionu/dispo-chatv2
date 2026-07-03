@@ -86,12 +86,12 @@ export default function SignIn() {
           and the `rail` marketing card floats a step lighter on top. */}
       <section className="relative flex flex-col px-8 sm:px-12 lg:px-16 py-8">
         {/* top bar */}
-        <div className="flex items-center gap-6 text-[13px]">
+        <div className="flex items-center gap-6 text-[0.8125rem]">
           <button className="text-text hover:text-text/80 transition-colors">Help</button>
           <button className="text-muted hover:text-text transition-colors">EN</button>
         </div>
 
-        <div className="flex-1 flex flex-col justify-center max-w-[440px] w-full mx-auto py-12">
+        <div className="flex-1 flex flex-col justify-center max-w-[27.5rem] w-full mx-auto py-12">
           {/* tabs */}
           <div className="flex items-center gap-6 border-b border-white/[0.08] mb-10">
             <TabButton
@@ -115,10 +115,10 @@ export default function SignIn() {
           </div>
 
           {/* heading */}
-          <h1 className="text-[22px] font-semibold tracking-[-0.2px] mb-2">
+          <h1 className="text-[1.375rem] font-semibold tracking-[-0.2px] mb-2">
             {isSignIn ? 'Sign in to your account' : 'Create your workspace'}
           </h1>
-          <p className="text-muted text-[13px] mb-7">
+          <p className="text-muted text-[0.8125rem] mb-7">
             {isSignIn
               ? 'Use your company email to access the dispatcher workspace.'
               : 'Set up a workspace for your transport company. You become the first admin.'}
@@ -162,13 +162,13 @@ export default function SignIn() {
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[12.5px] text-text" htmlFor="password">
+                <label className="text-[0.78125rem] text-text" htmlFor="password">
                   Password
                 </label>
                 {isSignIn && (
                   <button
                     type="button"
-                    className="text-[12px] text-muted hover:text-text transition-colors"
+                    className="text-[0.75rem] text-muted hover:text-text transition-colors"
                   >
                     Forgot?
                   </button>
@@ -183,7 +183,7 @@ export default function SignIn() {
                   placeholder="Type your password..."
                   autoComplete={isSignIn ? 'current-password' : 'new-password'}
                   required
-                  className="w-full bg-transparent border border-white/[0.08] rounded-btn pl-3 pr-10 py-2.5 text-[13.5px] focus:outline-none focus:border-white/[0.22] transition-colors"
+                  className="w-full bg-transparent border border-white/[0.08] rounded-btn pl-3 pr-10 py-2.5 text-[0.84375rem] focus:outline-none focus:border-white/[0.22] transition-colors"
                 />
                 <button
                   type="button"
@@ -194,9 +194,9 @@ export default function SignIn() {
                   className="absolute inset-y-0 right-0 px-3 flex items-center text-faint hover:text-text transition-colors"
                 >
                   {showPassword ? (
-                    <EyeOff size={15} strokeWidth={1.6} />
+                    <EyeOff size="0.9375rem" strokeWidth={1.6} />
                   ) : (
-                    <Eye size={15} strokeWidth={1.6} />
+                    <Eye size="0.9375rem" strokeWidth={1.6} />
                   )}
                 </button>
               </div>
@@ -206,7 +206,7 @@ export default function SignIn() {
             </div>
 
             {isSignIn && (
-              <label className="flex items-center gap-2.5 pt-1 text-[13px] text-text cursor-pointer select-none">
+              <label className="flex items-center gap-2.5 pt-1 text-[0.8125rem] text-text cursor-pointer select-none">
                 <input
                   type="checkbox"
                   className="checkbox"
@@ -218,7 +218,7 @@ export default function SignIn() {
             )}
 
             {error && (
-              <div className="text-[12.5px] text-alert border border-alert/30 bg-alert/5 rounded-btn px-3 py-2">
+              <div className="text-[0.78125rem] text-alert border border-alert/30 bg-alert/5 rounded-btn px-3 py-2">
                 {error}
               </div>
             )}
@@ -226,9 +226,9 @@ export default function SignIn() {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full mt-2 bg-text text-bg font-semibold text-[13.5px] py-3 rounded-btn hover:bg-text/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full mt-2 bg-text text-bg font-semibold text-[0.84375rem] py-3 rounded-btn hover:bg-text/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              {submitting && <Loader2 size={15} strokeWidth={2.2} className="animate-spin" />}
+              {submitting && <Loader2 size="0.9375rem" strokeWidth={2.2} className="animate-spin" />}
               {submitting
                 ? isSignIn
                   ? 'Signing in…'
@@ -239,7 +239,7 @@ export default function SignIn() {
             </button>
           </form>
 
-          <p className="text-center text-[12.5px] text-muted mt-6">
+          <p className="text-center text-[0.78125rem] text-muted mt-6">
             {isSignIn ? (
               <>
                 Need a workspace?{' '}
@@ -271,8 +271,8 @@ export default function SignIn() {
         </div>
 
         {/* footer */}
-        <div className="flex items-center justify-center gap-2 text-[11.5px] text-muted">
-          <Lock size={11} strokeWidth={1.5} />
+        <div className="flex items-center justify-center gap-2 text-[0.71875rem] text-muted">
+          <Lock size="0.6875rem" strokeWidth={1.5} />
           <span>Encrypted connection · SOC 2 Type II · GDPR compliant</span>
         </div>
       </section>
@@ -282,31 +282,31 @@ export default function SignIn() {
           near-black page. The section provides the surrounding black gutter so
           the card reads as visually detached. */}
       <section className="relative hidden lg:flex p-6">
-        <div className="flex-1 flex flex-col bg-rail border border-white/[0.08] rounded-[11px] px-14 py-10">
+        <div className="flex-1 flex flex-col bg-rail border border-white/[0.08] rounded-[0.6875rem] px-14 py-10">
         {/* logo */}
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-card border border-white/[0.1] bg-white/[0.03] flex items-center justify-center">
-            <Box size={18} strokeWidth={1.5} />
+            <Box size="1.125rem" strokeWidth={1.5} />
           </div>
           <div>
-            <div className="text-[17px] font-semibold tracking-[-0.2px]">Dispo-chat</div>
+            <div className="text-[1.0625rem] font-semibold tracking-[-0.2px]">Dispo-chat</div>
             <div className="eyebrow mt-0.5">Transport operations</div>
           </div>
         </div>
 
         {/* hero */}
-        <div className="flex-1 flex flex-col justify-center max-w-[640px]">
+        <div className="flex-1 flex flex-col justify-center max-w-[40rem]">
           <div className="eyebrow mb-5">Dispatcher workspace</div>
-          <h2 className="text-[44px] leading-[1.08] font-semibold tracking-[-0.6px] mb-6">
+          <h2 className="text-[2.75rem] leading-[1.08] font-semibold tracking-[-0.6px] mb-6">
             One workspace for every shipment, driver, and partner.
           </h2>
-          <p className="text-muted text-[15px] leading-[1.55] max-w-[520px]">
+          <p className="text-muted text-[0.9375rem] leading-[1.55] max-w-[32.5rem]">
             Coordinate orders, exchange quotes, and follow each load through every milestone — from
             confirmation to POD.
           </p>
 
           {/* live stats */}
-          <div className="mt-10 max-w-[560px] rounded-card border border-white/[0.08] bg-white/[0.015] px-6 py-5">
+          <div className="mt-10 max-w-[35rem] rounded-card border border-white/[0.08] bg-white/[0.015] px-6 py-5">
             <div className="flex items-center gap-2 mb-4">
               <span className="h-1.5 w-1.5 rounded-full bg-done" />
               <span className="eyebrow">Live · 19 May 2026</span>
@@ -321,7 +321,7 @@ export default function SignIn() {
         </div>
 
         {/* footer */}
-        <div className="flex items-center justify-between text-[12px] text-muted">
+        <div className="flex items-center justify-between text-[0.75rem] text-muted">
           <span>© 2026 Dispo-chat</span>
           <div className="flex items-center gap-6">
             <a className="hover:text-text transition-colors" href="#">
@@ -362,7 +362,7 @@ function Field({
 }) {
   return (
     <div>
-      <label className="block text-[12.5px] text-text mb-1.5" htmlFor={id}>
+      <label className="block text-[0.78125rem] text-text mb-1.5" htmlFor={id}>
         {label}
       </label>
       <input
@@ -373,7 +373,7 @@ function Field({
         placeholder={placeholder}
         autoComplete={autoComplete}
         required={required}
-        className="w-full bg-transparent border border-white/[0.08] rounded-btn px-3 py-2.5 text-[13.5px] focus:outline-none focus:border-white/[0.22] transition-colors"
+        className="w-full bg-transparent border border-white/[0.08] rounded-btn px-3 py-2.5 text-[0.84375rem] focus:outline-none focus:border-white/[0.22] transition-colors"
       />
     </div>
   )
@@ -392,7 +392,7 @@ function TabButton({
     <button
       onClick={onClick}
       type="button"
-      className={`relative pb-3 text-[14px] transition-colors ${
+      className={`relative pb-3 text-[0.875rem] transition-colors ${
         active ? 'text-text font-semibold' : 'text-muted hover:text-text font-medium'
       }`}
     >
@@ -449,7 +449,7 @@ function StrengthMeter({ password }: { password: string }) {
           />
         ))}
       </div>
-      <div className={`mt-1 text-[11px] ${textClass}`}>Password strength: {label}</div>
+      <div className={`mt-1 text-[0.6875rem] ${textClass}`}>Password strength: {label}</div>
     </div>
   )
 }
@@ -457,7 +457,7 @@ function StrengthMeter({ password }: { password: string }) {
 function Stat({ value, label }: { value: string; label: string }) {
   return (
     <div>
-      <div className="font-mono text-[26px] leading-none font-semibold tabular-nums">{value}</div>
+      <div className="font-mono text-[1.625rem] leading-none font-semibold tabular-nums">{value}</div>
       <div className="eyebrow mt-2">{label}</div>
     </div>
   )

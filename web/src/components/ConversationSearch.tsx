@@ -46,14 +46,14 @@ export default function ConversationSearch({ query, messages, currentUserId, onJ
     // a border (matching the app's borderless direction).
     <div
       data-search-region
-      className="absolute right-4 top-[58px] z-30 w-[min(360px,calc(100%-2rem))] rounded-[12px] bg-surface shadow-[0_16px_40px_rgba(0,0,0,0.55)] overflow-hidden"
+      className="absolute right-4 top-[3.625rem] z-30 w-[min(22.5rem,calc(100%-2rem))] rounded-[0.75rem] bg-surface shadow-[0_16px_40px_rgba(0,0,0,0.55)] overflow-hidden"
     >
-      <div className="max-h-[min(50vh,420px)] overflow-y-auto">
+      <div className="max-h-[min(50vh,26.25rem)] overflow-y-auto">
         {results.length === 0 ? (
-          <div className="px-3 py-4 text-[12.5px] text-faint">No messages found</div>
+          <div className="px-3 py-4 text-[0.78125rem] text-faint">No messages found</div>
         ) : (
           <div className="py-1">
-            <div className="px-3 pt-1 pb-1 text-[10.5px] uppercase tracking-wide text-faint">
+            <div className="px-3 pt-1 pb-1 text-[0.65625rem] uppercase tracking-wide text-faint">
               {results.length}
               {results.length === MAX_RESULTS ? '+' : ''}{' '}
               {results.length === 1 ? 'result' : 'results'}
@@ -65,14 +65,14 @@ export default function ConversationSearch({ query, messages, currentUserId, onJ
                 className="w-full text-left px-3 py-1.5 hover:bg-white/[0.04] transition-colors"
               >
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-[12px] font-semibold text-text truncate">
+                  <span className="text-[0.75rem] font-semibold text-text truncate">
                     {m.authorId === currentUserId ? 'You' : m.authorName || 'Member'}
                   </span>
-                  <span className="text-[10.5px] text-faint tabular-nums shrink-0">
+                  <span className="text-[0.65625rem] text-faint tabular-nums shrink-0">
                     {formatTime(m.createdAt)}
                   </span>
                 </div>
-                <div className="text-[12px] text-muted truncate">{highlight(m.body, q)}</div>
+                <div className="text-[0.75rem] text-muted truncate">{highlight(m.body, q)}</div>
               </button>
             ))}
           </div>

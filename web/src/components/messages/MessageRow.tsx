@@ -138,8 +138,9 @@ function MessageRow({
     new Date(prev.createdAt).toDateString() !== new Date(message.createdAt).toDateString()
 
   // A group starts on an author change / time gap / system break (all folded
-  // into !sameAuthorAsPrev) or whenever a date divider precedes this row. Drives
-  // the plain-stream author header; the bubble view uses sameAuthorAsPrev only.
+  // into !sameAuthorAsPrev) or whenever a date divider precedes this row.
+  // Drives the author chrome (avatar + name), group spacing, and the bubble
+  // corner grouping in BOTH display styles.
   const startNewGroup = !sameAuthorAsPrev || showDayDivider
 
   // Which message timeline style to render — 'bubble' (classic) or 'plain' (the
@@ -194,33 +195,40 @@ function MessageRow({
   // Font size comes from --chat-msg-font-size so it scales with the display.
   // max-w lives on the row so the trigger overlay can hug the bubble without
   // breaking the alignment math.
-  const rowMaxW = 'max-w-[min(78%,660px)]'
+  const rowMaxW = 'max-w-[min(78%,41.25rem)]'
   // Media (image/doc) messages use a tight 4px frame so the attachment nearly
   // fills the bubble instead of floating inside a thick coloured margin; text-
   // only messages keep a comfortable-but-compact padding. Caption text and the
   // meta footer re-add a small inset on media bubbles (see below).
   const bubblePad = hasAttachment ? 'p-1' : 'px-3 pt-1.5 pb-1'
   const bubbleBase = `${bubblePad} text-[length:var(--chat-msg-font-size)] leading-[1.45] flex flex-col text-[#F5F5F5] transition-[box-shadow,border-color] duration-500`
-  const deletedSkin = mine
-    ? 'bg-white/[0.02] text-muted italic rounded-[8px] rounded-br-[3px]'
-    : 'bg-white/[0.02] text-muted italic rounded-[8px] rounded-bl-[3px]'
-  // Minimal flat skins: neutral greys lifted above the neutral chat surface
-  // (`bg` #181818) — incoming a touch darker than my own so the two read apart.
-  // Borderless, no shadow. The bubble itself never changes on hover; only the
-  // actions affordance reveals. (Failed sends keep an alert border as their
-  // error cue.)
+  // Corner shape: an 8px rounded rectangle (matching the app's small-radius
+  // language — no pills) with a tighter 3px "tail" on the sender-side bottom
+  // corner as the directional cue. Inside a same-author run the top corner on
+  // that side also tightens, so consecutive bubbles read as one stacked group.
+  const grouped = !startNewGroup
+  const shapeMine = `rounded-[0.5rem] rounded-br-[0.1875rem]${grouped ? ' rounded-tr-[0.25rem]' : ''}`
+  const shapeOther = `rounded-[0.5rem] rounded-bl-[0.1875rem]${grouped ? ' rounded-tl-[0.25rem]' : ''}`
+  const deletedSkin = `bg-white/[0.02] text-muted italic ${mine ? shapeMine : shapeOther}`
+  // Minimal flat skins on the neutral chat surface (`bg` #181818): incoming a
+  // quiet neutral lift (`surface` grey), my own a slightly lighter grey warmed
+  // toward the `active` accent — tinted, never bright, so ownership reads at a
+  // glance while the timeline stays calm. Borderless, no shadow. The bubble
+  // itself never changes on hover; only the actions affordance reveals.
+  // (Failed sends keep an alert border as their error cue.)
   const bubbleSkin = deleted
     ? deletedSkin
     : mine
       ? failed
-        ? 'bg-[#303030] border border-alert/50 rounded-[8px] rounded-br-[3px]'
-        : 'bg-[#303030] rounded-[8px] rounded-br-[3px]'
-      : 'bg-[#262626] rounded-[8px] rounded-bl-[3px]'
+        ? `bg-[#383028] border border-alert/50 ${shapeMine}`
+        : `bg-[#383028] ${shapeMine}`
+      : `bg-[#262626] ${shapeOther}`
   // Subtle, theme-warm pulse applied when this row is the target of a
   // jump-to-original. Clears after ~1.8s back in ChatView.
   const highlightSkin = highlighted ? 'ring-2 ring-active/60' : ''
 
-  const iconSize = 14
+  // rem so the menu glyphs track the global UI scale (14px design size).
+  const iconSize = '0.875rem'
   const actions: MessageAction[] = [
     { label: 'Reply', onClick: () => onReply(message), icon: <Reply size={iconSize} strokeWidth={1.8} /> },
     {
@@ -330,7 +338,7 @@ function MessageRow({
     const metaCluster = (
       <span className="inline-flex items-center gap-1 shrink-0 leading-none select-none pb-[2px]">
         {edited && (
-          <span className="text-[10px] text-faint italic opacity-0 transition-opacity group-hover/msg:opacity-100">
+          <span className="text-[0.625rem] text-faint italic opacity-0 transition-opacity group-hover/msg:opacity-100">
             edited
           </span>
         )}
@@ -344,7 +352,7 @@ function MessageRow({
         )}
         {/* Time is always visible (no hover-reveal) so the log is scannable
             without hovering each row. */}
-        <span className="text-[10px] text-faint tabular-nums">
+        <span className="text-[0.625rem] text-faint tabular-nums">
           {time}
         </span>
       </span>
@@ -370,7 +378,7 @@ function MessageRow({
             : 'opacity-0 group-hover/msg:opacity-100 focus-visible:opacity-100'
         }`}
       >
-        <ChevronDown size={15} strokeWidth={1.8} />
+        <ChevronDown size="0.9375rem" strokeWidth={1.8} />
       </button>
     ) : null
 
@@ -420,7 +428,7 @@ function MessageRow({
             <div
               className={`group/msg min-w-0 flex flex-col ${
                 mine ? 'items-end' : 'items-start'
-              } max-w-[680px] -mx-1.5 px-1.5 rounded-md transition-colors duration-500 ${
+              } max-w-[42.5rem] -mx-1.5 px-1.5 rounded-md transition-colors duration-500 ${
                 highlighted ? 'bg-active/10' : 'hover:bg-white/[0.02]'
               }`}
             >
@@ -431,7 +439,7 @@ function MessageRow({
                   edge, sharing its x with the chevron gutter below it. */}
               {startNewGroup && !mine && (
                 <div className="flex items-center gap-1.5 mb-0.5 leading-none">
-                  <span className="text-[13.5px] font-semibold text-text">{authorLabel}</span>
+                  <span className="text-[0.84375rem] font-semibold text-text">{authorLabel}</span>
                 </div>
               )}
 
@@ -447,12 +455,12 @@ function MessageRow({
                     <ReplyQuote replyTo={message.replyTo} onJump={onJumpToMessage} />
                   )}
                   {pinned && (
-                    <span className="flex items-center gap-1 text-[10.5px] text-active mb-0.5 leading-none">
-                      <Pin size={10} strokeWidth={2} className="fill-current" /> Pinned
+                    <span className="flex items-center gap-1 text-[0.65625rem] text-active mb-0.5 leading-none">
+                      <Pin size="0.625rem" strokeWidth={2} className="fill-current" /> Pinned
                     </span>
                   )}
                   {forwarded && (
-                    <span className="block text-[10.5px] text-muted italic mb-0.5 leading-none">Forwarded</span>
+                    <span className="block text-[0.65625rem] text-muted italic mb-0.5 leading-none">Forwarded</span>
                   )}
 
                   {!deleted && message.attachments && message.attachments.length > 0 && (
@@ -498,7 +506,7 @@ function MessageRow({
                       <span className="min-w-0 text-[length:var(--chat-plain-font-size)] text-muted italic">
                         {mine ? 'You deleted this message' : 'This message was deleted'}
                       </span>
-                      <span className="shrink-0 text-[10px] text-faint tabular-nums leading-none select-none pb-[2px] opacity-0 transition-opacity group-hover/msg:opacity-100">
+                      <span className="shrink-0 text-[0.625rem] text-faint tabular-nums leading-none select-none pb-[2px] opacity-0 transition-opacity group-hover/msg:opacity-100">
                         {time}
                       </span>
                     </div>
@@ -521,7 +529,7 @@ function MessageRow({
                         // On hover it expands (animated) to make room for the
                         // chevron, nudging the meta over — space is only reserved
                         // for the arrow while it's actually shown.
-                        <span className="inline-flex align-text-top overflow-hidden max-w-0 ml-0 group-hover/msg:max-w-[20px] group-hover/msg:ml-1 transition-[max-width,margin] duration-200 ease-out">
+                        <span className="inline-flex align-text-top overflow-hidden max-w-0 ml-0 group-hover/msg:max-w-[1.25rem] group-hover/msg:ml-1 transition-[max-width,margin] duration-200 ease-out">
                           {actionsTrigger}
                         </span>
                       )}
@@ -534,7 +542,7 @@ function MessageRow({
                   {failed && mine && message.localId && (
                     <button
                       onClick={() => onRetry(message.localId!, message.body, message.pendingFile ?? null)}
-                      className="block text-[10.5px] text-alert hover:text-text transition-colors mt-0.5"
+                      className="block text-[0.65625rem] text-alert hover:text-text transition-colors mt-0.5"
                     >
                       Tap to retry
                     </button>
@@ -563,39 +571,47 @@ function MessageRow({
       )}
       <div
         data-message-id={message.id}
-        className={`flex ${sameAuthorAsPrev ? 'mt-0.5' : 'mt-2.5'}`}
+        className={`flex ${startNewGroup ? 'mt-3' : 'mt-0.5'}`}
       >
+        {/* Avatar gutter — incoming vehicle-group messages only (a DM's peer is
+            identified by the header, and my own side stays clean). The avatar
+            renders once per author run (day-divider aware); follow-up rows keep
+            the empty gutter so the group stays visually anchored. */}
         {showAuthorChrome && (
           <div className="w-9 mr-2.5 shrink-0">
-            {!sameAuthorAsPrev && (
+            {startNewGroup && (
               <Avatar userId={message.authorId} name={message.authorName} size={36} />
             )}
           </div>
         )}
         <div className={`flex-1 min-w-0 flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
-          {showAuthorChrome && !sameAuthorAsPrev && (
-            <div className="text-[11px] text-muted mb-1 px-1 leading-none">{message.authorName}</div>
+          {showAuthorChrome && startNewGroup && (
+            <div className="text-[0.6875rem] text-muted mb-1 px-1 leading-none">{message.authorName}</div>
           )}
-          {/* Group wrapper for hover-reveal of the actions chevron. Width
-              is capped here so the trigger hugs the bubble's edge. Right-click
-              anywhere on the bubble opens the same actions menu at the cursor. */}
+          {/* Group wrapper for hover-reveal of the actions chevron. Width is
+              capped here so the trigger hugs the bubble's edge. The chevron is
+              a flex SIBLING on the bubble's outer-flow side (right of incoming,
+              left of mine — mirrored by flex-row-reverse) so it never covers
+              text or media and reveals without any layout shift (always
+              mounted, opacity-only). Right-click anywhere on the bubble opens
+              the same actions menu at the cursor. */}
           <div
-            className={`group relative ${rowMaxW}`}
+            className={`group relative ${rowMaxW} flex items-center gap-1 ${mine ? 'flex-row-reverse' : ''}`}
             onContextMenu={(e) => {
               if (!canShowActions) return
               e.preventDefault()
               setMenu({ x: e.clientX, y: e.clientY })
             }}
           >
-            <div className={`${bubbleBase} ${bubbleSkin} ${highlightSkin}`}>
+            <div className={`min-w-0 ${bubbleBase} ${bubbleSkin} ${highlightSkin}`}>
               {pinned && (
-                <span className="flex items-center gap-1 text-[10.5px] text-active mb-1 leading-none">
-                  <Pin size={10} strokeWidth={2} className="fill-current" />
+                <span className="flex items-center gap-1 text-[0.65625rem] text-active mb-1 leading-none">
+                  <Pin size="0.625rem" strokeWidth={2} className="fill-current" />
                   Pinned
                 </span>
               )}
               {forwarded && (
-                <span className="text-[10.5px] text-muted italic mb-1 leading-none">
+                <span className="text-[0.65625rem] text-muted italic mb-1 leading-none">
                   Forwarded
                 </span>
               )}
@@ -629,26 +645,23 @@ function MessageRow({
               ) : (
                 <>
                   {message.body && (
-                    // On text-only bubbles pr-7 reserves the top-right corner for
-                    // the actions chevron so wrapping text never runs under it. On
-                    // media bubbles the chevron sits over the image (not the
-                    // caption), so the caption just gets a small inset back from
-                    // the tight media frame. Timestamp is NOT inline — it's the
-                    // footer row below.
+                    // The actions chevron lives OUTSIDE the bubble, so text
+                    // needs no reserved corner. Captions on media bubbles get a
+                    // small inset back from the tight media frame. Timestamp is
+                    // NOT inline — it's the footer row below.
                     <span
                       className={`whitespace-pre-wrap break-words font-medium tracking-normal ${
-                        hasAttachment ? 'px-1.5 pt-0.5' : canShowActions ? 'pr-7' : ''
+                        hasAttachment ? 'px-1.5 pt-0.5' : ''
                       }`}
                     >
                       {renderBody(message.body, message.mentions, currentUserId)}
                     </span>
                   )}
                   {/* Subtle footer row: the time (and `edited`) on their own line,
-                      aligned to the bubble's bottom-right corner — below the
-                      text/caption (or the media in an attachment-only bubble) and
-                      diagonally clear of the top-right chevron. */}
+                      tucked into the bubble's bottom-right corner — below the
+                      text/caption (or the media in an attachment-only bubble). */}
                   <span
-                    className={`self-end inline-flex items-center gap-1 whitespace-nowrap text-[10.5px] leading-none text-[#8F8A98] select-none mt-0.5 -mb-0.5 ${
+                    className={`self-end inline-flex items-center gap-1 whitespace-nowrap text-[0.65625rem] leading-none text-faint select-none mt-0.5 -mb-0.5 ${
                       hasAttachment ? '-mr-0.5' : '-mr-1.5'
                     }`}
                   >
@@ -668,11 +681,10 @@ function MessageRow({
               )}
             </div>
 
-            {/* Minimal hover-revealed actions trigger. On text bubbles it's a
-                bare muted chevron. On media/document bubbles it becomes a small
-                circular, translucent-dark button (like a native media control)
-                so the glyph stays legible on bright or dark images — no
-                rectangular patch or gradient edge. */}
+            {/* Minimal hover-revealed actions trigger — a bare muted chevron
+                riding the bubble's outer edge (see the wrapper comment). One
+                affordance for text AND media bubbles: it never sits over the
+                content, so no translucent patch is needed. */}
             {canShowActions && (
               <button
                 ref={triggerRef}
@@ -681,15 +693,13 @@ function MessageRow({
                 aria-label="Message actions"
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
-                className={`absolute top-1 right-1 z-10 flex items-center justify-center transition duration-200 ${
-                  hasAttachment
-                    ? `h-6 w-6 rounded-full border border-white/[0.08] backdrop-blur-sm text-white ${
-                        menuOpen ? 'bg-black/[0.55]' : 'bg-black/[0.38] hover:bg-black/[0.55]'
-                      }`
-                    : 'h-5 w-5 text-text'
-                } ${menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
+                className={`shrink-0 flex h-6 w-6 items-center justify-center rounded-full text-faint transition duration-200 hover:text-text hover:bg-white/[0.04] ${
+                  menuOpen
+                    ? 'opacity-100 text-text'
+                    : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
+                }`}
               >
-                <ChevronDown size={14} strokeWidth={1.8} />
+                <ChevronDown size="0.9375rem" strokeWidth={1.8} />
               </button>
             )}
 
@@ -705,7 +715,7 @@ function MessageRow({
           {failed && mine && message.localId && (
             <button
               onClick={() => onRetry(message.localId!, message.body, message.pendingFile ?? null)}
-              className="text-[10.5px] text-alert hover:text-text transition-colors mt-1 px-1"
+              className="text-[0.65625rem] text-alert hover:text-text transition-colors mt-1 px-1"
             >
               Tap to retry
             </button>

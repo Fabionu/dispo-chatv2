@@ -31,14 +31,14 @@ export default function ConfirmDialog({
         <>
           <button
             onClick={onCancel}
-            className="text-[12px] font-medium rounded-btn px-3 py-1.5 border border-white/[0.14] text-text hover:bg-white/[0.04] transition-colors"
+            className="text-[0.75rem] font-medium rounded-btn px-3 py-1.5 border border-white/[0.14] text-text hover:bg-white/[0.04] transition-colors"
           >
             {cancelLabel}
           </button>
           <button
             onClick={onConfirm}
             autoFocus
-            className={`text-[12px] font-semibold rounded-btn px-3 py-1.5 transition-colors ${
+            className={`text-[0.75rem] font-semibold rounded-btn px-3 py-1.5 transition-colors ${
               tone === 'alert'
                 ? 'bg-alert text-bg hover:bg-alert/90'
                 : 'bg-text text-bg hover:bg-text/90'
@@ -49,7 +49,7 @@ export default function ConfirmDialog({
         </>
       }
     >
-      <p className="text-[13px] text-muted leading-[1.55]">{message}</p>
+      <p className="text-[0.8125rem] text-muted leading-[1.55]">{message}</p>
     </Modal>
   )
 }

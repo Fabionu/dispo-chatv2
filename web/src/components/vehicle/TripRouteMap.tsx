@@ -74,7 +74,7 @@ export default function TripRouteMap({ stops, route }: Props) {
   if (points.length < 2) {
     return (
       <div className="flex-1 flex items-center justify-center bg-bg px-6 text-center">
-        <div className="text-[12.5px] text-muted leading-[1.5]">
+        <div className="text-[0.78125rem] text-muted leading-[1.5]">
           Add coordinates to at least two stops to see the trip route.
         </div>
       </div>
@@ -94,7 +94,7 @@ export default function TripRouteMap({ stops, route }: Props) {
         />
         {/* Compact route summary overlay — distance + driving time, or a quiet
             calculating state. */}
-        <div className="absolute top-2 left-2 rounded-full bg-bg/80 backdrop-blur-sm border border-white/[0.08] px-3 py-1.5 text-[11.5px] flex items-center gap-2 shadow-lg">
+        <div className="absolute top-2 left-2 rounded-full bg-bg/80 backdrop-blur-sm border border-white/[0.08] px-3 py-1.5 text-[0.71875rem] flex items-center gap-2 shadow-lg">
           {loading && !ok ? (
             <>
               <Spinner size={13} /> <span className="text-muted">Calculating route…</span>

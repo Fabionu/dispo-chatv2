@@ -8,9 +8,11 @@ import {
   markAvatarLoaded,
   preloadAvatar,
 } from '../lib/avatarCache'
+import { rem } from '../lib/density'
 
 type Props = {
-  /** Pixel diameter — match the DM Avatar so every conversation reads the same. */
+  /** Design-px diameter (rendered as rem) — match the DM Avatar so every
+   *  conversation reads the same. */
   size?: number
   /** The vehicle group's id. Needed (with `hasAvatar`) to render an uploaded
    *  image; without it the generated multi-user glyph is shown. */
@@ -54,7 +56,7 @@ export default function GroupAvatar({
     })
   }, [showImage, groupId, version])
 
-  const style = { width: size, height: size }
+  const style = { width: rem(size), height: rem(size) }
   // No-image fallback: a white multi-user glyph on the SAME neutral dark-grey
   // disc as the user Avatar (so every fallback matches the theme), but a distinct
   // icon so a group reads as a group. No warm tint; hairline neutral border keeps
@@ -64,7 +66,7 @@ export default function GroupAvatar({
       style={style}
       className={`rounded-full bg-bg border border-white/[0.08] flex items-center justify-center shrink-0 text-text ${className}`}
     >
-      <Users size={Math.max(12, Math.round(size * 0.46))} strokeWidth={1.7} />
+      <Users size={rem(Math.max(12, Math.round(size * 0.46)))} strokeWidth={1.7} />
     </span>
   )
 

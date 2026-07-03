@@ -77,27 +77,27 @@ export default function ForwardModal({ fromGroupId, message, onClose, onForwarde
     <Modal title="Forward message" subtitle="Choose a conversation to send this to." onClose={onClose}>
       <div className="space-y-3">
         {previewText && (
-          <div className="pl-2 border-l-2 border-active/60 bg-white/[0.025] rounded-[3px] px-2 py-1.5">
-            <div className="text-[12px] text-muted truncate italic">{previewText}</div>
+          <div className="pl-2 border-l-2 border-active/60 bg-white/[0.025] rounded-[0.1875rem] px-2 py-1.5">
+            <div className="text-[0.75rem] text-muted truncate italic">{previewText}</div>
           </div>
         )}
 
         <label className="flex items-center gap-2 h-8 px-2.5 rounded-chip border border-white/[0.06] bg-white/[0.02] focus-within:border-white/[0.16] transition-colors cursor-text">
-          <Search size={12} strokeWidth={1.6} className="text-faint shrink-0" />
+          <Search size="0.75rem" strokeWidth={1.6} className="text-faint shrink-0" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             autoFocus
             placeholder="Filter conversations…"
-            className="bg-transparent text-[12.5px] flex-1 outline-none placeholder:text-faint min-w-0"
+            className="bg-transparent text-[0.78125rem] flex-1 outline-none placeholder:text-faint min-w-0"
           />
         </label>
 
         <div className="max-h-72 overflow-y-auto -mx-1">
           {loading ? (
-            <div className="px-2 py-3 text-[12px] text-faint">Loading…</div>
+            <div className="px-2 py-3 text-[0.75rem] text-faint">Loading…</div>
           ) : filtered.length === 0 ? (
-            <div className="px-2 py-3 text-[12px] text-faint">No conversations found.</div>
+            <div className="px-2 py-3 text-[0.75rem] text-faint">No conversations found.</div>
           ) : (
             filtered.map((g) => (
               <button
@@ -119,20 +119,20 @@ export default function ForwardModal({ fromGroupId, message, onClose, onForwarde
                   <GroupAvatar groupId={g.id} hasAvatar={Boolean(g.hasAvatar)} size={32} />
                 )}
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[12.5px] truncate">{groupLabel(g)}</span>
-                  <span className="block text-[11px] text-faint truncate">
+                  <span className="block text-[0.78125rem] truncate">{groupLabel(g)}</span>
+                  <span className="block text-[0.6875rem] text-faint truncate">
                     {g.type === 'vehicle' ? 'Vehicle group' : 'Direct message'}
                   </span>
                 </span>
                 {busyId === g.id && (
-                  <span className="text-[11px] text-muted shrink-0">Sending…</span>
+                  <span className="text-[0.6875rem] text-muted shrink-0">Sending…</span>
                 )}
               </button>
             ))
           )}
         </div>
 
-        {error && <div className="text-[12px] text-alert">{error}</div>}
+        {error && <div className="text-[0.75rem] text-alert">{error}</div>}
       </div>
     </Modal>
   )

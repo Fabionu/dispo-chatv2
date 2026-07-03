@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { decode } from '@here/flexpolyline'
 import { loadHere } from '../../lib/here/loadHere'
-import { pathMidpoint } from '../../lib/here/geo'
+import { pathMidpoint, haversineMeters, nearestPointOnPath } from '../../lib/here/geo'
 import type { LatLng, RouteMarker, RouteMarkerKind, ScreenGeoCandidate } from '../../lib/here/types'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -68,6 +68,28 @@ const DEFAULT_ZOOM = 5
 const ROUTE_COLOR = '#c89572'
 const ORIGIN_COLOR = '#7d8a78'
 const DEST_COLOR = '#d97757'
+
+// How close (in screen pixels) the cursor must be to the drawn route line for
+// the hover-distance readout to appear. Converted to metres at the current
+// zoom/latitude at hover time so the feel is consistent when zoomed in or out.
+const HOVER_THRESHOLD_PX = 12
+
+// Google-Maps-style distance for the hover readout: metres under ~1 km (rounded
+// to the nearest 10 m, e.g. "850 m"), otherwise kilometres — one decimal only
+// when it adds information ("12.4 km", but "3 km"/"348 km" without a trailing .0).
+function formatHoverDistance(meters: number): string {
+  if (meters < 1000) {
+    const m = Math.round(meters / 10) * 10
+    if (m < 1000) return `${m} m`
+    return '1 km' // rounded up to a full kilometre
+  }
+  const km = meters / 1000
+  if (km < 100) {
+    const r = Math.round(km * 10) / 10
+    return Number.isInteger(r) ? `${r} km` : `${r.toFixed(1)} km`
+  }
+  return `${Math.round(km)} km`
+}
 
 // Opt-in drag/snap tracing: run `localStorage.routeSnapDebug = '1'` in the
 // console to log raw release pixels, the converted geo, and (in RoutePlanner)
@@ -221,6 +243,15 @@ export default function HereMap({
   // recalculates. This keeps the user's zoom/pan stable while adding stops, which
   // otherwise reframed (and felt like a random zoom-in) on every change.
   const lastFitSigRef = useRef<string>('')
+  // Decoded route path (whole route, travel order) + per-vertex cumulative
+  // distances (metres from the start), refreshed by draw(). Read by the
+  // pointermove hover readout; null when there's no route so the readout stays
+  // hidden. Kept in a ref so hovering never triggers a React re-render.
+  const hoverGeomRef = useRef<{ path: LatLng[]; cum: number[] } | null>(null)
+  // True while a marker/route/pan drag is in progress, and while the view is
+  // animating — both suppress the hover readout so it doesn't flicker.
+  const activeDragRef = useRef(false)
+  const viewChangingRef = useRef(false)
   // Flips true once the map exists; drives the effects so the first draw/toggle
   // always runs with the latest props (not whatever they were at mount).
   const [ready, setReady] = useState(false)
@@ -269,9 +300,81 @@ export default function HereMap({
         resizeObserver = new ResizeObserver(() => map.getViewPort().resize())
         resizeObserver.observe(containerRef.current)
 
+        const container = containerRef.current
+
+        // ── Route hover distance readout ──────────────────────────────────
+        // A compact floating pill that appears when the cursor is near the
+        // drawn route line, showing how far along the route (from the start)
+        // the hovered point is. All imperative: a plain DOM element positioned
+        // from a single rAF-throttled pointermove, reading the cached route
+        // geometry in hoverGeomRef. No React state and no map redraw, so moving
+        // the mouse never re-renders the component or the map, and nothing calls
+        // the routing API.
+        const hoverLabel = document.createElement('div')
+        hoverLabel.className = 'route-hover-label'
+        hoverLabel.style.display = 'none'
+        container.appendChild(hoverLabel)
+
+        const hideHover = () => {
+          if (hoverLabel.style.display !== 'none') hoverLabel.style.display = 'none'
+          container.classList.remove('route-hover')
+        }
+        const showHover = (x: number, y: number, meters: number) => {
+          hoverLabel.textContent = formatHoverDistance(meters)
+          hoverLabel.style.display = 'block'
+          container.classList.add('route-hover')
+          // Flip the pill below the point near the top edge so it never clips;
+          // the CSS tail points back at the line either way.
+          hoverLabel.classList.toggle('route-hover-label--below', y < 48)
+          // Keep the centre-anchored pill within the map horizontally.
+          const half = hoverLabel.offsetWidth / 2
+          const w = container.clientWidth
+          const cx = Math.min(Math.max(x, half + 4), Math.max(half + 4, w - half - 4))
+          hoverLabel.style.left = `${cx}px`
+          hoverLabel.style.top = `${y}px`
+        }
+
+        // rAF-coalesced: the move handler only stashes the latest cursor pixel;
+        // the nearest-point maths run at most once per frame.
+        let hoverRaf = 0
+        let hoverPx: { x: number; y: number } | null = null
+        const processHover = () => {
+          hoverRaf = 0
+          const p = hoverPx
+          const geom = hoverGeomRef.current
+          if (!p || !geom || activeDragRef.current || viewChangingRef.current) {
+            hideHover()
+            return
+          }
+          const g0 = map.screenToGeo(p.x, p.y)
+          if (!g0) {
+            hideHover()
+            return
+          }
+          const cursor = { lat: g0.lat, lng: g0.lng }
+          // Convert the fixed pixel threshold into ground metres at this zoom by
+          // measuring how far HOVER_THRESHOLD_PX spans, so the hit-test feels the
+          // same when zoomed in or out.
+          const g1 = map.screenToGeo(p.x + HOVER_THRESHOLD_PX, p.y)
+          const threshMeters = g1 ? haversineMeters(cursor, { lat: g1.lat, lng: g1.lng }) : 0
+          const near = nearestPointOnPath(cursor, geom.path, geom.cum)
+          if (near && threshMeters > 0 && near.meters <= threshMeters) showHover(p.x, p.y, near.along)
+          else hideHover()
+        }
+        const onPointerMove = (e: PointerEvent) => {
+          const rect = container.getBoundingClientRect()
+          hoverPx = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+          if (!hoverRaf) hoverRaf = requestAnimationFrame(processHover)
+        }
+        const onPointerLeave = () => {
+          hoverPx = null
+          hideHover()
+        }
+        container.addEventListener('pointermove', onPointerMove)
+        container.addEventListener('pointerleave', onPointerLeave)
+
         // Right-click → report the geo coordinate under the cursor + the
         // cursor's position within the container (for menu placement).
-        const container = containerRef.current
         const onContextMenu = (e: MouseEvent) => {
           if (!onContextMenuRef.current) return
           e.preventDefault()
@@ -294,9 +397,18 @@ export default function HereMap({
         }
         container.addEventListener('contextmenu', onContextMenu)
 
-        // Pan/zoom dismisses any open menu.
-        const onViewChange = () => onViewChangeRef.current?.()
+        // Pan/zoom dismisses any open menu and hides the hover readout; the flag
+        // keeps it suppressed for the duration of the gesture.
+        const onViewChange = () => {
+          viewChangingRef.current = true
+          hideHover()
+          onViewChangeRef.current?.()
+        }
+        const onViewChangeEnd = () => {
+          viewChangingRef.current = false
+        }
         map.addEventListener('mapviewchangestart', onViewChange)
+        map.addEventListener('mapviewchangeend', onViewChangeEnd)
 
         // ── Marker dragging ───────────────────────────────────────────────
         // Markers are made draggable + volatile in draw() (volatility is what
@@ -308,6 +420,10 @@ export default function HereMap({
           const t = ev.target
           const pointer = ev.currentPointer
           didDragRef.current = false
+          // Any drag (marker, route line, or a plain pan) suppresses the hover
+          // readout until dragend.
+          activeDragRef.current = true
+          hideHover()
           if (t instanceof H.map.Marker && pointer) {
             const screen = map.geoToScreen(t.getGeometry())
             t.__dragOffset = new H.math.Point(pointer.viewportX - screen.x, pointer.viewportY - screen.y)
@@ -427,6 +543,7 @@ export default function HereMap({
               onRouteDragEndRef.current?.(section, candidates, zoom)
             }
           }
+          activeDragRef.current = false
         }
         map.addEventListener('dragstart', onDragStart)
         map.addEventListener('drag', onDrag)
@@ -462,7 +579,12 @@ export default function HereMap({
 
         detachListeners = () => {
           container.removeEventListener('contextmenu', onContextMenu)
+          container.removeEventListener('pointermove', onPointerMove)
+          container.removeEventListener('pointerleave', onPointerLeave)
+          if (hoverRaf) cancelAnimationFrame(hoverRaf)
+          hoverLabel.remove()
           map.removeEventListener('mapviewchangestart', onViewChange)
+          map.removeEventListener('mapviewchangeend', onViewChangeEnd)
           map.removeEventListener('pointerdown', onPointerDown)
           map.removeEventListener('dragstart', onDragStart)
           map.removeEventListener('drag', onDrag)
@@ -611,12 +733,24 @@ export default function HereMap({
         // cursor styling, keeping the normal arrow cursor.)
         poly.setVolatility(true)
         poly.setData({ section: sectionIndex })
-        // No cursor change on hover — the map keeps the default arrow cursor
-        // everywhere (enforced by the .here-map-surface CSS), so dragging the
-        // route line never flips to a hand/grab cursor.
         group.addObject(poly)
       }
     })
+
+    // Cache the decoded route path + per-vertex cumulative distances (metres from
+    // the start) for the hover-distance readout (see the pointermove handler).
+    // Rebuilt on every redraw so it always matches the drawn line; null when
+    // there's no usable route, which keeps the readout hidden.
+    if (routePath.length >= 2) {
+      const cum = new Array<number>(routePath.length)
+      cum[0] = 0
+      for (let i = 1; i < routePath.length; i++) {
+        cum[i] = cum[i - 1] + haversineMeters(routePath[i - 1], routePath[i])
+      }
+      hoverGeomRef.current = { path: routePath, cum }
+    } else {
+      hoverGeomRef.current = null
+    }
 
     // Ordered waypoint markers, each anchored precisely on its coordinate.
     // Draggable so the user can refine a point directly on the map; the id is

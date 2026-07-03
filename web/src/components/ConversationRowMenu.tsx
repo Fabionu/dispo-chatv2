@@ -57,7 +57,12 @@ const ConversationRowMenu = forwardRef<
 
   // The menu sizes to its content (w-max); this is only the upper bound used for
   // off-screen clamping so a cursor-opened menu never overflows the right edge.
-  const MENU_MAX = 220
+  // Design px scaled by the root font-size so it tracks the global rem scale
+  // (the labels inside grow on the comfortable tier — see index.css).
+  const rootFs = typeof document !== 'undefined'
+    ? parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+    : 16
+  const MENU_MAX = Math.round(220 * (rootFs / 16))
 
   // Open at a cursor position (right-click on the row).
   useImperativeHandle(
@@ -157,7 +162,7 @@ const ConversationRowMenu = forwardRef<
           open ? 'bg-white/[0.08] text-text' : 'text-muted hover:text-text hover:bg-white/[0.06]'
         }`}
       >
-        <MoreHorizontal size={17} strokeWidth={1.8} />
+        <MoreHorizontal size="1.0625rem" strokeWidth={1.8} />
       </button>
 
       {open &&
@@ -191,7 +196,7 @@ const ConversationRowMenu = forwardRef<
                   e.stopPropagation()
                   select(a)
                 }}
-                className={`w-full flex items-center gap-2.5 px-2.5 py-2 text-[12.5px] text-left whitespace-nowrap transition-colors ${
+                className={`w-full flex items-center gap-2.5 px-2.5 py-2 text-[0.78125rem] text-left whitespace-nowrap transition-colors ${
                   danger ? 'text-alert hover:bg-alert/10' : 'text-text hover:bg-white/[0.04]'
                 }`}
               >

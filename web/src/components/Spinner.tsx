@@ -1,3 +1,5 @@
+import { rem } from '../lib/density'
+
 type SpinnerVariant = 'sm' | 'md' | 'lg'
 
 // Preset diameters (px). sm = inline/contextual (cards, pickers), md = sidebar
@@ -36,10 +38,10 @@ export default function Spinner({ variant = 'sm', size, label, className = '' }:
       className={`flex flex-col items-center justify-center gap-2.5 ${className}`}
     >
       <div
-        style={{ height: px, width: px, borderWidth: border }}
+        style={{ height: rem(px), width: rem(px), borderWidth: rem(border) }}
         className="rounded-full border-white/[0.12] border-t-active animate-spin"
       />
-      {label && <span className="text-[11px] text-faint">{label}</span>}
+      {label && <span className="text-[0.6875rem] text-faint">{label}</span>}
     </div>
   )
 }

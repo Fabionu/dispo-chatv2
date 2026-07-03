@@ -17,7 +17,7 @@ export default function TypingIndicator({ users }: { users: TypingUser[] }) {
 
   return (
     <div
-      className="flex items-center gap-1.5 text-[11px] text-muted h-4"
+      className="flex items-center gap-1.5 text-[0.6875rem] text-muted h-4"
       aria-live="polite"
     >
       <span className="flex items-center gap-0.5" aria-hidden="true">

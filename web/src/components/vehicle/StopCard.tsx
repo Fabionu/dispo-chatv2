@@ -34,7 +34,7 @@ export default function StopCard({
   return (
     <div className="group rounded-lg border border-white/[0.08] bg-white/[0.02] px-2.5 py-2">
       <div className="flex items-center gap-2">
-        <span className="text-[12.5px] font-medium">{labelOf(STOP_TYPES, stop.type)}</span>
+        <span className="text-[0.78125rem] font-medium">{labelOf(STOP_TYPES, stop.type)}</span>
         <StatusChip tone={stopStatusTone(stop.status)} label={labelOf(STOP_STATUSES, stop.status)} />
         <div className="flex-1" />
         {canManage && (
@@ -45,7 +45,7 @@ export default function StopCard({
               title="Edit stop"
               className="h-6 w-6 flex items-center justify-center rounded-chip text-faint hover:text-text hover:bg-white/[0.04] transition-colors"
             >
-              <Pencil size={12} strokeWidth={1.8} />
+              <Pencil size="0.75rem" strokeWidth={1.8} />
             </button>
             <button
               onClick={onRemove}
@@ -53,7 +53,7 @@ export default function StopCard({
               title="Remove stop"
               className="h-6 w-6 flex items-center justify-center rounded-chip text-faint hover:text-alert hover:bg-white/[0.04] transition-colors"
             >
-              <Trash2 size={12} strokeWidth={1.8} />
+              <Trash2 size="0.75rem" strokeWidth={1.8} />
             </button>
           </div>
         )}
@@ -61,17 +61,17 @@ export default function StopCard({
       {lines.length > 0 && (
         <div className="mt-1 space-y-0.5">
           {lines.map((l, i) => (
-            <div key={i} className="text-[12px] text-text break-words">
+            <div key={i} className="text-[0.75rem] text-text break-words">
               {l}
             </div>
           ))}
         </div>
       )}
       {stop.coordinates && (
-        <div className="text-[11px] text-muted mt-0.5 break-words">{stop.coordinates}</div>
+        <div className="text-[0.6875rem] text-muted mt-0.5 break-words">{stop.coordinates}</div>
       )}
-      {stop.plannedAt && <div className="text-[11px] text-muted mt-0.5">{stop.plannedAt}</div>}
-      {stop.notes && <div className="text-[11px] text-faint mt-0.5 break-words">{stop.notes}</div>}
+      {stop.plannedAt && <div className="text-[0.6875rem] text-muted mt-0.5">{stop.plannedAt}</div>}
+      {stop.notes && <div className="text-[0.6875rem] text-faint mt-0.5 break-words">{stop.notes}</div>}
     </div>
   )
 }

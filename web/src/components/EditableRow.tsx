@@ -101,7 +101,7 @@ export default function EditableRow({
   if (editing) {
     return (
       <div className="py-2 border-b border-white/[0.04] last:border-0">
-        <label className="block text-[11px] text-muted mb-1">
+        <label className="block text-[0.6875rem] text-muted mb-1">
           {label}
           {required && <span className="text-faint"> *</span>}
         </label>
@@ -118,7 +118,7 @@ export default function EditableRow({
               onKeyDown={onKeyDown}
               rows={2}
               placeholder={placeholder}
-              className="flex-1 min-w-0 resize-none bg-transparent pl-4 pr-1 py-2 text-[12.5px] text-text placeholder:text-faint outline-none"
+              className="flex-1 min-w-0 resize-none bg-transparent pl-4 pr-1 py-2 text-[0.78125rem] text-text placeholder:text-faint outline-none"
             />
           ) : (
             <input
@@ -127,7 +127,7 @@ export default function EditableRow({
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={onKeyDown}
               placeholder={placeholder}
-              className="flex-1 min-w-0 bg-transparent pl-4 pr-1 py-2 text-[12.5px] text-text placeholder:text-faint outline-none"
+              className="flex-1 min-w-0 bg-transparent pl-4 pr-1 py-2 text-[0.78125rem] text-text placeholder:text-faint outline-none"
             />
           )}
           <button
@@ -137,7 +137,7 @@ export default function EditableRow({
             title="Save"
             className="h-8 w-8 shrink-0 flex items-center justify-center rounded-full bg-text text-bg hover:bg-text/90 disabled:opacity-50 transition-colors"
           >
-            <Check size={14} strokeWidth={2.2} />
+            <Check size="0.875rem" strokeWidth={2.2} />
           </button>
           <button
             onClick={cancel}
@@ -146,10 +146,10 @@ export default function EditableRow({
             title="Cancel"
             className="h-8 w-8 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] disabled:opacity-50 transition-colors"
           >
-            <X size={14} strokeWidth={2} />
+            <X size="0.875rem" strokeWidth={2} />
           </button>
         </div>
-        {error && <div className="text-[11px] text-alert mt-1">{error}</div>}
+        {error && <div className="text-[0.6875rem] text-alert mt-1">{error}</div>}
       </div>
     )
   }
@@ -157,11 +157,11 @@ export default function EditableRow({
   return (
     <div className="group py-2 border-b border-white/[0.04] last:border-0">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[11px] text-muted">{label}</span>
-        {hint && <span className="text-[10px] text-faint shrink-0">{hint}</span>}
+        <span className="text-[0.6875rem] text-muted">{label}</span>
+        {hint && <span className="text-[0.625rem] text-faint shrink-0">{hint}</span>}
       </div>
       <div className="flex items-center gap-2 mt-0.5">
-        <div className={`flex-1 text-[12.5px] break-words ${has ? 'text-text' : 'text-faint'}`}>
+        <div className={`flex-1 text-[0.78125rem] break-words ${has ? 'text-text' : 'text-faint'}`}>
           {has ? current : 'Not set'}
         </div>
         {canEdit && (
@@ -171,7 +171,7 @@ export default function EditableRow({
             title={`Edit ${label}`}
             className="shrink-0 h-6 w-6 flex items-center justify-center rounded-chip text-faint opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-text hover:bg-white/[0.04] transition-all"
           >
-            <Pencil size={12} strokeWidth={1.8} />
+            <Pencil size="0.75rem" strokeWidth={1.8} />
           </button>
         )}
       </div>

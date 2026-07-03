@@ -141,12 +141,12 @@ export default function AvatarPhotoEditor({
                 menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
               }`}
             >
-              <MoreVertical size={15} strokeWidth={1.9} />
+              <MoreVertical size="0.9375rem" strokeWidth={1.9} />
             </button>
             {menuOpen && (
               <div
                 role="menu"
-                className="absolute right-0 top-[calc(100%+4px)] z-20 min-w-[150px] rounded-card border border-white/[0.1] bg-surface overflow-hidden py-1 shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
+                className="absolute right-0 top-[calc(100%+4px)] z-20 min-w-[9.375rem] rounded-card border border-white/[0.1] bg-surface overflow-hidden py-1 shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
               >
                 <MenuItem
                   onClick={() => {
@@ -154,7 +154,7 @@ export default function AvatarPhotoEditor({
                     openPicker()
                   }}
                 >
-                  <Upload size={13} strokeWidth={1.8} />
+                  <Upload size="0.8125rem" strokeWidth={1.8} />
                   Change
                 </MenuItem>
                 <MenuItem
@@ -165,7 +165,7 @@ export default function AvatarPhotoEditor({
                     onRemove()
                   }}
                 >
-                  <Trash2 size={13} strokeWidth={1.8} />
+                  <Trash2 size="0.8125rem" strokeWidth={1.8} />
                   Remove
                 </MenuItem>
               </div>
@@ -202,7 +202,7 @@ function MenuItem({
       role="menuitem"
       disabled={disabled}
       onClick={onClick}
-      className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-[12px] text-left whitespace-nowrap transition-colors disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent ${
+      className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-[0.75rem] text-left whitespace-nowrap transition-colors disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent ${
         tone === 'danger' ? 'text-alert hover:bg-alert/10' : 'text-text hover:bg-white/[0.04]'
       }`}
     >

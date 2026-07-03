@@ -26,7 +26,7 @@ function Tooltip({ label, side = 'bottom' }: { label: string; side?: TooltipSide
   return (
     <span
       role="tooltip"
-      className={`pointer-events-none absolute left-1/2 -translate-x-1/2 ${pos} z-10 whitespace-nowrap rounded-chip border border-white/[0.10] bg-surface px-2 py-1 text-[11px] text-text opacity-0 transition-opacity duration-100 group-hover:opacity-100`}
+      className={`pointer-events-none absolute left-1/2 -translate-x-1/2 ${pos} z-10 whitespace-nowrap rounded-chip border border-white/[0.10] bg-surface px-2 py-1 text-[0.6875rem] text-text opacity-0 transition-opacity duration-100 group-hover:opacity-100`}
       style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.55)' }}
     >
       {label}

@@ -31,7 +31,7 @@ export default function SystemMessageRow({
         <DayDivider iso={message.createdAt} conversationStart={conversationStart} />
       )}
       <div className="flex justify-center my-1.5">
-        <span className="text-[11px] text-faint text-center px-2 leading-[1.5]">
+        <span className="text-[0.6875rem] text-faint text-center px-2 leading-[1.5]">
           {renderActivity(message, onJumpToMessage)}
         </span>
       </div>

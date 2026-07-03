@@ -44,8 +44,8 @@ export default function PinnedBar({ messages, onJump, onUnpin }: Props) {
             {/* Label — the only accented part. Fixed width, never shrinks, and
                 sized to the row height so it centres against the first pin. */}
             <div className="flex h-7 items-center gap-1.5 text-active shrink-0">
-              <Pin size={13} strokeWidth={2} className="fill-current" />
-              <span className="text-[12px] font-semibold leading-none tracking-[0.01em]">
+              <Pin size="0.8125rem" strokeWidth={2} className="fill-current" />
+              <span className="text-[0.75rem] font-semibold leading-none tracking-[0.01em]">
                 Pinned{multiple ? ` · ${pins.length}` : ''}
               </span>
             </div>
@@ -60,13 +60,13 @@ export default function PinnedBar({ messages, onJump, onUnpin }: Props) {
                     type="button"
                     onClick={() => onJump(m.id)}
                     title="Jump to message"
-                    className="min-w-0 flex-1 flex h-7 items-center rounded-[4px] -ml-1.5 px-1.5 hover:bg-white/[0.05] transition-colors"
+                    className="min-w-0 flex-1 flex h-7 items-center rounded-[0.25rem] -ml-1.5 px-1.5 hover:bg-white/[0.05] transition-colors"
                   >
-                    <span className="text-[13px] font-medium text-text/90 shrink-0 leading-5">
+                    <span className="text-[0.8125rem] font-medium text-text/90 shrink-0 leading-5">
                       {m.authorName}
                     </span>
                     <span className="text-faint mx-1.5 shrink-0 leading-5">—</span>
-                    <span className="text-[13px] text-muted truncate min-w-0 leading-5">
+                    <span className="text-[0.8125rem] text-muted truncate min-w-0 leading-5">
                       {snippetFor(m)}
                     </span>
                   </button>
@@ -77,7 +77,7 @@ export default function PinnedBar({ messages, onJump, onUnpin }: Props) {
                     title="Unpin"
                     className="h-6 w-6 inline-flex items-center justify-center rounded text-faint hover:text-text hover:bg-white/[0.06] transition-colors shrink-0 opacity-0 group-hover/pin:opacity-100 focus:opacity-100"
                   >
-                    <X size={13} strokeWidth={2} />
+                    <X size="0.8125rem" strokeWidth={2} />
                   </button>
                 </div>
               ))}
@@ -94,7 +94,7 @@ export default function PinnedBar({ messages, onJump, onUnpin }: Props) {
                 className="h-7 w-7 inline-flex items-center justify-center rounded text-muted hover:text-text hover:bg-white/[0.06] transition-colors shrink-0"
               >
                 <ChevronDown
-                  size={15}
+                  size="0.9375rem"
                   strokeWidth={1.8}
                   className={`transition-transform ${expanded ? 'rotate-180' : ''}`}
                 />

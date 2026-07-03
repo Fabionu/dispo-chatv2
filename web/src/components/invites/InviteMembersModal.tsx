@@ -157,13 +157,13 @@ export default function InviteMembersModal({
     >
       <div className="space-y-3">
         <label className="flex items-center gap-2 h-8 px-2.5 rounded-chip border border-white/[0.06] bg-white/[0.02] focus-within:border-white/[0.16] transition-colors cursor-text">
-          <Search size={12} strokeWidth={1.6} className="text-faint shrink-0" />
+          <Search size="0.75rem" strokeWidth={1.6} className="text-faint shrink-0" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             autoFocus
             placeholder="Search colleagues or connections…"
-            className="bg-transparent text-[12.5px] flex-1 outline-none placeholder:text-faint min-w-0"
+            className="bg-transparent text-[0.78125rem] flex-1 outline-none placeholder:text-faint min-w-0"
           />
         </label>
 
@@ -173,7 +173,7 @@ export default function InviteMembersModal({
               <Spinner size={18} />
             </div>
           ) : filtered.length === 0 ? (
-            <div className="px-2 py-3 text-[12px] text-faint">
+            <div className="px-2 py-3 text-[0.75rem] text-faint">
               {people.length === 0
                 ? 'No colleagues or connections to invite yet.'
                 : 'No people found.'}
@@ -193,7 +193,7 @@ export default function InviteMembersModal({
           )}
         </div>
 
-        {error && <div className="text-[12px] text-alert">{error}</div>}
+        {error && <div className="text-[0.75rem] text-alert">{error}</div>}
       </div>
     </Modal>
   )
@@ -220,25 +220,25 @@ function ResultRow({
     <div className="flex items-center gap-2.5 px-2 py-2 rounded-chip hover:bg-white/[0.02] transition-colors">
       <Avatar userId={person.id} name={person.displayName} size={28} />
       <div className="min-w-0 flex-1">
-        <div className="text-[12.5px] truncate">{person.displayName}</div>
-        <div className="text-[11px] text-faint truncate">{detail}</div>
+        <div className="text-[0.78125rem] truncate">{person.displayName}</div>
+        <div className="text-[0.6875rem] text-faint truncate">{detail}</div>
       </div>
 
       {person.external && (
-        <span className="text-[10px] text-faint border border-white/[0.08] rounded-chip px-1.5 py-0.5 shrink-0">
+        <span className="text-[0.625rem] text-faint border border-white/[0.08] rounded-chip px-1.5 py-0.5 shrink-0">
           Connection
         </span>
       )}
 
       {isMember ? (
-        <span className="text-[11px] text-muted px-2 shrink-0">Member</span>
+        <span className="text-[0.6875rem] text-muted px-2 shrink-0">Member</span>
       ) : isPending ? (
-        <span className="text-[11px] text-muted px-2 shrink-0">Invited</span>
+        <span className="text-[0.6875rem] text-muted px-2 shrink-0">Invited</span>
       ) : (
         <button
           onClick={onInvite}
           disabled={disabled || busy}
-          className="shrink-0 text-[11.5px] font-semibold rounded-chip px-2.5 py-1 bg-text text-bg hover:bg-text/90 transition-colors disabled:opacity-50"
+          className="shrink-0 text-[0.71875rem] font-semibold rounded-chip px-2.5 py-1 bg-text text-bg hover:bg-text/90 transition-colors disabled:opacity-50"
         >
           {busy ? 'Inviting…' : 'Invite'}
         </button>

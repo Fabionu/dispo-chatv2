@@ -824,14 +824,14 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           list state (search, groups, DMs, requests, panels) is preserved and
           returns intact on expand. */}
       {sidebarCollapsed ? (
-        <aside className="w-14 shrink-0 bg-rail rounded-[11px] overflow-hidden flex flex-col items-center py-3 gap-1.5">
+        <aside className="w-14 shrink-0 bg-rail rounded-[0.6875rem] overflow-hidden flex flex-col items-center py-3 gap-1.5">
           <button
             onClick={toggleSidebar}
             title="Expand sidebar"
             aria-label="Expand sidebar"
             className="h-9 w-9 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
           >
-            <PanelLeftOpen size={19} strokeWidth={1.8} />
+            <PanelLeftOpen size="1.1875rem" strokeWidth={1.8} />
           </button>
           <button
             onClick={() => setSelection({ kind: 'inbox' })}
@@ -865,7 +865,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           header/list to the rounded corners; separation from the darker chat
           background comes from the panel's own `rail` tone (the same surface as
           the Group Info panel), not a border. */
-      <aside className="w-[var(--sidebar-width)] shrink-0 bg-rail rounded-[11px] overflow-hidden flex flex-col">
+      <aside className="w-[var(--sidebar-width)] shrink-0 bg-rail rounded-[0.6875rem] overflow-hidden flex flex-col">
         {profilePanelOpen ? (
           <ProfileSidebarPanel
             initialProfile={cachedProfile}
@@ -929,7 +929,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             aria-label="Collapse sidebar"
             className="self-center mr-1.5 h-9 w-9 flex items-center justify-center rounded-full text-muted hover:text-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 shrink-0"
           >
-            <PanelLeftClose size={19} strokeWidth={1.8} />
+            <PanelLeftClose size="1.1875rem" strokeWidth={1.8} />
           </button>
         </div>
 
@@ -937,9 +937,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         <div className="px-3 pt-3 pb-2 flex items-center gap-1.5">
           <label
             htmlFor="rail-search"
-            className="flex-1 h-[var(--sidebar-search-height)] flex items-center gap-2 px-3 rounded-[11px] border border-white/[0.06] bg-white/[0.02] focus-within:border-white/[0.16] hover:border-white/[0.10] transition-colors cursor-text"
+            className="flex-1 h-[var(--sidebar-search-height)] flex items-center gap-2 px-3 rounded-[0.6875rem] border border-white/[0.06] bg-white/[0.02] focus-within:border-white/[0.16] hover:border-white/[0.10] transition-colors cursor-text"
           >
-            <Search size={14} strokeWidth={1.6} className="text-faint shrink-0" />
+            <Search size="0.875rem" strokeWidth={1.6} className="text-faint shrink-0" />
             <input
               id="rail-search"
               value={query}
@@ -957,7 +957,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 aria-label="Clear search"
                 className="text-faint hover:text-text shrink-0 transition-colors"
               >
-                <X size={14} strokeWidth={1.8} />
+                <X size="0.875rem" strokeWidth={1.8} />
               </button>
             )}
           </label>
@@ -974,7 +974,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                   : 'text-muted hover:text-text hover:bg-white/[0.05]'
               }`}
             >
-              <MoreVertical size={19} strokeWidth={2} />
+              <MoreVertical size="1.1875rem" strokeWidth={2} />
             </button>
 
             {newMenuOpen && (
@@ -983,7 +983,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 // Hug the widest label exactly. Inline width:max-content (rather
                 // than a utility class) is immune to purge/override and to the
                 // abs-positioning shrink-to-fit of the narrow button wrapper.
-                style={{ width: 'max-content', maxWidth: 220 }}
+                style={{ width: 'max-content', maxWidth: '13.75rem' }}
                 className="absolute right-0 top-[calc(100%+6px)] rounded-card border border-white/[0.08] bg-surface overflow-hidden z-20 py-1"
               >
                 <CreateMenuItem label="Vehicle chat" onClick={() => startCreate('vehicle')} />
@@ -1101,9 +1101,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         {/* User menu */}
         <div className="relative border-t border-white/[0.05]" ref={userMenuRef}>
           {userMenuOpen && (
-            <div className="absolute bottom-full left-2 w-[240px] max-w-[calc(100%-1rem)] mb-2 rounded-card border border-white/[0.08] bg-surface overflow-hidden">
+            <div className="absolute bottom-full left-2 w-[15rem] max-w-[calc(100%-1rem)] mb-2 rounded-card border border-white/[0.08] bg-surface overflow-hidden">
               <MenuItem
-                icon={<CircleUser size={14} strokeWidth={1.6} />}
+                icon={<CircleUser size="0.875rem" strokeWidth={1.6} />}
                 onClick={() => {
                   setUserMenuOpen(false)
                   setProfilePanelOpen(true)
@@ -1112,7 +1112,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 My profile
               </MenuItem>
               <MenuItem
-                icon={<Building2 size={14} strokeWidth={1.6} />}
+                icon={<Building2 size="0.875rem" strokeWidth={1.6} />}
                 onClick={() => {
                   setUserMenuOpen(false)
                   setCompanyPanelOpen(true)
@@ -1121,7 +1121,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 Company profile
               </MenuItem>
               <MenuItem
-                icon={<Settings size={14} strokeWidth={1.6} />}
+                icon={<Settings size="0.875rem" strokeWidth={1.6} />}
                 onClick={() => {
                   setUserMenuOpen(false)
                   setSettingsPanelOpen(true)
@@ -1130,7 +1130,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 Workspace settings
               </MenuItem>
               <MenuItem
-                icon={<LogOut size={14} strokeWidth={1.6} />}
+                icon={<LogOut size="0.875rem" strokeWidth={1.6} />}
                 tone="danger"
                 onClick={() => {
                   setUserMenuOpen(false)
@@ -1177,7 +1177,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               </div>
             </div>
             <ChevronDown
-              size={14}
+              size="0.875rem"
               strokeWidth={1.6}
               className={`text-muted shrink-0 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`}
             />
@@ -1221,12 +1221,12 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               // the sender, or accepted/declined on another device). Show an
               // explicit state instead of silently dropping to the Inbox.
               <div className="flex-1 flex items-center justify-center px-6">
-                <div className="text-center max-w-[320px]">
-                  <p className="text-[13px] text-muted">This invitation is no longer pending.</p>
+                <div className="text-center max-w-[20rem]">
+                  <p className="text-[0.8125rem] text-muted">This invitation is no longer pending.</p>
                   <button
                     type="button"
                     onClick={() => setSelection(null)}
-                    className="mt-3 text-[12.5px] text-text font-semibold hover:underline underline-offset-4"
+                    className="mt-3 text-[0.78125rem] text-text font-semibold hover:underline underline-offset-4"
                   >
                     Back to inbox
                   </button>
@@ -1264,7 +1264,8 @@ function relTime(iso: string | null): string {
   const d = new Date(iso)
   const now = new Date()
   if (d.toDateString() === now.toDateString()) {
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    // 24-hour clock, matching message timestamps (see messageUtils.formatTime).
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
   }
   const yesterday = new Date()
   yesterday.setDate(now.getDate() - 1)
@@ -1421,7 +1422,7 @@ function GroupRow({
   // Small muted indicator shared by both view densities. Fades with the rest of
   // the right-side metadata on hover so the action button owns the far right.
   const mutedIcon = muted ? (
-    <BellOff size={12} strokeWidth={1.7} className={`shrink-0 text-faint ${metaFade}`} aria-label="Muted" />
+    <BellOff size="0.75rem" strokeWidth={1.7} className={`shrink-0 text-faint ${metaFade}`} aria-label="Muted" />
   ) : null
   // Pinned indicator — a prominent pin on the row's RIGHT edge (the same area the
   // metadata/actions live), vertically centred over the whole row. It stays
@@ -1437,7 +1438,7 @@ function GroupRow({
         menuOpen ? '-translate-x-9' : ''
       }`}
     >
-      <Pin size={16} strokeWidth={1.8} aria-label="Pinned" />
+      <Pin size="1rem" strokeWidth={1.8} aria-label="Pinned" />
     </div>
   ) : null
 
@@ -1452,7 +1453,7 @@ function GroupRow({
       <div className="relative group/row" onContextMenu={openMenuAtCursor}>
       <button
         onClick={onClick}
-        className={`w-full flex items-center gap-3 px-3 py-2.5 min-h-[62px] rounded-chip text-left transition-colors ${
+        className={`w-full flex items-center gap-3 px-3 py-2.5 min-h-[3.875rem] rounded-chip text-left transition-colors ${
           pinned ? 'pr-7' : ''
         } ${selected ? 'bg-white/[0.06] text-text' : 'text-muted hover:bg-white/[0.025] hover:text-text'}`}
       >
@@ -1480,7 +1481,7 @@ function GroupRow({
               vehicle's active-trip status chip is the one small indicator that
               belongs on the title line. */}
           <span className="flex items-center gap-2">
-            <span className={`flex-1 truncate text-[14.5px] ${unread ? 'text-text font-semibold' : 'text-text/90'}`}>
+            <span className={`flex-1 truncate text-[0.90625rem] ${unread ? 'text-text font-semibold' : 'text-text/90'}`}>
               {groupLabel(group)}
             </span>
             {trip && (
@@ -1492,7 +1493,7 @@ function GroupRow({
           <span className="flex items-center gap-2">
             {/* Latest-message preview — always shown (incl. vehicle rooms with an
                 active trip); the trip status lives in the chip on the title line. */}
-            <span className={`flex-1 truncate text-[13px] ${unread ? 'text-muted' : 'text-faint'}`}>
+            <span className={`flex-1 truncate text-[0.8125rem] ${unread ? 'text-muted' : 'text-faint'}`}>
               {preview.prefix && (
                 <span className={unread ? 'text-muted font-medium' : 'text-faint'}>{preview.prefix} </span>
               )}
@@ -1505,7 +1506,7 @@ function GroupRow({
                 <span
                   aria-label="You were mentioned"
                   title="You were mentioned"
-                  className="h-[18px] min-w-[18px] px-1 rounded-full bg-active/20 text-active text-[10.5px] font-bold leading-none flex items-center justify-center"
+                  className="h-[1.125rem] min-w-[1.125rem] px-1 rounded-full bg-active/20 text-active text-[0.65625rem] font-bold leading-none flex items-center justify-center"
                 >
                   @
                 </span>
@@ -1513,7 +1514,7 @@ function GroupRow({
               {unread && hasCount && unreadCount > 0 && (
                 <span
                   aria-label={`${unreadCount} unread`}
-                  className="h-[18px] min-w-[18px] px-1.5 rounded-full bg-active text-bg text-[10.5px] font-semibold leading-none flex items-center justify-center"
+                  className="h-[1.125rem] min-w-[1.125rem] px-1.5 rounded-full bg-active text-bg text-[0.65625rem] font-semibold leading-none flex items-center justify-center"
                 >
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
@@ -1521,7 +1522,7 @@ function GroupRow({
               {muted && mutedIcon}
               {/* Last-activity stamp — lives on the preview line (right side), not
                   the name line, so all rows share the same metadata baseline. */}
-              {time && <span className="text-[11.5px] text-faint tabular-nums">{time}</span>}
+              {time && <span className="text-[0.71875rem] text-faint tabular-nums">{time}</span>}
             </span>
           </span>
         </span>
@@ -1658,16 +1659,16 @@ function ContactRow({
       <button
         onClick={onClick}
         title={`Message ${member.displayName}`}
-        className="w-full flex items-center gap-3 px-3 py-2.5 min-h-[62px] rounded-chip text-left text-muted hover:bg-white/[0.025] hover:text-text transition-colors"
+        className="w-full flex items-center gap-3 px-3 py-2.5 min-h-[3.875rem] rounded-chip text-left text-muted hover:bg-white/[0.025] hover:text-text transition-colors"
       >
         <Avatar userId={member.id} name={member.displayName} size={NORMAL_AVATAR} />
         <span className="flex-1 min-w-0 flex flex-col gap-0.5">
           <span className="flex items-center gap-2">
-            <span className="flex-1 truncate text-[14.5px] text-text/90">{member.displayName}</span>
+            <span className="flex-1 truncate text-[0.90625rem] text-text/90">{member.displayName}</span>
           </span>
           {role && (
             <span className="flex items-center gap-2">
-              <span className="flex-1 truncate text-[13px] text-faint">{role}</span>
+              <span className="flex-1 truncate text-[0.8125rem] text-faint">{role}</span>
             </span>
           )}
         </span>
@@ -1753,7 +1754,7 @@ function MenuItem({
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-[13px] transition-colors text-left ${
+      className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-[0.8125rem] transition-colors text-left ${
         danger ? 'text-alert hover:bg-alert/10' : 'hover:bg-white/[0.03]'
       }`}
     >
@@ -1768,7 +1769,7 @@ function CreateMenuItem({ label, onClick }: { label: string; onClick: () => void
     <button
       onClick={onClick}
       role="menuitem"
-      className="w-full px-2.5 py-2 text-[13px] hover:bg-white/[0.03] transition-colors text-left whitespace-nowrap"
+      className="w-full px-2.5 py-2 text-[0.8125rem] hover:bg-white/[0.03] transition-colors text-left whitespace-nowrap"
     >
       {label}
     </button>

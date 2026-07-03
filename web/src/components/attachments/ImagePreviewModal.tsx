@@ -224,7 +224,7 @@ export default function ImagePreviewModal({
           height is reserved here. */}
       {!embedded && (
         <div className="flex items-center justify-between gap-3 px-3 py-2 shrink-0" onClick={stop}>
-          <div className="text-[12.5px] text-text truncate flex-1 min-w-0">
+          <div className="text-[0.78125rem] text-text truncate flex-1 min-w-0">
             {attachment.originalName}
           </div>
           <PreviewActionBar
@@ -294,10 +294,10 @@ export default function ImagePreviewModal({
             disabled={view.scale <= MIN_SCALE}
             onClick={() => applyZoom(1 / BUTTON_STEP)}
           >
-            <ZoomOut size={18} strokeWidth={1.8} />
+            <ZoomOut size="1.125rem" strokeWidth={1.8} />
           </IconButton>
           <IconButton label="Fit to screen" tooltipSide="top" onClick={() => setView(FIT)}>
-            <Maximize size={18} strokeWidth={1.8} />
+            <Maximize size="1.125rem" strokeWidth={1.8} />
           </IconButton>
           <IconButton
             label="Zoom in"
@@ -305,7 +305,7 @@ export default function ImagePreviewModal({
             disabled={view.scale >= MAX_SCALE}
             onClick={() => applyZoom(BUTTON_STEP)}
           >
-            <ZoomIn size={18} strokeWidth={1.8} />
+            <ZoomIn size="1.125rem" strokeWidth={1.8} />
           </IconButton>
         </div>
       </div>

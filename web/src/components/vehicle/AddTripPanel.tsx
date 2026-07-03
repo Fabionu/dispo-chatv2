@@ -125,25 +125,25 @@ export default function AddTripPanel({ ops, onClose, onCreate, onPickLocation }:
         // screens; xl+ a static, in-flow right column beside the chat as its own
         // borderless rail surface (matching radius + gap), so the chat reflows
         // narrower and stays visible.
-        className="fixed top-0 right-0 bottom-0 z-40 w-full max-w-[400px] shadow-[-16px_0_48px_rgba(0,0,0,0.4)] bg-rail flex flex-col
-                   xl:static xl:z-auto xl:w-[clamp(360px,26vw,420px)] xl:max-w-none xl:shrink-0 xl:shadow-none
-                   xl:rounded-[11px] xl:overflow-hidden"
+        className="fixed top-0 right-0 bottom-0 z-40 w-full max-w-[25rem] shadow-[-16px_0_48px_rgba(0,0,0,0.4)] bg-rail flex flex-col
+                   xl:static xl:z-auto xl:w-[clamp(22.5rem,26vw,26.25rem)] xl:max-w-none xl:shrink-0 xl:shadow-none
+                   xl:rounded-[0.6875rem] xl:overflow-hidden"
       >
         {/* Header — same height as the chat header so the two line up. */}
         <div className="h-[var(--header-height)] flex items-center justify-between px-4 shrink-0">
-          <span className="text-[13px] font-semibold">Add trip</span>
+          <span className="text-[0.8125rem] font-semibold">Add trip</span>
           <button
             onClick={onClose}
             disabled={submitting}
             aria-label="Close add trip"
             className="h-8 w-8 flex items-center justify-center rounded-chip text-muted hover:text-text hover:bg-white/[0.04] transition-colors disabled:opacity-50"
           >
-            <X size={16} strokeWidth={1.8} />
+            <X size="1rem" strokeWidth={1.8} />
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3.5">
-          <p className="text-[11.5px] text-muted leading-[1.45]">
+          <p className="text-[0.71875rem] text-muted leading-[1.45]">
             {replacing
               ? 'Creating a new trip will replace the current active trip.'
               : 'Manually create a trip for this vehicle and add its stops.'}
@@ -240,7 +240,7 @@ export default function AddTripPanel({ ops, onClose, onCreate, onPickLocation }:
             {editingId === null && <StopForm onSubmit={addStop} onPickLocation={onPickLocation} />}
           </div>
 
-          {error && <div className="text-[12px] text-alert">{error}</div>}
+          {error && <div className="text-[0.75rem] text-alert">{error}</div>}
         </div>
 
         {/* Footer action area — sits on the panel's rail surface, no divider. */}
@@ -248,14 +248,14 @@ export default function AddTripPanel({ ops, onClose, onCreate, onPickLocation }:
           <button
             onClick={onClose}
             disabled={submitting}
-            className="text-[12.5px] text-muted hover:text-text border border-white/[0.12] rounded-btn px-3 py-1.5 transition-colors disabled:opacity-60"
+            className="text-[0.78125rem] text-muted hover:text-text border border-white/[0.12] rounded-btn px-3 py-1.5 transition-colors disabled:opacity-60"
           >
             Cancel
           </button>
           <button
             onClick={() => void submit()}
             disabled={submitting}
-            className="text-[12.5px] font-semibold bg-text text-bg rounded-btn px-3.5 py-1.5 hover:bg-text/90 transition-colors disabled:opacity-60"
+            className="text-[0.78125rem] font-semibold bg-text text-bg rounded-btn px-3.5 py-1.5 hover:bg-text/90 transition-colors disabled:opacity-60"
           >
             {submitting ? 'Creating…' : 'Create trip'}
           </button>
@@ -367,9 +367,9 @@ function StopForm({
       <button
         type="button"
         onClick={() => setPhase('type')}
-        className="w-full inline-flex items-center justify-center gap-1.5 rounded-full border border-white/[0.06] bg-white/[0.04] py-2 text-[12.5px] text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
+        className="w-full inline-flex items-center justify-center gap-1.5 rounded-full border border-white/[0.06] bg-white/[0.04] py-2 text-[0.78125rem] text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
       >
-        <Plus size={14} strokeWidth={2} /> Add stop
+        <Plus size="0.875rem" strokeWidth={2} /> Add stop
       </button>
     )
   }
@@ -377,16 +377,16 @@ function StopForm({
   // Type picker — choose what kind of stop before any fields appear.
   if (phase === 'type') {
     return (
-      <div className="rounded-[18px] border border-white/[0.06] bg-white/[0.02] p-2.5 flex flex-col gap-2">
+      <div className="rounded-[1.125rem] border border-white/[0.06] bg-white/[0.02] p-2.5 flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] text-muted">Choose stop type</span>
+          <span className="text-[0.6875rem] text-muted">Choose stop type</span>
           <button
             type="button"
             onClick={() => (editing ? setPhase('form') : setPhase('idle'))}
             aria-label="Back"
             className="h-6 w-6 flex items-center justify-center rounded-full text-faint hover:text-text hover:bg-white/[0.05] transition-colors"
           >
-            <X size={13} strokeWidth={1.8} />
+            <X size="0.8125rem" strokeWidth={1.8} />
           </button>
         </div>
         <div className="grid grid-cols-3 gap-1.5">
@@ -398,7 +398,7 @@ function StopForm({
                 setType(o.value)
                 setPhase('form')
               }}
-              className="h-8 rounded-full border border-white/[0.06] bg-white/[0.04] text-[11.5px] text-text hover:bg-white/[0.09] transition-colors"
+              className="h-8 rounded-full border border-white/[0.06] bg-white/[0.04] text-[0.71875rem] text-text hover:bg-white/[0.09] transition-colors"
             >
               {o.label}
             </button>
@@ -411,14 +411,14 @@ function StopForm({
   // Form — the stop's fields. The type is shown up top and can be changed (back to
   // the picker) without losing the typed details.
   return (
-    <div className="rounded-[18px] border border-white/[0.06] bg-white/[0.02] p-2.5 flex flex-col gap-2">
+    <div className="rounded-[1.125rem] border border-white/[0.06] bg-white/[0.02] p-2.5 flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[12px] font-medium text-text truncate">{labelOf(STOP_TYPES, type)}</span>
+          <span className="text-[0.75rem] font-medium text-text truncate">{labelOf(STOP_TYPES, type)}</span>
           <button
             type="button"
             onClick={() => setPhase('type')}
-            className="shrink-0 text-[11px] text-muted hover:text-text transition-colors"
+            className="shrink-0 text-[0.6875rem] text-muted hover:text-text transition-colors"
           >
             Change
           </button>
@@ -429,7 +429,7 @@ function StopForm({
           aria-label={editing ? 'Cancel editing stop' : 'Cancel adding stop'}
           className="h-6 w-6 flex items-center justify-center rounded-full text-faint hover:text-text hover:bg-white/[0.05] transition-colors"
         >
-          <X size={13} strokeWidth={1.8} />
+          <X size="0.8125rem" strokeWidth={1.8} />
         </button>
       </div>
 
@@ -438,7 +438,7 @@ function StopForm({
           to keep the form compact. */}
       <div className="flex gap-2">
         <DateField value={plannedDate} onChange={setPlannedDate} className="flex-1 min-w-0" />
-        <TimeField value={plannedTime} onChange={setPlannedTime} className="w-[116px] shrink-0" />
+        <TimeField value={plannedTime} onChange={setPlannedTime} className="w-[7.25rem] shrink-0" />
       </div>
       <input
         value={company}
@@ -463,7 +463,7 @@ function StopForm({
           aria-label="Country code"
           placeholder="DE"
           maxLength={3}
-          className={`${FIELD_BASE} w-[58px] shrink-0 !px-2 text-center uppercase placeholder:normal-case`}
+          className={`${FIELD_BASE} w-[3.625rem] shrink-0 !px-2 text-center uppercase placeholder:normal-case`}
         />
         <input
           value={postalCode}
@@ -499,12 +499,12 @@ function StopForm({
               title="Find on map"
               className="h-9 w-9 shrink-0 flex items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.04] text-muted hover:text-text hover:bg-white/[0.08] transition-colors"
             >
-              <MapPinned size={16} strokeWidth={1.8} />
+              <MapPinned size="1rem" strokeWidth={1.8} />
             </button>
           )}
         </div>
         {coordInvalid && (
-          <span className="text-[10.5px] text-faint px-1">
+          <span className="text-[0.65625rem] text-faint px-1">
             Couldn't read these coordinates — they'll be kept as typed.
           </span>
         )}
@@ -522,7 +522,7 @@ function StopForm({
         <button
           type="button"
           onClick={cancel}
-          className="h-8 px-3 inline-flex items-center rounded-full text-[12px] text-muted hover:text-text hover:bg-white/[0.04] transition-colors"
+          className="h-8 px-3 inline-flex items-center rounded-full text-[0.75rem] text-muted hover:text-text hover:bg-white/[0.04] transition-colors"
         >
           Cancel
         </button>
@@ -530,11 +530,11 @@ function StopForm({
           type="button"
           onClick={submit}
           disabled={!canSave}
-          className="h-8 px-3.5 inline-flex items-center gap-1.5 rounded-full bg-white/[0.1] text-[12px] font-medium text-text hover:bg-white/[0.16] disabled:opacity-40 disabled:cursor-default transition-colors"
+          className="h-8 px-3.5 inline-flex items-center gap-1.5 rounded-full bg-white/[0.1] text-[0.75rem] font-medium text-text hover:bg-white/[0.16] disabled:opacity-40 disabled:cursor-default transition-colors"
         >
           {editing ? 'Save stop' : (
             <>
-              <Plus size={13} strokeWidth={2.2} /> Add stop
+              <Plus size="0.8125rem" strokeWidth={2.2} /> Add stop
             </>
           )}
         </button>
@@ -555,8 +555,8 @@ function StopCard({
 }) {
   return (
     <div className="flex items-center gap-2 rounded-lg bg-white/[0.03] px-2.5 py-2">
-      <span className="text-[12px] font-medium shrink-0">{labelOf(STOP_TYPES, stop.type)}</span>
-      <span className="flex-1 min-w-0 truncate text-[12px] text-muted">
+      <span className="text-[0.75rem] font-medium shrink-0">{labelOf(STOP_TYPES, stop.type)}</span>
+      <span className="flex-1 min-w-0 truncate text-[0.75rem] text-muted">
         {[stopLocationLabel(stop), stop.plannedAt].filter(Boolean).join(' · ') || '—'}
       </span>
       <button
@@ -565,7 +565,7 @@ function StopCard({
         title="Edit stop"
         className="h-6 w-6 shrink-0 flex items-center justify-center rounded-chip text-faint hover:text-text hover:bg-white/[0.04] transition-colors"
       >
-        <Pencil size={13} strokeWidth={1.8} />
+        <Pencil size="0.8125rem" strokeWidth={1.8} />
       </button>
       <button
         onClick={onRemove}
@@ -573,7 +573,7 @@ function StopCard({
         title="Remove stop"
         className="h-6 w-6 shrink-0 flex items-center justify-center rounded-chip text-faint hover:text-alert hover:bg-white/[0.04] transition-colors"
       >
-        <Trash2 size={13} strokeWidth={1.8} />
+        <Trash2 size="0.8125rem" strokeWidth={1.8} />
       </button>
     </div>
   )
@@ -587,17 +587,17 @@ function StopCard({
 // row) can set their own flex/width. INPUT_CLASS is the full-width variant used
 // by the standalone fields.
 const FIELD_BASE =
-  'rounded-full border border-white/[0.06] bg-white/[0.04] px-4 py-2 text-[12.5px] text-text placeholder:text-faint outline-none transition-colors focus:border-white/[0.12] focus:bg-white/[0.05]'
+  'rounded-full border border-white/[0.06] bg-white/[0.04] px-4 py-2 text-[0.78125rem] text-text placeholder:text-faint outline-none transition-colors focus:border-white/[0.12] focus:bg-white/[0.05]'
 
 const INPUT_CLASS = `w-full ${FIELD_BASE}`
 
 const AREA_CLASS =
-  'w-full resize-none rounded-[18px] border border-white/[0.06] bg-white/[0.04] px-4 py-2.5 text-[12.5px] text-text placeholder:text-faint outline-none transition-colors focus:border-white/[0.12] focus:bg-white/[0.05]'
+  'w-full resize-none rounded-[1.125rem] border border-white/[0.06] bg-white/[0.04] px-4 py-2.5 text-[0.78125rem] text-text placeholder:text-faint outline-none transition-colors focus:border-white/[0.12] focus:bg-white/[0.05]'
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-[12px] text-text mb-1.5">{label}</label>
+      <label className="block text-[0.75rem] text-text mb-1.5">{label}</label>
       {children}
     </div>
   )

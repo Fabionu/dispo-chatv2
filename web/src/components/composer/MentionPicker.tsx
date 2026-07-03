@@ -31,7 +31,7 @@ export default function MentionPicker({ members, activeIndex, onHover, onSelect 
       ref={listRef}
       role="listbox"
       aria-label="Mention a member"
-      className="absolute bottom-full left-0 mb-1.5 w-[260px] max-h-[200px] overflow-y-auto rounded-card border border-white/[0.12] bg-surface py-1 z-20"
+      className="absolute bottom-full left-0 mb-1.5 w-[16.25rem] max-h-[12.5rem] overflow-y-auto rounded-card border border-white/[0.12] bg-surface py-1 z-20"
       style={{ boxShadow: '0 16px 40px rgba(0,0,0,0.55)' }}
     >
       {members.map((m, i) => {
@@ -54,12 +54,12 @@ export default function MentionPicker({ members, activeIndex, onHover, onSelect 
           >
             <Avatar userId={m.id} name={m.displayName} size={24} />
             <span className="min-w-0 flex-1">
-              <span className="block text-[12.5px] text-text truncate">{m.displayName}</span>
+              <span className="block text-[0.78125rem] text-text truncate">{m.displayName}</span>
               {m.workspace && (
-                <span className="block text-[10.5px] text-faint truncate">{m.workspace}</span>
+                <span className="block text-[0.65625rem] text-faint truncate">{m.workspace}</span>
               )}
             </span>
-            <AtSign size={12} strokeWidth={1.8} className="text-faint shrink-0" />
+            <AtSign size="0.75rem" strokeWidth={1.8} className="text-faint shrink-0" />
           </button>
         )
       })}

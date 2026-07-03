@@ -54,39 +54,39 @@ export default function ConnectionRequestView({ connection, onAccepted, onDeclin
           inbox), so the normal name-based header returns automatically. */}
       <header className="h-[var(--header-height)] flex items-center justify-between px-5 shrink-0">
         <div className="min-w-0">
-          <div className="text-[13.5px] font-semibold truncate">Connection invitation</div>
-          <div className="text-[11px] text-muted truncate">from {u.workspace.name}</div>
+          <div className="text-[0.84375rem] font-semibold truncate">Connection invitation</div>
+          <div className="text-[0.6875rem] text-muted truncate">from {u.workspace.name}</div>
         </div>
-        <span className="font-mono text-[11px] text-muted border border-white/[0.08] rounded-chip px-2 py-0.5 shrink-0">
+        <span className="font-mono text-[0.6875rem] text-muted border border-white/[0.08] rounded-chip px-2 py-0.5 shrink-0">
           Pending
         </span>
       </header>
 
       {/* Centered identity block */}
       <div className="flex-1 overflow-y-auto flex items-center justify-center px-6 py-10">
-        <div className="w-full max-w-[420px] flex flex-col items-center text-center">
+        <div className="w-full max-w-[26.25rem] flex flex-col items-center text-center">
           <Avatar userId={u.id} name={u.displayName} size={88} />
 
           <div className="mt-1.5">
             <span className="eyebrow text-faint">Connection request</span>
           </div>
 
-          <h2 className="mt-2 text-[21px] font-semibold tracking-[-0.3px] leading-tight">
+          <h2 className="mt-2 text-[1.3125rem] font-semibold tracking-[-0.3px] leading-tight">
             {u.displayName}
           </h2>
-          <div className="mt-1 text-[13px] text-muted">{u.workspace.name}</div>
-          {u.email && <div className="mt-0.5 text-[12px] text-faint">{u.email}</div>}
+          <div className="mt-1 text-[0.8125rem] text-muted">{u.workspace.name}</div>
+          {u.email && <div className="mt-0.5 text-[0.75rem] text-faint">{u.email}</div>}
 
           {connection.message && (
-            <div className="mt-5 w-full max-w-[360px] rounded-card border border-white/[0.08] bg-white/[0.02] px-3.5 py-2.5 text-left">
+            <div className="mt-5 w-full max-w-[22.5rem] rounded-card border border-white/[0.08] bg-white/[0.02] px-3.5 py-2.5 text-left">
               <div className="eyebrow text-faint mb-1">Message</div>
-              <p className="text-[12.5px] text-text leading-[1.5] break-words whitespace-pre-wrap">
+              <p className="text-[0.78125rem] text-text leading-[1.5] break-words whitespace-pre-wrap">
                 {connection.message}
               </p>
             </div>
           )}
 
-          <div className="mt-5 text-[11px] text-faint">
+          <div className="mt-5 text-[0.6875rem] text-faint">
             Requested {formatDay(connection.requestedAt)}
           </div>
         </div>
@@ -95,22 +95,22 @@ export default function ConnectionRequestView({ connection, onAccepted, onDeclin
       {/* Bottom action area — sits directly on the main pane background, no
           separate footer surface or divider, so it blends into the page. */}
       <div className="shrink-0 px-6 py-3.5">
-        <div className="mx-auto w-full max-w-[440px]">
+        <div className="mx-auto w-full max-w-[27.5rem]">
           {error && (
-            <div className="text-[11.5px] text-alert text-center mb-2">{error}</div>
+            <div className="text-[0.71875rem] text-alert text-center mb-2">{error}</div>
           )}
           <div className="flex items-center gap-2.5">
             <button
               onClick={() => void decline()}
               disabled={busy !== null}
-              className="flex-1 h-10 rounded-chip border border-white/[0.14] text-text text-[13px] font-medium hover:bg-white/[0.04] disabled:opacity-50 transition-colors"
+              className="flex-1 h-10 rounded-chip border border-white/[0.14] text-text text-[0.8125rem] font-medium hover:bg-white/[0.04] disabled:opacity-50 transition-colors"
             >
               {busy === 'decline' ? 'Declining…' : 'Decline'}
             </button>
             <button
               onClick={() => void accept()}
               disabled={busy !== null}
-              className="flex-1 h-10 rounded-chip bg-text text-bg text-[13px] font-semibold hover:bg-text/90 disabled:opacity-50 transition-colors"
+              className="flex-1 h-10 rounded-chip bg-text text-bg text-[0.8125rem] font-semibold hover:bg-text/90 disabled:opacity-50 transition-colors"
             >
               {busy === 'accept' ? 'Accepting…' : 'Accept'}
             </button>

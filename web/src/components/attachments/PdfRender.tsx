@@ -213,7 +213,7 @@ export function PdfDocumentView({ file, url, fallback, className = '' }: DocProp
     <div ref={scrollRef} className={`relative w-full h-full overflow-y-auto ${className}`}>
       <div ref={hostRef} className="py-3 px-3" />
       {truncated && status === 'ready' && (
-        <div className="pb-4 text-center text-[11.5px] text-faint">
+        <div className="pb-4 text-center text-[0.71875rem] text-faint">
           Showing the first {MAX_PAGES} pages — download for the full document.
         </div>
       )}

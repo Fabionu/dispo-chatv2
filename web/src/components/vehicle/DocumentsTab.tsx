@@ -25,16 +25,16 @@ export default function DocumentsTab() {
           disabled
           title="Document upload is coming soon"
           aria-disabled
-          className="inline-flex items-center gap-1 text-[11.5px] text-faint cursor-not-allowed"
+          className="inline-flex items-center gap-1 text-[0.71875rem] text-faint cursor-not-allowed"
         >
-          <Upload size={12} strokeWidth={1.8} /> Upload
+          <Upload size="0.75rem" strokeWidth={1.8} /> Upload
         </button>
       </div>
 
       <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] px-3 py-3 text-center">
-        <FileText size={20} strokeWidth={1.6} className="mx-auto text-faint" />
-        <div className="text-[12.5px] text-muted mt-1.5">No documents yet</div>
-        <div className="text-[11.5px] text-faint mt-0.5">
+        <FileText size="1.25rem" strokeWidth={1.6} className="mx-auto text-faint" />
+        <div className="text-[0.78125rem] text-muted mt-1.5">No documents yet</div>
+        <div className="text-[0.71875rem] text-faint mt-0.5">
           Transport documents for this vehicle will appear here.
         </div>
       </div>
@@ -46,7 +46,7 @@ export default function DocumentsTab() {
         {DOCUMENT_TYPES.map((t) => (
           <span
             key={t}
-            className="inline-flex items-center rounded-chip border border-white/[0.08] bg-white/[0.02] px-2 py-0.5 text-[11px] text-muted"
+            className="inline-flex items-center rounded-chip border border-white/[0.08] bg-white/[0.02] px-2 py-0.5 text-[0.6875rem] text-muted"
           >
             {t}
           </span>

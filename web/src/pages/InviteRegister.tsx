@@ -81,21 +81,21 @@ export default function InviteRegister({ token }: Props) {
     <div className="min-h-screen w-full bg-[#181818] text-text flex flex-col">
       <div className="px-8 sm:px-12 lg:px-16 py-8 flex items-center gap-3">
         <div className="h-9 w-9 rounded-card border border-white/[0.1] bg-white/[0.03] flex items-center justify-center">
-          <Box size={17} strokeWidth={1.5} />
+          <Box size="1.0625rem" strokeWidth={1.5} />
         </div>
-        <div className="text-[15px] font-semibold tracking-[-0.2px]">Dispo-chat</div>
+        <div className="text-[0.9375rem] font-semibold tracking-[-0.2px]">Dispo-chat</div>
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center px-6 pb-12">
-        <div className="w-full max-w-[420px]">
+        <div className="w-full max-w-[26.25rem]">
           {checking ? (
-            <div className="flex items-center justify-center gap-2 text-muted text-[13px] py-16">
-              <Loader2 size={16} className="animate-spin" /> Checking invite…
+            <div className="flex items-center justify-center gap-2 text-muted text-[0.8125rem] py-16">
+              <Loader2 size="1rem" className="animate-spin" /> Checking invite…
             </div>
           ) : validation?.status === 'valid' ? (
             <>
-              <h1 className="text-[22px] font-semibold tracking-[-0.2px] mb-2">Join your team</h1>
-              <p className="text-muted text-[13px] mb-7">
+              <h1 className="text-[1.375rem] font-semibold tracking-[-0.2px] mb-2">Join your team</h1>
+              <p className="text-muted text-[0.8125rem] mb-7">
                 Create your account to join{' '}
                 <span className="text-text font-medium">{validation.companyName}</span> on Dispo-chat.
               </p>
@@ -104,9 +104,9 @@ export default function InviteRegister({ token }: Props) {
                 {/* Company — fixed by the invite, shown read-only so the user
                     knows exactly which company they're joining. */}
                 <div>
-                  <label className="block text-[12.5px] text-text mb-1.5">Company</label>
-                  <div className="flex items-center gap-2 w-full bg-white/[0.03] border border-white/[0.08] rounded-btn px-3 py-2.5 text-[13.5px] text-muted">
-                    <Building2 size={15} strokeWidth={1.6} className="text-faint shrink-0" />
+                  <label className="block text-[0.78125rem] text-text mb-1.5">Company</label>
+                  <div className="flex items-center gap-2 w-full bg-white/[0.03] border border-white/[0.08] rounded-btn px-3 py-2.5 text-[0.84375rem] text-muted">
+                    <Building2 size="0.9375rem" strokeWidth={1.6} className="text-faint shrink-0" />
                     <span className="truncate">{validation.companyName}</span>
                   </div>
                 </div>
@@ -132,7 +132,7 @@ export default function InviteRegister({ token }: Props) {
                 />
 
                 <div>
-                  <label className="block text-[12.5px] text-text mb-1.5" htmlFor="password">
+                  <label className="block text-[0.78125rem] text-text mb-1.5" htmlFor="password">
                     Password
                   </label>
                   <div className="relative">
@@ -144,7 +144,7 @@ export default function InviteRegister({ token }: Props) {
                       placeholder="At least 8 characters"
                       autoComplete="new-password"
                       required
-                      className="w-full bg-transparent border border-white/[0.08] rounded-btn pl-3 pr-10 py-2.5 text-[13.5px] focus:outline-none focus:border-white/[0.22] transition-colors"
+                      className="w-full bg-transparent border border-white/[0.08] rounded-btn pl-3 pr-10 py-2.5 text-[0.84375rem] focus:outline-none focus:border-white/[0.22] transition-colors"
                     />
                     <button
                       type="button"
@@ -153,7 +153,7 @@ export default function InviteRegister({ token }: Props) {
                       tabIndex={-1}
                       className="absolute inset-y-0 right-0 px-3 flex items-center text-faint hover:text-text transition-colors"
                     >
-                      {showPassword ? <EyeOff size={15} strokeWidth={1.6} /> : <Eye size={15} strokeWidth={1.6} />}
+                      {showPassword ? <EyeOff size="0.9375rem" strokeWidth={1.6} /> : <Eye size="0.9375rem" strokeWidth={1.6} />}
                     </button>
                   </div>
                 </div>
@@ -170,7 +170,7 @@ export default function InviteRegister({ token }: Props) {
                 />
 
                 {error && (
-                  <div className="text-[12.5px] text-alert border border-alert/30 bg-alert/5 rounded-btn px-3 py-2">
+                  <div className="text-[0.78125rem] text-alert border border-alert/30 bg-alert/5 rounded-btn px-3 py-2">
                     {error}
                   </div>
                 )}
@@ -178,9 +178,9 @@ export default function InviteRegister({ token }: Props) {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full mt-2 bg-text text-bg font-semibold text-[13.5px] py-3 rounded-btn hover:bg-text/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full mt-2 bg-text text-bg font-semibold text-[0.84375rem] py-3 rounded-btn hover:bg-text/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  {submitting && <Loader2 size={15} strokeWidth={2.2} className="animate-spin" />}
+                  {submitting && <Loader2 size="0.9375rem" strokeWidth={2.2} className="animate-spin" />}
                   {submitting ? 'Creating account…' : 'Create account'}
                 </button>
               </form>
@@ -191,8 +191,8 @@ export default function InviteRegister({ token }: Props) {
         </div>
       </div>
 
-      <div className="flex items-center justify-center gap-2 text-[11.5px] text-muted pb-8">
-        <Lock size={11} strokeWidth={1.5} />
+      <div className="flex items-center justify-center gap-2 text-[0.71875rem] text-muted pb-8">
+        <Lock size="0.6875rem" strokeWidth={1.5} />
         <span>Encrypted connection · SOC 2 Type II · GDPR compliant</span>
       </div>
     </div>
@@ -219,13 +219,13 @@ function DeadLink({ status }: { status: 'used' | 'expired' | 'invalid' }) {
   return (
     <div className="text-center">
       <div className="mx-auto mb-4 h-11 w-11 rounded-full border border-alert/30 bg-alert/10 flex items-center justify-center text-alert">
-        <TriangleAlert size={20} strokeWidth={1.8} />
+        <TriangleAlert size="1.25rem" strokeWidth={1.8} />
       </div>
-      <h1 className="text-[19px] font-semibold tracking-[-0.2px] mb-2">{copy.title}</h1>
-      <p className="text-muted text-[13px] leading-[1.55] mb-6">{copy.body}</p>
+      <h1 className="text-[1.1875rem] font-semibold tracking-[-0.2px] mb-2">{copy.title}</h1>
+      <p className="text-muted text-[0.8125rem] leading-[1.55] mb-6">{copy.body}</p>
       <a
         href="/"
-        className="inline-flex items-center justify-center bg-text text-bg font-semibold text-[13px] px-5 py-2.5 rounded-btn hover:bg-text/90 transition-colors"
+        className="inline-flex items-center justify-center bg-text text-bg font-semibold text-[0.8125rem] px-5 py-2.5 rounded-btn hover:bg-text/90 transition-colors"
       >
         Go to sign in
       </a>
@@ -254,7 +254,7 @@ function Field({
 }) {
   return (
     <div>
-      <label className="block text-[12.5px] text-text mb-1.5" htmlFor={id}>
+      <label className="block text-[0.78125rem] text-text mb-1.5" htmlFor={id}>
         {label}
       </label>
       <input
@@ -265,7 +265,7 @@ function Field({
         placeholder={placeholder}
         autoComplete={autoComplete}
         required={required}
-        className="w-full bg-transparent border border-white/[0.08] rounded-btn px-3 py-2.5 text-[13.5px] focus:outline-none focus:border-white/[0.22] transition-colors"
+        className="w-full bg-transparent border border-white/[0.08] rounded-btn px-3 py-2.5 text-[0.84375rem] focus:outline-none focus:border-white/[0.22] transition-colors"
       />
     </div>
   )

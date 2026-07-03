@@ -79,6 +79,56 @@ export function nearestRouteSection(
   return best
 }
 
+// Nearest point on a polyline `path` to `point`, computed in the same planar
+// (equirectangular) approximation as distancePointToSegmentMeters — pure maths,
+// no map projection, so it's cheap enough to run on pointermove. Returns:
+//   • meters — the perpendicular distance from `point` to the line (for the
+//     "is the cursor close enough to the route?" hit-test), and
+//   • along  — the distance travelled ALONG the path from its start to that
+//     nearest point, interpolated within the straddling segment using the
+//     precomputed per-vertex cumulative distances `cum` (cum[i] = metres from the
+//     path start to vertex i). This gives the cumulative multi-leg distance for
+//     free, since `path` is the whole route concatenated in travel order.
+// Returns null for a degenerate path (<2 points) or a mismatched `cum`.
+export function nearestPointOnPath(
+  point: LatLng,
+  path: LatLng[],
+  cum: number[],
+): { meters: number; along: number; at: LatLng } | null {
+  if (path.length < 2 || cum.length !== path.length) return null
+  const cos = Math.cos(toRad(point.lat))
+  const px = toRad(point.lng) * cos
+  const py = toRad(point.lat)
+  let best: { meters: number; along: number; at: LatLng } | null = null
+  for (let i = 0; i + 1 < path.length; i++) {
+    const a = path[i]
+    const b = path[i + 1]
+    const ax = toRad(a.lng) * cos
+    const ay = toRad(a.lat)
+    const bx = toRad(b.lng) * cos
+    const by = toRad(b.lat)
+    const dx = bx - ax
+    const dy = by - ay
+    const len2 = dx * dx + dy * dy
+    // t = clamped projection of the point onto segment a→b, in [0,1].
+    let t = len2 === 0 ? 0 : ((px - ax) * dx + (py - ay) * dy) / len2
+    t = Math.max(0, Math.min(1, t))
+    const cx = ax + t * dx
+    const cy = ay + t * dy
+    const ex = px - cx
+    const ey = py - cy
+    const meters = Math.sqrt(ex * ex + ey * ey) * EARTH_RADIUS_M
+    if (!best || meters < best.meters) {
+      best = {
+        meters,
+        along: cum[i] + t * (cum[i + 1] - cum[i]),
+        at: { lat: a.lat + (b.lat - a.lat) * t, lng: a.lng + (b.lng - a.lng) * t },
+      }
+    }
+  }
+  return best
+}
+
 // Great-circle distance in metres between two coordinates (haversine). Used as a
 // FALLBACK ordering signal when no real route geometry is available yet (see
 // bestInsertionIndex) — once a route exists, callers prefer nearestRouteSection,

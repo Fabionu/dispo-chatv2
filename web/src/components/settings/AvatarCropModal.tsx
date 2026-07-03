@@ -348,20 +348,20 @@ export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
         role="dialog"
         aria-modal="true"
         aria-label="Crop photo"
-        className="relative w-full max-w-[460px] rounded-modal border border-white/[0.08] bg-surface overflow-hidden"
+        className="relative w-full max-w-[28.75rem] rounded-modal border border-white/[0.08] bg-surface overflow-hidden"
         style={{ boxShadow: '0 32px 80px rgba(0,0,0,0.65)' }}
       >
         {/* Header: close (left) · helper title (centre) · replace + rotate
             (right). Slim, no separator. */}
         <header className="flex items-center gap-2 px-2.5 py-2">
           <IconBtn label="Close" side="bottom" onClick={() => !busy && onCancel()}>
-            <X size={17} strokeWidth={1.8} />
+            <X size="1.0625rem" strokeWidth={1.8} />
           </IconBtn>
           <div className="flex-1 min-w-0 text-center">
-            <span className="text-[12.5px] text-muted">Drag image to adjust</span>
+            <span className="text-[0.78125rem] text-muted">Drag image to adjust</span>
           </div>
           <IconBtn label="Rotate" side="bottom" onClick={() => void rotate()} disabled={busy}>
-            <RotateCw size={16} strokeWidth={1.7} />
+            <RotateCw size="1rem" strokeWidth={1.7} />
           </IconBtn>
           <IconBtn
             label="Replace photo"
@@ -369,7 +369,7 @@ export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
             onClick={() => replaceInputRef.current?.click()}
             disabled={busy}
           >
-            <RefreshCw size={16} strokeWidth={1.7} />
+            <RefreshCw size="1rem" strokeWidth={1.7} />
           </IconBtn>
         </header>
 
@@ -425,7 +425,7 @@ export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
                 onClick={() => handleZoom(zoom + 0.25)}
                 disabled={busy}
               >
-                <Plus size={16} strokeWidth={2} />
+                <Plus size="1rem" strokeWidth={2} />
               </IconBtn>
               <IconBtn
                 label="Zoom out"
@@ -434,7 +434,7 @@ export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
                 onClick={() => handleZoom(zoom - 0.25)}
                 disabled={busy}
               >
-                <Minus size={16} strokeWidth={2} />
+                <Minus size="1rem" strokeWidth={2} />
               </IconBtn>
             </div>
 
@@ -451,9 +451,9 @@ export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
                 disabled={busy || !natural}
               >
                 {busy ? (
-                  <Loader2 size={20} strokeWidth={2.2} className="animate-spin" />
+                  <Loader2 size="1.25rem" strokeWidth={2.2} className="animate-spin" />
                 ) : (
-                  <Check size={20} strokeWidth={2.4} />
+                  <Check size="1.25rem" strokeWidth={2.4} />
                 )}
               </IconBtn>
             </div>
@@ -475,7 +475,7 @@ export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
         </div>
 
         {error && (
-          <div className="text-[11.5px] text-alert text-center px-4 py-2 bg-bg">{error}</div>
+          <div className="text-[0.71875rem] text-alert text-center px-4 py-2 bg-bg">{error}</div>
         )}
       </div>
     </div>
@@ -528,7 +528,7 @@ function IconBtn({
       </button>
       <span
         role="tooltip"
-        className={`pointer-events-none absolute z-10 whitespace-nowrap rounded-chip border border-white/[0.10] bg-surface px-2 py-1 text-[11px] text-text opacity-0 transition-opacity duration-100 group-hover:opacity-100 ${tip}`}
+        className={`pointer-events-none absolute z-10 whitespace-nowrap rounded-chip border border-white/[0.10] bg-surface px-2 py-1 text-[0.6875rem] text-text opacity-0 transition-opacity duration-100 group-hover:opacity-100 ${tip}`}
         style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.55)' }}
       >
         {label}

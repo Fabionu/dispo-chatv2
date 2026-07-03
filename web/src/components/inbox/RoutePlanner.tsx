@@ -55,7 +55,7 @@ const EMPTY_TRUCK: TruckProfileForm = {
 
 const MAX_STOPS = 8
 const ON_ROUTE_METERS = 200
-// Width the expanded panel overlaps on the map's left edge (left-3 + w-[300px]
+// Width the expanded panel overlaps on the map's left edge (left-3 + w-[18.75rem]
 // + breathing room) — fed to the map so the route frames clear of it.
 const PANEL_INSET_PX = 322
 
@@ -132,7 +132,8 @@ function formatDuration(seconds: number): string {
 
 function formatEta(seconds: number): string {
   const eta = new Date(Date.now() + seconds * 1000)
-  return eta.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  // 24-hour clock, matching message timestamps (see messageUtils.formatTime).
+  return eta.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
 }
 
 function errorMessage(code: string): string {
@@ -409,11 +410,12 @@ export default function RoutePlanner({ onBack }: Props) {
   }
   // Add an intermediate stop at `atIndex` (clamped into the stop list), always
   // keeping the start first and the finish last. With no `atIndex` it appends
-  // before the destination. Callers pass an index for every deliberate case:
-  //   • "Add stop" (panel/map) → bestStopIndexFor(): the most LOGICAL position,
-  //     so a new stop slots into geographic order instead of just appending.
-  //   • route-line drag → the exact leg that was grabbed.
-  //   • "Add stop on route" → the nearest leg.
+  // before the destination. Two intentionally different insertion policies:
+  //   • Panel "Add stop" → NO index → appends in the destination slot (pushing
+  //     the destination down). No auto-sort: the list keeps the order the user
+  //     built, reorderable by hand. This is the predictable, Google-Maps rule.
+  //   • Map "Add stop" → bestStopIndexFor(): the most LOGICAL leg for the click.
+  //   • Map "Add stop on route" / route-line drag → the exact leg grabbed.
   // Setting start/finish is a separate action (setStart / setDestinationPoint).
   function addStop(point: Omit<RoutePoint, 'role'>, atIndex?: number) {
     setPoints((prev) => {
@@ -749,12 +751,12 @@ export default function RoutePlanner({ onBack }: Props) {
   }
 
   const menuActions: { action: MenuAction; label: string; icon: React.ReactNode }[] = (() => {
-    if (!start) return [{ action: 'start', label: 'Set as start', icon: <Navigation size={14} /> }]
-    if (!destination) return [{ action: 'destination', label: 'Set as destination', icon: <Flag size={14} /> }]
+    if (!start) return [{ action: 'start', label: 'Set as start', icon: <Navigation size="0.875rem" /> }]
+    if (!destination) return [{ action: 'destination', label: 'Set as destination', icon: <Flag size="0.875rem" /> }]
     const list: { action: MenuAction; label: string; icon: React.ReactNode }[] = []
     if (route && nearOnRoute !== null)
-      list.push({ action: 'add-on-route', label: 'Add stop on route', icon: <MapPin size={14} /> })
-    list.push({ action: 'add', label: 'Add stop', icon: <MapPin size={14} /> })
+      list.push({ action: 'add-on-route', label: 'Add stop on route', icon: <MapPin size="0.875rem" /> })
+    list.push({ action: 'add', label: 'Add stop', icon: <MapPin size="0.875rem" /> })
     return list
   })()
 
@@ -823,7 +825,7 @@ export default function RoutePlanner({ onBack }: Props) {
           aria-label="Cancel edit"
           className="h-10 w-8 flex items-center justify-center rounded text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
         >
-          <X size={15} strokeWidth={2} />
+          <X size="0.9375rem" strokeWidth={2} />
         </button>
       </div>
     )
@@ -837,18 +839,18 @@ export default function RoutePlanner({ onBack }: Props) {
           aria-label="Back to workspace"
           className="h-9 w-9 -ml-1 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.05] transition-colors"
         >
-          <ArrowLeft size={20} strokeWidth={1.8} />
+          <ArrowLeft size="1.25rem" strokeWidth={1.8} />
         </button>
         <div className="min-w-0">
-          <div className="text-[15px] font-semibold tracking-[-0.2px] leading-tight">Route planner</div>
-          <div className="text-[12px] text-muted leading-tight mt-0.5">
+          <div className="text-[0.9375rem] font-semibold tracking-[-0.2px] leading-tight">Route planner</div>
+          <div className="text-[0.75rem] text-muted leading-tight mt-0.5">
             Truck routing with HERE · right-click the map to add points
           </div>
         </div>
       </header>
 
       {/* Map region — the panel floats over this and never resizes it. */}
-      <div ref={regionRef} className="relative flex-1 min-h-[360px] mt-3 rounded-card overflow-hidden border border-white/[0.08]">
+      <div ref={regionRef} className="relative flex-1 min-h-[22.5rem] mt-3 rounded-card overflow-hidden border border-white/[0.08]">
         <HereMap
           markers={markers}
           routePolylines={polylines}
@@ -877,11 +879,11 @@ export default function RoutePlanner({ onBack }: Props) {
               ? 'Toggle HERE truck/HGV restriction overlay'
               : 'Truck overlay not available on this HERE plan'
           }
-          className={`absolute z-20 top-3 right-3 flex items-center gap-1.5 h-8 px-3 rounded-full border text-[12px] font-medium shadow-lg transition-colors ${
+          className={`absolute z-20 top-3 right-3 flex items-center gap-1.5 h-8 px-3 rounded-full border text-[0.75rem] font-medium shadow-lg transition-colors ${
             truckOverlay ? 'bg-active text-bg border-active' : 'bg-rail/90 text-text border-white/[0.12] hover:bg-rail'
           } disabled:opacity-40 disabled:cursor-not-allowed`}
         >
-          <Truck size={14} strokeWidth={2} />
+          <Truck size="0.875rem" strokeWidth={2} />
           HGV
         </button>
 
@@ -889,30 +891,30 @@ export default function RoutePlanner({ onBack }: Props) {
         <button
           onClick={() => setPanelCollapsed(false)}
           aria-label="Open route panel"
-          className={`absolute z-20 top-3 left-3 flex items-center gap-1.5 h-9 pl-2.5 pr-3 rounded-full border border-white/[0.12] bg-rail/90 text-text text-[12px] font-medium shadow-lg transition-opacity hover:bg-rail ${
+          className={`absolute z-20 top-3 left-3 flex items-center gap-1.5 h-9 pl-2.5 pr-3 rounded-full border border-white/[0.12] bg-rail/90 text-text text-[0.75rem] font-medium shadow-lg transition-opacity hover:bg-rail ${
             panelCollapsed ? 'opacity-100' : 'opacity-0 pointer-events-none'
           }`}
         >
-          <ChevronRight size={16} strokeWidth={2} />
+          <ChevronRight size="1rem" strokeWidth={2} />
           Route
         </button>
 
         {/* Floating route panel — compact; collapses horizontally to the left. */}
         <div
-          className="absolute z-20 top-3 left-3 w-[300px] max-w-[calc(100%-1.5rem)] max-h-[calc(100%-1.5rem)] flex flex-col rounded-card border border-white/[0.12] bg-rail/95 backdrop-blur-sm shadow-2xl transition-transform duration-300 ease-out"
+          className="absolute z-20 top-3 left-3 w-[18.75rem] max-w-[calc(100%-1.5rem)] max-h-[calc(100%-1.5rem)] flex flex-col rounded-card border border-white/[0.12] bg-rail/95 backdrop-blur-sm shadow-2xl transition-transform duration-300 ease-out"
           style={{ transform: panelCollapsed ? 'translateX(calc(-100% - 1rem))' : 'translateX(0)' }}
           aria-hidden={panelCollapsed}
         >
           <div className="flex items-center justify-between pl-3.5 pr-2 h-10 border-b border-white/[0.08] shrink-0">
-            <span className="text-[13px] font-semibold tracking-[-0.1px]">Route</span>
+            <span className="text-[0.8125rem] font-semibold tracking-[-0.1px]">Route</span>
             <div className="flex items-center gap-0.5">
               {points.length > 0 && (
                 <button
                   onClick={clearRoute}
                   title="Clear route"
-                  className="h-7 px-2 flex items-center gap-1 rounded text-[11px] text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
+                  className="h-7 px-2 flex items-center gap-1 rounded text-[0.6875rem] text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
                 >
-                  <Trash2 size={13} strokeWidth={1.8} /> Clear
+                  <Trash2 size="0.8125rem" strokeWidth={1.8} /> Clear
                 </button>
               )}
               <button
@@ -921,7 +923,7 @@ export default function RoutePlanner({ onBack }: Props) {
                 aria-label="Collapse panel"
                 className="h-7 w-7 flex items-center justify-center rounded text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
               >
-                <ChevronLeft size={16} strokeWidth={2} />
+                <ChevronLeft size="1rem" strokeWidth={2} />
               </button>
             </div>
           </div>
@@ -985,8 +987,12 @@ export default function RoutePlanner({ onBack }: Props) {
                       value={null}
                       onChange={(p) => {
                         if (p) {
-                          const sp = fromSearch(p)
-                          addStop(sp, bestStopIndexFor(sp.coordinates))
+                          // Panel "Add stop" appends the new stop in the current
+                          // destination slot (pushing the destination down so it
+                          // stays last) and does NOT auto-sort — the user placed it
+                          // here deliberately, Google-Maps-style. Only map/route
+                          // adds slot into the nearest leg (addStop with an index).
+                          addStop(fromSearch(p))
                           setAddingStop(false)
                         }
                       }}
@@ -998,15 +1004,15 @@ export default function RoutePlanner({ onBack }: Props) {
                     aria-label="Cancel add stop"
                     className="h-10 w-8 flex items-center justify-center rounded text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
                   >
-                    <X size={15} strokeWidth={2} />
+                    <X size="0.9375rem" strokeWidth={2} />
                   </button>
                 </div>
               ) : (
                 <button
                   onClick={() => setAddingStop(true)}
-                  className="self-start flex items-center gap-1.5 text-[12px] text-muted hover:text-text transition-colors"
+                  className="self-start flex items-center gap-1.5 text-[0.75rem] text-muted hover:text-text transition-colors"
                 >
-                  <Plus size={14} strokeWidth={2} /> Add stop
+                  <Plus size="0.875rem" strokeWidth={2} /> Add stop
                 </button>
               ))}
 
@@ -1038,12 +1044,12 @@ export default function RoutePlanner({ onBack }: Props) {
             {/* Truck profile (collapsible, with presets) */}
             <div className="border-t border-white/[0.08] pt-1.5">
               <button onClick={() => setTruckOpen((o) => !o)} className="w-full flex items-center justify-between py-1 text-left">
-                <span className="flex items-center gap-2 text-[12px] font-semibold tracking-[-0.1px]">
-                  <Truck size={14} strokeWidth={1.8} className="text-muted" /> Truck profile
+                <span className="flex items-center gap-2 text-[0.75rem] font-semibold tracking-[-0.1px]">
+                  <Truck size="0.875rem" strokeWidth={1.8} className="text-muted" /> Truck profile
                 </span>
-                <span className="flex items-center gap-1.5 text-[11px] text-muted min-w-0">
-                  {!truckOpen && <span className="truncate max-w-[150px]">{collapsedTruckLabel}</span>}
-                  {truckOpen ? <ChevronUp size={15} strokeWidth={2} /> : <ChevronDown size={15} strokeWidth={2} />}
+                <span className="flex items-center gap-1.5 text-[0.6875rem] text-muted min-w-0">
+                  {!truckOpen && <span className="truncate max-w-[9.375rem]">{collapsedTruckLabel}</span>}
+                  {truckOpen ? <ChevronUp size="0.9375rem" strokeWidth={2} /> : <ChevronDown size="0.9375rem" strokeWidth={2} />}
                 </span>
               </button>
 
@@ -1054,7 +1060,7 @@ export default function RoutePlanner({ onBack }: Props) {
                     <select
                       value={activePresetId ?? ''}
                       onChange={(e) => (e.target.value ? applyPreset(e.target.value) : setActivePresetId(null))}
-                      className="h-8 flex-1 min-w-0 rounded-lg border border-white/[0.1] bg-rail px-2 text-[12px] text-text outline-none focus:border-white/[0.25]"
+                      className="h-8 flex-1 min-w-0 rounded-lg border border-white/[0.1] bg-rail px-2 text-[0.75rem] text-text outline-none focus:border-white/[0.25]"
                     >
                       <option value="">Preset…</option>
                       <optgroup label="Built-in">
@@ -1080,7 +1086,7 @@ export default function RoutePlanner({ onBack }: Props) {
                       aria-label="Save preset"
                       className="h-8 w-8 flex items-center justify-center rounded-lg border border-white/[0.1] text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
                     >
-                      <Bookmark size={14} strokeWidth={1.8} />
+                      <Bookmark size="0.875rem" strokeWidth={1.8} />
                     </button>
                     {activePreset && !activePreset.builtIn && (
                       <button
@@ -1089,7 +1095,7 @@ export default function RoutePlanner({ onBack }: Props) {
                         aria-label="Delete preset"
                         className="h-8 w-8 flex items-center justify-center rounded-lg border border-white/[0.1] text-muted hover:text-red-300 hover:bg-white/[0.06] transition-colors"
                       >
-                        <Trash2 size={14} strokeWidth={1.8} />
+                        <Trash2 size="0.875rem" strokeWidth={1.8} />
                       </button>
                     )}
                   </div>
@@ -1102,14 +1108,14 @@ export default function RoutePlanner({ onBack }: Props) {
                         onKeyDown={(e) => e.key === 'Enter' && commitSavePreset()}
                         placeholder="Preset name"
                         autoFocus
-                        className="h-8 flex-1 min-w-0 rounded-lg border border-white/[0.1] bg-white/[0.03] px-2.5 text-[12px] outline-none focus:border-white/[0.25] placeholder:text-muted/60"
+                        className="h-8 flex-1 min-w-0 rounded-lg border border-white/[0.1] bg-white/[0.03] px-2.5 text-[0.75rem] outline-none focus:border-white/[0.25] placeholder:text-muted/60"
                       />
                       <button
                         onClick={commitSavePreset}
                         disabled={!presetName.trim()}
-                        className="h-8 px-2.5 flex items-center gap-1 rounded-lg bg-active/90 text-bg text-[12px] font-semibold hover:bg-active disabled:opacity-40 transition-colors"
+                        className="h-8 px-2.5 flex items-center gap-1 rounded-lg bg-active/90 text-bg text-[0.75rem] font-semibold hover:bg-active disabled:opacity-40 transition-colors"
                       >
-                        <Check size={13} strokeWidth={2.4} /> Save
+                        <Check size="0.8125rem" strokeWidth={2.4} /> Save
                       </button>
                     </div>
                   )}
@@ -1131,25 +1137,25 @@ export default function RoutePlanner({ onBack }: Props) {
               onClick={calculate}
               disabled={routeButtonDisabled}
               title={!hasEndpoints ? 'Set a start and destination first' : undefined}
-              className="h-10 rounded-lg bg-active/90 text-bg font-semibold text-[13px] flex items-center justify-center gap-2 transition-colors hover:bg-active disabled:opacity-40 disabled:cursor-not-allowed"
+              className="h-10 rounded-lg bg-active/90 text-bg font-semibold text-[0.8125rem] flex items-center justify-center gap-2 transition-colors hover:bg-active disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {routeUpToDate ? <Check size={16} strokeWidth={2.4} /> : <RouteIcon size={16} strokeWidth={2} />}
+              {routeUpToDate ? <Check size="1rem" strokeWidth={2.4} /> : <RouteIcon size="1rem" strokeWidth={2} />}
               {routeButtonLabel}
             </button>
             {route && dirty && !loading && (
-              <div className="text-[11px] text-amber-200/80">Route is outdated — press “Update route”.</div>
+              <div className="text-[0.6875rem] text-amber-200/80">Route is outdated — press “Update route”.</div>
             )}
 
             {/* Status */}
             {loading && (
-              <div className="flex items-center gap-2 text-[12px] text-muted">
+              <div className="flex items-center gap-2 text-[0.75rem] text-muted">
                 <Spinner size={14} /> Calculating route…
               </div>
             )}
             {error && (
-              <div className="text-[12px] text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</div>
+              <div className="text-[0.75rem] text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</div>
             )}
-            {snapNote && <div className="text-[11px] text-amber-200/80">{snapNote}</div>}
+            {snapNote && <div className="text-[0.6875rem] text-amber-200/80">{snapNote}</div>}
 
             {/* Summary + notices */}
             {route && !loading && (
@@ -1161,10 +1167,10 @@ export default function RoutePlanner({ onBack }: Props) {
                 </div>
                 {notices.length > 0 && (
                   <div className="flex flex-col gap-1.5">
-                    <div className="text-[11px] font-semibold text-muted uppercase tracking-wide">Notices</div>
+                    <div className="text-[0.6875rem] font-semibold text-muted uppercase tracking-wide">Notices</div>
                     {notices.map((n, i) => (
-                      <div key={`${n.code}-${i}`} className="flex items-start gap-2 text-[12px] text-amber-200/90">
-                        <TriangleAlert size={13} className="mt-0.5 shrink-0" strokeWidth={1.8} />
+                      <div key={`${n.code}-${i}`} className="flex items-start gap-2 text-[0.75rem] text-amber-200/90">
+                        <TriangleAlert size="0.8125rem" className="mt-0.5 shrink-0" strokeWidth={1.8} />
                         <span>{n.title || n.code || 'Route notice'}</span>
                       </div>
                     ))}
@@ -1179,17 +1185,17 @@ export default function RoutePlanner({ onBack }: Props) {
         {menu && (
           <div
             id="route-context-menu"
-            className="absolute z-30 min-w-[180px] rounded-lg border border-white/[0.12] bg-rail shadow-2xl py-1"
+            className="absolute z-30 min-w-[11.25rem] rounded-lg border border-white/[0.12] bg-rail shadow-2xl py-1"
             style={{ left: menu.x, top: menu.y }}
           >
-            <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-muted border-b border-white/[0.06] mb-1">
+            <div className="px-3 py-1.5 text-[0.625rem] uppercase tracking-wide text-muted border-b border-white/[0.06] mb-1">
               {fmtCoord({ lat: menu.lat, lng: menu.lng })}
             </div>
             {menuActions.map((opt) => (
               <button
                 key={opt.action}
                 onClick={() => applyMenuAction(opt.action)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-white/[0.06] transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 text-left text-[0.8125rem] hover:bg-white/[0.06] transition-colors"
               >
                 <span className="text-muted">{opt.icon}</span>
                 {opt.label}
@@ -1213,36 +1219,36 @@ export default function RoutePlanner({ onBack }: Props) {
           return (
             <div
               id="route-marker-menu"
-              className="absolute z-30 min-w-[180px] rounded-lg border border-white/[0.12] bg-rail shadow-2xl py-1"
+              className="absolute z-30 min-w-[11.25rem] rounded-lg border border-white/[0.12] bg-rail shadow-2xl py-1"
               style={{ left: markerMenu.x, top: markerMenu.y }}
             >
               <div className="px-3 py-1.5 border-b border-white/[0.06] mb-1">
-                <div className="text-[10px] uppercase tracking-wide text-muted">{heading}</div>
-                <div className="text-[12px] text-text truncate" title={point.label}>
+                <div className="text-[0.625rem] uppercase tracking-wide text-muted">{heading}</div>
+                <div className="text-[0.75rem] text-text truncate" title={point.label}>
                   {point.label}
                 </div>
               </div>
               <button
                 onClick={() => copyPointCoord(markerMenu.id)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-white/[0.06] transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 text-left text-[0.8125rem] hover:bg-white/[0.06] transition-colors"
               >
-                <span className="text-muted"><Copy size={14} /></span>
+                <span className="text-muted"><Copy size="0.875rem" /></span>
                 Copy coordinates
               </button>
               {markerMenu.role === 'stop' ? (
                 <button
                   onClick={() => removeStopFromMap(markerMenu.id)}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-[13px] text-red-300 hover:bg-red-500/10 transition-colors"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-[0.8125rem] text-red-300 hover:bg-red-500/10 transition-colors"
                 >
-                  <span><Trash2 size={14} /></span>
+                  <span><Trash2 size="0.875rem" /></span>
                   Remove stop
                 </button>
               ) : (
                 <button
                   onClick={() => clearEndpointFromMap(markerMenu.id)}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-[13px] text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-[0.8125rem] text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
                 >
-                  <span><X size={14} /></span>
+                  <span><X size="0.875rem" /></span>
                   {markerMenu.role === 'start' ? 'Clear start' : 'Clear destination'}
                 </button>
               )}
@@ -1300,14 +1306,14 @@ function PointRow({
   const badge =
     role === 'start' ? (
       <span className="h-5 w-5 shrink-0 rounded-full bg-[#7d8a78] flex items-center justify-center text-bg">
-        <Navigation size={11} strokeWidth={2.4} />
+        <Navigation size="0.6875rem" strokeWidth={2.4} />
       </span>
     ) : role === 'destination' ? (
       <span className="h-5 w-5 shrink-0 rounded-full bg-[#d97757] flex items-center justify-center text-bg">
-        <Flag size={11} strokeWidth={2.4} />
+        <Flag size="0.6875rem" strokeWidth={2.4} />
       </span>
     ) : (
-      <span className="h-5 w-5 shrink-0 rounded-full border-2 border-active text-[10px] font-bold flex items-center justify-center">
+      <span className="h-5 w-5 shrink-0 rounded-full border-2 border-active text-[0.625rem] font-bold flex items-center justify-center">
         {index}
       </span>
     )
@@ -1340,7 +1346,7 @@ function PointRow({
           title="Drag to reorder"
           className="shrink-0 -ml-0.5 -mr-0.5 text-muted/60 hover:text-text cursor-default"
         >
-          <GripVertical size={14} strokeWidth={1.8} />
+          <GripVertical size="0.875rem" strokeWidth={1.8} />
         </span>
       )}
       <div className="shrink-0">{badge}</div>
@@ -1349,25 +1355,25 @@ function PointRow({
           <button
             onClick={onEdit}
             title="Edit address"
-            className="block w-full text-left text-[12.5px] leading-tight truncate hover:text-text transition-colors"
+            className="block w-full text-left text-[0.78125rem] leading-tight truncate hover:text-text transition-colors"
           >
             {point.label}
           </button>
         ) : (
-          <div className="text-[12.5px] leading-tight truncate" title={point.label}>
+          <div className="text-[0.78125rem] leading-tight truncate" title={point.label}>
             {point.label}
           </div>
         )}
         <button
           onClick={copyCoord}
           title="Copy coordinates"
-          className="group flex items-center gap-1 text-[11px] text-muted hover:text-text transition-colors tabular-nums"
+          className="group flex items-center gap-1 text-[0.6875rem] text-muted hover:text-text transition-colors tabular-nums"
         >
           {coord.lat.toFixed(5)}, {coord.lng.toFixed(5)}
           {copied ? (
-            <Check size={11} strokeWidth={2.4} className="text-done" />
+            <Check size="0.6875rem" strokeWidth={2.4} className="text-done" />
           ) : (
-            <Copy size={11} strokeWidth={1.8} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+            <Copy size="0.6875rem" strokeWidth={1.8} className="opacity-0 group-hover:opacity-100 transition-opacity" />
           )}
           {point.source === 'map' && <span className="text-faint">· map</span>}
         </button>
@@ -1375,11 +1381,11 @@ function PointRow({
       <div className="flex items-center gap-0.5 shrink-0">
         {onEdit && (
           <IconBtn label="Edit address" onClick={onEdit}>
-            <Pencil size={13} strokeWidth={1.8} />
+            <Pencil size="0.8125rem" strokeWidth={1.8} />
           </IconBtn>
         )}
         <IconBtn label="Remove" onClick={onClear}>
-          <X size={14} strokeWidth={2} />
+          <X size="0.875rem" strokeWidth={2} />
         </IconBtn>
       </div>
     </div>
@@ -1413,7 +1419,7 @@ function NumberField({
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[11px] text-muted">{label}</span>
+      <span className="text-[0.6875rem] text-muted">{label}</span>
       <input
         type="number"
         inputMode="numeric"
@@ -1421,7 +1427,7 @@ function NumberField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="h-8 rounded-lg border border-white/[0.1] bg-white/[0.03] px-2.5 text-[13px] outline-none focus:border-white/[0.25] placeholder:text-muted/60"
+        className="h-8 rounded-lg border border-white/[0.1] bg-white/[0.03] px-2.5 text-[0.8125rem] outline-none focus:border-white/[0.25] placeholder:text-muted/60"
       />
     </label>
   )
@@ -1430,8 +1436,8 @@ function NumberField({
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-[11px] text-muted">{label}</span>
-      <span className="text-[14px] font-semibold tracking-[-0.2px]">{value}</span>
+      <span className="text-[0.6875rem] text-muted">{label}</span>
+      <span className="text-[0.875rem] font-semibold tracking-[-0.2px]">{value}</span>
     </div>
   )
 }

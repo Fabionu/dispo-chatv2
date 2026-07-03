@@ -84,14 +84,14 @@ export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
         <>
           <button
             onClick={onClose}
-            className="text-[12.5px] text-muted hover:text-text border border-white/[0.12] rounded-btn px-3 py-1.5 transition-colors"
+            className="text-[0.78125rem] text-muted hover:text-text border border-white/[0.12] rounded-btn px-3 py-1.5 transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={() => void submit()}
             disabled={submitting}
-            className="text-[12.5px] font-semibold bg-text text-bg rounded-btn px-3.5 py-1.5 hover:bg-text/90 transition-colors disabled:opacity-60"
+            className="text-[0.78125rem] font-semibold bg-text text-bg rounded-btn px-3.5 py-1.5 hover:bg-text/90 transition-colors disabled:opacity-60"
           >
             {submitting ? 'Creating…' : 'Create group'}
           </button>
@@ -143,15 +143,15 @@ export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
                     checked={selected.has(m.id)}
                     onChange={() => toggleMember(m.id)}
                   />
-                  <span className="text-[12.5px] flex-1 truncate">{m.displayName}</span>
-                  <span className="text-[11px] text-faint capitalize">{m.role}</span>
+                  <span className="text-[0.78125rem] flex-1 truncate">{m.displayName}</span>
+                  <span className="text-[0.6875rem] text-faint capitalize">{m.role}</span>
                 </label>
               ))}
             </div>
           </div>
         )}
 
-        {error && <div className="text-[12px] text-alert">{error}</div>}
+        {error && <div className="text-[0.75rem] text-alert">{error}</div>}
       </div>
     </Modal>
   )
@@ -168,7 +168,7 @@ function ModalField({
 }) {
   return (
     <div>
-      <label className="block text-[12px] text-text mb-1.5">
+      <label className="block text-[0.75rem] text-text mb-1.5">
         {label}
         {required && <span className="text-faint"> *</span>}
       </label>

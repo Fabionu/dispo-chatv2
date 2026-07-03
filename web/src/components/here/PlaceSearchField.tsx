@@ -108,13 +108,13 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
 
   return (
     <div ref={rootRef} className="relative flex flex-col gap-1.5">
-      {label && <label className="text-[12px] font-medium text-muted">{label}</label>}
+      {label && <label className="text-[0.75rem] font-medium text-muted">{label}</label>}
 
       {value ? (
         // Selected state — locked chip with the chosen place + clear button.
         <div className="flex items-center gap-2 rounded-xl border border-white/[0.1] bg-white/[0.03] px-3 h-10">
-          <MapPin size={15} className="shrink-0 text-active" strokeWidth={1.8} />
-          <span className="flex-1 truncate text-[13px]" title={value.label}>
+          <MapPin size="0.9375rem" className="shrink-0 text-active" strokeWidth={1.8} />
+          <span className="flex-1 truncate text-[0.8125rem]" title={value.label}>
             {value.label || value.title}
           </span>
           <button
@@ -123,7 +123,7 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
             aria-label={`Clear ${label}`}
             className="shrink-0 text-muted hover:text-text transition-colors"
           >
-            <X size={15} strokeWidth={2} />
+            <X size="0.9375rem" strokeWidth={2} />
           </button>
         </div>
       ) : (
@@ -145,7 +145,7 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
           aria-controls={listboxId}
           autoComplete="off"
           autoFocus={autoFocus}
-          className="h-10 rounded-xl border border-white/[0.1] bg-white/[0.03] px-3 text-[13px] outline-none focus:border-white/[0.25] placeholder:text-muted/70"
+          className="h-10 rounded-xl border border-white/[0.1] bg-white/[0.03] px-3 text-[0.8125rem] outline-none focus:border-white/[0.25] placeholder:text-muted/70"
         />
       )}
 
@@ -165,17 +165,17 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
                 onClick={() => select(coordPlace(coord))}
                 className="w-full text-left px-3 py-2 hover:bg-white/[0.05] transition-colors flex items-start gap-2"
               >
-                <MapPin size={14} className="mt-0.5 shrink-0 text-active" strokeWidth={1.8} />
+                <MapPin size="0.875rem" className="mt-0.5 shrink-0 text-active" strokeWidth={1.8} />
                 <span className="min-w-0">
-                  <span className="block text-[13px]">Go to coordinates</span>
-                  <span className="block text-[11px] text-muted tabular-nums">
+                  <span className="block text-[0.8125rem]">Go to coordinates</span>
+                  <span className="block text-[0.6875rem] text-muted tabular-nums">
                     {coord.lat.toFixed(5)}, {coord.lng.toFixed(5)}
                   </span>
                 </span>
               </button>
             </li>
           ) : (
-            <li className="px-3 py-2.5 text-[12px] text-amber-200/80">
+            <li className="px-3 py-2.5 text-[0.75rem] text-amber-200/80">
               Invalid coordinates — latitude −90 to 90, longitude −180 to 180.
             </li>
           )}
@@ -189,7 +189,7 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
           className="absolute z-20 top-full mt-1 w-full max-h-72 overflow-y-auto rounded-xl border border-white/[0.1] bg-rail shadow-xl"
         >
           {loading && items.length === 0 && (
-            <li className="px-3 py-2.5 text-[12px] text-muted">Searching…</li>
+            <li className="px-3 py-2.5 text-[0.75rem] text-muted">Searching…</li>
           )}
           {items.map((item) => (
             <li key={item.id} role="option" aria-selected={false}>
@@ -198,11 +198,11 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
                 onClick={() => select(item)}
                 className="w-full text-left px-3 py-2 hover:bg-white/[0.05] transition-colors flex items-start gap-2"
               >
-                <MapPin size={14} className="mt-0.5 shrink-0 text-muted" strokeWidth={1.8} />
+                <MapPin size="0.875rem" className="mt-0.5 shrink-0 text-muted" strokeWidth={1.8} />
                 <span className="min-w-0">
-                  <span className="block text-[13px] truncate">{item.title}</span>
+                  <span className="block text-[0.8125rem] truncate">{item.title}</span>
                   {item.label && item.label !== item.title && (
-                    <span className="block text-[11px] text-muted truncate">{item.label}</span>
+                    <span className="block text-[0.6875rem] text-muted truncate">{item.label}</span>
                   )}
                 </span>
               </button>

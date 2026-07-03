@@ -261,7 +261,7 @@ export default function AttachmentBlock({
             />
             {!loaded && (
               <div className="absolute inset-0 flex items-center justify-center bg-white/[0.03] animate-pulse pointer-events-none">
-                <ImageIcon size={22} strokeWidth={1.5} className="text-faint" />
+                <ImageIcon size="1.375rem" strokeWidth={1.5} className="text-faint" />
               </div>
             )}
             {/* Pending overlay: a subtle dark gradient + centered spinner while
@@ -272,7 +272,7 @@ export default function AttachmentBlock({
                 <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/10 to-black/20" />
                 <div className="absolute inset-0 flex items-center justify-center">
                   <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/55 backdrop-blur-[1px]">
-                    <Loader2 size={16} strokeWidth={2} className="animate-spin text-white/90" />
+                    <Loader2 size="1rem" strokeWidth={2} className="animate-spin text-white/90" />
                   </span>
                 </div>
               </div>
@@ -285,21 +285,21 @@ export default function AttachmentBlock({
 
   if (isImage && imgFailed) {
     return (
-      <div className="flex items-center gap-2.5 rounded-card border border-white/[0.08] bg-white/[0.02] px-2.5 py-2 max-w-[360px]">
+      <div className="flex items-center gap-2.5 rounded-card border border-white/[0.08] bg-white/[0.02] px-2.5 py-2 max-w-[22.5rem]">
         <div className="h-9 w-9 rounded-chip border border-white/[0.10] bg-white/[0.03] flex items-center justify-center shrink-0">
-          <ImageOff size={15} strokeWidth={1.6} className="text-faint" />
+          <ImageOff size="0.9375rem" strokeWidth={1.6} className="text-faint" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-[12px] text-muted truncate">{attachment.originalName}</div>
-          <div className="text-[10.5px] text-faint">Image unavailable</div>
+          <div className="text-[0.75rem] text-muted truncate">{attachment.originalName}</div>
+          <div className="text-[0.65625rem] text-faint">Image unavailable</div>
         </div>
         <button
           type="button"
           onClick={retryImage}
           aria-label="Retry loading image"
-          className="flex items-center gap-1 rounded-chip border border-white/[0.10] px-1.5 py-1 text-[10.5px] text-muted hover:text-text hover:bg-white/[0.04] transition-colors shrink-0"
+          className="flex items-center gap-1 rounded-chip border border-white/[0.10] px-1.5 py-1 text-[0.65625rem] text-muted hover:text-text hover:bg-white/[0.04] transition-colors shrink-0"
         >
-          <RotateCw size={12} strokeWidth={1.8} />
+          <RotateCw size="0.75rem" strokeWidth={1.8} />
           Retry
         </button>
       </div>
@@ -322,33 +322,33 @@ export default function AttachmentBlock({
       onClick={() => onActivate(attachment)}
       disabled={uploading || !hasUrl}
       aria-label={isPdf ? `Preview ${attachment.originalName}` : `Open ${attachment.originalName}`}
-      className="block w-[240px] max-w-full overflow-hidden rounded-card border border-white/[0.05] bg-white/[0.02] hover:bg-white/[0.03] disabled:cursor-default transition-colors text-left"
+      className="block w-[15rem] max-w-full overflow-hidden rounded-card border border-white/[0.05] bg-white/[0.02] hover:bg-white/[0.03] disabled:cursor-default transition-colors text-left"
     >
       {/* Preview band */}
-      <div className="relative h-[104px] bg-bg border-b border-white/[0.06] flex items-center justify-center">
+      <div className="relative h-[6.5rem] bg-bg border-b border-white/[0.06] flex items-center justify-center">
         <div className="absolute inset-0 opacity-[0.04] bg-gradient-to-b from-white to-transparent pointer-events-none" />
         <div className="h-12 w-12 rounded-card border border-white/[0.10] bg-white/[0.03] flex items-center justify-center">
           <DocIcon mime={attachment.mimeType} size={24} />
         </div>
-        <span className="absolute top-2 left-2 rounded-chip border border-white/[0.10] bg-black/40 px-1.5 py-0.5 text-[9.5px] font-semibold tracking-wide text-muted">
+        <span className="absolute top-2 left-2 rounded-chip border border-white/[0.10] bg-black/40 px-1.5 py-0.5 text-[0.59375rem] font-semibold tracking-wide text-muted">
           {docExt}
         </span>
         {uploading && (
-          <span className="absolute top-2 right-2 flex items-center gap-1 rounded-chip bg-black/55 px-1.5 py-0.5 text-[10px] text-text/90">
-            <Loader2 size={11} strokeWidth={2} className="animate-spin" />
+          <span className="absolute top-2 right-2 flex items-center gap-1 rounded-chip bg-black/55 px-1.5 py-0.5 text-[0.625rem] text-text/90">
+            <Loader2 size="0.6875rem" strokeWidth={2} className="animate-spin" />
             Uploading…
           </span>
         )}
         {!uploading && hasUrl && (
           <span className="absolute bottom-2 right-2 text-muted">
-            {isPdf ? <Eye size={14} strokeWidth={1.6} /> : <Download size={14} strokeWidth={1.6} />}
+            {isPdf ? <Eye size="0.875rem" strokeWidth={1.6} /> : <Download size="0.875rem" strokeWidth={1.6} />}
           </span>
         )}
       </div>
       {/* Footer */}
       <div className="px-2.5 py-2">
-        <div className="text-[12px] text-text truncate">{attachment.originalName}</div>
-        <div className="text-[10.5px] text-muted mt-0.5">
+        <div className="text-[0.75rem] text-text truncate">{attachment.originalName}</div>
+        <div className="text-[0.65625rem] text-muted mt-0.5">
           {docExt} · {formatBytes(attachment.byteSize)}
         </div>
       </div>

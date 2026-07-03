@@ -43,21 +43,21 @@ export default function PreviewActionBar({
       }
     >
       <IconButton label="Reply" onClick={() => onReply(message)}>
-        <Reply size={18} strokeWidth={1.8} />
+        <Reply size="1.125rem" strokeWidth={1.8} />
       </IconButton>
       <IconButton label="Forward" onClick={() => onForward(message)}>
-        <Forward size={18} strokeWidth={1.8} />
+        <Forward size="1.125rem" strokeWidth={1.8} />
       </IconButton>
       {onOpenInTab && (
         <IconButton label="Open in tab" onClick={onOpenInTab}>
-          <Plus size={18} strokeWidth={1.8} />
+          <Plus size="1.125rem" strokeWidth={1.8} />
         </IconButton>
       )}
       <IconLink label="Download" href={attachment.url} download={attachment.originalName}>
-        <Download size={18} strokeWidth={1.8} />
+        <Download size="1.125rem" strokeWidth={1.8} />
       </IconLink>
       <IconButton label="Close" onClick={onClose}>
-        <X size={18} strokeWidth={1.8} />
+        <X size="1.125rem" strokeWidth={1.8} />
       </IconButton>
     </div>
   )

@@ -1152,9 +1152,9 @@ export default function ChatView({
       {dragActive && !dropBlocked && (
         <div className="absolute inset-0 z-30 pointer-events-none flex items-center justify-center bg-bg/80 backdrop-blur-[2px]">
           <div className="flex flex-col items-center gap-2.5 rounded-card border-2 border-dashed border-white/20 px-10 py-8 text-center">
-            <Upload size={26} strokeWidth={1.6} className="text-muted" />
-            <div className="text-[14px] font-semibold text-text">Drop to send</div>
-            <div className="text-[11.5px] text-faint">Images up to 10MB · files up to 25MB</div>
+            <Upload size="1.625rem" strokeWidth={1.6} className="text-muted" />
+            <div className="text-[0.875rem] font-semibold text-text">Drop to send</div>
+            <div className="text-[0.71875rem] text-faint">Images up to 10MB · files up to 25MB</div>
           </div>
         </div>
       )}
@@ -1223,8 +1223,8 @@ export default function ChatView({
             <GroupAvatar groupId={group.id} hasAvatar={Boolean(group.hasAvatar)} size={56} />
           )}
           <div className="min-w-0">
-            <div className="text-[16px] font-semibold truncate leading-tight">{groupLabel(group)}</div>
-            <div className="text-[13px] text-muted truncate leading-tight mt-0.5">{subtitle}</div>
+            <div className="text-[1rem] font-semibold truncate leading-tight">{groupLabel(group)}</div>
+            <div className="text-[0.8125rem] text-muted truncate leading-tight mt-0.5">{subtitle}</div>
           </div>
         </div>
 
@@ -1255,7 +1255,7 @@ export default function ChatView({
                 }}
                 placeholder="Search messages…"
                 aria-label="Search this conversation"
-                className="w-40 sm:w-52 bg-transparent text-[13px] outline-none placeholder:text-faint"
+                className="w-40 sm:w-52 bg-transparent text-[0.8125rem] outline-none placeholder:text-faint"
               />
               {searchQuery && (
                 <button
@@ -1266,7 +1266,7 @@ export default function ChatView({
                   aria-label="Clear search"
                   className="h-6 w-6 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.08] transition-colors shrink-0"
                 >
-                  <X size={14} strokeWidth={2} />
+                  <X size="0.875rem" strokeWidth={2} />
                 </button>
               )}
             </div>
@@ -1277,7 +1277,7 @@ export default function ChatView({
             onClick={() => (searchOpen ? closeSearch() : openSearch())}
             label={searchOpen ? 'Close search' : 'Search conversation'}
           >
-            <Search size={19} strokeWidth={1.8} />
+            <Search size="1.1875rem" strokeWidth={1.8} />
           </HeaderIconButton>
           {routeMapAvailable && (
             <HeaderIconButton
@@ -1287,12 +1287,12 @@ export default function ChatView({
                 tripRouteOpen && activeTool === 'route' ? closeTripRoute() : openTripRoute()
               }
             >
-              <Route size={19} strokeWidth={1.8} />
+              <Route size="1.1875rem" strokeWidth={1.8} />
             </HeaderIconButton>
           )}
           {group.type === 'vehicle' && (
             <HeaderIconButton label="Group info" onClick={() => setGroupInfoOpen(true)}>
-              <Info size={20} strokeWidth={1.8} />
+              <Info size="1.25rem" strokeWidth={1.8} />
             </HeaderIconButton>
           )}
         </div>
@@ -1306,14 +1306,14 @@ export default function ChatView({
         <div className="shrink-0 h-9 px-3 flex items-center gap-1 border-b border-white/[0.04] overflow-x-auto [scrollbar-width:none]">
           <ToolTab
             active={activeTool === 'chat'}
-            icon={<MessageSquare size={12} strokeWidth={2} />}
+            icon={<MessageSquare size="0.75rem" strokeWidth={2} />}
             label="Chat"
             onClick={() => setActiveTool('chat')}
           />
           {mapPick && (
             <ToolTab
               active={activeTool === 'map'}
-              icon={<MapPin size={12} strokeWidth={2} />}
+              icon={<MapPin size="0.75rem" strokeWidth={2} />}
               label="Map"
               onClick={() => setActiveTool('map')}
               onClose={closeMapPick}
@@ -1322,7 +1322,7 @@ export default function ChatView({
           {tripRouteOpen && (
             <ToolTab
               active={activeTool === 'route'}
-              icon={<Route size={12} strokeWidth={2} />}
+              icon={<Route size="0.75rem" strokeWidth={2} />}
               label="Trip route"
               onClick={() => setActiveTool('route')}
               onClose={closeTripRoute}
@@ -1334,9 +1334,9 @@ export default function ChatView({
               active={activeTool === `att:${t.attachment.id}`}
               icon={
                 t.attachment.mimeType.startsWith('image/') ? (
-                  <ImageIcon size={12} strokeWidth={2} />
+                  <ImageIcon size="0.75rem" strokeWidth={2} />
                 ) : (
-                  <FileText size={12} strokeWidth={2} />
+                  <FileText size="0.75rem" strokeWidth={2} />
                 )
               }
               label={attachmentTabLabel(t.attachment)}
@@ -1403,7 +1403,7 @@ export default function ChatView({
                 <div className="chat-column">
                 {messages.length === 0 ? (
                   <div className="h-full flex items-center justify-center">
-                    <p className="text-[12.5px] text-faint">No messages yet. Say something.</p>
+                    <p className="text-[0.78125rem] text-faint">No messages yet. Say something.</p>
                   </div>
                 ) : (
                   // PERF / TODO (message-list virtualization): every loaded
@@ -1427,7 +1427,7 @@ export default function ChatView({
                         <button
                           onClick={loadOlder}
                           disabled={loadingOlder}
-                          className="text-[11.5px] text-muted hover:text-text border border-white/[0.10] rounded-chip px-3 py-1 transition-colors disabled:opacity-50"
+                          className="text-[0.71875rem] text-muted hover:text-text border border-white/[0.10] rounded-chip px-3 py-1 transition-colors disabled:opacity-50"
                         >
                           {loadingOlder ? 'Loading…' : 'Load earlier messages'}
                         </button>
@@ -1512,13 +1512,13 @@ export default function ChatView({
                 style={{ bottom: composerHeight + 8 }}
                 className="absolute left-1/2 -translate-x-1/2 z-10 h-9 w-9 rounded-full bg-surface border border-white/[0.10] text-text hover:bg-surface-2 hover:border-white/[0.20] flex items-center justify-center transition-colors shadow-[0_4px_14px_rgba(0,0,0,0.55)]"
               >
-                <ArrowDown size={16} strokeWidth={1.8} />
+                <ArrowDown size="1rem" strokeWidth={1.8} />
               </button>
             )}
             {notice && (
               <div
                 style={{ bottom: composerHeight + 8 }}
-                className="absolute left-1/2 -translate-x-1/2 z-10 rounded-chip bg-surface border border-white/[0.10] text-[11.5px] text-muted px-3 py-1.5 shadow-[0_4px_14px_rgba(0,0,0,0.55)]"
+                className="absolute left-1/2 -translate-x-1/2 z-10 rounded-chip bg-surface border border-white/[0.10] text-[0.71875rem] text-muted px-3 py-1.5 shadow-[0_4px_14px_rgba(0,0,0,0.55)]"
               >
                 {notice}
               </div>
@@ -1543,7 +1543,7 @@ export default function ChatView({
                     <TypingIndicator users={typingUsers} />
                   </div>
                 )}
-                {error && <div className="text-[11.5px] text-alert mb-1.5">{error}</div>}
+                {error && <div className="text-[0.71875rem] text-alert mb-1.5">{error}</div>}
                 <ChatComposer
                   ref={composerHandleRef}
                   placeholder={`Message ${groupLabel(group)}`}
@@ -1706,13 +1706,13 @@ function HeaderPlace({
   const loading = kind === 'loading'
   const RoleIcon = loading ? ArrowUpFromLine : ArrowDownToLine
   return (
-    <span className="inline-flex items-center gap-2 min-w-0 text-[12.5px]">
+    <span className="inline-flex items-center gap-2 min-w-0 text-[0.78125rem]">
       <span
-        className={`shrink-0 w-[58px] inline-flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wide ${
+        className={`shrink-0 w-[3.625rem] inline-flex items-center gap-1 text-[0.65625rem] font-semibold uppercase tracking-wide ${
           loading ? 'text-[#5fae72]' : 'text-[#d68a52]'
         }`}
       >
-        <RoleIcon size={12} strokeWidth={2.2} className="shrink-0" />
+        <RoleIcon size="0.75rem" strokeWidth={2.2} className="shrink-0" />
         {loading ? 'Load' : 'Unload'}
       </span>
       <CountryFlag code={place.code} />
@@ -1748,7 +1748,7 @@ function ToolTab({
 }) {
   return (
     <div
-      className={`h-7 inline-flex items-center gap-1.5 rounded-full pl-2.5 text-[12px] font-medium transition-colors ${
+      className={`h-7 inline-flex items-center gap-1.5 rounded-full pl-2.5 text-[0.75rem] font-medium transition-colors ${
         onClose ? 'pr-1.5' : 'pr-2.5'
       } ${active ? 'bg-white/[0.07] text-text' : 'text-muted hover:text-text hover:bg-white/[0.04]'}`}
     >
@@ -1763,7 +1763,7 @@ function ToolTab({
           aria-label={`Close ${label}`}
           className="h-4 w-4 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.08] transition-colors"
         >
-          <X size={11} strokeWidth={2.2} />
+          <X size="0.6875rem" strokeWidth={2.2} />
         </button>
       )}
     </div>

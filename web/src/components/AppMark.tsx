@@ -1,4 +1,5 @@
 import { Box, MessageCircle } from 'lucide-react'
+import { rem } from '../lib/density'
 
 /**
  * The Dispo-chat brand mark: a light `MessageCircle` with a logistics `Box`
@@ -25,22 +26,22 @@ export default function AppMark({
   return (
     <span
       className={`relative inline-flex shrink-0 items-center justify-center ${className}`}
-      style={{ width: size, height: size }}
+      style={{ width: rem(size), height: rem(size) }}
     >
-      <MessageCircle size={size} strokeWidth={1.6} className="text-text" />
+      <MessageCircle size={rem(size)} strokeWidth={1.6} className="text-text" />
       {/* Centered on the bubble body (slightly above the icon's geometric
           center, clear of the tail) so the box reads cleanly. */}
       <span
         className="absolute flex items-center justify-center rounded-full bg-bg"
         style={{
-          width: disc,
-          height: disc,
+          width: rem(disc),
+          height: rem(disc),
           top: '47%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
         }}
       >
-        <Box size={box} strokeWidth={2.4} className="text-text" />
+        <Box size={rem(box)} strokeWidth={2.4} className="text-text" />
       </span>
     </span>
   )

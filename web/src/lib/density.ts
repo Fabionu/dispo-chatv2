@@ -11,14 +11,23 @@ import { useEffect, useState } from 'react'
 
 export type Density = 'compact' | 'default' | 'comfortable'
 
-// Sidebar avatar / company-logo diameter per tier. Components that take a
-// numeric `size` (Avatar, CompanyLogo) can't read the CSS density tokens, so
-// they read this map via useDensity() instead. Kept in lockstep with the
-// --sidebar-user-avatar-size token in index.css.
+// Design-px → rem string. The whole app is sized in rem so the root font-size
+// (16px normally, 18px on `comfortable` — see index.css) scales it uniformly on
+// 2K+ displays. Size-prop components (Avatar, GroupAvatar, CompanyLogo,
+// AppMark, Spinner) keep their numeric px API but render through this, so a
+// `size={28}` is 28px at 1080p and 31.5px on the comfortable tier.
+export const rem = (px: number): string => `${px / 16}rem`
+
+// Sidebar avatar / company-logo diameter per tier, in DESIGN px (pre-rem-scale
+// — Avatar/CompanyLogo render size/16 rem, so the comfortable root bump adds
+// its ×1.125 on top: 38 → ~42.75 actual, matching the tuned
+// --sidebar-user-avatar-size token in index.css). Components that take a
+// numeric `size` can't read the CSS density tokens, so they read this map via
+// useDensity() instead.
 export const SIDEBAR_AVATAR_SIZE: Record<Density, number> = {
   compact: 34,
   default: 36,
-  comfortable: 43,
+  comfortable: 38,
 }
 
 const STORAGE_KEY = 'dispo:density'

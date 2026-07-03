@@ -8,11 +8,12 @@ import {
   markAvatarLoaded,
   preloadAvatar,
 } from '../lib/avatarCache'
+import { rem } from '../lib/density'
 
 type Props = {
   userId: string
   name: string
-  /** Pixel diameter. */
+  /** Design-px diameter (rendered as rem so it tracks the global UI scale). */
   size?: number
   /** Bump to bust the browser cache after the current user changes their image. */
   version?: number | string
@@ -42,7 +43,7 @@ export default function Avatar({
     })
   }, [userId, version])
 
-  const style = { width: size, height: size }
+  const style = { width: rem(size), height: rem(size) }
   // No-photo fallback: a white generic-contact glyph on a neutral dark-grey disc
   // (`bg` — darker than the rail/panels), with only a hairline neutral border so
   // the circle stays defined even on the equally-dark chat header. No warm tint,
@@ -52,7 +53,7 @@ export default function Avatar({
       style={style}
       className={`rounded-full bg-bg border border-white/[0.08] flex items-center justify-center shrink-0 text-text ${className}`}
     >
-      <User size={Math.max(13, Math.round(size * 0.58))} strokeWidth={1.7} />
+      <User size={rem(Math.max(13, Math.round(size * 0.58)))} strokeWidth={1.7} />
     </span>
   )
 

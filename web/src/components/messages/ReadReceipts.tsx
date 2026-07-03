@@ -57,7 +57,7 @@ export default function ReadReceipts({ others, createdAt, pending, align = 'auto
   if (pending) {
     return (
       <span className="inline-flex items-center" aria-label="Sending" title="Sending…">
-        <Clock size={13} strokeWidth={2} style={{ color: MUTED }} />
+        <Clock size="0.8125rem" strokeWidth={2} style={{ color: MUTED }} />
       </span>
     )
   }
@@ -76,7 +76,7 @@ export default function ReadReceipts({ others, createdAt, pending, align = 'auto
   if (others.length === 0) {
     return (
       <span className="inline-flex items-center" aria-label="Sent" title="Sent">
-        <CheckCheck size={14} strokeWidth={2} style={{ color: MUTED }} />
+        <CheckCheck size="0.875rem" strokeWidth={2} style={{ color: MUTED }} />
       </span>
     )
   }
@@ -95,7 +95,7 @@ export default function ReadReceipts({ others, createdAt, pending, align = 'auto
         aria-expanded={open}
         className="inline-flex items-center"
       >
-        <CheckCheck size={14} strokeWidth={2} style={{ color: fullyRead ? ACCENT : MUTED }} />
+        <CheckCheck size="0.875rem" strokeWidth={2} style={{ color: fullyRead ? ACCENT : MUTED }} />
       </button>
       {open && (
         <ReceiptsPopover
@@ -206,13 +206,13 @@ function ReceiptsPopover({
         zIndex: 60,
         visibility: pos.visible ? 'visible' : 'hidden',
       }}
-      className="w-[232px] max-h-[300px] overflow-y-auto rounded-card border border-white/[0.08] bg-surface py-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.55)]"
+      className="w-[14.5rem] max-h-[18.75rem] overflow-y-auto rounded-card border border-white/[0.08] bg-surface py-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.55)]"
     >
       {seen.length > 0 && (
         <>
           <div className="flex items-center gap-1.5 px-3 pb-1 pt-0.5">
-            <CheckCheck size={12} strokeWidth={2} style={{ color: ACCENT }} />
-            <span className="text-[10px] uppercase tracking-[0.08em] text-faint">
+            <CheckCheck size="0.75rem" strokeWidth={2} style={{ color: ACCENT }} />
+            <span className="text-[0.625rem] uppercase tracking-[0.08em] text-faint">
               Seen by {seen.length}
             </span>
           </div>
@@ -222,8 +222,8 @@ function ReceiptsPopover({
               {/* Name + time share one column: name to the avatar's top edge,
                   time to its bottom edge (justify-between over the avatar height). */}
               <div className="min-w-0 flex-1 flex flex-col justify-between py-px">
-                <div className="text-[12.5px] text-text truncate leading-tight">{r.displayName}</div>
-                <div className="text-[10.5px] text-muted truncate leading-tight">
+                <div className="text-[0.78125rem] text-text truncate leading-tight">{r.displayName}</div>
+                <div className="text-[0.65625rem] text-muted truncate leading-tight">
                   {r.lastReadAt ? seenAt(r.lastReadAt) : ''}
                 </div>
               </div>
@@ -236,15 +236,15 @@ function ReceiptsPopover({
         <>
           {seen.length > 0 && <div className="my-1 h-px bg-white/[0.06]" />}
           <div className="flex items-center gap-1.5 px-3 pb-1 pt-0.5">
-            <Check size={12} strokeWidth={2} className="text-faint" />
-            <span className="text-[10px] uppercase tracking-[0.08em] text-faint">Not seen yet</span>
+            <Check size="0.75rem" strokeWidth={2} className="text-faint" />
+            <span className="text-[0.625rem] uppercase tracking-[0.08em] text-faint">Not seen yet</span>
           </div>
           {notSeen.map((r) => (
             <div key={r.id} className="flex items-center gap-2.5 px-3 py-1 opacity-60">
               <Avatar userId={r.id} name={r.displayName} size={30} />
               {/* Same compact row, no timestamp. */}
               <div className="min-w-0 flex-1">
-                <div className="text-[12.5px] text-muted truncate leading-tight">
+                <div className="text-[0.78125rem] text-muted truncate leading-tight">
                   {r.displayName}
                 </div>
               </div>

@@ -312,7 +312,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
   // textarea's own `outline-none` keeps the browser ring off too. `relative`
   // anchors the mention picker.
   return (
-    <div className="relative rounded-[14px] bg-composer">
+    <div className="relative rounded-[0.875rem] bg-composer">
       {pickerOpen && (
         <MentionPicker
           members={matches}
@@ -329,10 +329,10 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
       {hasSelection && !pickerOpen && (
         <div className="absolute left-1/2 -translate-x-1/2 bottom-[calc(100%+8px)] z-20 flex items-center gap-0.5 rounded-chip border border-white/[0.12] bg-surface-2 px-1 py-1 shadow-[0_2px_12px_rgba(0,0,0,0.5)]">
           <FormatButton label="Bold" shortcut="Ctrl/Cmd+B" onClick={() => applyFormat('*')}>
-            <Bold size={15} strokeWidth={2.4} />
+            <Bold size="0.9375rem" strokeWidth={2.4} />
           </FormatButton>
           <FormatButton label="Italic" shortcut="Ctrl/Cmd+I" onClick={() => applyFormat('_')}>
-            <Italic size={15} strokeWidth={2.2} />
+            <Italic size="0.9375rem" strokeWidth={2.2} />
           </FormatButton>
           {/* Downward caret so it reads as a tooltip anchored to the input. */}
           <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-px h-2 w-2 rotate-45 border-r border-b border-white/[0.12] bg-surface-2" />
@@ -391,7 +391,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           aria-label={editContext ? 'Save edit' : 'Send message'}
           className="h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 flex items-center justify-center rounded-full bg-text text-bg hover:bg-text/90 transition-colors disabled:opacity-30 disabled:cursor-default disabled:hover:bg-text"
         >
-          <ArrowUp size={15} strokeWidth={2.2} />
+          <ArrowUp size="0.9375rem" strokeWidth={2.2} />
         </button>
       </div>
     </div>
@@ -418,7 +418,7 @@ function FormatButton({
       title={`${label} (${shortcut})`}
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
-      className="h-7 w-7 flex items-center justify-center rounded-[3px] text-muted hover:text-text hover:bg-white/[0.08] transition-colors"
+      className="h-7 w-7 flex items-center justify-center rounded-[0.1875rem] text-muted hover:text-text hover:bg-white/[0.08] transition-colors"
     >
       {children}
     </button>

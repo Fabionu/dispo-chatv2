@@ -2,6 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Global rem scale ────────────────────────────────────────────────────────
+   Everything OUTSIDE the var-tokenized chat/sidebar (modals, buttons, tabs,
+   menus, panels, workspace pages, icons, avatars) is sized in rem — Tailwind's
+   spacing/size utilities, rem arbitrary values, and the rem-rendering size-prop
+   components (Avatar/GroupAvatar/CompanyLogo/AppMark/Spinner). Bumping the root
+   font-size on the `comfortable` tier therefore scales the WHOLE app uniformly
+   on 2K+ displays, without transform/zoom (layout px stay real, so canvas maps
+   and getBoundingClientRect popup positioning stay exact).
+   16px root × n/16 rem reproduces today's px sizes EXACTLY on compact/default,
+   so 1080p and laptops render pixel-identical to before. */
+html {
+  font-size: 16px;
+}
+html[data-density='comfortable'] {
+  /* 1.125× — noticeable on QHD without being cartoonish; the px density tokens
+     below add their own tuned bump on top for chat/sidebar. */
+  font-size: 18px;
+}
+/* No-JS / pre-hydration fallback, mirroring the token fallbacks below. */
+@media (min-width: 2200px) {
+  html:not([data-density]) {
+    font-size: 18px;
+  }
+}
+
 :root {
   color-scheme: dark;
 
@@ -123,8 +148,11 @@
 /* comfortable — 2K/QHD and larger: noticeably more scale so a 2560×1440 (and up)
    display reads clearly instead of as a miniature, while staying dense enough for
    dispatch work. Tuned against a 2560-wide @100% monitor (the common QHD case).
-   Keep in sync with the no-JS @media(min-width:2200px) fallback below AND
-   SIDEBAR_AVATAR_SIZE.comfortable in lib/density.ts. */
+   Works together with the 18px root font-size above, which scales all the
+   rem-sized chrome (modals, buttons, icons, menus, panels) by ×1.125; these px
+   tokens carry the chat/sidebar's own tuned bump. Keep in sync with the no-JS
+   @media(min-width:2200px) fallback below AND SIDEBAR_AVATAR_SIZE.comfortable
+   in lib/density.ts (design px: 38 × 1.125 ≈ the 43px avatar below). */
 [data-density='comfortable'] {
   --app-font-size: 17.5px;
   --chat-msg-font-size: 16px;
@@ -296,7 +324,7 @@ button {
 }
 
 .eyebrow {
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -315,6 +343,15 @@ button {
 .here-map-surface,
 .here-map-surface canvas {
   cursor: default !important;
+}
+/* While the cursor is over (or right next to) the drawn route line, HereMap
+   adds `.route-hover` to the container. The route line is draggable (drag it to
+   add a stop), so we show the standard `grab` affordance — a precise, normal-
+   sized cursor, not an oversized hand. More specific than the default rule
+   above, so it wins despite the shared !important. */
+.here-map-surface.route-hover,
+.here-map-surface.route-hover canvas {
+  cursor: grab !important;
 }
 
 /* Route distance badge: a compact, dark pill anchored at the route midpoint
@@ -355,13 +392,62 @@ button {
   border-top: 7px solid rgba(20, 20, 20, 0.92);
 }
 
+/* Route hover readout: a compact dark pill that follows the cursor along the
+   route line, showing the distance from the route start to the hovered point.
+   Positioned imperatively at the cursor pixel (left/top set by HereMap); the
+   transform lifts it just ABOVE the point so it stays close to the line without
+   covering it. Small radius + light shadow to match the planner's tooltips, and
+   readable on the light HERE basemap. Non-interactive so it never blocks a
+   drag/click on the line beneath. */
+.route-hover-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 15;
+  transform: translate(-50%, calc(-100% - 9px));
+  pointer-events: none;
+  white-space: nowrap;
+  background: rgba(20, 20, 20, 0.9);
+  color: #f5f5f5;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+/* Tail pointing DOWN at the hovered point (pill sits above it). */
+.route-hover-label::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid rgba(20, 20, 20, 0.9);
+}
+/* Flipped variant near the top edge: pill BELOW the point, tail pointing up. */
+.route-hover-label--below {
+  transform: translate(-50%, 9px);
+}
+.route-hover-label--below::after {
+  top: auto;
+  bottom: 100%;
+  border-top: none;
+  border-bottom: 6px solid rgba(20, 20, 20, 0.9);
+}
+
 .modal-input {
   width: 100%;
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 4px;
-  padding: 7px 10px;
-  font-size: 13px;
+  padding: 0.4375rem 0.625rem;
+  font-size: 0.8125rem;
   outline: none;
   transition: border-color 120ms;
 }
@@ -372,8 +458,8 @@ button {
 /* Custom checkbox */
 .checkbox {
   appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 1rem;
+  height: 1rem;
   border: 1px solid rgba(255,255,255,0.16);
   border-radius: 3px;
   background: transparent;
@@ -388,10 +474,10 @@ button {
 .checkbox:checked::after {
   content: '';
   position: absolute;
-  left: 4px;
-  top: 1px;
-  width: 5px;
-  height: 9px;
+  left: 0.25rem;
+  top: 0.0625rem;
+  width: 0.3125rem;
+  height: 0.5625rem;
   border: solid #000000;
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);

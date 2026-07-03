@@ -336,19 +336,19 @@ export default function GroupInfoPanel({
         // own borderless surface — same rail bg + radius as the sidebar/chat
         // cards, with a gap from the chat (the row's xl:gap-3) — so the chat
         // reflows narrower and the panel matches the app's flat card shell.
-        className="fixed top-0 right-0 bottom-0 z-40 w-full max-w-[400px] shadow-[-16px_0_48px_rgba(0,0,0,0.4)] bg-rail flex flex-col
-                   xl:static xl:z-auto xl:w-[clamp(360px,26vw,420px)] xl:max-w-none xl:shrink-0 xl:shadow-none
-                   xl:rounded-[11px] xl:overflow-hidden"
+        className="fixed top-0 right-0 bottom-0 z-40 w-full max-w-[25rem] shadow-[-16px_0_48px_rgba(0,0,0,0.4)] bg-rail flex flex-col
+                   xl:static xl:z-auto xl:w-[clamp(22.5rem,26vw,26.25rem)] xl:max-w-none xl:shrink-0 xl:shadow-none
+                   xl:rounded-[0.6875rem] xl:overflow-hidden"
       >
         {/* Header — same height as the chat header so the two line up. */}
         <div className="h-[var(--header-height)] flex items-center justify-between px-4 shrink-0">
-          <span className="text-[13px] font-semibold">Group info</span>
+          <span className="text-[0.8125rem] font-semibold">Group info</span>
           <button
             onClick={onClose}
             aria-label="Close group info"
             className="h-8 w-8 flex items-center justify-center rounded-chip text-muted hover:text-text hover:bg-white/[0.04] transition-colors"
           >
-            <X size={16} strokeWidth={1.8} />
+            <X size="1rem" strokeWidth={1.8} />
           </button>
         </div>
 
@@ -380,14 +380,14 @@ export default function GroupInfoPanel({
                 size={120}
               />
             </AvatarPhotoEditor>
-            <div className="mt-3 text-[16px] font-semibold tracking-[-0.2px]">
+            <div className="mt-3 text-[1rem] font-semibold tracking-[-0.2px]">
               {groupLabel(group)}
             </div>
-            <div className="mt-0.5 text-[12px] text-muted">
+            <div className="mt-0.5 text-[0.75rem] text-muted">
               {members.length} member{members.length === 1 ? '' : 's'}
             </div>
             {vehicleMeta && (
-              <div className="mt-1 text-[11.5px] text-faint">{vehicleMeta}</div>
+              <div className="mt-1 text-[0.71875rem] text-faint">{vehicleMeta}</div>
             )}
             {ops.vehicle.status && (
               <div className="mt-2">
@@ -397,7 +397,7 @@ export default function GroupInfoPanel({
                 />
               </div>
             )}
-            {error && <div className="text-[11.5px] text-alert mt-2">{error}</div>}
+            {error && <div className="text-[0.71875rem] text-alert mt-2">{error}</div>}
           </div>
 
           {/* Tab bar — compact segmented control for the operational sections. */}
@@ -407,7 +407,7 @@ export default function GroupInfoPanel({
                 key={t.id}
                 onClick={() => setTab(t.id)}
                 aria-current={tab === t.id ? 'true' : undefined}
-                className={`flex-1 h-7 rounded-md text-[11.5px] font-medium transition-colors ${
+                className={`flex-1 h-7 rounded-md text-[0.71875rem] font-medium transition-colors ${
                   tab === t.id ? 'bg-white/[0.08] text-text' : 'text-muted hover:text-text'
                 }`}
               >
@@ -450,9 +450,9 @@ export default function GroupInfoPanel({
                     canManage ? (
                       <button
                         onClick={onInvite}
-                        className="inline-flex items-center gap-1 text-[11.5px] text-muted hover:text-text transition-colors"
+                        className="inline-flex items-center gap-1 text-[0.71875rem] text-muted hover:text-text transition-colors"
                       >
-                        <UserPlus size={12} strokeWidth={1.8} />
+                        <UserPlus size="0.75rem" strokeWidth={1.8} />
                         Invite
                       </button>
                     ) : undefined
@@ -481,7 +481,7 @@ export default function GroupInfoPanel({
                       ))}
                     </div>
                   )}
-                  {error && <div className="text-[11.5px] text-alert px-2 pt-1">{error}</div>}
+                  {error && <div className="text-[0.71875rem] text-alert px-2 pt-1">{error}</div>}
                 </Section>
 
                 {/* Pending invites (manage-capable only) */}
@@ -500,12 +500,12 @@ export default function GroupInfoPanel({
                           >
                             <Avatar userId={p.userId} name={p.displayName} size={28} />
                             <div className="min-w-0 flex-1">
-                              <div className="text-[12.5px] truncate">{p.displayName}</div>
-                              <div className="text-[11px] text-faint">Invitation pending</div>
+                              <div className="text-[0.78125rem] truncate">{p.displayName}</div>
+                              <div className="text-[0.6875rem] text-faint">Invitation pending</div>
                             </div>
                             <button
                               onClick={() => void cancelInvite(p.id)}
-                              className="shrink-0 text-[11px] text-muted hover:text-alert px-2 transition-colors"
+                              className="shrink-0 text-[0.6875rem] text-muted hover:text-alert px-2 transition-colors"
                             >
                               Cancel
                             </button>
@@ -665,12 +665,12 @@ function MemberRow({
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="text-[12.5px] truncate">
+        <div className="text-[0.78125rem] truncate">
           {member.displayName}
           {isSelf && <span className="text-faint"> (you)</span>}
         </div>
         {/* Group role (admin / member) as plain text — never the workspace role. */}
-        <div className="text-[11px] text-faint truncate">{groupRoleLabel}</div>
+        <div className="text-[0.6875rem] text-faint truncate">{groupRoleLabel}</div>
       </div>
 
       {/* Compact text-based actions menu. The small ⋮ trigger keeps the row
@@ -692,12 +692,12 @@ function MemberRow({
               aria-expanded={menuOpen}
               className="h-7 w-7 flex items-center justify-center rounded-chip text-muted hover:text-text hover:bg-white/[0.04] transition-colors disabled:opacity-30 disabled:cursor-default"
             >
-              <MoreVertical size={14} strokeWidth={1.8} />
+              <MoreVertical size="0.875rem" strokeWidth={1.8} />
             </button>
             {menuOpen && (
               <div
                 role="menu"
-                className="absolute right-0 top-[calc(100%+4px)] z-20 min-w-[136px] rounded-card border border-white/[0.1] bg-surface overflow-hidden py-1"
+                className="absolute right-0 top-[calc(100%+4px)] z-20 min-w-[8.5rem] rounded-card border border-white/[0.1] bg-surface overflow-hidden py-1"
                 style={{ boxShadow: '0 12px 32px rgba(0,0,0,0.5)' }}
               >
                 {actions.map((a, i) => (
@@ -709,14 +709,14 @@ function MemberRow({
                       onClick={a.onClick}
                       disabled={a.disabled}
                       title={a.hint}
-                      className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-[12px] text-left whitespace-nowrap transition-colors disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent ${
+                      className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-[0.75rem] text-left whitespace-nowrap transition-colors disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent ${
                         a.tone === 'danger'
                           ? 'text-alert hover:bg-alert/10'
                           : 'text-text hover:bg-white/[0.04]'
                       }`}
                     >
                       <span className="flex-1">{a.label}</span>
-                      {a.hint && <span className="text-[10px] text-faint shrink-0">{a.hint}</span>}
+                      {a.hint && <span className="text-[0.625rem] text-faint shrink-0">{a.hint}</span>}
                     </button>
                   </div>
                 ))}

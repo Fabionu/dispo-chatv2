@@ -61,27 +61,27 @@ export default function AttachMenu({ disabled, onPickKind, onAddTrip }: Props) {
             : 'text-muted hover:text-text hover:bg-white/[0.04]'
         }`}
       >
-        <Plus size={18} strokeWidth={1.8} />
+        <Plus size="1.125rem" strokeWidth={1.8} />
       </button>
       {open && (
         <div
           role="menu"
-          className="absolute bottom-[calc(100%+6px)] left-0 w-[180px] rounded-card border border-white/[0.08] bg-surface overflow-hidden z-20 py-1"
+          className="absolute bottom-[calc(100%+6px)] left-0 w-[11.25rem] rounded-card border border-white/[0.08] bg-surface overflow-hidden z-20 py-1"
         >
           <AttachMenuItem
-            icon={<ImageIcon size={14} strokeWidth={1.6} />}
+            icon={<ImageIcon size="0.875rem" strokeWidth={1.6} />}
             onClick={() => pick(IMAGE_ACCEPT)}
           >
             Photo
           </AttachMenuItem>
           <AttachMenuItem
-            icon={<FileText size={14} strokeWidth={1.6} />}
+            icon={<FileText size="0.875rem" strokeWidth={1.6} />}
             onClick={() => pick(DOC_ACCEPT)}
           >
             Document
           </AttachMenuItem>
           {onAddTrip && (
-            <AttachMenuItem icon={<Route size={14} strokeWidth={1.6} />} onClick={addTrip}>
+            <AttachMenuItem icon={<Route size="0.875rem" strokeWidth={1.6} />} onClick={addTrip}>
               Trip
             </AttachMenuItem>
           )}
@@ -105,7 +105,7 @@ function AttachMenuItem({
       type="button"
       onClick={onClick}
       role="menuitem"
-      className="w-full flex items-center gap-2.5 px-3 py-2 text-[12.5px] hover:bg-white/[0.03] transition-colors text-left"
+      className="w-full flex items-center gap-2.5 px-3 py-2 text-[0.78125rem] hover:bg-white/[0.03] transition-colors text-left"
     >
       <span className="text-muted">{icon}</span>
       {children}

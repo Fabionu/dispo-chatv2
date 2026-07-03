@@ -120,13 +120,13 @@ export default function AttachmentSendPreviewModal({
 
       {/* Top bar: filename + icon-only replace/close (themed tooltips). */}
       <div className="flex items-center justify-between gap-3 px-2 py-1.5 shrink-0">
-        <div className="text-[12.5px] text-text truncate flex-1 min-w-0">{file.name}</div>
+        <div className="text-[0.78125rem] text-text truncate flex-1 min-w-0">{file.name}</div>
         <div className="flex items-center gap-0.5 shrink-0">
           <HeaderIconButton label="Replace" onClick={pickReplace}>
-            <RefreshCw size={18} strokeWidth={1.8} />
+            <RefreshCw size="1.125rem" strokeWidth={1.8} />
           </HeaderIconButton>
           <HeaderIconButton label="Close" onClick={onCancel}>
-            <X size={18} strokeWidth={1.8} />
+            <X size="1.125rem" strokeWidth={1.8} />
           </HeaderIconButton>
         </div>
       </div>
@@ -143,7 +143,7 @@ export default function AttachmentSendPreviewModal({
             className="max-w-full max-h-full object-contain rounded-card"
           />
         ) : isPdf ? (
-          <div className="w-full h-full max-w-[820px] mx-auto">
+          <div className="w-full h-full max-w-[51.25rem] mx-auto">
             <PdfPagePreview
               file={file}
               fallback={
@@ -161,13 +161,13 @@ export default function AttachmentSendPreviewModal({
       {/* Caption + send. */}
       <div className="shrink-0 pt-3">
         {error && (
-          <div className="text-[11.5px] text-alert mb-1.5 text-center">{error}</div>
+          <div className="text-[0.71875rem] text-alert mb-1.5 text-center">{error}</div>
         )}
         {/* Caption bar — the SAME borderless input shell as the main chat
-            composer (ChatComposer): solid `surface` fill, rounded-[14px], no
+            composer (ChatComposer): solid `surface` fill, rounded-[0.875rem], no
             border, no focus tint, no shadow; identical textarea + circular send
             button. Only the outer max-width/centering is preview-specific. */}
-        <div className="mx-auto w-full max-w-[820px] rounded-[14px] bg-surface">
+        <div className="mx-auto w-full max-w-[51.25rem] rounded-[0.875rem] bg-surface">
           <div className="flex items-center gap-1 px-2 py-1.5">
             <textarea
               ref={textareaRef}
@@ -183,7 +183,7 @@ export default function AttachmentSendPreviewModal({
               aria-label="Send attachment"
               className="h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 flex items-center justify-center rounded-full bg-text text-bg hover:bg-text/90 transition-colors disabled:opacity-30 disabled:cursor-default disabled:hover:bg-text"
             >
-              <ArrowUp size={15} strokeWidth={2.2} />
+              <ArrowUp size="0.9375rem" strokeWidth={2.2} />
             </button>
           </div>
         </div>

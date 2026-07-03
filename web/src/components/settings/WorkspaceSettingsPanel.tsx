@@ -13,6 +13,11 @@ import {
   Users,
 } from 'lucide-react'
 import { useViewMode, setViewMode, type ViewMode } from '../../lib/viewMode'
+import {
+  useMessageDisplay,
+  setMessageDisplay,
+  type MessageDisplay,
+} from '../../lib/messageDisplay'
 import { useAuth } from '../../auth/AuthContext'
 import { api, ApiError } from '../../lib/api'
 import type { WorkspaceInvite, WorkspaceInviteCreated } from '../../lib/types'
@@ -96,20 +101,20 @@ export default function WorkspaceSettingsPanel({ onBack }: Props) {
       <div className="flex-1 overflow-y-auto px-4 py-5 space-y-2.5">
         {isAdmin && (
           <CategoryCard
-            icon={<Users size={16} strokeWidth={1.8} />}
+            icon={<Users size="1rem" strokeWidth={1.8} />}
             title="Company members"
             description="Invite people to your company with a secure link."
             onClick={() => setCategory('members')}
           />
         )}
         <CategoryCard
-          icon={<Palette size={16} strokeWidth={1.8} />}
+          icon={<Palette size="1rem" strokeWidth={1.8} />}
           title="Appearance"
-          description="Conversation list density."
+          description="Conversation list density and message style."
           onClick={() => setCategory('appearance')}
         />
         <CategoryCard
-          icon={<Info size={16} strokeWidth={1.8} />}
+          icon={<Info size="1rem" strokeWidth={1.8} />}
           title="About"
           description="Version and build information."
           onClick={() => setCategory('about')}
@@ -138,9 +143,9 @@ function PanelHeader({
         aria-label={backLabel}
         className="h-8 w-8 flex items-center justify-center rounded-chip text-muted hover:text-text hover:bg-white/[0.04] transition-colors shrink-0"
       >
-        <ArrowLeft size={16} strokeWidth={1.8} />
+        <ArrowLeft size="1rem" strokeWidth={1.8} />
       </button>
-      <span className="text-[13px] font-semibold">{title}</span>
+      <span className="text-[0.8125rem] font-semibold">{title}</span>
     </div>
   )
 }
@@ -165,14 +170,14 @@ function CategoryCard({
       onClick={onClick}
       className="w-full flex items-center gap-3 rounded-card border border-white/[0.07] bg-white/[0.015] px-3 py-3 text-left transition-colors hover:bg-white/[0.03] hover:border-white/[0.12]"
     >
-      <span className="h-8 w-8 shrink-0 flex items-center justify-center rounded-[7px] border border-white/[0.06] bg-white/[0.02] text-muted">
+      <span className="h-8 w-8 shrink-0 flex items-center justify-center rounded-[0.4375rem] border border-white/[0.06] bg-white/[0.02] text-muted">
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[13px] font-semibold text-text leading-tight">{title}</span>
-        <span className="block text-[11.5px] text-faint mt-0.5 leading-[1.4]">{description}</span>
+        <span className="block text-[0.8125rem] font-semibold text-text leading-tight">{title}</span>
+        <span className="block text-[0.71875rem] text-faint mt-0.5 leading-[1.4]">{description}</span>
       </span>
-      <ChevronRight size={16} strokeWidth={1.8} className="shrink-0 text-faint" />
+      <ChevronRight size="1rem" strokeWidth={1.8} className="shrink-0 text-faint" />
     </button>
   )
 }
@@ -183,15 +188,16 @@ function CategoryCard({
 // dividers, so nothing competes. Subscribes to the prefs only while mounted.
 function AppearanceSettings() {
   const viewMode = useViewMode()
+  const messageDisplay = useMessageDisplay()
 
   return (
     <div className="space-y-5">
-      <p className="text-[12px] text-faint leading-[1.5]">
+      <p className="text-[0.75rem] text-faint leading-[1.5]">
         Personalize how conversations look on this device.
       </p>
 
       <div className="rounded-card border border-white/[0.06] bg-white/[0.015] px-4 py-4">
-        <div className="text-[11.5px] text-muted mb-4">Conversation layout</div>
+        <div className="text-[0.71875rem] text-muted mb-4">Conversation layout</div>
         <div className="space-y-5">
           <SettingBlock
             label="List density"
@@ -204,6 +210,19 @@ function AppearanceSettings() {
                 { value: 'normal', label: 'Normal' },
               ]}
               onChange={(v) => setViewMode(v as ViewMode)}
+            />
+          </SettingBlock>
+          <SettingBlock
+            label="Message display"
+            description="Bubbles align messages left/right; plain stream reads as a log."
+          >
+            <Segmented
+              value={messageDisplay}
+              options={[
+                { value: 'bubble', label: 'Bubbles' },
+                { value: 'plain', label: 'Plain stream' },
+              ]}
+              onChange={(v) => setMessageDisplay(v as MessageDisplay)}
             />
           </SettingBlock>
         </div>
@@ -226,7 +245,7 @@ function AboutSettings() {
 
   return (
     <div className="space-y-5">
-      <p className="text-[12px] text-faint leading-[1.5]">Version and build information for this app.</p>
+      <p className="text-[0.75rem] text-faint leading-[1.5]">Version and build information for this app.</p>
 
       <div className="rounded-card border border-white/[0.06] bg-white/[0.015] px-4 py-1.5">
         <FieldRow label="App version" value={appVersion} />
@@ -299,7 +318,7 @@ function CompanyMembersSettings() {
 
   return (
     <div className="space-y-5">
-      <p className="text-[12px] text-faint leading-[1.5]">
+      <p className="text-[0.75rem] text-faint leading-[1.5]">
         Invite people to join <span className="text-muted">your company</span>. Each link works
         once, expires after 15 minutes, and can’t be reused after someone signs up.
       </p>
@@ -307,18 +326,18 @@ function CompanyMembersSettings() {
       <button
         onClick={generate}
         disabled={generating}
-        className="w-full h-9 flex items-center justify-center gap-2 rounded-btn bg-text text-bg font-semibold text-[12.5px] hover:bg-text/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+        className="w-full h-9 flex items-center justify-center gap-2 rounded-btn bg-text text-bg font-semibold text-[0.78125rem] hover:bg-text/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
       >
         {generating ? (
-          <Loader2 size={14} strokeWidth={2.2} className="animate-spin" />
+          <Loader2 size="0.875rem" strokeWidth={2.2} className="animate-spin" />
         ) : (
-          <Plus size={14} strokeWidth={2.2} />
+          <Plus size="0.875rem" strokeWidth={2.2} />
         )}
         Generate invite link
       </button>
 
       {genError && (
-        <div className="text-[12px] text-alert border border-alert/30 bg-alert/5 rounded-btn px-3 py-2">
+        <div className="text-[0.75rem] text-alert border border-alert/30 bg-alert/5 rounded-btn px-3 py-2">
           {genError}
         </div>
       )}
@@ -327,15 +346,15 @@ function CompanyMembersSettings() {
 
       {/* Recent invites */}
       <div>
-        <div className="text-[11.5px] text-muted mb-2">Recent invites</div>
+        <div className="text-[0.71875rem] text-muted mb-2">Recent invites</div>
         {loading ? (
-          <div className="flex items-center gap-2 text-[12px] text-faint px-1 py-2">
-            <Loader2 size={13} className="animate-spin" /> Loading…
+          <div className="flex items-center gap-2 text-[0.75rem] text-faint px-1 py-2">
+            <Loader2 size="0.8125rem" className="animate-spin" /> Loading…
           </div>
         ) : loadError ? (
-          <div className="text-[12px] text-alert px-1 py-2">Could not load invites.</div>
+          <div className="text-[0.75rem] text-alert px-1 py-2">Could not load invites.</div>
         ) : invites.length === 0 ? (
-          <div className="text-[12px] text-faint px-1 py-2">No invites yet.</div>
+          <div className="text-[0.75rem] text-faint px-1 py-2">No invites yet.</div>
         ) : (
           <div className="rounded-card border border-white/[0.06] bg-white/[0.015] divide-y divide-white/[0.05]">
             {invites.map((inv) => (
@@ -387,29 +406,29 @@ function FreshInviteCard({ invite }: { invite: WorkspaceInviteCreated }) {
 
   return (
     <div className="rounded-card border border-active/30 bg-active/[0.06] px-3.5 py-3 space-y-2.5">
-      <div className="flex items-center gap-2 text-[12px] font-semibold text-active">
-        <Link2 size={14} strokeWidth={2} /> Invite link ready
+      <div className="flex items-center gap-2 text-[0.75rem] font-semibold text-active">
+        <Link2 size="0.875rem" strokeWidth={2} /> Invite link ready
       </div>
       <div className="flex items-center gap-2">
         <input
           readOnly
           value={invite.url}
           onFocus={(e) => e.currentTarget.select()}
-          className="flex-1 min-w-0 bg-black/20 border border-white/[0.08] rounded-btn px-2.5 py-2 text-[11.5px] text-text font-mono truncate focus:outline-none focus:border-white/[0.2]"
+          className="flex-1 min-w-0 bg-black/20 border border-white/[0.08] rounded-btn px-2.5 py-2 text-[0.71875rem] text-text font-mono truncate focus:outline-none focus:border-white/[0.2]"
         />
         <button
           onClick={copy}
-          className="shrink-0 h-[34px] px-3 flex items-center gap-1.5 rounded-btn bg-white/[0.06] text-text text-[12px] font-medium hover:bg-white/[0.1] transition-colors"
+          className="shrink-0 h-[2.125rem] px-3 flex items-center gap-1.5 rounded-btn bg-white/[0.06] text-text text-[0.75rem] font-medium hover:bg-white/[0.1] transition-colors"
         >
           {copied ? (
-            <Check size={13} strokeWidth={2.4} className="text-done" />
+            <Check size="0.8125rem" strokeWidth={2.4} className="text-done" />
           ) : (
-            <Copy size={13} strokeWidth={1.8} />
+            <Copy size="0.8125rem" strokeWidth={1.8} />
           )}
           {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
-      <div className="text-[11px] text-muted">
+      <div className="text-[0.6875rem] text-muted">
         {left ? (
           <>
             Single-use · expires in <span className="tabular-nums text-text">{left}</span>
@@ -442,8 +461,8 @@ function InviteListRow({ invite, onRevoke }: { invite: WorkspaceInvite; onRevoke
     <div className="flex items-center gap-2.5 px-3 py-2.5">
       <StatusBadge status={invite.status} />
       <div className="min-w-0 flex-1">
-        <div className="text-[12px] text-text leading-tight truncate">{detail}</div>
-        <div className="text-[11px] text-faint mt-0.5 truncate">
+        <div className="text-[0.75rem] text-text leading-tight truncate">{detail}</div>
+        <div className="text-[0.6875rem] text-faint mt-0.5 truncate">
           {invite.createdByName ? `By ${invite.createdByName}` : 'Invite'}
         </div>
       </div>
@@ -454,7 +473,7 @@ function InviteListRow({ invite, onRevoke }: { invite: WorkspaceInvite; onRevoke
           aria-label="Revoke link"
           className="shrink-0 h-7 w-7 flex items-center justify-center rounded-chip text-muted hover:text-alert hover:bg-white/[0.05] transition-colors"
         >
-          <Trash2 size={14} strokeWidth={1.8} />
+          <Trash2 size="0.875rem" strokeWidth={1.8} />
         </button>
       )}
     </div>
@@ -469,7 +488,7 @@ function StatusBadge({ status }: { status: WorkspaceInvite['status'] }) {
   }[status]
   return (
     <span
-      className={`shrink-0 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border ${map.cls}`}
+      className={`shrink-0 text-[0.625rem] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border ${map.cls}`}
     >
       {map.label}
     </span>
@@ -481,11 +500,11 @@ function StatusBadge({ status }: { status: WorkspaceInvite['status'] }) {
 function FieldRow({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex items-center justify-between gap-3 py-2.5 border-b border-white/[0.05] last:border-0">
-      <span className="shrink-0 text-[12px] text-muted">{label}</span>
+      <span className="shrink-0 text-[0.75rem] text-muted">{label}</span>
       <span
         title={value}
         className={`min-w-0 truncate text-right text-text ${
-          mono ? 'font-mono text-[11.5px] tabular-nums' : 'text-[12.5px]'
+          mono ? 'font-mono text-[0.71875rem] tabular-nums' : 'text-[0.78125rem]'
         }`}
       >
         {value}
@@ -507,8 +526,8 @@ function SettingBlock({
 }) {
   return (
     <div>
-      <div className="text-[13px] text-text leading-tight">{label}</div>
-      <div className="text-[11.5px] text-faint mt-0.5 leading-[1.4]">{description}</div>
+      <div className="text-[0.8125rem] text-text leading-tight">{label}</div>
+      <div className="text-[0.71875rem] text-faint mt-0.5 leading-[1.4]">{description}</div>
       <div className="mt-2.5">{children}</div>
     </div>
   )
@@ -527,7 +546,7 @@ function Segmented({
   onChange: (value: string) => void
 }) {
   return (
-    <div className="inline-flex gap-0.5 rounded-[8px] bg-black/20 p-0.5">
+    <div className="inline-flex gap-0.5 rounded-[0.5rem] bg-black/20 p-0.5">
       {options.map((o) => {
         const active = o.value === value
         return (
@@ -535,7 +554,7 @@ function Segmented({
             key={o.value}
             onClick={() => onChange(o.value)}
             aria-pressed={active}
-            className={`h-7 px-3.5 rounded-[6px] text-[12px] transition-colors ${
+            className={`h-7 px-3.5 rounded-[0.375rem] text-[0.75rem] transition-colors ${
               active
                 ? 'bg-active/15 text-active font-semibold'
                 : 'text-muted hover:text-text hover:bg-white/[0.03]'

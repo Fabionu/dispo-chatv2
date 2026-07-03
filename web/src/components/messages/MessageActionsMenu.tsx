@@ -106,7 +106,7 @@ export default function MessageActionsMenu({ anchorEl, anchorPoint, actions, onC
         zIndex: 60,
         visibility: pos.visible ? 'visible' : 'hidden',
       }}
-      className="min-w-[152px] rounded-card border border-white/[0.08] bg-surface overflow-hidden py-1 shadow-[0_12px_32px_rgba(0,0,0,0.55)]"
+      className="min-w-[9.5rem] rounded-card border border-white/[0.08] bg-surface overflow-hidden py-1 shadow-[0_12px_32px_rgba(0,0,0,0.55)]"
     >
       {actions.map((a, i) => (
         <div key={i}>
@@ -120,7 +120,7 @@ export default function MessageActionsMenu({ anchorEl, anchorPoint, actions, onC
               a.onClick()
               onClose()
             }}
-            className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 text-[12.5px] whitespace-nowrap transition-colors disabled:opacity-30 disabled:cursor-default ${
+            className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 text-[0.78125rem] whitespace-nowrap transition-colors disabled:opacity-30 disabled:cursor-default ${
               a.tone === 'alert'
                 ? 'text-alert hover:bg-alert/10'
                 : 'text-muted hover:text-text hover:bg-white/[0.04]'

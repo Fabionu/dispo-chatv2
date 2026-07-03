@@ -15,13 +15,13 @@ import {
 // subtle dark fill, no heavy border, quiet brighten on focus. Single-line fields
 // share one height; notes is the only multiline field. No old square inputs.
 const PILL =
-  'w-full rounded-full border border-white/[0.06] bg-white/[0.04] px-4 py-2 text-[12.5px] text-text placeholder:text-faint outline-none transition-colors focus:border-white/[0.12] focus:bg-white/[0.05]'
+  'w-full rounded-full border border-white/[0.06] bg-white/[0.04] px-4 py-2 text-[0.78125rem] text-text placeholder:text-faint outline-none transition-colors focus:border-white/[0.12] focus:bg-white/[0.05]'
 const PILL_BASE =
-  'rounded-full border border-white/[0.06] bg-white/[0.04] px-4 py-2 text-[12.5px] text-text placeholder:text-faint outline-none transition-colors focus:border-white/[0.12] focus:bg-white/[0.05]'
+  'rounded-full border border-white/[0.06] bg-white/[0.04] px-4 py-2 text-[0.78125rem] text-text placeholder:text-faint outline-none transition-colors focus:border-white/[0.12] focus:bg-white/[0.05]'
 const SELECT_PILL =
-  'h-9 w-full rounded-full border border-white/[0.06] bg-white/[0.04] px-3.5 text-[12.5px] text-text outline-none transition-colors focus:border-white/[0.12] focus:bg-white/[0.05]'
+  'h-9 w-full rounded-full border border-white/[0.06] bg-white/[0.04] px-3.5 text-[0.78125rem] text-text outline-none transition-colors focus:border-white/[0.12] focus:bg-white/[0.05]'
 const AREA_PILL =
-  'w-full resize-none rounded-[18px] border border-white/[0.06] bg-white/[0.04] px-4 py-2.5 text-[12.5px] text-text placeholder:text-faint outline-none transition-colors focus:border-white/[0.12] focus:bg-white/[0.05]'
+  'w-full resize-none rounded-[1.125rem] border border-white/[0.06] bg-white/[0.04] px-4 py-2.5 text-[0.78125rem] text-text placeholder:text-faint outline-none transition-colors focus:border-white/[0.12] focus:bg-white/[0.05]'
 
 // Add/edit a stop with the integrated pill-style fields. Holds its own draft and
 // only calls onSave on confirm, so nothing is persisted until the user commits
@@ -102,10 +102,10 @@ export default function StopEditor({
   }
 
   return (
-    <div className="rounded-[18px] border border-white/[0.12] bg-white/[0.03] p-2.5 flex flex-col gap-2">
+    <div className="rounded-[1.125rem] border border-white/[0.12] bg-white/[0.03] p-2.5 flex flex-col gap-2">
       <div className="grid grid-cols-2 gap-2">
         <label className="flex flex-col gap-1">
-          <span className="text-[11px] text-muted">Type</span>
+          <span className="text-[0.6875rem] text-muted">Type</span>
           <select value={type} onChange={(e) => setType(e.target.value as StopType)} className={SELECT_PILL}>
             {STOP_TYPES.map((o) => (
               <option key={o.value} value={o.value}>
@@ -115,7 +115,7 @@ export default function StopEditor({
           </select>
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-[11px] text-muted">Status</span>
+          <span className="text-[0.6875rem] text-muted">Status</span>
           <select value={status} onChange={(e) => setStatus(e.target.value as StopStatus)} className={SELECT_PILL}>
             {STOP_STATUSES.map((o) => (
               <option key={o.value} value={o.value}>
@@ -128,10 +128,10 @@ export default function StopEditor({
       {/* Planned date + time — two separate pill fields, each with its own custom
           picker (calendar / clock). */}
       <div className="flex flex-col gap-1">
-        <span className="text-[11px] text-muted">Planned date &amp; time</span>
+        <span className="text-[0.6875rem] text-muted">Planned date &amp; time</span>
         <div className="flex gap-2">
           <DateField value={plannedDate} onChange={setPlannedDate} className="flex-1 min-w-0" />
-          <TimeField value={plannedTime} onChange={setPlannedTime} className="w-[116px] shrink-0" />
+          <TimeField value={plannedTime} onChange={setPlannedTime} className="w-[7.25rem] shrink-0" />
         </div>
       </div>
       {/* Address fields — meaning lives in the placeholder (no visible label) to
@@ -159,7 +159,7 @@ export default function StopEditor({
           aria-label="Country code"
           placeholder="DE"
           maxLength={3}
-          className={`${PILL_BASE} w-[58px] shrink-0 !px-2 text-center uppercase placeholder:normal-case`}
+          className={`${PILL_BASE} w-[3.625rem] shrink-0 !px-2 text-center uppercase placeholder:normal-case`}
         />
         <input
           value={postalCode}
@@ -185,7 +185,7 @@ export default function StopEditor({
           className={PILL}
         />
         {coordInvalid && (
-          <span className="text-[10.5px] text-faint px-1">
+          <span className="text-[0.65625rem] text-faint px-1">
             Couldn't read these coordinates — they'll be kept as typed.
           </span>
         )}
@@ -198,7 +198,7 @@ export default function StopEditor({
         placeholder="Optional notes"
         className={AREA_PILL}
       />
-      {error && <div className="text-[11px] text-alert">Could not save. Try again.</div>}
+      {error && <div className="text-[0.6875rem] text-alert">Could not save. Try again.</div>}
       {/* Circular Save/Cancel — same integrated icon buttons as the inline fields. */}
       <div className="flex items-center justify-end gap-1.5">
         <button
@@ -208,7 +208,7 @@ export default function StopEditor({
           title="Cancel"
           className="h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] disabled:opacity-50 transition-colors"
         >
-          <X size={14} strokeWidth={2} />
+          <X size="0.875rem" strokeWidth={2} />
         </button>
         <button
           onClick={() => void commit()}
@@ -217,7 +217,7 @@ export default function StopEditor({
           title="Save"
           className="h-8 w-8 flex items-center justify-center rounded-full bg-text text-bg hover:bg-text/90 disabled:opacity-50 transition-colors"
         >
-          <Check size={14} strokeWidth={2.2} />
+          <Check size="0.875rem" strokeWidth={2.2} />
         </button>
       </div>
     </div>
