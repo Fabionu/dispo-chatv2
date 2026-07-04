@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { ArrowLeft, Check, ChevronDown, Loader2, Trash2 } from 'lucide-react'
 import type { AvailabilityStatus, Profile, Role } from '../../lib/types'
 import { api, type ProfilePatch } from '../../lib/api'
+import { ICON_ACTION_BASE, ICON_ACTION_IDLE } from '../HeaderIconButton'
 import { useAuth } from '../../auth/AuthContext'
 import { avatarUrl, clearAvatarCache } from '../../lib/avatarCache'
 import { AVAILABILITY, AWAY, statusMeta } from '../../lib/availability'
@@ -149,9 +150,9 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
           <button
             onClick={onBack}
             aria-label="Back to inbox"
-            className="h-8 w-8 flex items-center justify-center rounded-chip text-muted hover:text-text hover:bg-white/[0.04] transition-colors shrink-0"
+            className={`${ICON_ACTION_BASE} ${ICON_ACTION_IDLE} shrink-0`}
           >
-            <ArrowLeft size="1rem" strokeWidth={1.8} />
+            <ArrowLeft size="1.25rem" strokeWidth={1.8} />
           </button>
           <span className="text-[0.8125rem] font-semibold">Profile</span>
         </div>

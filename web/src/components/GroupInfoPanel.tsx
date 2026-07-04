@@ -21,6 +21,7 @@ import { usePresence } from '../hooks/usePresence'
 import Avatar from './Avatar'
 import GroupAvatar from './GroupAvatar'
 import AvatarPhotoEditor from './AvatarPhotoEditor'
+import { ICON_ACTION_BASE, ICON_ACTION_IDLE } from './HeaderIconButton'
 import AvatarCropModal from './settings/AvatarCropModal'
 import Spinner from './Spinner'
 import { StatusChip } from './vehicle/opsControls'
@@ -346,9 +347,9 @@ export default function GroupInfoPanel({
           <button
             onClick={onClose}
             aria-label="Close group info"
-            className="h-8 w-8 flex items-center justify-center rounded-chip text-muted hover:text-text hover:bg-white/[0.04] transition-colors"
+            className={`${ICON_ACTION_BASE} ${ICON_ACTION_IDLE} shrink-0`}
           >
-            <X size="1rem" strokeWidth={1.8} />
+            <X size="1.125rem" strokeWidth={1.8} />
           </button>
         </div>
 

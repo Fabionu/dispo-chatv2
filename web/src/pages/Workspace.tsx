@@ -1481,7 +1481,7 @@ function GroupRow({
               vehicle's active-trip status chip is the one small indicator that
               belongs on the title line. */}
           <span className="flex items-center gap-2">
-            <span className={`flex-1 truncate text-[0.90625rem] ${unread ? 'text-text font-semibold' : 'text-text/90'}`}>
+            <span className={`flex-1 truncate text-[0.96875rem] ${unread ? 'text-text font-semibold' : 'text-text/90'}`}>
               {groupLabel(group)}
             </span>
             {trip && (
@@ -1493,7 +1493,7 @@ function GroupRow({
           <span className="flex items-center gap-2">
             {/* Latest-message preview — always shown (incl. vehicle rooms with an
                 active trip); the trip status lives in the chip on the title line. */}
-            <span className={`flex-1 truncate text-[0.8125rem] ${unread ? 'text-muted' : 'text-faint'}`}>
+            <span className={`flex-1 truncate text-[0.875rem] ${unread ? 'text-muted' : 'text-faint'}`}>
               {preview.prefix && (
                 <span className={unread ? 'text-muted font-medium' : 'text-faint'}>{preview.prefix} </span>
               )}
@@ -1522,7 +1522,7 @@ function GroupRow({
               {muted && mutedIcon}
               {/* Last-activity stamp — lives on the preview line (right side), not
                   the name line, so all rows share the same metadata baseline. */}
-              {time && <span className="text-[0.71875rem] text-faint tabular-nums">{time}</span>}
+              {time && <span className="text-[0.78125rem] text-faint tabular-nums">{time}</span>}
             </span>
           </span>
         </span>
@@ -1575,7 +1575,7 @@ function GroupRow({
       <span className="flex-1 min-w-0 flex items-center gap-1.5">
         <span
           className={`min-w-0 truncate ${unread ? 'text-text font-medium' : ''}`}
-          style={{ fontSize: 'var(--sidebar-row-font-size)' }}
+          style={{ fontSize: 'var(--sidebar-conv-font-size)' }}
         >
           {groupLabel(group)}
         </span>
@@ -1592,7 +1592,7 @@ function GroupRow({
         <span
           title={peer.workspace}
           className={`shrink truncate text-right text-faint ${metaFade}`}
-          style={{ fontSize: 'var(--sidebar-meta-font-size)', maxWidth: '46%' }}
+          style={{ fontSize: 'var(--sidebar-conv-meta-font-size)', maxWidth: '46%' }}
         >
           {peer.workspace}
         </span>
@@ -1664,11 +1664,11 @@ function ContactRow({
         <Avatar userId={member.id} name={member.displayName} size={NORMAL_AVATAR} />
         <span className="flex-1 min-w-0 flex flex-col gap-0.5">
           <span className="flex items-center gap-2">
-            <span className="flex-1 truncate text-[0.90625rem] text-text/90">{member.displayName}</span>
+            <span className="flex-1 truncate text-[0.96875rem] text-text/90">{member.displayName}</span>
           </span>
           {role && (
             <span className="flex items-center gap-2">
-              <span className="flex-1 truncate text-[0.8125rem] text-faint">{role}</span>
+              <span className="flex-1 truncate text-[0.875rem] text-faint">{role}</span>
             </span>
           )}
         </span>
@@ -1692,7 +1692,7 @@ function ContactRow({
       className="w-full flex items-center rounded-chip text-left text-muted hover:bg-white/[0.025] hover:text-text transition-colors"
     >
       <Avatar userId={member.id} name={member.displayName} size={size} />
-      <span className="min-w-0 flex-1 truncate" style={{ fontSize: 'var(--sidebar-row-font-size)' }}>
+      <span className="min-w-0 flex-1 truncate" style={{ fontSize: 'var(--sidebar-conv-font-size)' }}>
         {member.displayName}
       </span>
     </button>

@@ -34,14 +34,14 @@ export default function GroupInviteRow({ invite, selected, onClick }: Props) {
       />
       <span
         className="flex-1 truncate text-text font-medium"
-        style={{ fontSize: 'var(--sidebar-row-font-size)' }}
+        style={{ fontSize: 'var(--sidebar-conv-font-size)' }}
       >
         {invite.groupName ?? 'Vehicle group'}
       </span>
       {invite.tractorPlate && (
         <span
           className="font-mono text-faint shrink-0"
-          style={{ fontSize: 'var(--sidebar-meta-font-size)' }}
+          style={{ fontSize: 'var(--sidebar-conv-meta-font-size)' }}
         >
           {invite.tractorPlate}
         </span>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { MapPinned, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { DateField, TimeField, joinPlannedAt, splitPlannedAt } from '../DateTimeField'
+import { ICON_ACTION_BASE, ICON_ACTION_IDLE, ICON_ACTION_SMALL } from '../HeaderIconButton'
 import {
   STOP_TYPES,
   labelOf,
@@ -136,9 +137,9 @@ export default function AddTripPanel({ ops, onClose, onCreate, onPickLocation }:
             onClick={onClose}
             disabled={submitting}
             aria-label="Close add trip"
-            className="h-8 w-8 flex items-center justify-center rounded-chip text-muted hover:text-text hover:bg-white/[0.04] transition-colors disabled:opacity-50"
+            className={`${ICON_ACTION_BASE} ${ICON_ACTION_IDLE} shrink-0`}
           >
-            <X size="1rem" strokeWidth={1.8} />
+            <X size="1.125rem" strokeWidth={1.8} />
           </button>
         </div>
 
@@ -563,7 +564,7 @@ function StopCard({
         onClick={onEdit}
         aria-label="Edit stop"
         title="Edit stop"
-        className="h-6 w-6 shrink-0 flex items-center justify-center rounded-chip text-faint hover:text-text hover:bg-white/[0.04] transition-colors"
+        className={`${ICON_ACTION_SMALL} shrink-0 transition-colors`}
       >
         <Pencil size="0.8125rem" strokeWidth={1.8} />
       </button>

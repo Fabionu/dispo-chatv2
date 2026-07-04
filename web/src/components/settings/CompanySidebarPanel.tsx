@@ -5,6 +5,7 @@ import { api, type CompanyProfilePatch } from '../../lib/api'
 import CompanyLogo from '../CompanyLogo'
 import AvatarPhotoEditor from '../AvatarPhotoEditor'
 import EditableRow from '../EditableRow'
+import { ICON_ACTION_BASE, ICON_ACTION_IDLE } from '../HeaderIconButton'
 
 type Props = {
   onBack: () => void
@@ -79,9 +80,9 @@ export default function CompanySidebarPanel({ onBack, onSaved }: Props) {
         <button
           onClick={onBack}
           aria-label="Back to inbox"
-          className="h-8 w-8 flex items-center justify-center rounded-chip text-muted hover:text-text hover:bg-white/[0.04] transition-colors shrink-0"
+          className={`${ICON_ACTION_BASE} ${ICON_ACTION_IDLE} shrink-0`}
         >
-          <ArrowLeft size="1rem" strokeWidth={1.8} />
+          <ArrowLeft size="1.25rem" strokeWidth={1.8} />
         </button>
         <span className="text-[0.8125rem] font-semibold">Company profile</span>
       </div>

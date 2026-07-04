@@ -1,5 +1,6 @@
 import { Pencil, Trash2 } from 'lucide-react'
 import { StatusChip } from './opsControls'
+import { ICON_ACTION_SMALL } from '../HeaderIconButton'
 import {
   STOP_STATUSES,
   STOP_TYPES,
@@ -43,7 +44,7 @@ export default function StopCard({
               onClick={onEdit}
               aria-label="Edit stop"
               title="Edit stop"
-              className="h-6 w-6 flex items-center justify-center rounded-chip text-faint hover:text-text hover:bg-white/[0.04] transition-colors"
+              className={`${ICON_ACTION_SMALL} transition-colors`}
             >
               <Pencil size="0.75rem" strokeWidth={1.8} />
             </button>

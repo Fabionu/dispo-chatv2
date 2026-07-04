@@ -271,7 +271,11 @@
       "PowerShell(\\(Test-NetConnection -ComputerName localhost -Port 3001 -WarningAction SilentlyContinue\\).TcpTestSucceeded)",
       "PowerShell(node \"C:\\\\Users\\\\Home\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Home-Desktop-dispo-chatv2\\\\0c1bb119-9013-475b-ae72-a70cacf961b1\\\\scratchpad\\\\px2rem.cjs\")",
       "Bash(cat)",
-      "Bash(node /c/Users/Home/AppData/Local/Temp/claude/C--Users-Home-Desktop-dispo-chatv2/7d21f11e-f79f-49d6-a40c-bff15063f16d/scratchpad/geo_test.mjs)"
+      "Bash(node /c/Users/Home/AppData/Local/Temp/claude/C--Users-Home-Desktop-dispo-chatv2/7d21f11e-f79f-49d6-a40c-bff15063f16d/scratchpad/geo_test.mjs)",
+      "Bash(grep -rn \"ICON_ACTION_BASE} \\\\${ICON_ACTION_IDLE}\" src/components/Modal.tsx src/components/GroupInfoPanel.tsx src/components/vehicle/AddTripPanel.tsx)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(Object.keys\\(p.dependencies\\).join\\('\\\\n'\\)\\)\")",
+      "Bash(awk '{print $5, $9}')",
+      "Bash(node -e \"console.log\\(require\\('./package.json'\\).dependencies.react\\)\")"
     ]
   }
 }

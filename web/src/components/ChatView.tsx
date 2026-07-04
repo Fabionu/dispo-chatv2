@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDown,
   ArrowDownToLine,
@@ -19,19 +19,26 @@ import { fileError } from './attachments/attachmentUtils'
 import { resolveMentionIds } from '../lib/mentions'
 import { api, ApiError } from '../lib/api'
 import { getSocket } from '../lib/socket'
-import ImagePreviewModal from './attachments/ImagePreviewModal'
-import InlinePdfPreview from './attachments/InlinePdfPreview'
-import AttachmentSendPreviewModal from './attachments/AttachmentSendPreviewModal'
-import AttachmentTabView from './attachments/AttachmentTabView'
-import DocumentPreviewModal from './attachments/DocumentPreviewModal'
 import ChatComposer, { type ChatComposerHandle, type EditContext } from './composer/ChatComposer'
 import Avatar from './Avatar'
 import GroupAvatar from './GroupAvatar'
-import GroupInfoPanel from './GroupInfoPanel'
 import HeaderIconButton from './HeaderIconButton'
-import AddTripPanel from './vehicle/AddTripPanel'
-import StopLocationMap from './vehicle/StopLocationMap'
-import TripRouteMap from './vehicle/TripRouteMap'
+import { PaneLoader, ModalLoader, PanelLoader } from './LazyFallback'
+
+// ── Code-split heavy features ──────────────────────────────────────────────
+// These load only when actually opened, keeping their bundles (pdf.js image/
+// document preview logic, the @here/flexpolyline map stack, the trip + group
+// info panels) out of the initial chat bundle. Each render site is wrapped in a
+// Suspense with a compact loader (see LazyFallback).
+const ImagePreviewModal = lazy(() => import('./attachments/ImagePreviewModal'))
+const InlinePdfPreview = lazy(() => import('./attachments/InlinePdfPreview'))
+const AttachmentSendPreviewModal = lazy(() => import('./attachments/AttachmentSendPreviewModal'))
+const AttachmentTabView = lazy(() => import('./attachments/AttachmentTabView'))
+const DocumentPreviewModal = lazy(() => import('./attachments/DocumentPreviewModal'))
+const GroupInfoPanel = lazy(() => import('./GroupInfoPanel'))
+const AddTripPanel = lazy(() => import('./vehicle/AddTripPanel'))
+const StopLocationMap = lazy(() => import('./vehicle/StopLocationMap'))
+const TripRouteMap = lazy(() => import('./vehicle/TripRouteMap'))
 import CountryFlag from './CountryFlag'
 import { StatusChip } from './vehicle/opsControls'
 import { getOps, tripSummary, type TripPlace, type VehicleOps } from '../lib/vehicleOps'
@@ -1347,6 +1354,7 @@ export default function ChatView({
         </div>
       )}
 
+      <Suspense fallback={<PaneLoader className="flex-1" />}>
       {mapPick && activeTool === 'map' ? (
         <StopLocationMap
           initialQuery={mapPick.query}
@@ -1572,6 +1580,7 @@ export default function ChatView({
           </div>
         </>
       )}
+      </Suspense>
       </div>
       {/* end chat card */}
 
@@ -1592,6 +1601,7 @@ export default function ChatView({
       {/* end chat pane */}
 
       {pendingFile && (
+        <Suspense fallback={<ModalLoader />}>
         <AttachmentSendPreviewModal
           file={pendingFile}
           initialCaption={text}
@@ -1599,9 +1609,11 @@ export default function ChatView({
           onCancel={() => setPendingFile(null)}
           onSend={sendPendingFile}
         />
+        </Suspense>
       )}
 
       {imagePreview && (
+        <Suspense fallback={<ModalLoader />}>
         <ImagePreviewModal
           attachment={imagePreview.attachment}
           message={imagePreview.message}
@@ -1610,9 +1622,11 @@ export default function ChatView({
           onClose={() => setImagePreview(null)}
           onOpenInTab={() => openAttachmentTab(imagePreview)}
         />
+        </Suspense>
       )}
 
       {docPreview && (
+        <Suspense fallback={<ModalLoader />}>
         <DocumentPreviewModal
           attachment={docPreview.attachment}
           message={docPreview.message}
@@ -1621,6 +1635,7 @@ export default function ChatView({
           onClose={() => setDocPreview(null)}
           onOpenInTab={() => openAttachmentTab(docPreview)}
         />
+        </Suspense>
       )}
 
       {forwardTarget && (
@@ -1635,6 +1650,7 @@ export default function ChatView({
       {/* Group info and Add trip share the single right-hand column slot — Add
           trip takes precedence when both are open, so they never stack. */}
       {group.type === 'vehicle' && groupInfoOpen && !addTripOpen && (
+        <Suspense fallback={<PanelLoader />}>
         <GroupInfoPanel
           group={group}
           currentUserId={currentUserId}
@@ -1648,15 +1664,18 @@ export default function ChatView({
           onGroupUpdated={(partial) => onGroupUpdated?.(group.id, partial)}
           onOpenRouteMap={routeMapAvailable ? openTripRoute : undefined}
         />
+        </Suspense>
       )}
 
       {group.type === 'vehicle' && addTripOpen && (
+        <Suspense fallback={<PanelLoader />}>
         <AddTripPanel
           ops={ops ?? { vehicle: {}, trip: null, stops: [] }}
           onClose={() => setAddTripOpen(false)}
           onCreate={saveTripOps}
           onPickLocation={openMapPick}
         />
+        </Suspense>
       )}
 
       {inviteOpen && (

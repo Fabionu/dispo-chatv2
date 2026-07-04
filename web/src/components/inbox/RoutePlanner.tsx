@@ -28,6 +28,7 @@ import type { TruckPreset } from '../../lib/here/truckPresets'
 import HereMap from '../here/HereMap'
 import PlaceSearchField from '../here/PlaceSearchField'
 import Spinner from '../Spinner'
+import { ICON_ACTION_BASE, ICON_ACTION_IDLE } from '../HeaderIconButton'
 import type {
   HerePlace,
   LatLng,
@@ -837,7 +838,7 @@ export default function RoutePlanner({ onBack }: Props) {
         <button
           onClick={onBack}
           aria-label="Back to workspace"
-          className="h-9 w-9 -ml-1 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.05] transition-colors"
+          className={`${ICON_ACTION_BASE} ${ICON_ACTION_IDLE} -ml-1`}
         >
           <ArrowLeft size="1.25rem" strokeWidth={1.8} />
         </button>
@@ -901,7 +902,7 @@ export default function RoutePlanner({ onBack }: Props) {
 
         {/* Floating route panel — compact; collapses horizontally to the left. */}
         <div
-          className="absolute z-20 top-3 left-3 w-[18.75rem] max-w-[calc(100%-1.5rem)] max-h-[calc(100%-1.5rem)] flex flex-col rounded-card border border-white/[0.12] bg-rail/95 backdrop-blur-sm shadow-2xl transition-transform duration-300 ease-out"
+          className="absolute z-20 top-3 left-3 w-[18.75rem] max-w-[calc(100%-1.5rem)] max-h-[calc(100%-1.5rem)] flex flex-col rounded-xl border border-white/[0.12] bg-rail/95 backdrop-blur-sm shadow-2xl transition-transform duration-300 ease-out"
           style={{ transform: panelCollapsed ? 'translateX(calc(-100% - 1rem))' : 'translateX(0)' }}
           aria-hidden={panelCollapsed}
         >
@@ -1060,7 +1061,7 @@ export default function RoutePlanner({ onBack }: Props) {
                     <select
                       value={activePresetId ?? ''}
                       onChange={(e) => (e.target.value ? applyPreset(e.target.value) : setActivePresetId(null))}
-                      className="h-8 flex-1 min-w-0 rounded-lg border border-white/[0.1] bg-rail px-2 text-[0.75rem] text-text outline-none focus:border-white/[0.25]"
+                      className="h-8 flex-1 min-w-0 rounded-xl border border-white/[0.1] bg-rail px-2 text-[0.75rem] text-text outline-none focus:border-white/[0.25]"
                     >
                       <option value="">Preset…</option>
                       <optgroup label="Built-in">
@@ -1084,7 +1085,7 @@ export default function RoutePlanner({ onBack }: Props) {
                       onClick={() => setSavingPreset((s) => !s)}
                       title="Save current profile as a preset"
                       aria-label="Save preset"
-                      className="h-8 w-8 flex items-center justify-center rounded-lg border border-white/[0.1] text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
+                      className="h-8 w-8 flex items-center justify-center rounded-xl border border-white/[0.1] text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
                     >
                       <Bookmark size="0.875rem" strokeWidth={1.8} />
                     </button>
@@ -1093,7 +1094,7 @@ export default function RoutePlanner({ onBack }: Props) {
                         onClick={() => removePreset(activePreset.id)}
                         title="Delete this preset"
                         aria-label="Delete preset"
-                        className="h-8 w-8 flex items-center justify-center rounded-lg border border-white/[0.1] text-muted hover:text-red-300 hover:bg-white/[0.06] transition-colors"
+                        className="h-8 w-8 flex items-center justify-center rounded-xl border border-white/[0.1] text-muted hover:text-red-300 hover:bg-white/[0.06] transition-colors"
                       >
                         <Trash2 size="0.875rem" strokeWidth={1.8} />
                       </button>
@@ -1108,12 +1109,12 @@ export default function RoutePlanner({ onBack }: Props) {
                         onKeyDown={(e) => e.key === 'Enter' && commitSavePreset()}
                         placeholder="Preset name"
                         autoFocus
-                        className="h-8 flex-1 min-w-0 rounded-lg border border-white/[0.1] bg-white/[0.03] px-2.5 text-[0.75rem] outline-none focus:border-white/[0.25] placeholder:text-muted/60"
+                        className="h-8 flex-1 min-w-0 rounded-xl border border-white/[0.1] bg-white/[0.03] px-2.5 text-[0.75rem] outline-none focus:border-white/[0.25] placeholder:text-muted/60"
                       />
                       <button
                         onClick={commitSavePreset}
                         disabled={!presetName.trim()}
-                        className="h-8 px-2.5 flex items-center gap-1 rounded-lg bg-active/90 text-bg text-[0.75rem] font-semibold hover:bg-active disabled:opacity-40 transition-colors"
+                        className="h-8 px-2.5 flex items-center gap-1 rounded-xl bg-active/90 text-bg text-[0.75rem] font-semibold hover:bg-active disabled:opacity-40 transition-colors"
                       >
                         <Check size="0.8125rem" strokeWidth={2.4} /> Save
                       </button>
@@ -1137,7 +1138,7 @@ export default function RoutePlanner({ onBack }: Props) {
               onClick={calculate}
               disabled={routeButtonDisabled}
               title={!hasEndpoints ? 'Set a start and destination first' : undefined}
-              className="h-10 rounded-lg bg-active/90 text-bg font-semibold text-[0.8125rem] flex items-center justify-center gap-2 transition-colors hover:bg-active disabled:opacity-40 disabled:cursor-not-allowed"
+              className="h-10 rounded-xl bg-active/90 text-bg font-semibold text-[0.8125rem] flex items-center justify-center gap-2 transition-colors hover:bg-active disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {routeUpToDate ? <Check size="1rem" strokeWidth={2.4} /> : <RouteIcon size="1rem" strokeWidth={2} />}
               {routeButtonLabel}
@@ -1427,7 +1428,7 @@ function NumberField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="h-8 rounded-lg border border-white/[0.1] bg-white/[0.03] px-2.5 text-[0.8125rem] outline-none focus:border-white/[0.25] placeholder:text-muted/60"
+        className="h-8 rounded-xl border border-white/[0.1] bg-white/[0.03] px-2.5 text-[0.8125rem] outline-none focus:border-white/[0.25] placeholder:text-muted/60"
       />
     </label>
   )

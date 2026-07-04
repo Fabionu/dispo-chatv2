@@ -1,6 +1,11 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { Route } from 'lucide-react'
-import RoutePlanner from './RoutePlanner'
+import { PaneLoader } from '../LazyFallback'
+
+// The Route planner pulls in the whole HERE map stack (@here/flexpolyline, the
+// HERE SDK loader, truck presets). Code-split so none of it ships in the initial
+// bundle — it loads only when the user opens the tool.
+const RoutePlanner = lazy(() => import('./RoutePlanner'))
 
 type Props = {
   workspaceName: string
@@ -14,7 +19,11 @@ export default function InboxView({ workspaceName }: Props) {
   const [tool, setTool] = useState<'route' | null>(null)
 
   if (tool === 'route') {
-    return <RoutePlanner onBack={() => setTool(null)} />
+    return (
+      <Suspense fallback={<PaneLoader className="h-full" />}>
+        <RoutePlanner onBack={() => setTool(null)} />
+      </Suspense>
+    )
   }
 
   return (

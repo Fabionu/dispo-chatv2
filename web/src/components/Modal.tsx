@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from 'react'
 import { X } from 'lucide-react'
+import { ICON_ACTION_BASE, ICON_ACTION_IDLE } from './HeaderIconButton'
 
 type Props = {
   title: string
@@ -38,9 +39,13 @@ export default function Modal({ title, subtitle, onClose, children, footer }: Pr
           <button
             onClick={onClose}
             aria-label="Close"
-            className="text-muted hover:text-text transition-colors -mr-1 mt-0.5"
+            // Circular icon button like the rest of the app. Negative vertical
+            // margins let the 36px control sit inside the header's existing
+            // padding so it never grows the header — including title-only dialogs
+            // (e.g. ConfirmDialog) where the button is taller than the title line.
+            className={`${ICON_ACTION_BASE} ${ICON_ACTION_IDLE} shrink-0 -my-2 -mr-1.5`}
           >
-            <X size="1rem" strokeWidth={1.8} />
+            <X size="1.125rem" strokeWidth={1.8} />
           </button>
         </header>
 

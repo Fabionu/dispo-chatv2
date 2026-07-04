@@ -14,6 +14,18 @@ export const ICON_ACTION_BASE =
 export const ICON_ACTION_IDLE = 'text-muted hover:text-text hover:bg-white/[0.05]'
 export const ICON_ACTION_ACTIVE = 'text-text bg-white/[0.06]'
 
+// Compact 24×24 sibling of ICON_ACTION_BASE for inline row affordances (e.g. the
+// edit pencil on an EditableRow / stop card) that must stay small enough not to
+// grow their row. Same circular, borderless, muted-glyph-that-warms-on-hover look
+// as the standard icon button — just smaller, and with no transition baked in so
+// each caller keeps its own (some fade opacity on row hover). The caller supplies
+// the glyph and any resting-visibility utilities.
+export const ICON_ACTION_SMALL =
+  'h-6 w-6 flex items-center justify-center rounded-full text-muted ' +
+  'hover:text-text hover:bg-white/[0.05] ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ' +
+  'disabled:opacity-30 disabled:cursor-default'
+
 type Props = {
   /** Accessible name + default tooltip. */
   label: string

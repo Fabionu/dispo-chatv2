@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check, Pencil, X } from 'lucide-react'
+import { ICON_ACTION_SMALL } from './HeaderIconButton'
 
 type Props = {
   label: string
@@ -169,7 +170,7 @@ export default function EditableRow({
             onClick={start}
             aria-label={`Edit ${label}`}
             title={`Edit ${label}`}
-            className="shrink-0 h-6 w-6 flex items-center justify-center rounded-chip text-faint opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-text hover:bg-white/[0.04] transition-all"
+            className={`${ICON_ACTION_SMALL} shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all`}
           >
             <Pencil size="0.75rem" strokeWidth={1.8} />
           </button>

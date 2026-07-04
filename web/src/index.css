@@ -70,6 +70,14 @@ html[data-density='comfortable'] {
      var() resolves against the cascaded value). Used ONLY by plain-stream rows
      — bubble view and the composer keep --chat-msg-font-size. */
   --chat-plain-font-size: calc(var(--chat-msg-font-size) + 1px);
+  /* Sidebar conversation-row text sits ~1px above the shared row/meta tokens for
+     readability, WITHOUT enlarging the search field, filter pills, or footer
+     profile that reuse those tokens. Defined once as a calc over the row/meta
+     tokens (same lazy-resolve trick as --chat-plain-font-size above) so they
+     track every density tier automatically. Consumed only by the sidebar
+     conversation / contact / request / invite rows. */
+  --sidebar-conv-font-size: calc(var(--sidebar-row-font-size) + 1px);
+  --sidebar-conv-meta-font-size: calc(var(--sidebar-meta-font-size) + 1px);
   --header-height: 60px;
   --sidebar-width: 520px;
   --composer-size: 28px;
