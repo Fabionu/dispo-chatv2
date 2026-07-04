@@ -46,7 +46,7 @@ export default function ConversationSearch({ query, messages, currentUserId, onJ
     // a border (matching the app's borderless direction).
     <div
       data-search-region
-      className="absolute right-4 top-[3.625rem] z-30 w-[min(22.5rem,calc(100%-2rem))] rounded-[0.75rem] bg-surface shadow-[0_16px_40px_rgba(0,0,0,0.55)] overflow-hidden"
+      className="absolute right-4 top-[3.625rem] z-30 w-[min(22.5rem,calc(100%-2rem))] rounded-panel bg-surface shadow-[0_16px_40px_rgba(0,0,0,0.55)] overflow-hidden"
     >
       <div className="max-h-[min(50vh,26.25rem)] overflow-y-auto">
         {results.length === 0 ? (

@@ -75,7 +75,7 @@ export default function PinnedBar({ messages, onJump, onUnpin }: Props) {
                     onClick={() => onUnpin(m)}
                     aria-label="Unpin message"
                     title="Unpin"
-                    className="h-6 w-6 inline-flex items-center justify-center rounded text-faint hover:text-text hover:bg-white/[0.06] transition-colors shrink-0 opacity-0 group-hover/pin:opacity-100 focus:opacity-100"
+                    className="h-6 w-6 inline-flex items-center justify-center rounded-full text-faint hover:text-text hover:bg-white/[0.06] transition-colors shrink-0 opacity-0 group-hover/pin:opacity-100 focus:opacity-100"
                   >
                     <X size="0.8125rem" strokeWidth={2} />
                   </button>
@@ -91,7 +91,7 @@ export default function PinnedBar({ messages, onJump, onUnpin }: Props) {
                 onClick={() => setExpanded((v) => !v)}
                 aria-label={expanded ? 'Collapse pinned' : 'Show all pinned'}
                 aria-expanded={expanded}
-                className="h-7 w-7 inline-flex items-center justify-center rounded text-muted hover:text-text hover:bg-white/[0.06] transition-colors shrink-0"
+                className="h-7 w-7 inline-flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] transition-colors shrink-0"
               >
                 <ChevronDown
                   size="0.9375rem"

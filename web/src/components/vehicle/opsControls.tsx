@@ -111,7 +111,7 @@ export function SelectRow<T extends string>({
           value={value ?? ''}
           disabled={saving}
           onChange={(e) => void change((e.target.value || undefined) as T | undefined)}
-          className="h-8 w-full rounded-lg border border-white/[0.1] bg-white/[0.03] px-2 text-[0.78125rem] text-text outline-none focus:border-white/[0.25] disabled:opacity-50"
+          className="h-8 w-full rounded-card border border-white/[0.08] bg-white/[0.03] px-2 text-[0.78125rem] text-text outline-none focus:border-white/[0.22] disabled:opacity-50"
         >
           <option value="">Not set</option>
           {options.map((o) => (

@@ -46,11 +46,23 @@ export default {
         sans: ['"Inter"', 'system-ui', 'sans-serif'],
         mono: ['ui-monospace', '"SF Mono"', 'Menlo', 'monospace'],
       },
+      // ── Radius scale (4 / 6 / 8 / 10 / 12) ───────────────────────────────
+      // One geometric scale for every surface. Pick by ROLE, never a raw
+      // rounded-* utility or an arbitrary value:
+      //   chip  — tags, badges, tiny inline chips
+      //   btn   — rectangular buttons, segmented-control items
+      //   card  — cards, inputs/selects, menus, dropdowns, popovers
+      //   modal — modal dialogs
+      //   panel — the app's outer shells (sidebar / chat / info panel cards)
+      //           and floating tool panels
+      // Circular icon buttons use rounded-full (see ICON_ACTION_* in
+      // HeaderIconButton.tsx).
       borderRadius: {
         chip: '4px',
-        btn: '5px',
-        card: '6px',
-        modal: '7px',
+        btn: '6px',
+        card: '8px',
+        modal: '10px',
+        panel: '12px',
       },
       letterSpacing: {
         eyebrow: '0.14em',

@@ -339,7 +339,7 @@ export default function GroupInfoPanel({
         // reflows narrower and the panel matches the app's flat card shell.
         className="fixed top-0 right-0 bottom-0 z-40 w-full max-w-[25rem] shadow-[-16px_0_48px_rgba(0,0,0,0.4)] bg-rail flex flex-col
                    xl:static xl:z-auto xl:w-[clamp(22.5rem,26vw,26.25rem)] xl:max-w-none xl:shrink-0 xl:shadow-none
-                   xl:rounded-[0.6875rem] xl:overflow-hidden"
+                   xl:rounded-panel xl:overflow-hidden"
       >
         {/* Header — same height as the chat header so the two line up. */}
         <div className="h-[var(--header-height)] flex items-center justify-between px-4 shrink-0">
@@ -402,13 +402,13 @@ export default function GroupInfoPanel({
           </div>
 
           {/* Tab bar — compact segmented control for the operational sections. */}
-          <div className="mt-4 flex items-center gap-0.5 rounded-lg bg-white/[0.03] p-0.5">
+          <div className="mt-4 flex items-center gap-0.5 rounded-card bg-white/[0.03] p-0.5">
             {PANEL_TABS.map((t) => (
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
                 aria-current={tab === t.id ? 'true' : undefined}
-                className={`flex-1 h-7 rounded-md text-[0.71875rem] font-medium transition-colors ${
+                className={`flex-1 h-7 rounded-btn text-[0.71875rem] font-medium transition-colors ${
                   tab === t.id ? 'bg-white/[0.08] text-text' : 'text-muted hover:text-text'
                 }`}
               >
@@ -691,7 +691,7 @@ function MemberRow({
               aria-label={`Manage ${member.displayName}`}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
-              className="h-7 w-7 flex items-center justify-center rounded-chip text-muted hover:text-text hover:bg-white/[0.04] transition-colors disabled:opacity-30 disabled:cursor-default"
+              className="h-7 w-7 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.04] transition-colors disabled:opacity-30 disabled:cursor-default"
             >
               <MoreVertical size="0.875rem" strokeWidth={1.8} />
             </button>

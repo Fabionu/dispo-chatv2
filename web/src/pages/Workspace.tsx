@@ -824,7 +824,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           list state (search, groups, DMs, requests, panels) is preserved and
           returns intact on expand. */}
       {sidebarCollapsed ? (
-        <aside className="w-14 shrink-0 bg-rail rounded-[0.6875rem] overflow-hidden flex flex-col items-center py-3 gap-1.5">
+        <aside className="w-14 shrink-0 bg-rail rounded-panel overflow-hidden flex flex-col items-center py-3 gap-1.5">
           <button
             onClick={toggleSidebar}
             title="Expand sidebar"
@@ -865,7 +865,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           header/list to the rounded corners; separation from the darker chat
           background comes from the panel's own `rail` tone (the same surface as
           the Group Info panel), not a border. */
-      <aside className="w-[var(--sidebar-width)] shrink-0 bg-rail rounded-[0.6875rem] overflow-hidden flex flex-col">
+      <aside className="w-[var(--sidebar-width)] shrink-0 bg-rail rounded-panel overflow-hidden flex flex-col">
         {profilePanelOpen ? (
           <ProfileSidebarPanel
             initialProfile={cachedProfile}
@@ -937,7 +937,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         <div className="px-3 pt-3 pb-2 flex items-center gap-1.5">
           <label
             htmlFor="rail-search"
-            className="flex-1 h-[var(--sidebar-search-height)] flex items-center gap-2 px-3 rounded-[0.6875rem] border border-white/[0.06] bg-white/[0.02] focus-within:border-white/[0.16] hover:border-white/[0.10] transition-colors cursor-text"
+            className="flex-1 h-[var(--sidebar-search-height)] flex items-center gap-2 px-3 rounded-panel border border-white/[0.06] bg-white/[0.02] focus-within:border-white/[0.16] hover:border-white/[0.10] transition-colors cursor-text"
           >
             <Search size="0.875rem" strokeWidth={1.6} className="text-faint shrink-0" />
             <input

@@ -33,7 +33,7 @@ export default function StopCard({
   if (lines.length === 0 && stop.location?.trim()) lines.push(stop.location.trim())
 
   return (
-    <div className="group rounded-lg border border-white/[0.08] bg-white/[0.02] px-2.5 py-2">
+    <div className="group rounded-card border border-white/[0.08] bg-white/[0.02] px-2.5 py-2">
       <div className="flex items-center gap-2">
         <span className="text-[0.78125rem] font-medium">{labelOf(STOP_TYPES, stop.type)}</span>
         <StatusChip tone={stopStatusTone(stop.status)} label={labelOf(STOP_STATUSES, stop.status)} />
@@ -52,7 +52,7 @@ export default function StopCard({
               onClick={onRemove}
               aria-label="Remove stop"
               title="Remove stop"
-              className="h-6 w-6 flex items-center justify-center rounded-chip text-faint hover:text-alert hover:bg-white/[0.04] transition-colors"
+              className="h-6 w-6 flex items-center justify-center rounded-full text-faint hover:text-alert hover:bg-white/[0.04] transition-colors"
             >
               <Trash2 size="0.75rem" strokeWidth={1.8} />
             </button>

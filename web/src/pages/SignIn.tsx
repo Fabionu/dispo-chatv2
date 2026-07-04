@@ -282,7 +282,7 @@ export default function SignIn() {
           near-black page. The section provides the surrounding black gutter so
           the card reads as visually detached. */}
       <section className="relative hidden lg:flex p-6">
-        <div className="flex-1 flex flex-col bg-rail border border-white/[0.08] rounded-[0.6875rem] px-14 py-10">
+        <div className="flex-1 flex flex-col bg-rail border border-white/[0.08] rounded-panel px-14 py-10">
         {/* logo */}
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-card border border-white/[0.1] bg-white/[0.03] flex items-center justify-center">

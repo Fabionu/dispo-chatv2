@@ -171,7 +171,7 @@ function CategoryCard({
       onClick={onClick}
       className="w-full flex items-center gap-3 rounded-card border border-white/[0.07] bg-white/[0.015] px-3 py-3 text-left transition-colors hover:bg-white/[0.03] hover:border-white/[0.12]"
     >
-      <span className="h-8 w-8 shrink-0 flex items-center justify-center rounded-[0.4375rem] border border-white/[0.06] bg-white/[0.02] text-muted">
+      <span className="h-8 w-8 shrink-0 flex items-center justify-center rounded-btn border border-white/[0.06] bg-white/[0.02] text-muted">
         {icon}
       </span>
       <span className="min-w-0 flex-1">
@@ -472,7 +472,7 @@ function InviteListRow({ invite, onRevoke }: { invite: WorkspaceInvite; onRevoke
           onClick={onRevoke}
           title="Revoke link"
           aria-label="Revoke link"
-          className="shrink-0 h-7 w-7 flex items-center justify-center rounded-chip text-muted hover:text-alert hover:bg-white/[0.05] transition-colors"
+          className="shrink-0 h-7 w-7 flex items-center justify-center rounded-full text-muted hover:text-alert hover:bg-white/[0.05] transition-colors"
         >
           <Trash2 size="0.875rem" strokeWidth={1.8} />
         </button>
@@ -547,7 +547,7 @@ function Segmented({
   onChange: (value: string) => void
 }) {
   return (
-    <div className="inline-flex gap-0.5 rounded-[0.5rem] bg-black/20 p-0.5">
+    <div className="inline-flex gap-0.5 rounded-card bg-black/20 p-0.5">
       {options.map((o) => {
         const active = o.value === value
         return (
@@ -555,7 +555,7 @@ function Segmented({
             key={o.value}
             onClick={() => onChange(o.value)}
             aria-pressed={active}
-            className={`h-7 px-3.5 rounded-[0.375rem] text-[0.75rem] transition-colors ${
+            className={`h-7 px-3.5 rounded-btn text-[0.75rem] transition-colors ${
               active
                 ? 'bg-active/15 text-active font-semibold'
                 : 'text-muted hover:text-text hover:bg-white/[0.03]'

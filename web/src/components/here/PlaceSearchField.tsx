@@ -112,7 +112,7 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
 
       {value ? (
         // Selected state — locked chip with the chosen place + clear button.
-        <div className="flex items-center gap-2 rounded-xl border border-white/[0.1] bg-white/[0.03] px-3 h-10">
+        <div className="flex items-center gap-2 rounded-card border border-white/[0.08] bg-white/[0.03] px-3 h-10">
           <MapPin size="0.9375rem" className="shrink-0 text-active" strokeWidth={1.8} />
           <span className="flex-1 truncate text-[0.8125rem]" title={value.label}>
             {value.label || value.title}
@@ -145,7 +145,7 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
           aria-controls={listboxId}
           autoComplete="off"
           autoFocus={autoFocus}
-          className="h-10 rounded-xl border border-white/[0.1] bg-white/[0.03] px-3 text-[0.8125rem] outline-none focus:border-white/[0.25] placeholder:text-muted/70"
+          className="h-10 rounded-card border border-white/[0.08] bg-white/[0.03] px-3 text-[0.8125rem] outline-none focus:border-white/[0.22] placeholder:text-faint"
         />
       )}
 
@@ -156,7 +156,7 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
         <ul
           id={listboxId}
           role="listbox"
-          className="absolute z-20 top-full mt-1 w-full rounded-xl border border-white/[0.1] bg-rail shadow-xl"
+          className="absolute z-20 top-full mt-1 w-full rounded-card border border-white/[0.1] bg-rail shadow-xl overflow-hidden"
         >
           {coord ? (
             <li role="option" aria-selected={false}>
@@ -186,7 +186,7 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
         <ul
           id={listboxId}
           role="listbox"
-          className="absolute z-20 top-full mt-1 w-full max-h-72 overflow-y-auto rounded-xl border border-white/[0.1] bg-rail shadow-xl"
+          className="absolute z-20 top-full mt-1 w-full max-h-72 overflow-y-auto rounded-card border border-white/[0.1] bg-rail shadow-xl"
         >
           {loading && items.length === 0 && (
             <li className="px-3 py-2.5 text-[0.75rem] text-muted">Searching…</li>

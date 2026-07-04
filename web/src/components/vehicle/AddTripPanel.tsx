@@ -128,7 +128,7 @@ export default function AddTripPanel({ ops, onClose, onCreate, onPickLocation }:
         // narrower and stays visible.
         className="fixed top-0 right-0 bottom-0 z-40 w-full max-w-[25rem] shadow-[-16px_0_48px_rgba(0,0,0,0.4)] bg-rail flex flex-col
                    xl:static xl:z-auto xl:w-[clamp(22.5rem,26vw,26.25rem)] xl:max-w-none xl:shrink-0 xl:shadow-none
-                   xl:rounded-[0.6875rem] xl:overflow-hidden"
+                   xl:rounded-panel xl:overflow-hidden"
       >
         {/* Header — same height as the chat header so the two line up. */}
         <div className="h-[var(--header-height)] flex items-center justify-between px-4 shrink-0">
@@ -555,7 +555,7 @@ function StopCard({
   onRemove: () => void
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-white/[0.03] px-2.5 py-2">
+    <div className="flex items-center gap-2 rounded-card bg-white/[0.03] px-2.5 py-2">
       <span className="text-[0.75rem] font-medium shrink-0">{labelOf(STOP_TYPES, stop.type)}</span>
       <span className="flex-1 min-w-0 truncate text-[0.75rem] text-muted">
         {[stopLocationLabel(stop), stop.plannedAt].filter(Boolean).join(' · ') || '—'}
@@ -572,7 +572,7 @@ function StopCard({
         onClick={onRemove}
         aria-label="Remove stop"
         title="Remove stop"
-        className="h-6 w-6 shrink-0 flex items-center justify-center rounded-chip text-faint hover:text-alert hover:bg-white/[0.04] transition-colors"
+        className="h-6 w-6 shrink-0 flex items-center justify-center rounded-full text-faint hover:text-alert hover:bg-white/[0.04] transition-colors"
       >
         <Trash2 size="0.8125rem" strokeWidth={1.8} />
       </button>

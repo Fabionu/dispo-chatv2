@@ -179,7 +179,7 @@ export default function TripTab({
         type="button"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
-        className="w-full text-left rounded-xl border border-white/[0.08] bg-white/[0.025] hover:bg-white/[0.04] transition-colors px-3 py-2.5 flex flex-col gap-1"
+        className="w-full text-left rounded-card border border-white/[0.08] bg-white/[0.025] hover:bg-white/[0.04] transition-colors px-3 py-2.5 flex flex-col gap-1"
       >
         <div className="flex items-start justify-between gap-2">
           <div className="text-[0.8125rem] font-semibold leading-tight min-w-0 truncate">

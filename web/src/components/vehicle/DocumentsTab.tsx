@@ -31,7 +31,7 @@ export default function DocumentsTab() {
         </button>
       </div>
 
-      <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] px-3 py-3 text-center">
+      <div className="rounded-card border border-white/[0.08] bg-white/[0.02] px-3 py-3 text-center">
         <FileText size="1.25rem" strokeWidth={1.6} className="mx-auto text-faint" />
         <div className="text-[0.78125rem] text-muted mt-1.5">No documents yet</div>
         <div className="text-[0.71875rem] text-faint mt-0.5">

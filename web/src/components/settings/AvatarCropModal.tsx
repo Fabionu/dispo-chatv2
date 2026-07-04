@@ -506,7 +506,7 @@ function IconBtn({
       ? 'h-12 w-12 rounded-full bg-active text-bg shadow-[0_8px_24px_rgba(0,0,0,0.45)] hover:bg-active/90 focus-visible:ring-2 focus-visible:ring-active/60 disabled:opacity-60'
       : variant === 'float'
         ? 'h-9 w-9 rounded-full bg-black/45 backdrop-blur border border-white/[0.1] text-white hover:bg-black/65 focus-visible:ring-2 focus-visible:ring-white/40 disabled:opacity-40'
-        : 'h-8 w-8 rounded-btn text-muted hover:text-text hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-white/30 disabled:opacity-40 disabled:hover:bg-transparent'
+        : 'h-8 w-8 rounded-full text-muted hover:text-text hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-white/30 disabled:opacity-40 disabled:hover:bg-transparent'
 
   const tip =
     side === 'top'

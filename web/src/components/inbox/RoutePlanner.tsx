@@ -824,7 +824,7 @@ export default function RoutePlanner({ onBack }: Props) {
         <button
           onClick={() => setEditingId(null)}
           aria-label="Cancel edit"
-          className="h-10 w-8 flex items-center justify-center rounded text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
+          className="h-8 w-8 mt-1 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
         >
           <X size="0.9375rem" strokeWidth={2} />
         </button>
@@ -902,7 +902,7 @@ export default function RoutePlanner({ onBack }: Props) {
 
         {/* Floating route panel — compact; collapses horizontally to the left. */}
         <div
-          className="absolute z-20 top-3 left-3 w-[18.75rem] max-w-[calc(100%-1.5rem)] max-h-[calc(100%-1.5rem)] flex flex-col rounded-xl border border-white/[0.12] bg-rail/95 backdrop-blur-sm shadow-2xl transition-transform duration-300 ease-out"
+          className="absolute z-20 top-3 left-3 w-[18.75rem] max-w-[calc(100%-1.5rem)] max-h-[calc(100%-1.5rem)] flex flex-col rounded-panel border border-white/[0.12] bg-rail/95 backdrop-blur-sm shadow-2xl transition-transform duration-300 ease-out"
           style={{ transform: panelCollapsed ? 'translateX(calc(-100% - 1rem))' : 'translateX(0)' }}
           aria-hidden={panelCollapsed}
         >
@@ -913,7 +913,7 @@ export default function RoutePlanner({ onBack }: Props) {
                 <button
                   onClick={clearRoute}
                   title="Clear route"
-                  className="h-7 px-2 flex items-center gap-1 rounded text-[0.6875rem] text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
+                  className="h-7 px-2 flex items-center gap-1 rounded-btn text-[0.6875rem] text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
                 >
                   <Trash2 size="0.8125rem" strokeWidth={1.8} /> Clear
                 </button>
@@ -922,7 +922,7 @@ export default function RoutePlanner({ onBack }: Props) {
                 onClick={() => setPanelCollapsed(true)}
                 title="Collapse panel"
                 aria-label="Collapse panel"
-                className="h-7 w-7 flex items-center justify-center rounded text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
+                className="h-7 w-7 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
               >
                 <ChevronLeft size="1rem" strokeWidth={2} />
               </button>
@@ -1003,7 +1003,7 @@ export default function RoutePlanner({ onBack }: Props) {
                   <button
                     onClick={() => setAddingStop(false)}
                     aria-label="Cancel add stop"
-                    className="h-10 w-8 flex items-center justify-center rounded text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
+                    className="h-8 w-8 mt-1 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
                   >
                     <X size="0.9375rem" strokeWidth={2} />
                   </button>
@@ -1061,7 +1061,7 @@ export default function RoutePlanner({ onBack }: Props) {
                     <select
                       value={activePresetId ?? ''}
                       onChange={(e) => (e.target.value ? applyPreset(e.target.value) : setActivePresetId(null))}
-                      className="h-8 flex-1 min-w-0 rounded-xl border border-white/[0.1] bg-rail px-2 text-[0.75rem] text-text outline-none focus:border-white/[0.25]"
+                      className="h-8 flex-1 min-w-0 rounded-card border border-white/[0.08] bg-rail px-2 text-[0.75rem] text-text outline-none focus:border-white/[0.22]"
                     >
                       <option value="">Preset…</option>
                       <optgroup label="Built-in">
@@ -1085,7 +1085,7 @@ export default function RoutePlanner({ onBack }: Props) {
                       onClick={() => setSavingPreset((s) => !s)}
                       title="Save current profile as a preset"
                       aria-label="Save preset"
-                      className="h-8 w-8 flex items-center justify-center rounded-xl border border-white/[0.1] text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
+                      className="h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
                     >
                       <Bookmark size="0.875rem" strokeWidth={1.8} />
                     </button>
@@ -1094,7 +1094,7 @@ export default function RoutePlanner({ onBack }: Props) {
                         onClick={() => removePreset(activePreset.id)}
                         title="Delete this preset"
                         aria-label="Delete preset"
-                        className="h-8 w-8 flex items-center justify-center rounded-xl border border-white/[0.1] text-muted hover:text-red-300 hover:bg-white/[0.06] transition-colors"
+                        className="h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-alert hover:bg-white/[0.06] transition-colors"
                       >
                         <Trash2 size="0.875rem" strokeWidth={1.8} />
                       </button>
@@ -1109,12 +1109,12 @@ export default function RoutePlanner({ onBack }: Props) {
                         onKeyDown={(e) => e.key === 'Enter' && commitSavePreset()}
                         placeholder="Preset name"
                         autoFocus
-                        className="h-8 flex-1 min-w-0 rounded-xl border border-white/[0.1] bg-white/[0.03] px-2.5 text-[0.75rem] outline-none focus:border-white/[0.25] placeholder:text-muted/60"
+                        className="h-8 flex-1 min-w-0 rounded-card border border-white/[0.08] bg-white/[0.03] px-2.5 text-[0.75rem] outline-none focus:border-white/[0.22] placeholder:text-faint"
                       />
                       <button
                         onClick={commitSavePreset}
                         disabled={!presetName.trim()}
-                        className="h-8 px-2.5 flex items-center gap-1 rounded-xl bg-active/90 text-bg text-[0.75rem] font-semibold hover:bg-active disabled:opacity-40 transition-colors"
+                        className="h-8 px-2.5 flex items-center gap-1 rounded-card bg-active/90 text-bg text-[0.75rem] font-semibold hover:bg-active disabled:opacity-40 transition-colors"
                       >
                         <Check size="0.8125rem" strokeWidth={2.4} /> Save
                       </button>
@@ -1138,7 +1138,7 @@ export default function RoutePlanner({ onBack }: Props) {
               onClick={calculate}
               disabled={routeButtonDisabled}
               title={!hasEndpoints ? 'Set a start and destination first' : undefined}
-              className="h-10 rounded-xl bg-active/90 text-bg font-semibold text-[0.8125rem] flex items-center justify-center gap-2 transition-colors hover:bg-active disabled:opacity-40 disabled:cursor-not-allowed"
+              className="h-10 rounded-card bg-active/90 text-bg font-semibold text-[0.8125rem] flex items-center justify-center gap-2 transition-colors hover:bg-active disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {routeUpToDate ? <Check size="1rem" strokeWidth={2.4} /> : <RouteIcon size="1rem" strokeWidth={2} />}
               {routeButtonLabel}
@@ -1154,7 +1154,7 @@ export default function RoutePlanner({ onBack }: Props) {
               </div>
             )}
             {error && (
-              <div className="text-[0.75rem] text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</div>
+              <div className="text-[0.75rem] text-alert bg-alert/10 border border-alert/20 rounded-card px-3 py-2">{error}</div>
             )}
             {snapNote && <div className="text-[0.6875rem] text-amber-200/80">{snapNote}</div>}
 
@@ -1186,7 +1186,7 @@ export default function RoutePlanner({ onBack }: Props) {
         {menu && (
           <div
             id="route-context-menu"
-            className="absolute z-30 min-w-[11.25rem] rounded-lg border border-white/[0.12] bg-rail shadow-2xl py-1"
+            className="absolute z-30 min-w-[11.25rem] rounded-card border border-white/[0.12] bg-rail shadow-2xl py-1"
             style={{ left: menu.x, top: menu.y }}
           >
             <div className="px-3 py-1.5 text-[0.625rem] uppercase tracking-wide text-muted border-b border-white/[0.06] mb-1">
@@ -1220,7 +1220,7 @@ export default function RoutePlanner({ onBack }: Props) {
           return (
             <div
               id="route-marker-menu"
-              className="absolute z-30 min-w-[11.25rem] rounded-lg border border-white/[0.12] bg-rail shadow-2xl py-1"
+              className="absolute z-30 min-w-[11.25rem] rounded-card border border-white/[0.12] bg-rail shadow-2xl py-1"
               style={{ left: markerMenu.x, top: markerMenu.y }}
             >
               <div className="px-3 py-1.5 border-b border-white/[0.06] mb-1">
@@ -1239,7 +1239,7 @@ export default function RoutePlanner({ onBack }: Props) {
               {markerMenu.role === 'stop' ? (
                 <button
                   onClick={() => removeStopFromMap(markerMenu.id)}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-[0.8125rem] text-red-300 hover:bg-red-500/10 transition-colors"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-[0.8125rem] text-alert hover:bg-alert/10 transition-colors"
                 >
                   <span><Trash2 size="0.875rem" /></span>
                   Remove stop
@@ -1337,7 +1337,7 @@ function PointRow({
       // (done on dragenter) sticks and the cursor reads as "movable".
       onDragOver={draggable ? (e) => e.preventDefault() : undefined}
       onDragEnd={draggable ? () => onDragEndRow?.() : undefined}
-      className={`flex items-center gap-2 rounded-xl border bg-white/[0.02] px-2 py-1.5 transition-[opacity,border-color] ${
+      className={`flex items-center gap-2 rounded-card border bg-white/[0.02] px-2 py-1.5 transition-[opacity,border-color] ${
         dragging ? 'opacity-50 border-active/40' : 'border-white/[0.08]'
       }`}
     >
@@ -1400,7 +1400,7 @@ function IconBtn({ label, onClick, children }: { label: string; onClick: () => v
       aria-label={label}
       title={label}
       onClick={onClick}
-      className="h-6 w-6 flex items-center justify-center rounded text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
+      className="h-6 w-6 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
     >
       {children}
     </button>
@@ -1428,7 +1428,7 @@ function NumberField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="h-8 rounded-xl border border-white/[0.1] bg-white/[0.03] px-2.5 text-[0.8125rem] outline-none focus:border-white/[0.25] placeholder:text-muted/60"
+        className="h-8 rounded-card border border-white/[0.08] bg-white/[0.03] px-2.5 text-[0.8125rem] outline-none focus:border-white/[0.22] placeholder:text-faint"
       />
     </label>
   )

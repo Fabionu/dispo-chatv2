@@ -428,7 +428,7 @@ function MessageRow({
             <div
               className={`group/msg min-w-0 flex flex-col ${
                 mine ? 'items-end' : 'items-start'
-              } max-w-[42.5rem] -mx-1.5 px-1.5 rounded-md transition-colors duration-500 ${
+              } max-w-[42.5rem] -mx-1.5 px-1.5 rounded-btn transition-colors duration-500 ${
                 highlighted ? 'bg-active/10' : 'hover:bg-white/[0.02]'
               }`}
             >

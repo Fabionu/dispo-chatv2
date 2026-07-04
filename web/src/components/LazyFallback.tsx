@@ -33,7 +33,7 @@ export function PanelLoader() {
   return (
     <div
       className="fixed top-0 right-0 bottom-0 z-40 w-full max-w-[25rem] bg-rail flex items-center justify-center
-                 xl:static xl:z-auto xl:w-[clamp(22.5rem,26vw,26.25rem)] xl:max-w-none xl:shrink-0 xl:rounded-[0.6875rem]"
+                 xl:static xl:z-auto xl:w-[clamp(22.5rem,26vw,26.25rem)] xl:max-w-none xl:shrink-0 xl:rounded-panel"
     >
       <Spinner variant="sm" />
     </div>
