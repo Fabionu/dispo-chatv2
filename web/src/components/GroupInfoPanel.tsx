@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { MoreVertical, UserPlus, X } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { X } from 'lucide-react'
 import type { Group, GroupMember, GroupPendingInvitee } from '../lib/types'
 import { groupLabel, tractorPlate, trailerPlate } from '../lib/types'
 import {
@@ -16,18 +16,16 @@ import { api, ApiError } from '../lib/api'
 import { persistOpsWithRoute, persistTripRoute } from '../lib/tripRoute'
 import { getSocket } from '../lib/socket'
 import { avatarUrl, clearAvatarCache } from '../lib/avatarCache'
-import { statusMeta, OFFLINE } from '../lib/availability'
 import { usePresence } from '../hooks/usePresence'
-import Avatar from './Avatar'
 import GroupAvatar from './GroupAvatar'
 import AvatarPhotoEditor from './AvatarPhotoEditor'
 import { ICON_ACTION_BASE, ICON_ACTION_IDLE } from './HeaderIconButton'
 import AvatarCropModal from './settings/AvatarCropModal'
-import Spinner from './Spinner'
 import { StatusChip } from './vehicle/opsControls'
 import VehicleInfoTab from './vehicle/VehicleInfoTab'
 import TripTab from './vehicle/TripTab'
 import DocumentsTab from './vehicle/DocumentsTab'
+import MembersTab from './vehicle/MembersTab'
 
 // The operational tabs in the vehicle-room info panel. Stops are managed inside
 // the Trip tab (no separate Stops tab) so there's a single place to manage a
@@ -442,81 +440,24 @@ export default function GroupInfoPanel({
             )}
             {tab === 'docs' && <DocumentsTab />}
             {tab === 'members' && (
-              <div className="space-y-5">
-                {/* Members — count already shown in the hero, so the section
-                    title stays plain (no duplicate "· N"). */}
-                <Section
-                  label="Members"
-                  action={
-                    canManage ? (
-                      <button
-                        onClick={onInvite}
-                        className="inline-flex items-center gap-1 text-[0.71875rem] text-muted hover:text-text transition-colors"
-                      >
-                        <UserPlus size="0.75rem" strokeWidth={1.8} />
-                        Invite
-                      </button>
-                    ) : undefined
-                  }
-                >
-                  {membersLoading ? (
-                    <div className="flex justify-center py-4">
-                      <Spinner size={16} />
-                    </div>
-                  ) : (
-                    <div className="-mx-1">
-                      {members.map((m) => (
-                        <MemberRow
-                          key={m.id}
-                          member={m}
-                          online={online.has(m.id)}
-                          isSelf={m.id === currentUserId}
-                          canManageRoles={canManageRoles}
-                          isLastAdmin={m.role === 'admin' && adminCount <= 1}
-                          busy={roleBusyId === m.id}
-                          actionsDisabled={roleBusyId !== null}
-                          onSetRole={setMemberRole}
-                          onRemove={removeMember}
-                          onMessage={messageMember}
-                        />
-                      ))}
-                    </div>
-                  )}
-                  {error && <div className="text-[0.71875rem] text-alert px-2 pt-1">{error}</div>}
-                </Section>
-
-                {/* Pending invites (manage-capable only) */}
-                {canManage && (pendingLoading || pending.length > 0) && (
-                  <Section label={`Pending invites${pending.length ? ` · ${pending.length}` : ''}`}>
-                    {pendingLoading ? (
-                      <div className="flex justify-center py-4">
-                        <Spinner size={16} />
-                      </div>
-                    ) : (
-                      <div className="-mx-1">
-                        {pending.map((p) => (
-                          <div
-                            key={p.id}
-                            className="flex items-center gap-2.5 px-2 py-2 rounded-chip hover:bg-white/[0.02] transition-colors"
-                          >
-                            <Avatar userId={p.userId} name={p.displayName} size={28} />
-                            <div className="min-w-0 flex-1">
-                              <div className="text-[0.78125rem] truncate">{p.displayName}</div>
-                              <div className="text-[0.6875rem] text-faint">Invitation pending</div>
-                            </div>
-                            <button
-                              onClick={() => void cancelInvite(p.id)}
-                              className="shrink-0 text-[0.6875rem] text-muted hover:text-alert px-2 transition-colors"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </Section>
-                )}
-              </div>
+              <MembersTab
+                members={members}
+                membersLoading={membersLoading}
+                currentUserId={currentUserId}
+                canManage={canManage}
+                canManageRoles={canManageRoles}
+                adminCount={adminCount}
+                roleBusyId={roleBusyId}
+                online={online}
+                error={error}
+                pending={pending}
+                pendingLoading={pendingLoading}
+                onInvite={onInvite}
+                onSetRole={setMemberRole}
+                onRemove={removeMember}
+                onMessage={messageMember}
+                onCancelInvite={cancelInvite}
+              />
             )}
           </div>
         </div>
@@ -532,220 +473,5 @@ export default function GroupInfoPanel({
         />
       )}
     </>
-  )
-}
-
-// One entry in a member's text-based actions menu. `separator` draws a faint
-// divider above the item; `tone: 'danger'` renders it as an alert (destructive)
-// action; `hint` shows a small trailing note (e.g. "Last admin") on a disabled
-// item explaining why it can't be used.
-type MemberAction = {
-  label: string
-  onClick: () => void
-  disabled?: boolean
-  tone?: 'danger'
-  separator?: boolean
-  hint?: string
-}
-
-function MemberRow({
-  member,
-  online,
-  isSelf,
-  canManageRoles,
-  isLastAdmin,
-  busy,
-  actionsDisabled,
-  onSetRole,
-  onRemove,
-  onMessage,
-}: {
-  member: GroupMember
-  // Live presence for this member (from the parent's usePresence). Drives the
-  // dot colour so it updates without a refetch.
-  online: boolean
-  isSelf: boolean
-  canManageRoles: boolean
-  isLastAdmin: boolean
-  busy: boolean
-  actionsDisabled: boolean
-  onSetRole: (userId: string, role: 'admin' | 'member') => void
-  onRemove: (userId: string) => void
-  onMessage: (member: GroupMember) => void
-}) {
-  const [menuOpen, setMenuOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!menuOpen) return
-    function onDown(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setMenuOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [menuOpen])
-
-  const isAdmin = member.role === 'admin'
-  // Presence dot (drivers have no meaningful status, so no dot). Live: the
-  // member's availability colour shows only while online; offline → dim grey.
-  // Mirrors the sidebar DM dots so both reflect the same state simultaneously.
-  const showDot = member.userRole !== 'driver'
-  const dot = online ? statusMeta(member.availabilityStatus ?? 'available') : OFFLINE
-  // Secondary line: the member's role IN THIS GROUP (admin / member) — NOT their
-  // company/workspace role. Plain text under the name (no badge).
-  const groupRoleLabel = isAdmin ? 'Admin' : 'Member'
-
-  function run(fn: () => void) {
-    setMenuOpen(false)
-    fn()
-  }
-
-  // Build the per-member action list. UI gating mirrors the server rules (the
-  // endpoints re-enforce all of them): DM only for other people; role changes
-  // and removal only for managers; the last admin can be neither demoted nor
-  // removed.
-  const actions: MemberAction[] = []
-  if (!isSelf) {
-    actions.push({ label: 'Send private message', onClick: () => run(() => onMessage(member)) })
-  }
-  // Self-service leave for non-managers (managers reach the same action through
-  // their own "Remove from group" below). The server logs a "X left the group"
-  // activity row. A sole admin can't leave (it would orphan the group).
-  if (isSelf && !canManageRoles) {
-    actions.push({
-      label: 'Leave group',
-      onClick: () => run(() => onRemove(member.id)),
-      tone: 'danger',
-      disabled: isAdmin && isLastAdmin,
-      hint: isAdmin && isLastAdmin ? 'Last admin' : undefined,
-    })
-  }
-  if (canManageRoles) {
-    if (isAdmin) {
-      actions.push({
-        label: 'Remove admin',
-        onClick: () => run(() => onSetRole(member.id, 'member')),
-        disabled: isLastAdmin,
-        hint: isLastAdmin ? 'Last admin' : undefined,
-      })
-    } else {
-      actions.push({
-        label: 'Make admin',
-        onClick: () => run(() => onSetRole(member.id, 'admin')),
-      })
-    }
-    actions.push({
-      label: 'Remove from group',
-      onClick: () => run(() => onRemove(member.id)),
-      tone: 'danger',
-      // The last admin can't be removed (it would orphan the group) — covers a
-      // sole admin trying to remove themselves, too.
-      disabled: isAdmin && isLastAdmin,
-      hint: isAdmin && isLastAdmin ? 'Last admin' : undefined,
-      separator: true,
-    })
-  }
-
-  return (
-    <div className="flex items-center gap-2.5 px-2 py-2 rounded-chip hover:bg-white/[0.02] transition-colors">
-      <div className="relative shrink-0">
-        <Avatar userId={member.id} name={member.displayName} size={28} />
-        {showDot && dot && (
-          <span
-            title={dot.label}
-            className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-rail"
-            style={{ backgroundColor: dot.color }}
-          />
-        )}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-[0.78125rem] truncate">
-          {member.displayName}
-          {isSelf && <span className="text-faint"> (you)</span>}
-        </div>
-        {/* Group role (admin / member) as plain text — never the workspace role. */}
-        <div className="text-[0.6875rem] text-faint truncate">{groupRoleLabel}</div>
-      </div>
-
-      {/* Compact text-based actions menu. The small ⋮ trigger keeps the row
-          clean (no always-visible buttons); a row spinner replaces it while a
-          role/removal request is in flight. Only rendered when there's at least
-          one action available to this viewer. */}
-      {actions.length > 0 &&
-        (busy ? (
-          <span className="shrink-0 h-7 w-7 flex items-center justify-center">
-            <Spinner size={14} />
-          </span>
-        ) : (
-          <div className="relative shrink-0" ref={menuRef}>
-            <button
-              onClick={() => setMenuOpen((v) => !v)}
-              disabled={actionsDisabled}
-              aria-label={`Manage ${member.displayName}`}
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              className="h-7 w-7 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.04] transition-colors disabled:opacity-30 disabled:cursor-default"
-            >
-              <MoreVertical size="0.875rem" strokeWidth={1.8} />
-            </button>
-            {menuOpen && (
-              <div
-                role="menu"
-                className="absolute right-0 top-[calc(100%+4px)] z-20 min-w-[8.5rem] rounded-card border border-white/[0.1] bg-surface overflow-hidden py-1"
-                style={{ boxShadow: '0 12px 32px rgba(0,0,0,0.5)' }}
-              >
-                {actions.map((a, i) => (
-                  <div key={i}>
-                    {a.separator && <div className="my-1 h-px bg-white/[0.06]" />}
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={a.onClick}
-                      disabled={a.disabled}
-                      title={a.hint}
-                      className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-[0.75rem] text-left whitespace-nowrap transition-colors disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent ${
-                        a.tone === 'danger'
-                          ? 'text-alert hover:bg-alert/10'
-                          : 'text-text hover:bg-white/[0.04]'
-                      }`}
-                    >
-                      <span className="flex-1">{a.label}</span>
-                      {a.hint && <span className="text-[0.625rem] text-faint shrink-0">{a.hint}</span>}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-    </div>
-  )
-}
-
-// ── Compact, panel-native bits ──────────────────────────────────────────────
-function Section({
-  label,
-  action,
-  children,
-}: {
-  label: string
-  action?: ReactNode
-  children: ReactNode
-}) {
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <span className="eyebrow">{label}</span>
-        {action}
-      </div>
-      {children}
-    </div>
   )
 }

@@ -1,64 +1,22 @@
-import { Fragment, memo, useRef, useState, type ReactNode } from 'react'
-import {
-  ChevronDown,
-  Copy,
-  Download,
-  Forward,
-  MessageCircle,
-  Pencil,
-  Pin,
-  PinOff,
-  Reply,
-  Trash2,
-} from 'lucide-react'
-import type { Attachment, GroupType, Mention } from '../../lib/types'
-import { splitBodyByMentions } from '../../lib/mentions'
-import { renderRichText } from '../../lib/richText'
+import { memo, useRef, useState } from 'react'
+import { ChevronDown, Pin } from 'lucide-react'
+import type { Attachment, GroupType } from '../../lib/types'
 import AttachmentBlock from '../attachments/AttachmentBlock'
-import { downloadAttachment } from '../attachments/attachmentUtils'
-import MessageActionsMenu, { type MessageAction } from './MessageActionsMenu'
+import MessageActionsMenu from './MessageActionsMenu'
 import ReadReceipts, { type Reader } from './ReadReceipts'
 import ReplyQuote from './ReplyQuote'
 import { DELETE_WINDOW_MS, formatTime } from './messageUtils'
 import DayDivider from './DayDivider'
 import Avatar from '../Avatar'
 import { useMessageDisplay } from '../../lib/messageDisplay'
+import { renderBody } from './messageBody'
+import { buildMessageActions } from './messageActionItems'
 import type { LocalMessage } from './types'
 
 // Consecutive messages from the same author within this window are grouped (one
 // author header, then plain rows / tight bubbles). A new group also starts on an
 // author change, a system row, or a date divider. ~7 min reads as "same burst".
 const GROUP_WINDOW_MS = 7 * 60 * 1000
-
-// Render a message body with @-mentions highlighted and *bold* / _italic_ inline
-// formatting applied. Tokenized into plain-text and mention segments (never HTML)
-// so user input is always escaped by React; the plain segments additionally run
-// through renderRichText for bold/italic. A mention of the current user gets a
-// stronger-but-subtle chip; others are a quiet accent-coloured token.
-function renderBody(
-  body: string,
-  mentions: Mention[] | undefined,
-  currentUserId: string,
-): ReactNode {
-  const segments = splitBodyByMentions(body, mentions)
-  if (segments.length === 1 && !segments[0].mention) return renderRichText(body)
-  return segments.map((seg, i) => {
-    if (!seg.mention) return <Fragment key={i}>{renderRichText(seg.text, `s${i}-`)}</Fragment>
-    const isMe = seg.mention.userId === currentUserId
-    return (
-      <span
-        key={i}
-        className={
-          isMe
-            ? 'rounded px-0.5 font-semibold text-active bg-active/15'
-            : 'font-medium text-active'
-        }
-      >
-        {seg.text}
-      </span>
-    )
-  })
-}
 
 type Props = {
   message: LocalMessage
@@ -227,81 +185,26 @@ function MessageRow({
   // jump-to-original. Clears after ~1.8s back in ChatView.
   const highlightSkin = highlighted ? 'ring-2 ring-active/60' : ''
 
-  // rem so the menu glyphs track the global UI scale (14px design size).
-  const iconSize = '0.875rem'
-  const actions: MessageAction[] = [
-    { label: 'Reply', onClick: () => onReply(message), icon: <Reply size={iconSize} strokeWidth={1.8} /> },
-    {
-      label: pinned ? 'Unpin message' : 'Pin message',
-      onClick: () => (pinned ? onUnpin(message) : onPin(message)),
-      icon: pinned ? (
-        <PinOff size={iconSize} strokeWidth={1.8} />
-      ) : (
-        <Pin size={iconSize} strokeWidth={1.8} />
-      ),
-    },
-    {
-      label: 'Copy',
-      onClick: () => onCopy(message),
-      disabled: !canCopy,
-      icon: <Copy size={iconSize} strokeWidth={1.8} />,
-    },
-    { label: 'Forward', onClick: () => onForward(message), icon: <Forward size={iconSize} strokeWidth={1.8} /> },
-    // Download sits with Copy/Forward, before the delete group. Only present
-    // when the message has at least one server-backed attachment. One file →
-    // direct download; multiple → each is downloaded in turn.
-    ...(downloadable.length > 0
-      ? [
-          {
-            label: 'Download',
-            onClick: () => downloadable.forEach((a) => downloadAttachment(a)),
-            icon: <Download size={iconSize} strokeWidth={1.8} />,
-          },
-        ]
-      : []),
-    ...(canMessagePrivately
-      ? [
-          {
-            label: 'Reply privately',
-            onClick: () => onReplyPrivately(message),
-            icon: <Reply size={iconSize} strokeWidth={1.8} />,
-          },
-          {
-            label: 'Send private message',
-            onClick: () => onSendPrivate(message),
-            icon: <MessageCircle size={iconSize} strokeWidth={1.8} />,
-          },
-        ]
-      : []),
-    ...(mine
-      ? [
-          {
-            label: 'Edit',
-            onClick: () => onEdit(message),
-            disabled: !canEdit,
-            icon: <Pencil size={iconSize} strokeWidth={1.8} />,
-          },
-        ]
-      : []),
-    {
-      label: 'Delete for me',
-      onClick: () => onDeleteForMe(message),
-      tone: 'alert' as const,
-      separator: true,
-      icon: <Trash2 size={iconSize} strokeWidth={1.8} />,
-    },
-    ...(mine
-      ? [
-          {
-            label: 'Delete for everyone',
-            onClick: () => onDeleteForEveryone(message),
-            disabled: !canDeleteForEveryone,
-            tone: 'alert' as const,
-            icon: <Trash2 size={iconSize} strokeWidth={1.8} />,
-          },
-        ]
-      : []),
-  ]
+  const actions = buildMessageActions({
+    message,
+    pinned,
+    canCopy,
+    downloadable,
+    canMessagePrivately,
+    mine,
+    canEdit,
+    canDeleteForEveryone,
+    onCopy,
+    onPin,
+    onUnpin,
+    onReply,
+    onEdit,
+    onForward,
+    onReplyPrivately,
+    onSendPrivate,
+    onDeleteForMe,
+    onDeleteForEveryone,
+  })
 
   // Subtle bubble-corner meta: optional `edited` tag then the time (or a
   // `Failed` marker). Rendered two ways below — tucked into the last line of a

@@ -3,6 +3,15 @@ import { decode } from '@here/flexpolyline'
 import { loadHere } from '../../lib/here/loadHere'
 import { pathMidpoint, haversineMeters, nearestPointOnPath } from '../../lib/here/geo'
 import type { LatLng, RouteMarker, RouteMarkerKind, ScreenGeoCandidate } from '../../lib/here/types'
+import {
+  DEFAULT_CENTER,
+  DEFAULT_ZOOM,
+  HOVER_THRESHOLD_PX,
+  formatHoverDistance,
+  sampleScreenCandidates,
+  snapDebug,
+} from './hereMapUtils'
+import { ROUTE_COLOR, ghostSvg, iconFor } from './hereMapIcons'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -59,126 +68,6 @@ type Props = {
   // map. Used by the stop-location picker; the route planner never sets it.
   center?: LatLng | null
   className?: string
-}
-
-// Default view: central Europe, so an empty planner shows a sensible map.
-const DEFAULT_CENTER = { lat: 50.11, lng: 8.68 }
-const DEFAULT_ZOOM = 5
-
-const ROUTE_COLOR = '#c89572'
-const ORIGIN_COLOR = '#7d8a78'
-const DEST_COLOR = '#d97757'
-
-// How close (in screen pixels) the cursor must be to the drawn route line for
-// the hover-distance readout to appear. Converted to metres at the current
-// zoom/latitude at hover time so the feel is consistent when zoomed in or out.
-const HOVER_THRESHOLD_PX = 12
-
-// Google-Maps-style distance for the hover readout: metres under ~1 km (rounded
-// to the nearest 10 m, e.g. "850 m"), otherwise kilometres — one decimal only
-// when it adds information ("12.4 km", but "3 km"/"348 km" without a trailing .0).
-function formatHoverDistance(meters: number): string {
-  if (meters < 1000) {
-    const m = Math.round(meters / 10) * 10
-    if (m < 1000) return `${m} m`
-    return '1 km' // rounded up to a full kilometre
-  }
-  const km = meters / 1000
-  if (km < 100) {
-    const r = Math.round(km * 10) / 10
-    return Number.isInteger(r) ? `${r} km` : `${r.toFixed(1)} km`
-  }
-  return `${Math.round(km)} km`
-}
-
-// Opt-in drag/snap tracing: run `localStorage.routeSnapDebug = '1'` in the
-// console to log raw release pixels, the converted geo, and (in RoutePlanner)
-// the snapped point + distance moved. Off (and silent) by default.
-function snapDebug(): boolean {
-  try {
-    return typeof localStorage !== 'undefined' && localStorage.getItem('routeSnapDebug') === '1'
-  } catch {
-    return false
-  }
-}
-
-// Convert the release pixel — and a ring of nearby pixels — back to geo
-// coordinates, so the snap can weigh the roads actually rendered AROUND the
-// cursor instead of only the single release point. The user aims at a road drawn
-// on screen; zoomed out, one pixel can span a kilometre, so the exact release
-// pixel may sit just BESIDE the highway while a pixel a few px toward it lands ON
-// it. Sampling a small ring recovers that intent. `vx,vy` are viewport (map-
-// container) pixels — exactly what `screenToGeo` expects, so no offset math here.
-// The first entry is always the exact release pixel (px 0). Near-duplicate geos
-// (common when zoomed in, where the ring is sub-metre) are de-duplicated.
-function sampleScreenCandidates(map: any, vx: number, vy: number, zoom: number): ScreenGeoCandidate[] {
-  // 8 compass directions; diagonals unit-normalised so every sample on a ring is
-  // the same pixel distance from the cursor.
-  const D = 0.7071
-  const dirs: [number, number][] = [
-    [1, 0],
-    [-1, 0],
-    [0, 1],
-    [0, -1],
-    [D, D],
-    [D, -D],
-    [-D, D],
-    [-D, -D],
-  ]
-  // Zoomed in the release is already precise → one tight ring. Zoomed out it's
-  // imprecise and the visible roads are far apart → sample wider, on two rings.
-  const radii = zoom >= 13 ? [10] : [12, 24]
-  const offsets: [number, number][] = [[0, 0]]
-  for (const r of radii) for (const [ux, uy] of dirs) offsets.push([ux * r, uy * r])
-
-  const out: ScreenGeoCandidate[] = []
-  const seen = new Set<string>()
-  for (const [ox, oy] of offsets) {
-    const g = map.screenToGeo(vx + ox, vy + oy)
-    if (!g || typeof g.lat !== 'number' || typeof g.lng !== 'number') continue
-    const key = `${g.lat.toFixed(6)},${g.lng.toFixed(6)}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    out.push({ lat: g.lat, lng: g.lng, px: Math.round(Math.hypot(ox, oy)) })
-  }
-  return out
-}
-
-// ── Marker icons ───────────────────────────────────────────────────────────
-// Built as SVG with an explicit anchor so the marker sits EXACTLY on the
-// coordinate: centre for the round origin/stop dots, the tip for the
-// destination pin. (HERE places the icon's anchor point on the coordinate.)
-// Kept deliberately small so the markers don't blanket the spot under them —
-// precise clicking/placement needs the coordinate to stay visible. Start (green
-// dot) and finish (coral pin) stay visually distinct in shape + colour.
-function originSvg(): string {
-  return `<svg width="14" height="14" viewBox="0 0 14 14" xmlns="http://www.w3.org/2000/svg"><circle cx="7" cy="7" r="5" fill="${ORIGIN_COLOR}" stroke="#ffffff" stroke-width="2"/></svg>`
-}
-
-function stopSvg(label: string): string {
-  return `<svg width="17" height="17" viewBox="0 0 17 17" xmlns="http://www.w3.org/2000/svg"><circle cx="8.5" cy="8.5" r="6.5" fill="#ffffff" stroke="${ROUTE_COLOR}" stroke-width="2"/><text x="8.5" y="8.5" text-anchor="middle" dominant-baseline="central" font-family="Inter, system-ui, sans-serif" font-size="9.5" font-weight="700" fill="#1c1c1f">${label}</text></svg>`
-}
-
-function destSvg(): string {
-  return `<svg width="20" height="26" viewBox="0 0 20 26" xmlns="http://www.w3.org/2000/svg"><path d="M10 1 C5 1 1 5 1 9.9 c0 6.6 9 15.1 9 15.1 s9-8.5 9-15.1 C19 5 15 1 10 1 z" fill="${DEST_COLOR}" stroke="#ffffff" stroke-width="1.8"/><circle cx="10" cy="10" r="3.4" fill="#ffffff"/></svg>`
-}
-
-// Small translucent dot shown under the cursor while dragging the route line.
-// Kept tiny so it marks the release point without covering the road beneath it.
-function ghostSvg(): string {
-  return `<svg width="12" height="12" viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg"><circle cx="6" cy="6" r="4" fill="${ROUTE_COLOR}" fill-opacity="0.65" stroke="#ffffff" stroke-width="1.5"/></svg>`
-}
-
-// Build the H.map.Icon for a marker with the correct anchor for its kind.
-function iconFor(H: any, marker: RouteMarker): any {
-  if (marker.kind === 'origin') {
-    return new H.map.Icon(originSvg(), { anchor: new H.math.Point(7, 7) })
-  }
-  if (marker.kind === 'destination') {
-    // Anchor at the pin's tip (bottom centre of the 20×26 viewBox).
-    return new H.map.Icon(destSvg(), { anchor: new H.math.Point(10, 26) })
-  }
-  return new H.map.Icon(stopSvg(marker.label ?? ''), { anchor: new H.math.Point(8.5, 8.5) })
 }
 
 // Interactive HERE map (Maps JS v3.2 / HARP). Owns the map instance; redraws the

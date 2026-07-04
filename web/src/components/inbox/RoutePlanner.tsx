@@ -10,10 +10,8 @@ import {
   ChevronUp,
   Copy,
   Flag,
-  GripVertical,
   MapPin,
   Navigation,
-  Pencil,
   Plus,
   Route as RouteIcon,
   Trash2,
@@ -36,138 +34,31 @@ import type {
   RoutePoint,
   RoutePointRole,
   ScreenGeoCandidate,
-  TruckProfile,
   TruckProfileForm,
   TruckRoute,
 } from '../../lib/here/types'
+import PointRow from './RoutePointRow'
+import { NumberField, Stat } from './RoutePlannerFields'
+import {
+  EMPTY_TRUCK,
+  MAX_STOPS,
+  ON_ROUTE_METERS,
+  PANEL_INSET_PX,
+  errorMessage,
+  fmtCoord,
+  formatDistance,
+  formatDuration,
+  formatEta,
+  isValidCoord,
+  snapDebug,
+  snappedFromRoute,
+  toTruckProfile,
+  truckSummary,
+  uid,
+} from './routePlannerUtils'
 
 type Props = {
   onBack: () => void
-}
-
-const EMPTY_TRUCK: TruckProfileForm = {
-  heightCm: '',
-  widthCm: '',
-  lengthCm: '',
-  grossWeightKg: '',
-  axleCount: '',
-  trailerCount: '',
-}
-
-const MAX_STOPS = 8
-const ON_ROUTE_METERS = 200
-// Width the expanded panel overlaps on the map's left edge (left-3 + w-[18.75rem]
-// + breathing room) — fed to the map so the route frames clear of it.
-const PANEL_INSET_PX = 322
-
-const uid = () =>
-  typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : Math.random().toString(36).slice(2)
-
-const fmtCoord = (c: LatLng) => `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}`
-
-// A point only routes when it carries finite coordinates. Guards the route
-// request so a stop without valid coordinates is never submitted as an empty
-// address (the request would otherwise fail asking for it).
-const isValidCoord = (c?: LatLng | null): c is LatLng =>
-  !!c && Number.isFinite(c.lat) && Number.isFinite(c.lng)
-
-// Opt-in drag/snap tracing (mirrors HereMap): `localStorage.routeSnapDebug = '1'`
-// in the console logs the raw release coordinate, the snapped point, and how far
-// the snap moved it. Silent + off by default.
-function snapDebug(): boolean {
-  try {
-    return typeof localStorage !== 'undefined' && localStorage.getItem('routeSnapDebug') === '1'
-  } catch {
-    return false
-  }
-}
-
-function toTruckProfile(form: TruckProfileForm): TruckProfile {
-  const num = (s: string) => {
-    const n = Number(s)
-    return s.trim() !== '' && Number.isFinite(n) ? n : undefined
-  }
-  const profile: TruckProfile = {}
-  const height = num(form.heightCm)
-  const width = num(form.widthCm)
-  const length = num(form.lengthCm)
-  const gross = num(form.grossWeightKg)
-  const axles = num(form.axleCount)
-  const trailers = num(form.trailerCount)
-  if (height && height > 0) profile.heightCm = Math.round(height)
-  if (width && width > 0) profile.widthCm = Math.round(width)
-  if (length && length > 0) profile.lengthCm = Math.round(length)
-  if (gross && gross > 0) profile.grossWeightKg = Math.round(gross)
-  if (axles && axles > 0) profile.axleCount = Math.round(axles)
-  if (trailers !== undefined && trailers >= 0) profile.trailerCount = Math.round(trailers)
-  return profile
-}
-
-function truckSummary(form: TruckProfileForm): string {
-  const parts: string[] = []
-  const gw = Number(form.grossWeightKg)
-  if (form.grossWeightKg && gw > 0) parts.push(`${(gw / 1000).toFixed(gw % 1000 ? 1 : 0)}t`)
-  const ln = Number(form.lengthCm)
-  if (form.lengthCm && ln > 0) parts.push(`${(ln / 100).toFixed(1)}m`)
-  const ht = Number(form.heightCm)
-  if (form.heightCm && ht > 0) parts.push(`${(ht / 100).toFixed(1)}m`)
-  return parts.length ? parts.join(' · ') : 'Not set'
-}
-
-// Google-Maps-style km formatting, shared by the side-panel stat and the on-map
-// distance badge so the two always read identically: one decimal under 10 km
-// (3.4 km), rounded to a whole km at/above it (12 km, 84 km, 247 km).
-function formatDistance(metres: number): string {
-  const km = metres / 1000
-  return km < 10 ? `${km.toFixed(1)} km` : `${Math.round(km)} km`
-}
-
-function formatDuration(seconds: number): string {
-  const total = Math.round(seconds / 60)
-  const h = Math.floor(total / 60)
-  const m = total % 60
-  return h > 0 ? `${h} h ${m} min` : `${m} min`
-}
-
-function formatEta(seconds: number): string {
-  const eta = new Date(Date.now() + seconds * 1000)
-  // 24-hour clock, matching message timestamps (see messageUtils.formatTime).
-  return eta.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
-}
-
-function errorMessage(code: string): string {
-  switch (code) {
-    case 'here_not_configured':
-      return 'HERE is not configured on the server (set HERE_API_KEY).'
-    case 'route_not_found':
-      return 'No truck route found between these points.'
-    case 'here_request_failed':
-      return 'HERE could not calculate this route. Try different points.'
-    default:
-      return 'Something went wrong calculating the route.'
-  }
-}
-
-function snappedFromRoute(
-  route: TruckRoute | null,
-  stopCount: number,
-): { origin: LatLng; stops: LatLng[]; destination: LatLng } | null {
-  if (!route) return null
-  const secs = route.sections
-  if (secs.length !== stopCount + 1) return null
-  const origin = secs[0].departure
-  if (!origin) return null
-  const stops: LatLng[] = []
-  for (let i = 0; i < stopCount; i++) {
-    const p = secs[i].arrival
-    if (!p) return null
-    stops.push(p)
-  }
-  const destination = secs[secs.length - 1].arrival
-  if (!destination) return null
-  return { origin, stops, destination }
 }
 
 type MenuState = { x: number; y: number; lat: number; lng: number; zoom: number; candidates: ScreenGeoCandidate[] }
@@ -1257,188 +1148,6 @@ export default function RoutePlanner({ onBack }: Props) {
           )
         })()}
       </div>
-    </div>
-  )
-}
-
-// ── Compact row for a committed point (start / stop / destination) ──────────
-// Every row is draggable (native DnD) once the route has ≥2 points, so the whole
-// route — start and finish included — can be reordered. The reorder happens live
-// as the dragged row enters another row; roles are re-derived from the resulting
-// order by the parent.
-function PointRow({
-  role,
-  index,
-  point,
-  coord,
-  onClear,
-  onEdit,
-  draggable = false,
-  dragging = false,
-  onDragStartRow,
-  onDragEnterRow,
-  onDragEndRow,
-}: {
-  role: RoutePointRole
-  index?: number
-  point: RoutePoint
-  coord: LatLng
-  onClear: () => void
-  onEdit?: () => void
-  draggable?: boolean
-  dragging?: boolean
-  onDragStartRow?: () => void
-  onDragEnterRow?: () => void
-  onDragEndRow?: () => void
-}) {
-  const [copied, setCopied] = useState(false)
-
-  async function copyCoord() {
-    const text = `${coord.lat.toFixed(5)}, ${coord.lng.toFixed(5)}`
-    try {
-      await navigator.clipboard?.writeText(text)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1200)
-    } catch {
-      /* clipboard unavailable — ignore */
-    }
-  }
-
-  const badge =
-    role === 'start' ? (
-      <span className="h-5 w-5 shrink-0 rounded-full bg-[#7d8a78] flex items-center justify-center text-bg">
-        <Navigation size="0.6875rem" strokeWidth={2.4} />
-      </span>
-    ) : role === 'destination' ? (
-      <span className="h-5 w-5 shrink-0 rounded-full bg-[#d97757] flex items-center justify-center text-bg">
-        <Flag size="0.6875rem" strokeWidth={2.4} />
-      </span>
-    ) : (
-      <span className="h-5 w-5 shrink-0 rounded-full border-2 border-active text-[0.625rem] font-bold flex items-center justify-center">
-        {index}
-      </span>
-    )
-
-  return (
-    <div
-      draggable={draggable}
-      onDragStart={
-        draggable
-          ? (e) => {
-              // Required for Firefox to start a drag; also marks the payload.
-              e.dataTransfer.effectAllowed = 'move'
-              e.dataTransfer.setData('text/plain', point.id)
-              onDragStartRow?.()
-            }
-          : undefined
-      }
-      onDragEnter={draggable ? () => onDragEnterRow?.() : undefined}
-      // preventDefault marks this row as a valid drop target so the live reorder
-      // (done on dragenter) sticks and the cursor reads as "movable".
-      onDragOver={draggable ? (e) => e.preventDefault() : undefined}
-      onDragEnd={draggable ? () => onDragEndRow?.() : undefined}
-      className={`flex items-center gap-2 rounded-card border bg-white/[0.02] px-2 py-1.5 transition-[opacity,border-color] ${
-        dragging ? 'opacity-50 border-active/40' : 'border-white/[0.08]'
-      }`}
-    >
-      {draggable && (
-        <span
-          aria-hidden
-          title="Drag to reorder"
-          className="shrink-0 -ml-0.5 -mr-0.5 text-muted/60 hover:text-text cursor-default"
-        >
-          <GripVertical size="0.875rem" strokeWidth={1.8} />
-        </span>
-      )}
-      <div className="shrink-0">{badge}</div>
-      <div className="min-w-0 flex-1">
-        {onEdit ? (
-          <button
-            onClick={onEdit}
-            title="Edit address"
-            className="block w-full text-left text-[0.78125rem] leading-tight truncate hover:text-text transition-colors"
-          >
-            {point.label}
-          </button>
-        ) : (
-          <div className="text-[0.78125rem] leading-tight truncate" title={point.label}>
-            {point.label}
-          </div>
-        )}
-        <button
-          onClick={copyCoord}
-          title="Copy coordinates"
-          className="group flex items-center gap-1 text-[0.6875rem] text-muted hover:text-text transition-colors tabular-nums"
-        >
-          {coord.lat.toFixed(5)}, {coord.lng.toFixed(5)}
-          {copied ? (
-            <Check size="0.6875rem" strokeWidth={2.4} className="text-done" />
-          ) : (
-            <Copy size="0.6875rem" strokeWidth={1.8} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-          )}
-          {point.source === 'map' && <span className="text-faint">· map</span>}
-        </button>
-      </div>
-      <div className="flex items-center gap-0.5 shrink-0">
-        {onEdit && (
-          <IconBtn label="Edit address" onClick={onEdit}>
-            <Pencil size="0.8125rem" strokeWidth={1.8} />
-          </IconBtn>
-        )}
-        <IconBtn label="Remove" onClick={onClear}>
-          <X size="0.875rem" strokeWidth={2} />
-        </IconBtn>
-      </div>
-    </div>
-  )
-}
-
-function IconBtn({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      className="h-6 w-6 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
-    >
-      {children}
-    </button>
-  )
-}
-
-function NumberField({
-  label,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  placeholder?: string
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[0.6875rem] text-muted">{label}</span>
-      <input
-        type="number"
-        inputMode="numeric"
-        min={0}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="h-8 rounded-card border border-white/[0.08] bg-white/[0.03] px-2.5 text-[0.8125rem] outline-none focus:border-white/[0.22] placeholder:text-faint"
-      />
-    </label>
-  )
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[0.6875rem] text-muted">{label}</span>
-      <span className="text-[0.875rem] font-semibold tracking-[-0.2px]">{value}</span>
     </div>
   )
 }

@@ -1,8 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDown,
-  ArrowDownToLine,
-  ArrowUpFromLine,
   FileText,
   Image as ImageIcon,
   Info,
@@ -39,15 +37,14 @@ const GroupInfoPanel = lazy(() => import('./GroupInfoPanel'))
 const AddTripPanel = lazy(() => import('./vehicle/AddTripPanel'))
 const StopLocationMap = lazy(() => import('./vehicle/StopLocationMap'))
 const TripRouteMap = lazy(() => import('./vehicle/TripRouteMap'))
-import CountryFlag from './CountryFlag'
 import { StatusChip } from './vehicle/opsControls'
-import { getOps, tripSummary, type TripPlace, type VehicleOps } from '../lib/vehicleOps'
+import { getOps, tripSummary, type VehicleOps } from '../lib/vehicleOps'
 import { canRouteStops, persistOpsWithRoute } from '../lib/tripRoute'
 import ConversationSearch from './ConversationSearch'
 import MessageRow from './messages/MessageRow'
 import SystemMessageRow from './messages/SystemMessageRow'
 import PinnedBar from './messages/PinnedBar'
-import TypingIndicator, { type TypingUser } from './messages/TypingIndicator'
+import TypingIndicator from './messages/TypingIndicator'
 import ForwardModal from './messages/ForwardModal'
 import InviteMembersModal from './invites/InviteMembersModal'
 import ConfirmDialog from './ConfirmDialog'
@@ -57,6 +54,11 @@ import { useChatScroll } from '../hooks/useChatScroll'
 import { devlog } from '../lib/devlog'
 import { useMessageCache } from '../hooks/useMessageCache'
 import { preloadImage } from '../lib/attachmentCache'
+import HeaderPlace from './ChatHeaderPlace'
+import ToolTab from './ChatToolTab'
+import { toReplyPreview, attachmentTabLabel } from './chatViewUtils'
+import { useTypingIndicator } from '../hooks/useTypingIndicator'
+import { usePinnedMessages } from '../hooks/usePinnedMessages'
 
 // Stable empty list so a group with no cached thread doesn't hand a fresh
 // array to useChatScroll on every render.
@@ -77,13 +79,6 @@ const RECENT_IMAGE_WINDOW = 15
 // sitting BELOW the floating composer + chips (z-10/z-20) so the input stays
 // sharp. Fades to the chat background (`bg`, #181818).
 const CHAT_BOTTOM_FADE_HEIGHT = 56
-
-// Typing indicator cadence. We re-announce "still typing" at most once per
-// THROTTLE while keys are flowing, send a stop after STOP_IDLE of silence, and
-// each receiver auto-expires a typer after TTL as a backstop if a stop is lost.
-const TYPING_THROTTLE_MS = 2500
-const TYPING_STOP_IDLE_MS = 3000
-const TYPING_TTL_MS = 6000
 
 type Props = {
   group: Group
@@ -110,17 +105,6 @@ type Props = {
   // Patch the parent group's record after an in-panel edit (name / plates /
   // image) so the header and rail reflect the change without a refetch.
   onGroupUpdated?: (groupId: string, partial: Partial<Group>) => void
-}
-
-// Build the compact reply snapshot the composer + bubble render from a message.
-function toReplyPreview(m: LocalMessage): ReplyToPreview {
-  return {
-    id: m.id,
-    authorName: m.authorName,
-    body: m.body,
-    hasAttachments: (m.attachments?.length ?? 0) > 0,
-    deleted: Boolean(m.deletedAt),
-  }
 }
 
 export default function ChatView({
@@ -295,10 +279,12 @@ export default function ChatView({
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null)
   // Group-wide pinned messages, newest pin first. Fetched on open and kept
   // fresh via socket events — independent of the loaded thread page so a pin
-  // older than the current page still shows in the bar.
-  const [pinned, setPinned] = useState<LocalMessage[]>([])
-  // Who else is currently typing in this conversation (excludes self).
-  const [typingUsers, setTypingUsers] = useState<TypingUser[]>([])
+  // older than the current page still shows in the bar. (Fetch + live sync live
+  // in usePinnedMessages; the optimistic pin/unpin handlers still drive setPinned.)
+  const [pinned, setPinned] = usePinnedMessages(group.id)
+  // Who else is currently typing in this conversation (excludes self). The whole
+  // emit/receive cadence lives in useTypingIndicator, driven by the composer text.
+  const typingUsers = useTypingIndicator(group.id, currentUserId, text)
   // Members of this conversation — the source for the @-mention picker, @Name
   // resolution at send time, and the sent-message read receipts. Read from the
   // session cache (not local state) so it's preserved across conversation
@@ -326,12 +312,6 @@ export default function ChatView({
   const composerHandleRef = useRef<ChatComposerHandle>(null)
   const highlightTimer = useRef<number | undefined>(undefined)
   const noticeTimer = useRef<number | undefined>(undefined)
-  // Typing-emission bookkeeping (outbound).
-  const typingActiveRef = useRef(false)
-  const typingSentAtRef = useRef(0)
-  const typingStopTimer = useRef<number | undefined>(undefined)
-  // Per-typer auto-expiry timers (inbound).
-  const typingExpiry = useRef<Record<string, number>>({})
 
   // ── Scroll / autosize ──────────────────────────────────────────────────
   const {
@@ -511,122 +491,6 @@ export default function ChatView({
       }
     }
   }, [messages])
-
-  // ── Pinned messages (fetch + live sync) ────────────────────────────────
-  // Load the group's pins on open, then keep the bar in sync with live pin/
-  // unpin/delete events. Held separately from the thread cache so a pin older
-  // than the loaded page still shows.
-  useEffect(() => {
-    let cancelled = false
-    api.groups
-      .pins(group.id)
-      .then((res) => {
-        if (!cancelled) setPinned(res.messages as LocalMessage[])
-      })
-      .catch(() => {})
-
-    const socket = getSocket()
-    function onPinned(p: { groupId: string; message: LocalMessage }) {
-      if (p.groupId !== group.id) return
-      // Replace if already present, else prepend (newest pin first).
-      setPinned((prev) => [p.message, ...prev.filter((m) => m.id !== p.message.id)])
-    }
-    function onUnpinned(p: { groupId: string; id: string }) {
-      if (p.groupId !== group.id) return
-      setPinned((prev) => prev.filter((m) => m.id !== p.id))
-    }
-    function onDeleted(p: { groupId: string; id: string }) {
-      if (p.groupId !== group.id) return
-      setPinned((prev) => prev.filter((m) => m.id !== p.id))
-    }
-    socket.on('message:pinned', onPinned)
-    socket.on('message:unpinned', onUnpinned)
-    socket.on('message:deleted', onDeleted)
-    return () => {
-      cancelled = true
-      socket.off('message:pinned', onPinned)
-      socket.off('message:unpinned', onUnpinned)
-      socket.off('message:deleted', onDeleted)
-    }
-  }, [group.id])
-
-  // ── Typing indicator: emit (outbound) ──────────────────────────────────
-  // Driven by the composer text we own. Announce "typing" at most once per
-  // throttle window while keys flow; schedule a "stop" after a short idle.
-  useEffect(() => {
-    const socket = getSocket()
-    const sendStop = () => {
-      window.clearTimeout(typingStopTimer.current)
-      if (typingActiveRef.current) {
-        typingActiveRef.current = false
-        socket.emit('typing:stop', { groupId: group.id })
-      }
-    }
-    if (text.trim().length === 0) {
-      sendStop()
-      return
-    }
-    const now = Date.now()
-    if (!typingActiveRef.current || now - typingSentAtRef.current > TYPING_THROTTLE_MS) {
-      typingActiveRef.current = true
-      typingSentAtRef.current = now
-      socket.emit('typing:start', { groupId: group.id })
-    }
-    window.clearTimeout(typingStopTimer.current)
-    typingStopTimer.current = window.setTimeout(sendStop, TYPING_STOP_IDLE_MS)
-  }, [text, group.id])
-
-  // Make sure we tell the room we stopped when leaving the conversation.
-  useEffect(
-    () => () => {
-      window.clearTimeout(typingStopTimer.current)
-      if (typingActiveRef.current) {
-        typingActiveRef.current = false
-        getSocket().emit('typing:stop', { groupId: group.id })
-      }
-    },
-    [group.id],
-  )
-
-  // ── Typing indicator: receive (inbound) ────────────────────────────────
-  useEffect(() => {
-    const socket = getSocket()
-    const expiry = typingExpiry.current
-    const remove = (id: string) => {
-      window.clearTimeout(expiry[id])
-      delete expiry[id]
-      setTypingUsers((prev) => prev.filter((u) => u.id !== id))
-    }
-    function onTyping(p: {
-      groupId: string
-      userId: string
-      name?: string
-      typing: boolean
-    }) {
-      if (p.groupId !== group.id || p.userId === currentUserId) return
-      if (!p.typing) return remove(p.userId)
-      // Refresh the auto-expiry backstop in case a stop event is dropped.
-      window.clearTimeout(expiry[p.userId])
-      expiry[p.userId] = window.setTimeout(() => remove(p.userId), TYPING_TTL_MS)
-      setTypingUsers((prev) => {
-        const name = p.name || 'Someone'
-        const existing = prev.find((u) => u.id === p.userId)
-        if (existing) {
-          return existing.name === name
-            ? prev
-            : prev.map((u) => (u.id === p.userId ? { ...u, name } : u))
-        }
-        return [...prev, { id: p.userId, name }]
-      })
-    }
-    socket.on('typing', onTyping)
-    return () => {
-      socket.off('typing', onTyping)
-      for (const id of Object.keys(expiry)) window.clearTimeout(expiry[id])
-      typingExpiry.current = {}
-      setTypingUsers([])
-    }
-  }, [group.id, currentUserId])
 
   // ── Read receipts on live arrivals ─────────────────────────────────────
   // The cache itself is kept fresh by a global socket listener; here we only
@@ -1702,88 +1566,6 @@ export default function ChatView({
           onConfirm={confirmPendingDelete}
           onCancel={() => setPendingDelete(null)}
         />
-      )}
-    </div>
-  )
-}
-
-// A compact loading/unloading place in the room header. A small role marker
-// (coloured directional icon + short "Load"/"Unload" label, fixed-width so the
-// two lines align) distinguishes loading from unloading at a glance, followed by
-// the inline-SVG country flag (when a code is detected) + the "ES 11201
-// Algeciras" text, with a "+N" when more stops of that role exist. The flag
-// renders nothing for unknown codes.
-function HeaderPlace({
-  kind,
-  place,
-  extra,
-}: {
-  kind: 'loading' | 'unloading'
-  place: TripPlace
-  extra: number
-}) {
-  const loading = kind === 'loading'
-  const RoleIcon = loading ? ArrowUpFromLine : ArrowDownToLine
-  return (
-    <span className="inline-flex items-center gap-2 min-w-0 text-[0.78125rem]">
-      <span
-        className={`shrink-0 w-[3.625rem] inline-flex items-center gap-1 text-[0.65625rem] font-semibold uppercase tracking-wide ${
-          loading ? 'text-[#5fae72]' : 'text-[#d68a52]'
-        }`}
-      >
-        <RoleIcon size="0.75rem" strokeWidth={2.2} className="shrink-0" />
-        {loading ? 'Load' : 'Unload'}
-      </span>
-      <CountryFlag code={place.code} />
-      <span className="truncate text-muted">{place.text || place.code || '—'}</span>
-      {extra > 0 && <span className="shrink-0 text-faint">+{extra}</span>}
-    </span>
-  )
-}
-
-// Short label for an attachment tab pill: the filename (trimmed), or a generic
-// fallback by kind. Kept compact so the tab banner doesn't grow wide.
-function attachmentTabLabel(a: Attachment): string {
-  const name = a.originalName?.trim()
-  if (name) return name.length > 22 ? `${name.slice(0, 21)}…` : name
-  return a.mimeType.startsWith('image/') ? 'Image' : 'Document'
-}
-
-// One tab in the chat-window tool banner. A compact pill: a subtle filled state
-// when active, quiet hover otherwise. An optional × (for closeable tools like the
-// Map) sits inside the pill without triggering the tab's own click.
-function ToolTab({
-  active,
-  icon,
-  label,
-  onClick,
-  onClose,
-}: {
-  active: boolean
-  icon: React.ReactNode
-  label: string
-  onClick: () => void
-  onClose?: () => void
-}) {
-  return (
-    <div
-      className={`h-7 inline-flex items-center gap-1.5 rounded-full pl-2.5 text-[0.75rem] font-medium transition-colors ${
-        onClose ? 'pr-1.5' : 'pr-2.5'
-      } ${active ? 'bg-white/[0.07] text-text' : 'text-muted hover:text-text hover:bg-white/[0.04]'}`}
-    >
-      <button type="button" onClick={onClick} className="inline-flex items-center gap-1.5">
-        {icon}
-        {label}
-      </button>
-      {onClose && (
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label={`Close ${label}`}
-          className="h-4 w-4 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.08] transition-colors"
-        >
-          <X size="0.6875rem" strokeWidth={2.2} />
-        </button>
       )}
     </div>
   )
