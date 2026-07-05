@@ -31,17 +31,17 @@ export default function ConnectionRequestRow({ connection, selected, onClick }: 
         <span className="relative shrink-0 flex">
           <Avatar userId={peer.id} name={peer.displayName} size={NORMAL_AVATAR} />
         </span>
-        <span className="flex-1 min-w-0 flex flex-col gap-0.5">
+        <span className="flex-1 min-w-0 flex flex-col gap-px">
           {/* Line 1 — just the requester name, kept clean. */}
           <span className="flex items-center gap-2">
-            <span className="flex-1 truncate text-[0.96875rem] text-text font-semibold">
+            <span className="flex-1 truncate text-[0.96875rem] leading-tight text-text font-semibold">
               {peer.displayName}
             </span>
           </span>
           {/* Line 2 — quiet person subtitle on the left; the "Request" pill on
               the right, where a DM row shows its timestamp. */}
           <span className="flex items-center gap-2">
-            <span className="flex-1 truncate text-[0.875rem] text-faint">{peer.email}</span>
+            <span className="flex-1 truncate text-[0.875rem] leading-tight text-faint">{peer.email}</span>
             <span className="shrink-0 h-[1.1875rem] px-2 rounded-full bg-active/15 text-active text-[0.65625rem] font-semibold leading-none flex items-center justify-center">
               Request
             </span>

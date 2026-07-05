@@ -32,13 +32,13 @@ export default function ContactRow({
         className="w-full flex items-center gap-3 px-3 py-2.5 min-h-[3.875rem] rounded-chip text-left text-muted hover:bg-white/[0.025] hover:text-text transition-colors"
       >
         <Avatar userId={member.id} name={member.displayName} size={NORMAL_AVATAR} />
-        <span className="flex-1 min-w-0 flex flex-col gap-0.5">
+        <span className="flex-1 min-w-0 flex flex-col gap-px">
           <span className="flex items-center gap-2">
-            <span className="flex-1 truncate text-[0.96875rem] text-text/90">{member.displayName}</span>
+            <span className="flex-1 truncate text-[0.96875rem] leading-tight text-text/90">{member.displayName}</span>
           </span>
           {role && (
             <span className="flex items-center gap-2">
-              <span className="flex-1 truncate text-[0.875rem] text-faint">{role}</span>
+              <span className="flex-1 truncate text-[0.875rem] leading-tight text-faint">{role}</span>
             </span>
           )}
         </span>

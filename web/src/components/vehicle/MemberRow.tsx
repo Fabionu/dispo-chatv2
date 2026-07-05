@@ -29,6 +29,7 @@ export default function MemberRow({
   onSetRole,
   onRemove,
   onMessage,
+  onOpenProfile,
 }: {
   member: GroupMember
   // Live presence for this member (from the parent's usePresence). Drives the
@@ -42,6 +43,8 @@ export default function MemberRow({
   onSetRole: (userId: string, role: 'admin' | 'member') => void
   onRemove: (userId: string) => void
   onMessage: (member: GroupMember) => void
+  // Open the read-only user-details panel for this member (avatar click).
+  onOpenProfile: (member: GroupMember) => void
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -124,24 +127,32 @@ export default function MemberRow({
   }
 
   return (
-    <div className="flex items-center gap-2.5 px-2 py-2 rounded-chip hover:bg-white/[0.02] transition-colors">
+    <div className="flex items-center gap-3 px-2 py-2 rounded-chip hover:bg-white/[0.02] transition-colors">
       <div className="relative shrink-0">
-        <Avatar userId={member.id} name={member.displayName} size={28} />
+        <button
+          type="button"
+          onClick={() => onOpenProfile(member)}
+          aria-label={`View ${member.displayName}'s profile`}
+          title={member.displayName}
+          className="block rounded-full cursor-pointer transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+        >
+          <Avatar userId={member.id} name={member.displayName} size={34} />
+        </button>
         {showDot && dot && (
           <span
             title={dot.label}
-            className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-rail"
+            className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border border-rail"
             style={{ backgroundColor: dot.color }}
           />
         )}
       </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-[0.78125rem] truncate">
+      <div className="min-w-0 flex-1 flex flex-col gap-px">
+        <div className="text-[0.875rem] leading-tight truncate">
           {member.displayName}
           {isSelf && <span className="text-faint"> (you)</span>}
         </div>
         {/* Group role (admin / member) as plain text — never the workspace role. */}
-        <div className="text-[0.6875rem] text-faint truncate">{groupRoleLabel}</div>
+        <div className="text-[0.75rem] leading-tight text-faint truncate">{groupRoleLabel}</div>
       </div>
 
       {/* Compact text-based actions menu. The small ⋮ trigger keeps the row

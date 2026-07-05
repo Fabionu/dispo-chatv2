@@ -55,6 +55,9 @@ type Props = {
   // member action. Reuses the parent's existing direct-message creation flow;
   // throws an ApiError (e.g. `connection_required`) the panel surfaces inline.
   onMessageMember: (member: GroupMember) => Promise<void>
+  // Open the read-only user-details panel for a member (avatar click in the
+  // Members tab). Owned by ChatView so it overlays this panel.
+  onOpenProfile: (member: GroupMember) => void
   // Patch the parent group after a details edit so the header reflects it live.
   onGroupUpdated: (partial: Partial<Group>) => void
   // Open the read-only trip route map tool (owned by ChatView, shown in the chat
@@ -85,6 +88,7 @@ export default function GroupInfoPanel({
   onInvite,
   onMembersChanged,
   onMessageMember,
+  onOpenProfile,
   onGroupUpdated,
   onOpenRouteMap,
 }: Props) {
@@ -456,6 +460,7 @@ export default function GroupInfoPanel({
                 onSetRole={setMemberRole}
                 onRemove={removeMember}
                 onMessage={messageMember}
+                onOpenProfile={onOpenProfile}
                 onCancelInvite={cancelInvite}
               />
             )}

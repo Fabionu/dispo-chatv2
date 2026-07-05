@@ -41,6 +41,7 @@ import { StatusChip } from './vehicle/opsControls'
 import { getOps, tripSummary, type VehicleOps } from '../lib/vehicleOps'
 import { canRouteStops, persistOpsWithRoute } from '../lib/tripRoute'
 import ConversationSearch from './ConversationSearch'
+import UserProfilePanel from './UserProfilePanel'
 import MessageRow from './messages/MessageRow'
 import SystemMessageRow from './messages/SystemMessageRow'
 import PinnedBar from './messages/PinnedBar'
@@ -153,6 +154,16 @@ export default function ChatView({
   const [inviteOpen, setInviteOpen] = useState(false)
   // Whether the group-info drawer is open (vehicle groups only).
   const [groupInfoOpen, setGroupInfoOpen] = useState(false)
+  // The user whose read-only details panel is open (avatar click on a message
+  // row, the DM header, or a group-member row). Null = closed. The name is the
+  // display name known at click time, so the panel's hero renders instantly
+  // while the profile fetch runs. Purely an overlay — opening it never touches
+  // the selection, composer, tabs, or the group-info panel's state.
+  const [profileTarget, setProfileTarget] = useState<{ id: string; name: string } | null>(null)
+  const openProfile = useCallback((userId: string, name: string) => {
+    if (!userId || userId.startsWith('local-')) return
+    setProfileTarget({ id: userId, name })
+  }, [])
   // Whether the "Add trip" modal is open (vehicle groups only). Opened from the
   // composer's add (+) menu.
   const [addTripOpen, setAddTripOpen] = useState(false)
@@ -1083,11 +1094,23 @@ export default function ChatView({
             the trip details live in the left banner, never on the title row. */}
         <div className="flex items-center gap-3 min-w-0">
           {group.type === 'direct' ? (
-            <Avatar
-              userId={group.directPeer?.id ?? ''}
-              name={group.directPeer?.name ?? groupLabel(group)}
-              size={56}
-            />
+            // The peer's avatar opens their read-only profile panel (DMs show
+            // no per-message avatars, so the header is the DM's avatar surface).
+            <button
+              type="button"
+              onClick={() =>
+                openProfile(group.directPeer?.id ?? '', group.directPeer?.name ?? groupLabel(group))
+              }
+              aria-label={`View ${group.directPeer?.name ?? 'user'}'s profile`}
+              title={group.directPeer?.name ?? undefined}
+              className="block shrink-0 rounded-full cursor-pointer transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+            >
+              <Avatar
+                userId={group.directPeer?.id ?? ''}
+                name={group.directPeer?.name ?? groupLabel(group)}
+                size={56}
+              />
+            </button>
           ) : (
             // Vehicle identity — the group's uploaded image when set, else the
             // generated generic icon, in the same circular 56px slot as a DM.
@@ -1354,6 +1377,7 @@ export default function ChatView({
                             setPendingDelete({ message: m, scope: 'everyone' })
                           }
                           onJumpToMessage={jumpToMessage}
+                          onOpenProfile={openProfile}
                         />
                       )
                     })}
@@ -1511,8 +1535,14 @@ export default function ChatView({
         />
       )}
 
-      {/* Group info and Add trip share the single right-hand column slot — Add
-          trip takes precedence when both are open, so they never stack. */}
+      {/* Group info, Add trip and the user profile share the single right-hand
+          column slot — Add trip takes precedence over Group info, and the user
+          profile takes precedence over both, so they never stack. The hidden
+          wrapper (display:none) keeps Group info / Add trip MOUNTED while a
+          profile is open, so their state (active tab, form drafts) survives and
+          returns intact when the profile closes; `contents` unwraps them back
+          into the flex row otherwise. */}
+      <div className={profileTarget ? 'hidden' : 'contents'}>
       {group.type === 'vehicle' && groupInfoOpen && !addTripOpen && (
         <Suspense fallback={<PanelLoader />}>
         <GroupInfoPanel
@@ -1525,6 +1555,7 @@ export default function ChatView({
           onInvite={() => setInviteOpen(true)}
           onMembersChanged={refetchMembers}
           onMessageMember={messageMember}
+          onOpenProfile={(m) => openProfile(m.id, m.displayName)}
           onGroupUpdated={(partial) => onGroupUpdated?.(group.id, partial)}
           onOpenRouteMap={routeMapAvailable ? openTripRoute : undefined}
         />
@@ -1540,6 +1571,25 @@ export default function ChatView({
           onPickLocation={openMapPick}
         />
         </Suspense>
+      )}
+      </div>
+
+      {/* Read-only user details — occupies the same right-hand column slot as
+          Group info (in-flow card on xl+, overlay drawer below), rendered while
+          the panels above are display:none'd. Keyed by user so switching
+          targets refetches. */}
+      {profileTarget && (
+        <UserProfilePanel
+          key={profileTarget.id}
+          userId={profileTarget.id}
+          name={profileTarget.name}
+          groupRole={
+            group.type === 'vehicle'
+              ? members.find((m) => m.id === profileTarget.id)?.role
+              : undefined
+          }
+          onClose={() => setProfileTarget(null)}
+        />
       )}
 
       {inviteOpen && (

@@ -55,6 +55,8 @@ type Props = {
   onDeleteForMe: (m: LocalMessage) => void
   onDeleteForEveryone: (m: LocalMessage) => void
   onJumpToMessage: (messageId: string) => void
+  // Open the read-only user-details panel for a message author (avatar click).
+  onOpenProfile: (userId: string, name: string) => void
 }
 
 function MessageRow({
@@ -81,6 +83,7 @@ function MessageRow({
   onDeleteForMe,
   onDeleteForEveryone,
   onJumpToMessage,
+  onOpenProfile,
 }: Props) {
   // Collapse the author line when the previous message is from the same
   // author within a couple of minutes — keeps bursts readable. A system
@@ -315,7 +318,15 @@ function MessageRow({
             {!mine && (
               <div className="w-8 shrink-0 pt-0.5">
                 {startNewGroup && (
-                  <Avatar userId={message.authorId} name={authorLabel} size={32} />
+                  <button
+                    type="button"
+                    onClick={() => onOpenProfile(message.authorId, authorLabel)}
+                    aria-label={`View ${authorLabel}'s profile`}
+                    title={authorLabel}
+                    className="block rounded-full cursor-pointer transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                  >
+                    <Avatar userId={message.authorId} name={authorLabel} size={32} />
+                  </button>
                 )}
               </div>
             )}
@@ -483,7 +494,15 @@ function MessageRow({
         {showAuthorChrome && (
           <div className="w-9 mr-2.5 shrink-0">
             {startNewGroup && (
-              <Avatar userId={message.authorId} name={message.authorName} size={36} />
+              <button
+                type="button"
+                onClick={() => onOpenProfile(message.authorId, message.authorName)}
+                aria-label={`View ${message.authorName}'s profile`}
+                title={message.authorName}
+                className="block rounded-full cursor-pointer transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+              >
+                <Avatar userId={message.authorId} name={message.authorName} size={36} />
+              </button>
             )}
           </div>
         )}

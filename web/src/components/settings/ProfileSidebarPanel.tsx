@@ -25,7 +25,9 @@ type Props = {
   onSaved: (profile: Profile, avatarVersion: number) => void
 }
 
-const ROLE_LABEL: Record<Role, string> = {
+// Workspace-role display labels — shared with the read-only user details panel
+// (UserProfilePanel) so both surfaces name roles identically.
+export const ROLE_LABEL: Record<Role, string> = {
   admin: 'Admin',
   dispatcher: 'Dispatcher',
   driver: 'Driver',

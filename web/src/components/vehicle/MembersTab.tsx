@@ -26,6 +26,7 @@ export default function MembersTab({
   onSetRole,
   onRemove,
   onMessage,
+  onOpenProfile,
   onCancelInvite,
 }: {
   members: GroupMember[]
@@ -43,6 +44,7 @@ export default function MembersTab({
   onSetRole: (userId: string, role: 'admin' | 'member') => void
   onRemove: (userId: string) => void
   onMessage: (member: GroupMember) => void
+  onOpenProfile: (member: GroupMember) => void
   onCancelInvite: (inviteId: string) => void
 }) {
   return (
@@ -82,6 +84,7 @@ export default function MembersTab({
                 onSetRole={onSetRole}
                 onRemove={onRemove}
                 onMessage={onMessage}
+                onOpenProfile={onOpenProfile}
               />
             ))}
           </div>
@@ -101,16 +104,16 @@ export default function MembersTab({
               {pending.map((p) => (
                 <div
                   key={p.id}
-                  className="flex items-center gap-2.5 px-2 py-2 rounded-chip hover:bg-white/[0.02] transition-colors"
+                  className="flex items-center gap-3 px-2 py-2 rounded-chip hover:bg-white/[0.02] transition-colors"
                 >
-                  <Avatar userId={p.userId} name={p.displayName} size={28} />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[0.78125rem] truncate">{p.displayName}</div>
-                    <div className="text-[0.6875rem] text-faint">Invitation pending</div>
+                  <Avatar userId={p.userId} name={p.displayName} size={34} />
+                  <div className="min-w-0 flex-1 flex flex-col gap-px">
+                    <div className="text-[0.875rem] leading-tight truncate">{p.displayName}</div>
+                    <div className="text-[0.75rem] leading-tight text-faint truncate">Invitation pending</div>
                   </div>
                   <button
                     onClick={() => void onCancelInvite(p.id)}
-                    className="shrink-0 text-[0.6875rem] text-muted hover:text-alert px-2 transition-colors"
+                    className="shrink-0 text-[0.75rem] text-muted hover:text-alert px-2 transition-colors"
                   >
                     Cancel
                   </button>

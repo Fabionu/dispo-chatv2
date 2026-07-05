@@ -242,13 +242,15 @@ export default function GroupRow({
             />
           )}
         </span>
-        <span className="flex-1 min-w-0 flex flex-col gap-0.5">
+        <span className="flex-1 min-w-0 flex flex-col gap-px">
           {/* Line 1 — just the name. No company/timestamp here: the timestamp
               sits with the preview on line 2, keeping the name row clean. The
               vehicle's active-trip status chip is the one small indicator that
-              belongs on the title line. */}
+              belongs on the title line. Tight line-height on both lines groups
+              the name + preview into one block, vertically centred against the
+              avatar (button is items-center) without touching row height. */}
           <span className="flex items-center gap-2">
-            <span className={`flex-1 truncate text-[0.96875rem] ${unread ? 'text-text font-semibold' : 'text-text/90'}`}>
+            <span className={`flex-1 truncate text-[0.96875rem] leading-tight ${unread ? 'text-text font-semibold' : 'text-text/90'}`}>
               {groupLabel(group)}
             </span>
             {trip && (
@@ -260,7 +262,7 @@ export default function GroupRow({
           <span className="flex items-center gap-2">
             {/* Latest-message preview — always shown (incl. vehicle rooms with an
                 active trip); the trip status lives in the chip on the title line. */}
-            <span className={`flex-1 truncate text-[0.875rem] ${unread ? 'text-muted' : 'text-faint'}`}>
+            <span className={`flex-1 truncate text-[0.875rem] leading-tight ${unread ? 'text-muted' : 'text-faint'}`}>
               {preview.prefix && (
                 <span className={unread ? 'text-muted font-medium' : 'text-faint'}>{preview.prefix} </span>
               )}

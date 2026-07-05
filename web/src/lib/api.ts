@@ -10,6 +10,7 @@ import type {
   InviteValidation,
   Message,
   Profile,
+  PublicProfile,
   WorkspaceInvite,
   WorkspaceInviteCreated,
   WorkspaceMember,
@@ -334,6 +335,13 @@ export const api = {
     // and conversations are kept; personal details are scrubbed) and clears the
     // session cookie. The caller should sign out locally afterwards.
     delete: () => request<{ ok: true }>('/profile', { method: 'DELETE' }),
+  },
+
+  users: {
+    // Another user's public profile card (read-only). 404s for ids the caller
+    // has no relationship with (no shared workspace/conversation/connection).
+    profile: (userId: string) =>
+      request<{ profile: PublicProfile }>(`/users/${encodeURIComponent(userId)}/profile`),
   },
 
   company: {

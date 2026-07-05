@@ -202,6 +202,98 @@ profileRouter.delete(
 // /api/users (see index.ts) but defined here to keep avatar logic together.
 export const usersRouter = Router()
 usersRouter.use(requireAuth)
+
+// ── GET /api/users/:id/profile ───────────────────────────────────────────
+// Another user's PUBLIC profile card (read-only) — the fields behind the
+// user-details panel opened from an avatar. Returns only safe display fields;
+// never password/auth data. Visibility mirrors who you can already see in the
+// app: yourself, a company colleague, an accepted connection, or someone you
+// share a conversation (vehicle room / DM) with. Anything else → 404, the same
+// answer as a nonexistent id, so the endpoint can't be used to enumerate users.
+// Deleted (anonymized) users return just the anonymized name + deleted flag —
+// every scrubbed field is withheld even if a stale client asks.
+type PublicProfileRow = ProfileRow & {
+  workspace_id: string
+  created_at: string
+  deleted_at: string | null
+}
+
+usersRouter.get(
+  '/:id/profile',
+  asyncHandler(async (req, res) => {
+    const parsedId = z.string().uuid().safeParse(req.params.id)
+    if (!parsedId.success) return res.status(404).json({ error: 'not_found' })
+    const targetId = parsedId.data
+    const viewerId = req.session!.userId
+
+    const { rows } = await pool.query<PublicProfileRow>(
+      `select u.id, u.email, u.display_name, u.role,
+              u.job_title, u.work_phone, u.native_language,
+              u.other_languages, u.availability_status, u.avatar_path,
+              u.workspace_id, u.created_at, u.deleted_at,
+              w.name as workspace_name
+         from users u
+         join workspaces w on w.id = u.workspace_id
+        where u.id = $1
+        limit 1`,
+      [targetId],
+    )
+    const target = rows[0]
+    if (!target) return res.status(404).json({ error: 'not_found' })
+
+    // Visibility check (skipped for self and same-workspace colleagues).
+    if (targetId !== viewerId && target.workspace_id !== req.session!.workspaceId) {
+      const { rows: rel } = await pool.query<{ visible: boolean }>(
+        `select (
+           exists (
+             select 1 from connections
+              where status = 'accepted'
+                and ((user_a_id = $1 and user_b_id = $2)
+                  or (user_a_id = $2 and user_b_id = $1))
+           )
+           or exists (
+             select 1
+               from group_members gm1
+               join group_members gm2 on gm2.group_id = gm1.group_id
+              where gm1.user_id = $1 and gm2.user_id = $2
+           )
+         ) as visible`,
+        [viewerId, targetId],
+      )
+      if (!rel[0]?.visible) return res.status(404).json({ error: 'not_found' })
+    }
+
+    if (target.deleted_at) {
+      // Anonymized account: the display name is already the scrubbed
+      // "user_deleted_…" placeholder. Nothing else leaves the server.
+      return res.json({
+        profile: {
+          id: target.id,
+          displayName: target.display_name,
+          deleted: true,
+          role: null,
+          jobTitle: null,
+          workPhone: null,
+          email: null,
+          nativeLanguage: null,
+          otherLanguages: [],
+          availabilityStatus: null,
+          hasAvatar: false,
+          company: null,
+          memberSince: null,
+        },
+      })
+    }
+
+    res.json({
+      profile: {
+        ...mapProfile(target),
+        deleted: false,
+        memberSince: target.created_at,
+      },
+    })
+  }),
+)
 usersRouter.get(
   '/:id/avatar',
   asyncHandler(async (req, res) => {

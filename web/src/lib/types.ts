@@ -23,6 +23,27 @@ export type Profile = {
   company: string
 }
 
+// Another user's PUBLIC profile card (read-only), shown in the user-details
+// panel opened from an avatar. Safe display fields only — the server withholds
+// everything else. A deleted (anonymized) user carries just the scrubbed
+// display name + `deleted: true`; every other field is null/empty.
+export type PublicProfile = {
+  id: string
+  displayName: string
+  deleted: boolean
+  role: Role | null
+  jobTitle: string | null
+  workPhone: string | null
+  email: string | null
+  nativeLanguage: string | null
+  otherLanguages: string[]
+  availabilityStatus: AvailabilityStatus | null
+  hasAvatar: boolean
+  company: string | null
+  /** ISO timestamp of account creation ("Member since"). */
+  memberSince: string | null
+}
+
 // The company / workspace operational profile.
 export type CompanyProfile = {
   id: string
