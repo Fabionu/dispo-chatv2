@@ -11,6 +11,7 @@ import AvatarPhotoEditor from '../AvatarPhotoEditor'
 import EditableRow from '../EditableRow'
 import ConfirmDialog from '../ConfirmDialog'
 import AvatarCropModal from './AvatarCropModal'
+import { MENU_SURFACE } from '../menuStyles'
 
 type Props = {
   // Prefetched profile (warmed at app mount) so the drawer renders instantly
@@ -347,7 +348,7 @@ function StatusSelect({
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} aria-hidden />
           <div
             role="listbox"
-            className="absolute left-1/2 -translate-x-1/2 mt-1.5 z-20 w-[9.375rem] rounded-card border border-white/[0.1] bg-surface py-1"
+            className={`absolute left-1/2 -translate-x-1/2 mt-1.5 z-20 w-[9.375rem] ${MENU_SURFACE} py-1`}
             style={{ boxShadow: '0 12px 32px rgba(0,0,0,0.5)' }}
           >
             {AVAILABILITY.map((a) => (

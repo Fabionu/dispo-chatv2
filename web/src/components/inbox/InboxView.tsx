@@ -63,7 +63,7 @@ function ToolCard({
   return (
     <button
       onClick={onClick}
-      className="group flex flex-col gap-3.5 rounded-[1.125rem] border border-white/[0.08] bg-white/[0.02] p-5 text-left transition-colors hover:border-white/[0.16] hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+      className="group flex flex-col gap-3.5 rounded-soft border border-white/[0.08] bg-white/[0.02] p-5 text-left transition-colors hover:border-white/[0.16] hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
     >
       <span className="h-11 w-11 flex items-center justify-center rounded-full bg-white/[0.04] text-active transition-colors group-hover:bg-white/[0.06]">
         {icon}

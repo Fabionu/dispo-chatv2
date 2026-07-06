@@ -60,7 +60,7 @@ export default function PinnedBar({ messages, onJump, onUnpin }: Props) {
                     type="button"
                     onClick={() => onJump(m.id)}
                     title="Jump to message"
-                    className="min-w-0 flex-1 flex h-7 items-center rounded-[0.25rem] -ml-1.5 px-1.5 hover:bg-white/[0.05] transition-colors"
+                    className="min-w-0 flex-1 flex h-7 items-center rounded-chip -ml-1.5 px-1.5 hover:bg-white/[0.05] transition-colors"
                   >
                     <span className="text-[0.8125rem] font-medium text-text/90 shrink-0 leading-5">
                       {m.authorName}

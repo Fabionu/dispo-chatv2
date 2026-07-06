@@ -276,7 +276,10 @@
       "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(Object.keys\\(p.dependencies\\).join\\('\\\\n'\\)\\)\")",
       "Bash(awk '{print $5, $9}')",
       "Bash(node -e \"console.log\\(require\\('./package.json'\\).dependencies.react\\)\")",
-      "Bash(xargs wc -l)"
+      "Bash(xargs wc -l)",
+      "Bash(sed -i 's/rounded-\\\\[1\\\\.125rem\\\\]/rounded-soft/g' components/vehicle/StopForm.tsx components/inbox/InboxView.tsx)",
+      "Bash(sed -i 's/rounded-2xl/rounded-soft/g' components/vehicle/StopLocationMap.tsx)",
+      "Bash(python -)"
     ]
   }
 }

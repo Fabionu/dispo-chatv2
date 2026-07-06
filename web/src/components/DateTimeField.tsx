@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { Calendar, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
+import { MENU_SURFACE } from './menuStyles'
 
 // Custom, theme-native date & time fields used by the stop forms. Each is a pill
 // input (typeable) with an icon button that opens a compact custom picker — a
@@ -35,8 +36,7 @@ const FIELD_INPUT =
   'flex-1 min-w-0 bg-transparent pl-4 pr-1 py-2 text-[0.78125rem] text-text placeholder:text-faint outline-none'
 const FIELD_BTN =
   'h-7 w-7 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] transition-colors'
-const POPOVER =
-  'absolute z-30 mt-1.5 rounded-2xl border border-white/[0.08] bg-surface p-2 shadow-[0_12px_32px_rgba(0,0,0,0.5)]'
+const POPOVER = `absolute z-30 mt-1.5 ${MENU_SURFACE} p-2`
 
 // Close a popover on outside-click or Escape.
 function usePopoverClose(ref: RefObject<HTMLDivElement>, open: boolean, close: () => void) {

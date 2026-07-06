@@ -3,6 +3,7 @@ import { MapPin, X } from 'lucide-react'
 import { api } from '../../lib/api'
 import { looksLikeCoordPair, parseLatLng } from '../../lib/here/geo'
 import type { HerePlace, LatLng } from '../../lib/here/types'
+import { MENU_SURFACE } from '../menuStyles'
 
 // Build a HerePlace from directly-entered coordinates so the selection flow is
 // identical to picking a search result (caller reads `position` + `label`).
@@ -156,7 +157,7 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
         <ul
           id={listboxId}
           role="listbox"
-          className="absolute z-20 top-full mt-1 w-full rounded-card border border-white/[0.1] bg-rail shadow-xl overflow-hidden"
+          className={`absolute z-20 top-full mt-1 w-full ${MENU_SURFACE} overflow-hidden`}
         >
           {coord ? (
             <li role="option" aria-selected={false}>
@@ -186,7 +187,7 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
         <ul
           id={listboxId}
           role="listbox"
-          className="absolute z-20 top-full mt-1 w-full max-h-72 overflow-y-auto rounded-card border border-white/[0.1] bg-rail shadow-xl"
+          className={`absolute z-20 top-full mt-1 w-full max-h-72 overflow-y-auto ${MENU_SURFACE}`}
         >
           {loading && items.length === 0 && (
             <li className="px-3 py-2.5 text-[0.75rem] text-muted">Searching…</li>

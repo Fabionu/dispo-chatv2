@@ -164,10 +164,10 @@ export default function AttachmentSendPreviewModal({
           <div className="text-[0.71875rem] text-alert mb-1.5 text-center">{error}</div>
         )}
         {/* Caption bar — the SAME borderless input shell as the main chat
-            composer (ChatComposer): solid `surface` fill, rounded-[0.875rem], no
+            composer (ChatComposer): solid `surface` fill, rounded-panel, no
             border, no focus tint, no shadow; identical textarea + circular send
             button. Only the outer max-width/centering is preview-specific. */}
-        <div className="mx-auto w-full max-w-[51.25rem] rounded-[0.875rem] bg-surface">
+        <div className="mx-auto w-full max-w-[51.25rem] rounded-panel bg-surface">
           <div className="flex items-center gap-1 px-2 py-1.5">
             <textarea
               ref={textareaRef}

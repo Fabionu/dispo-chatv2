@@ -32,8 +32,8 @@ export function ModalLoader() {
 export function PanelLoader() {
   return (
     <div
-      className="fixed top-0 right-0 bottom-0 z-40 w-full max-w-[25rem] bg-rail flex items-center justify-center
-                 xl:static xl:z-auto xl:w-[clamp(22.5rem,26vw,26.25rem)] xl:max-w-none xl:shrink-0 xl:rounded-panel"
+      className="fixed top-0 right-0 bottom-0 z-40 w-full max-w-[25rem] shadow-[-16px_0_48px_rgba(0,0,0,0.4)] bg-rail flex items-center justify-center
+                 xl:static xl:z-auto xl:w-[clamp(22.5rem,26vw,26.25rem)] xl:max-w-none xl:shrink-0 xl:rounded-panel xl:shadow-none"
     >
       <Spinner variant="sm" />
     </div>

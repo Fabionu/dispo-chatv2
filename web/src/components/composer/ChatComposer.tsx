@@ -312,7 +312,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
   // textarea's own `outline-none` keeps the browser ring off too. `relative`
   // anchors the mention picker.
   return (
-    <div className="relative rounded-[0.875rem] bg-composer">
+    <div className="relative rounded-panel bg-composer">
       {pickerOpen && (
         <MentionPicker
           members={matches}

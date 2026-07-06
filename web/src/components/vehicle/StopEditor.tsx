@@ -10,18 +10,15 @@ import {
   type VehicleStop,
 } from '../../lib/vehicleOps'
 
-// ── Integrated pill field styles ─────────────────────────────────────────────
-// Match the inline EditableRow / DateTimeField look: a soft rounded pill on a
-// subtle dark fill, no heavy border, quiet brighten on focus. Single-line fields
-// share one height; notes is the only multiline field. No old square inputs.
-const PILL =
-  'w-full rounded-full border border-white/[0.06] bg-white/[0.04] px-4 py-2 text-[0.78125rem] text-text placeholder:text-faint outline-none transition-colors focus:border-white/[0.12] focus:bg-white/[0.05]'
-const PILL_BASE =
-  'rounded-full border border-white/[0.06] bg-white/[0.04] px-4 py-2 text-[0.78125rem] text-text placeholder:text-faint outline-none transition-colors focus:border-white/[0.12] focus:bg-white/[0.05]'
-const SELECT_PILL =
-  'h-9 w-full rounded-full border border-white/[0.06] bg-white/[0.04] px-3.5 text-[0.78125rem] text-text outline-none transition-colors focus:border-white/[0.12] focus:bg-white/[0.05]'
-const AREA_PILL =
-  'w-full resize-none rounded-[1.125rem] border border-white/[0.06] bg-white/[0.04] px-4 py-2.5 text-[0.78125rem] text-text placeholder:text-faint outline-none transition-colors focus:border-white/[0.12] focus:bg-white/[0.05]'
+// Integrated pill field styles — the shared trip-form set (tripFormStyles.ts),
+// matching the inline EditableRow / DateTimeField look. Local aliases keep the
+// JSX below readable.
+import { AREA_CLASS, FIELD_BASE, INPUT_CLASS, SELECT_CLASS } from './tripFormStyles'
+
+const PILL = INPUT_CLASS
+const PILL_BASE = FIELD_BASE
+const SELECT_PILL = SELECT_CLASS
+const AREA_PILL = AREA_CLASS
 
 // Add/edit a stop with the integrated pill-style fields. Holds its own draft and
 // only calls onSave on confirm, so nothing is persisted until the user commits
@@ -102,7 +99,7 @@ export default function StopEditor({
   }
 
   return (
-    <div className="rounded-[1.125rem] border border-white/[0.12] bg-white/[0.03] p-2.5 flex flex-col gap-2">
+    <div className="rounded-soft border border-white/[0.12] bg-white/[0.03] p-2.5 flex flex-col gap-2">
       <div className="grid grid-cols-2 gap-2">
         <label className="flex flex-col gap-1">
           <span className="text-[0.6875rem] text-muted">Type</span>

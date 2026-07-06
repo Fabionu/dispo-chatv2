@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Check, CheckCheck, Clock } from 'lucide-react'
 import Avatar from '../Avatar'
 import { formatDay, formatTime } from './messageUtils'
+import { MENU_SURFACE } from '../menuStyles'
 
 // One potential reader of a sent message — a group member other than the
 // author. `lastReadAt` is their conversation "read up to" marker; the message
@@ -206,7 +207,7 @@ function ReceiptsPopover({
         zIndex: 60,
         visibility: pos.visible ? 'visible' : 'hidden',
       }}
-      className="w-[14.5rem] max-h-[18.75rem] overflow-y-auto rounded-card border border-white/[0.08] bg-surface py-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.55)]"
+      className={`w-[14.5rem] max-h-[18.75rem] overflow-y-auto ${MENU_SURFACE} py-1.5`}
     >
       {seen.length > 0 && (
         <>

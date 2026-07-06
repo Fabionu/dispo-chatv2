@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Eye, MoreVertical, Trash2, Upload } from 'lucide-react'
 import ImageLightbox from './ImageLightbox'
+import { MENU_SURFACE } from './menuStyles'
 
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024
 
@@ -146,7 +147,7 @@ export default function AvatarPhotoEditor({
             {menuOpen && (
               <div
                 role="menu"
-                className="absolute right-0 top-[calc(100%+4px)] z-20 min-w-[9.375rem] rounded-card border border-white/[0.1] bg-surface overflow-hidden py-1 shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
+                className={`absolute right-0 top-[calc(100%+4px)] z-20 min-w-[9.375rem] ${MENU_SURFACE} overflow-hidden py-1`}
               >
                 <MenuItem
                   onClick={() => {

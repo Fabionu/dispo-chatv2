@@ -115,7 +115,7 @@ export default function StopLocationMap({ initialQuery, onConfirm, onCancel }: P
           <button
             type="button"
             onClick={() => pick(coordPlace(coord))}
-            className="w-full text-left rounded-2xl border border-white/[0.06] bg-rail px-3 py-2 hover:bg-white/[0.05] transition-colors flex items-start gap-2"
+            className="w-full text-left rounded-soft border border-white/[0.06] bg-rail px-3 py-2 hover:bg-white/[0.05] transition-colors flex items-start gap-2"
           >
             <MapPin size="0.875rem" className="mt-0.5 shrink-0 text-active" strokeWidth={1.8} />
             <span className="min-w-0">
@@ -125,7 +125,7 @@ export default function StopLocationMap({ initialQuery, onConfirm, onCancel }: P
           </button>
         )}
         {!selected && !coord && (loading || items.length > 0) && (
-          <div className="rounded-2xl border border-white/[0.06] bg-rail overflow-hidden max-h-56 overflow-y-auto">
+          <div className="rounded-soft border border-white/[0.06] bg-rail overflow-hidden max-h-56 overflow-y-auto">
             {loading && items.length === 0 && (
               <div className="px-3 py-2 text-[0.75rem] text-muted">Searching…</div>
             )}

@@ -10,7 +10,10 @@ import type { ChipTone } from '../../lib/vehicleOps'
 // dark theme. Kept as FULL class strings so Tailwind's content scan keeps them.
 // The colour lives on the dot + text; the chip keeps the app's neutral grey pill
 // surface so every chip reads consistently (no per-status background wash).
-const TONE_TEXT: Record<ChipTone, string> = {
+// Exported so other surfaces that colour by the same semantics (e.g. the chat
+// header's Load/Unload markers) reuse these exact hues instead of re-declaring
+// the hex values.
+export const TONE_TEXT: Record<ChipTone, string> = {
   muted: 'text-muted',
   done: 'text-done',
   active: 'text-active',

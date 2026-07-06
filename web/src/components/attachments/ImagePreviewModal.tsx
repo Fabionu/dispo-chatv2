@@ -284,7 +284,7 @@ export default function ImagePreviewModal({
           onClick={stop}
           className={`absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 ${
             embedded
-              ? 'rounded-full bg-[rgba(24,24,24,0.92)] px-1 py-0.5 shadow-[0_2px_10px_rgba(0,0,0,0.45)]'
+              ? 'rounded-full bg-bg/[0.92] px-1 py-0.5 shadow-[0_2px_10px_rgba(0,0,0,0.45)]'
               : ''
           }`}
         >

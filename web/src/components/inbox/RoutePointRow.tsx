@@ -47,11 +47,11 @@ export default function PointRow({
 
   const badge =
     role === 'start' ? (
-      <span className="h-5 w-5 shrink-0 rounded-full bg-[#7d8a78] flex items-center justify-center text-bg">
+      <span className="h-5 w-5 shrink-0 rounded-full bg-done flex items-center justify-center text-bg">
         <Navigation size="0.6875rem" strokeWidth={2.4} />
       </span>
     ) : role === 'destination' ? (
-      <span className="h-5 w-5 shrink-0 rounded-full bg-[#d97757] flex items-center justify-center text-bg">
+      <span className="h-5 w-5 shrink-0 rounded-full bg-alert flex items-center justify-center text-bg">
         <Flag size="0.6875rem" strokeWidth={2.4} />
       </span>
     ) : (

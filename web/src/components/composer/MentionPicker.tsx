@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { AtSign } from 'lucide-react'
 import type { GroupMember } from '../../lib/types'
 import Avatar from '../Avatar'
+import { MENU_SURFACE } from '../menuStyles'
 
 type Props = {
   members: GroupMember[]
@@ -31,7 +32,7 @@ export default function MentionPicker({ members, activeIndex, onHover, onSelect 
       ref={listRef}
       role="listbox"
       aria-label="Mention a member"
-      className="absolute bottom-full left-0 mb-1.5 w-[16.25rem] max-h-[12.5rem] overflow-y-auto rounded-card border border-white/[0.12] bg-surface py-1 z-20"
+      className={`absolute bottom-full left-0 mb-1.5 w-[16.25rem] max-h-[12.5rem] overflow-y-auto ${MENU_SURFACE} py-1 z-20`}
       style={{ boxShadow: '0 16px 40px rgba(0,0,0,0.55)' }}
     >
       {members.map((m, i) => {

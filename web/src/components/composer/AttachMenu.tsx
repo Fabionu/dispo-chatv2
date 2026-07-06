@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { FileText, Image as ImageIcon, Plus, Route } from 'lucide-react'
 import { DOC_ACCEPT, IMAGE_ACCEPT } from '../attachments/attachmentUtils'
+import { MENU_SURFACE } from '../menuStyles'
 
 type Props = {
   disabled?: boolean
@@ -66,7 +67,7 @@ export default function AttachMenu({ disabled, onPickKind, onAddTrip }: Props) {
       {open && (
         <div
           role="menu"
-          className="absolute bottom-[calc(100%+6px)] left-0 w-[11.25rem] rounded-card border border-white/[0.08] bg-surface overflow-hidden z-20 py-1"
+          className={`absolute bottom-[calc(100%+6px)] left-0 w-[11.25rem] ${MENU_SURFACE} overflow-hidden z-20 py-1`}
         >
           <AttachMenuItem
             icon={<ImageIcon size="0.875rem" strokeWidth={1.6} />}

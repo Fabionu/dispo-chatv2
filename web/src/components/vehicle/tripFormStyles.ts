@@ -11,5 +11,10 @@ export const FIELD_BASE =
 
 export const INPUT_CLASS = `w-full ${FIELD_BASE}`
 
+// <select> variant: fixed height (selects don't take vertical padding the same
+// way), slightly tighter x-padding for the native chevron.
+export const SELECT_CLASS =
+  'h-9 w-full rounded-full border border-white/[0.06] bg-white/[0.04] px-3.5 text-[0.78125rem] text-text outline-none transition-colors focus:border-white/[0.12] focus:bg-white/[0.05]'
+
 export const AREA_CLASS =
-  'w-full resize-none rounded-[1.125rem] border border-white/[0.06] bg-white/[0.04] px-4 py-2.5 text-[0.78125rem] text-text placeholder:text-faint outline-none transition-colors focus:border-white/[0.12] focus:bg-white/[0.05]'
+  'w-full resize-none rounded-soft border border-white/[0.06] bg-white/[0.04] px-4 py-2.5 text-[0.78125rem] text-text placeholder:text-faint outline-none transition-colors focus:border-white/[0.12] focus:bg-white/[0.05]'

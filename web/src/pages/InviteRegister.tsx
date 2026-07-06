@@ -78,7 +78,7 @@ export default function InviteRegister({ token }: Props) {
   }
 
   return (
-    <div className="min-h-screen w-full bg-[#181818] text-text flex flex-col">
+    <div className="min-h-screen w-full bg-bg text-text flex flex-col">
       <div className="px-8 sm:px-12 lg:px-16 py-8 flex items-center gap-3">
         <div className="h-9 w-9 rounded-card border border-white/[0.1] bg-white/[0.03] flex items-center justify-center">
           <Box size="1.0625rem" strokeWidth={1.5} />

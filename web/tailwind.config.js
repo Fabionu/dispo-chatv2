@@ -33,6 +33,10 @@ export default {
         //   faint — timestamps, hints, placeholders: subtle but NOT invisible.
         muted: '#a3a3a3',
         faint: '#767676',
+        // Own-message bubble: the `surface` grey warmed toward the `active`
+        // accent — tinted, never bright, so ownership reads at a glance while
+        // the timeline stays calm (incoming bubbles use plain `surface`).
+        'bubble-own': '#383028',
         done: '#7d8a78',
         active: '#c89572',
         alert: '#d97757',
@@ -57,12 +61,19 @@ export default {
       //           and floating tool panels
       // Circular icon buttons use rounded-full (see ICON_ACTION_* in
       // HeaderIconButton.tsx).
+      //   soft  — the pill-field family's companion radius: multi-line
+      //           textareas, stop cards and other soft in-panel surfaces that
+      //           sit alongside rounded-full pill inputs (EditableRow /
+      //           tripFormStyles), plus the workspace tool cards. Anything
+      //           that must visually pair with a pill uses this, never an
+      //           arbitrary value.
       borderRadius: {
         chip: '4px',
         btn: '6px',
         card: '8px',
         modal: '10px',
         panel: '12px',
+        soft: '18px',
       },
       letterSpacing: {
         eyebrow: '0.14em',

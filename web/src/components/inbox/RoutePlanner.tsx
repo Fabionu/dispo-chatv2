@@ -56,6 +56,7 @@ import {
   truckSummary,
   uid,
 } from './routePlannerUtils'
+import { MENU_SURFACE } from '../menuStyles'
 
 type Props = {
   onBack: () => void
@@ -1077,7 +1078,7 @@ export default function RoutePlanner({ onBack }: Props) {
         {menu && (
           <div
             id="route-context-menu"
-            className="absolute z-30 min-w-[11.25rem] rounded-card border border-white/[0.12] bg-rail shadow-2xl py-1"
+            className={`absolute z-30 min-w-[11.25rem] ${MENU_SURFACE} py-1`}
             style={{ left: menu.x, top: menu.y }}
           >
             <div className="px-3 py-1.5 text-[0.625rem] uppercase tracking-wide text-muted border-b border-white/[0.06] mb-1">
@@ -1111,7 +1112,7 @@ export default function RoutePlanner({ onBack }: Props) {
           return (
             <div
               id="route-marker-menu"
-              className="absolute z-30 min-w-[11.25rem] rounded-card border border-white/[0.12] bg-rail shadow-2xl py-1"
+              className={`absolute z-30 min-w-[11.25rem] ${MENU_SURFACE} py-1`}
               style={{ left: markerMenu.x, top: markerMenu.y }}
             >
               <div className="px-3 py-1.5 border-b border-white/[0.06] mb-1">

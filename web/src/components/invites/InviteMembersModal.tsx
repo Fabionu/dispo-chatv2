@@ -238,7 +238,7 @@ function ResultRow({
         <button
           onClick={onInvite}
           disabled={disabled || busy}
-          className="shrink-0 text-[0.71875rem] font-semibold rounded-chip px-2.5 py-1 bg-text text-bg hover:bg-text/90 transition-colors disabled:opacity-50"
+          className="shrink-0 text-[0.71875rem] font-semibold rounded-btn px-2.5 py-1 bg-text text-bg hover:bg-text/90 transition-colors disabled:opacity-50"
         >
           {busy ? 'Inviting…' : 'Invite'}
         </button>

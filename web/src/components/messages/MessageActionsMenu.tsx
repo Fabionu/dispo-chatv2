@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { MENU_SURFACE } from '../menuStyles'
 
 export type MessageAction = {
   label: string
@@ -106,7 +107,7 @@ export default function MessageActionsMenu({ anchorEl, anchorPoint, actions, onC
         zIndex: 60,
         visibility: pos.visible ? 'visible' : 'hidden',
       }}
-      className="min-w-[9.5rem] rounded-card border border-white/[0.08] bg-surface overflow-hidden py-1 shadow-[0_12px_32px_rgba(0,0,0,0.55)]"
+      className={`min-w-[9.5rem] ${MENU_SURFACE} overflow-hidden py-1`}
     >
       {actions.map((a, i) => (
         <div key={i}>

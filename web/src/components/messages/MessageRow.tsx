@@ -162,7 +162,7 @@ function MessageRow({
   // only messages keep a comfortable-but-compact padding. Caption text and the
   // meta footer re-add a small inset on media bubbles (see below).
   const bubblePad = hasAttachment ? 'p-1' : 'px-3 pt-1.5 pb-1'
-  const bubbleBase = `${bubblePad} text-[length:var(--chat-msg-font-size)] leading-[1.45] flex flex-col text-[#F5F5F5] transition-[box-shadow,border-color] duration-500`
+  const bubbleBase = `${bubblePad} text-[length:var(--chat-msg-font-size)] leading-[1.45] flex flex-col text-text transition-[box-shadow,border-color] duration-500`
   // Corner shape: an 8px rounded rectangle (matching the app's small-radius
   // language — no pills) with a tighter 3px "tail" on the sender-side bottom
   // corner as the directional cue. Inside a same-author run the top corner on
@@ -181,9 +181,9 @@ function MessageRow({
     ? deletedSkin
     : mine
       ? failed
-        ? `bg-[#383028] border border-alert/50 ${shapeMine}`
-        : `bg-[#383028] ${shapeMine}`
-      : `bg-[#262626] ${shapeOther}`
+        ? `bg-bubble-own border border-alert/50 ${shapeMine}`
+        : `bg-bubble-own ${shapeMine}`
+      : `bg-surface ${shapeOther}`
   // Subtle, theme-warm pulse applied when this row is the target of a
   // jump-to-original. Clears after ~1.8s back in ChatView.
   const highlightSkin = highlighted ? 'ring-2 ring-active/60' : ''
@@ -220,13 +220,14 @@ function MessageRow({
     </>
   )
 
-  // ── Plain stream (no-bubble, grouped "operational log") ────────────────────
-  // Slack/Discord-style work-log: every group is LEFT-aligned with the SAME
-  // structure regardless of author — including my own. A group start shows the
+  // ── Plain stream (grouped "operational log") ────────────────────────────────
+  // Slack/Discord-style work-log for INCOMING messages: a group start shows the
   // avatar (in a fixed left gutter) + author name; following rows in the group
-  // are bare text indented under that gutter. Ownership of my messages is marked
-  // only subtly (warmer name + read ticks) — never by alignment
-  // or a bubble. Per-message time trails the body on the row's end (faint, never
+  // are bare text indented under that gutter. MY OWN messages are the one
+  // asymmetry: right-aligned AND wrapped in the same warm own-message bubble as
+  // bubble view (`bubble-own` skin + tail shape), so ownership is unmistakable
+  // while the incoming side keeps the bare log structure.
+  // Per-message time trails the body on the row's end (faint, never
   // in the header, never above the text). A single subtle dropdown chevron
   // reveals on hover, ATTACHED to the content: for text it sits just after the
   // last line (before the time/ticks); for attachment-only messages it sits to
@@ -235,6 +236,11 @@ function MessageRow({
   if (display === 'plain') {
     const authorLabel = message.authorName || 'Member'
     const time = formatTime(message.createdAt)
+    // My own (non-deleted) rows render as a bubble even in the plain stream —
+    // the same skin/shape/padding as bubble view (bubbleSkin/bubblePad above),
+    // including the failed-send alert border. Deleted rows stay bare muted
+    // italics on both sides, so a removed message never draws attention.
+    const ownBubble = mine && !deleted
     // Trailing meta cluster, a flex sibling at the END of the message (close on
     // short messages, at the row end on long ones) — never at the viewport edge,
     // the author header, or above the text. Order: optional `edited`, then my
@@ -306,10 +312,10 @@ function MessageRow({
               live up here next to the avatar/name — it sits INSIDE the content
               column, in a gutter on the message block (below the author header),
               so it aligns with the message text row and never shifts the avatar,
-              name, or body. MY OWN messages are a bare right-aligned text block:
-              no avatar and no author header (right alignment alone marks
-              ownership, WhatsApp-style), so the text stays the visual anchor and
-              the row keeps the plain no-bubble structure. */}
+              name, or body. MY OWN messages are a right-aligned own-skin BUBBLE
+              (no avatar, no author header — alignment + the warm fill mark
+              ownership, WhatsApp-style); incoming rows keep the plain no-bubble
+              structure. */}
           <div className={`flex items-start gap-2.5 ${mine ? 'justify-end' : ''}`}>
             {/* Avatar gutter (incoming only) — avatar at a group start; empty
                 (indent) on following rows so the group stays visually anchored.
@@ -342,8 +348,16 @@ function MessageRow({
             <div
               className={`group/msg min-w-0 flex flex-col ${
                 mine ? 'items-end' : 'items-start'
-              } max-w-[42.5rem] -mx-1.5 px-1.5 rounded-btn transition-colors duration-500 ${
-                highlighted ? 'bg-active/10' : 'hover:bg-white/[0.02]'
+              } max-w-[42.5rem] ${
+                // Own-bubble rows carry no hover pill and no highlight wash on
+                // the wrapper — the bubble itself never changes on hover (same
+                // rule as bubble view) and the jump-highlight rides the bubble
+                // as a ring instead (see the message block below).
+                ownBubble
+                  ? ''
+                  : `-mx-1.5 px-1.5 rounded-btn transition-colors duration-500 ${
+                      highlighted ? 'bg-active/10' : 'hover:bg-white/[0.02]'
+                    }`
               }`}
             >
               {/* Author header: just the name — incoming messages only. My own
@@ -364,7 +378,15 @@ function MessageRow({
                   row, right after the body and just before the trailing
                   timestamp / read-ticks (see metaCluster usages below), so it
                   follows the text without interrupting reading. */}
-              <div className={`min-w-0 w-full flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
+              <div
+                className={`min-w-0 flex flex-col ${mine ? 'items-end' : 'items-start'} ${
+                  // The bubble hugs its content (no w-full stretch); the
+                  // jump-highlight pulses as a ring on it, like bubble view.
+                  ownBubble
+                    ? `${bubblePad} ${bubbleSkin} transition-[box-shadow,border-color] duration-500 ${highlightSkin}`
+                    : 'w-full'
+                }`}
+              >
                   {!deleted && message.replyTo && (
                     <ReplyQuote replyTo={message.replyTo} onJump={onJumpToMessage} />
                   )}
@@ -385,7 +407,11 @@ function MessageRow({
                     // with the chat edge). Captioned attachments omit the chevron
                     // here; it rides the caption's text row instead (see the body
                     // branch below), so there's never a duplicate.
-                    <div className={`flex items-start gap-1.5 my-1 max-w-full ${mine ? 'flex-row-reverse' : ''}`}>
+                    <div
+                      className={`flex items-start gap-1.5 max-w-full ${ownBubble ? '' : 'my-1'} ${
+                        mine ? 'flex-row-reverse' : ''
+                      }`}
+                    >
                       <div className="flex flex-col gap-1 min-w-0">
                         {message.attachments.map((a, i) => (
                           <AttachmentBlock
@@ -404,10 +430,17 @@ function MessageRow({
                             below. Captioned attachments keep their meta inline
                             with the caption (body branch below). */}
                         {!message.body && (
-                          <div className="flex justify-end -mt-0.5">{metaCluster}</div>
+                          // Own-bubble rows keep the chevron INSIDE the bubble,
+                          // riding the meta row (the media sets the row's width,
+                          // so the always-mounted trigger never widens the
+                          // bubble). Incoming rows keep it beside the media.
+                          <div className="flex justify-end items-center gap-1 -mt-0.5">
+                            {ownBubble && actionsTrigger}
+                            {metaCluster}
+                          </div>
                         )}
                       </div>
-                      {!message.body && <div className="pt-0.5">{actionsTrigger}</div>}
+                      {!message.body && !ownBubble && <div className="pt-0.5">{actionsTrigger}</div>}
                     </div>
                   )}
 
@@ -435,18 +468,26 @@ function MessageRow({
                     //   • the time/ticks use align-bottom so they stay in the
                     //     bottom corner (on the text baseline) as before.
                     // A ~4px lead keeps each attached; both stay one-piece (nowrap).
-                    <div className="max-w-full text-[length:var(--chat-plain-font-size)] leading-[1.55] text-[#F5F5F5] whitespace-pre-wrap break-words">
+                    <div className="max-w-full text-[length:var(--chat-plain-font-size)] leading-[1.55] text-text whitespace-pre-wrap break-words">
                       {renderBody(message.body, message.mentions, currentUserId)}
-                      {actionsTrigger && (
-                        // Collapsed to zero width when the row isn't hovered, so
-                        // the trailing time/ticks tuck right up against the text.
-                        // On hover it expands (animated) to make room for the
-                        // chevron, nudging the meta over — space is only reserved
-                        // for the arrow while it's actually shown.
-                        <span className="inline-flex align-text-top overflow-hidden max-w-0 ml-0 group-hover/msg:max-w-[1.25rem] group-hover/msg:ml-1 transition-[max-width,margin] duration-200 ease-out">
-                          {actionsTrigger}
-                        </span>
-                      )}
+                      {actionsTrigger &&
+                        (ownBubble ? (
+                          // Inside a bubble the expand animation would visibly
+                          // grow the bubble on hover, so own-bubble rows keep
+                          // the chevron's space reserved (opacity-only reveal,
+                          // same trick as the meta cluster) — the bubble's
+                          // width never changes.
+                          <span className="inline-flex align-text-top ml-1">{actionsTrigger}</span>
+                        ) : (
+                          // Collapsed to zero width when the row isn't hovered,
+                          // so the trailing time/ticks tuck right up against the
+                          // text. On hover it expands (animated) to make room
+                          // for the chevron, nudging the meta over — space is
+                          // only reserved for the arrow while it's shown.
+                          <span className="inline-flex align-text-top overflow-hidden max-w-0 ml-0 group-hover/msg:max-w-[1.25rem] group-hover/msg:ml-1 transition-[max-width,margin] duration-200 ease-out">
+                            {actionsTrigger}
+                          </span>
+                        ))}
                       <span className="inline-flex items-end align-bottom ml-1 whitespace-nowrap">
                         {metaCluster}
                       </span>

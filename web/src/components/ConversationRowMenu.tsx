@@ -9,6 +9,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { MoreHorizontal } from 'lucide-react'
+import { MENU_SURFACE } from './menuStyles'
 
 // One entry in a conversation row's hover-actions menu.
 export type RowMenuAction = {
@@ -182,7 +183,7 @@ const ConversationRowMenu = forwardRef<
             bottom: pos.bottom,
             maxWidth: MENU_MAX,
           }}
-          className="z-50 w-max rounded-card border border-white/[0.1] bg-surface overflow-hidden py-1 shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
+          className={`z-50 w-max ${MENU_SURFACE} overflow-hidden py-1`}
         >
           {actions.map((a) => {
             const confirming = confirmKey === a.key

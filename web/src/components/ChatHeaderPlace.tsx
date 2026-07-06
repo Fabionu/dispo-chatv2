@@ -1,5 +1,6 @@
 import { ArrowDownToLine, ArrowUpFromLine } from 'lucide-react'
 import CountryFlag from './CountryFlag'
+import { TONE_TEXT } from './vehicle/opsControls'
 import type { TripPlace } from '../lib/vehicleOps'
 
 // A compact loading/unloading place in the room header. A small role marker
@@ -23,7 +24,7 @@ export default function HeaderPlace({
     <span className="inline-flex items-center gap-2 min-w-0 text-[0.78125rem]">
       <span
         className={`shrink-0 w-[3.625rem] inline-flex items-center gap-1 text-[0.65625rem] font-semibold uppercase tracking-wide ${
-          loading ? 'text-[#5fae72]' : 'text-[#d68a52]'
+          loading ? TONE_TEXT.green : TONE_TEXT.orange
         }`}
       >
         <RoleIcon size="0.75rem" strokeWidth={2.2} className="shrink-0" />

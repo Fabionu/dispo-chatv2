@@ -122,7 +122,7 @@ export default function StopForm({
   // Type picker — choose what kind of stop before any fields appear.
   if (phase === 'type') {
     return (
-      <div className="rounded-[1.125rem] border border-white/[0.06] bg-white/[0.02] p-2.5 flex flex-col gap-2">
+      <div className="rounded-soft border border-white/[0.06] bg-white/[0.02] p-2.5 flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <span className="text-[0.6875rem] text-muted">Choose stop type</span>
           <button
@@ -156,7 +156,7 @@ export default function StopForm({
   // Form — the stop's fields. The type is shown up top and can be changed (back to
   // the picker) without losing the typed details.
   return (
-    <div className="rounded-[1.125rem] border border-white/[0.06] bg-white/[0.02] p-2.5 flex flex-col gap-2">
+    <div className="rounded-soft border border-white/[0.06] bg-white/[0.02] p-2.5 flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-[0.75rem] font-medium text-text truncate">{labelOf(STOP_TYPES, type)}</span>

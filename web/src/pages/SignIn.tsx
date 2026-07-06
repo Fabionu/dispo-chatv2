@@ -79,7 +79,7 @@ export default function SignIn() {
   const isSignIn = tab === 'signin'
 
   return (
-    <div className="min-h-screen w-full grid grid-cols-1 lg:grid-cols-2 bg-[#181818] text-text">
+    <div className="min-h-screen w-full grid grid-cols-1 lg:grid-cols-2 bg-bg text-text">
       {/* LEFT — form. Sits directly on the near-black page, so the sign-in
           details read on a full-black surface. Pinned to the same near-black as
           the `bg` chat surface (#181818) so the login background matches the app

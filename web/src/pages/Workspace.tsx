@@ -33,6 +33,7 @@ import ConnectionRequestsSection from '../components/connections/ConnectionReque
 import GroupInvitesSection from '../components/invites/GroupInvitesSection'
 import GroupInviteView from '../components/invites/GroupInviteView'
 import Avatar from '../components/Avatar'
+import { MENU_SURFACE } from '../components/menuStyles'
 import Spinner from '../components/Spinner'
 import CompanyLogo from '../components/CompanyLogo'
 import CreateVehicleGroupModal from '../components/CreateVehicleGroupModal'
@@ -965,7 +966,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 // than a utility class) is immune to purge/override and to the
                 // abs-positioning shrink-to-fit of the narrow button wrapper.
                 style={{ width: 'max-content', maxWidth: '13.75rem' }}
-                className="absolute right-0 top-[calc(100%+6px)] rounded-card border border-white/[0.08] bg-surface overflow-hidden z-20 py-1"
+                className={`absolute right-0 top-[calc(100%+6px)] ${MENU_SURFACE} overflow-hidden z-20 py-1`}
               >
                 <CreateMenuItem label="Vehicle chat" onClick={() => startCreate('vehicle')} />
                 <CreateMenuItem label="Add connection" onClick={() => startCreate('direct')} />
@@ -1082,7 +1083,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         {/* User menu */}
         <div className="relative border-t border-white/[0.05]" ref={userMenuRef}>
           {userMenuOpen && (
-            <div className="absolute bottom-full left-2 w-[15rem] max-w-[calc(100%-1rem)] mb-2 rounded-card border border-white/[0.08] bg-surface overflow-hidden">
+            <div className={`absolute bottom-full left-2 w-[15rem] max-w-[calc(100%-1rem)] mb-2 ${MENU_SURFACE} overflow-hidden`}>
               <MenuItem
                 icon={<CircleUser size="0.875rem" strokeWidth={1.6} />}
                 onClick={() => {

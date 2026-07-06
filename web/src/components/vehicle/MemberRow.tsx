@@ -4,6 +4,7 @@ import type { GroupMember } from '../../lib/types'
 import { statusMeta, OFFLINE } from '../../lib/availability'
 import Avatar from '../Avatar'
 import Spinner from '../Spinner'
+import { MENU_SURFACE } from '../menuStyles'
 
 // One entry in a member's text-based actions menu. `separator` draws a faint
 // divider above the item; `tone: 'danger'` renders it as an alert (destructive)
@@ -179,7 +180,7 @@ export default function MemberRow({
             {menuOpen && (
               <div
                 role="menu"
-                className="absolute right-0 top-[calc(100%+4px)] z-20 min-w-[8.5rem] rounded-card border border-white/[0.1] bg-surface overflow-hidden py-1"
+                className={`absolute right-0 top-[calc(100%+4px)] z-20 min-w-[8.5rem] ${MENU_SURFACE} overflow-hidden py-1`}
                 style={{ boxShadow: '0 12px 32px rgba(0,0,0,0.5)' }}
               >
                 {actions.map((a, i) => (

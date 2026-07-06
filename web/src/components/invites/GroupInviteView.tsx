@@ -92,14 +92,14 @@ export default function GroupInviteView({ invite, onAccepted, onDeclined }: Prop
             <button
               onClick={() => void decline()}
               disabled={busy !== null}
-              className="flex-1 h-10 rounded-chip border border-white/[0.14] text-text text-[0.8125rem] font-medium hover:bg-white/[0.04] disabled:opacity-50 transition-colors"
+              className="flex-1 h-10 rounded-btn border border-white/[0.14] text-text text-[0.8125rem] font-medium hover:bg-white/[0.04] disabled:opacity-50 transition-colors"
             >
               {busy === 'decline' ? 'Declining…' : 'Decline'}
             </button>
             <button
               onClick={() => void accept()}
               disabled={busy !== null}
-              className="flex-1 h-10 rounded-chip bg-text text-bg text-[0.8125rem] font-semibold hover:bg-text/90 disabled:opacity-50 transition-colors"
+              className="flex-1 h-10 rounded-btn bg-text text-bg text-[0.8125rem] font-semibold hover:bg-text/90 disabled:opacity-50 transition-colors"
             >
               {busy === 'accept' ? 'Accepting…' : 'Accept'}
             </button>

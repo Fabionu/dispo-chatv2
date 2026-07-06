@@ -204,7 +204,7 @@ function RowButton({
     <button
       onClick={onClick}
       disabled={disabled || busy}
-      className={`shrink-0 text-[0.71875rem] font-medium rounded-chip px-2.5 py-1 transition-colors disabled:opacity-50 ${
+      className={`shrink-0 text-[0.71875rem] font-medium rounded-btn px-2.5 py-1 transition-colors disabled:opacity-50 ${
         primary
           ? 'bg-text text-bg font-semibold hover:bg-text/90'
           : 'border border-white/[0.14] text-text hover:bg-white/[0.04]'

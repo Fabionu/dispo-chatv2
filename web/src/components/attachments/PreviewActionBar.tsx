@@ -38,7 +38,7 @@ export default function PreviewActionBar({
     <div
       className={
         floating
-          ? 'absolute top-2 right-2 z-10 flex items-center gap-0.5 rounded-full bg-[rgba(24,24,24,0.92)] p-0.5 shadow-[0_2px_10px_rgba(0,0,0,0.45)]'
+          ? 'absolute top-2 right-2 z-10 flex items-center gap-0.5 rounded-full bg-bg/[0.92] p-0.5 shadow-[0_2px_10px_rgba(0,0,0,0.45)]'
           : 'flex items-center gap-1.5 shrink-0'
       }
     >
