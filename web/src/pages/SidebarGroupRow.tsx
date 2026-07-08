@@ -4,17 +4,15 @@ import {
   ArchiveRestore,
   Bell,
   BellOff,
-  CircleUser,
   MailOpen,
   Pin,
   PinOff,
   Trash2,
-  Users,
 } from 'lucide-react'
 import type { Group } from '../lib/types'
 import { groupHasUnread, groupLabel, groupPreview } from '../lib/types'
 import { getOps, tripSummary } from '../lib/vehicleOps'
-import { StatusChip, StatusDot } from '../components/vehicle/opsControls'
+import { TripStatusInline } from '../components/vehicle/opsControls'
 import Avatar from '../components/Avatar'
 import GroupAvatar from '../components/GroupAvatar'
 import ConversationRowMenu, {
@@ -22,10 +20,9 @@ import ConversationRowMenu, {
   type RowMenuAction,
 } from '../components/ConversationRowMenu'
 import { statusMeta, OFFLINE } from '../lib/availability'
-import { useViewMode } from '../lib/viewMode'
 
-// Compact last-activity stamp for a Normal-view row: today → HH:MM, yesterday →
-// "Yesterday", otherwise DD/MM. Empty string when there's no timestamp.
+// Compact last-activity stamp: today → HH:MM, yesterday → "Yesterday", otherwise
+// DD/MM. Empty string when there's no timestamp.
 function relTime(iso: string | null): string {
   if (!iso) return ''
   const d = new Date(iso)
@@ -43,11 +40,21 @@ function relTime(iso: string | null): string {
   return `${day}/${month}`
 }
 
+// One conversation in the unified rail — a single, calm, monochrome row. The
+// identity slot reads a conversation's TYPE by shape, not colour: a circular
+// Avatar for a direct message (with a live presence dot), a `card`-radius
+// GroupAvatar squircle for a vehicle room (its uploaded photo, or the generated
+// glyph). The name is primary; a vehicle room's active-trip status trails it as
+// quiet tone-coloured text. The right edge carries at most one piece of metadata
+// (unread badge, else last-activity time) plus optional mute/mention markers,
+// all of which fade on hover so the ⋮ actions button owns the far right without
+// overlap or layout shift.
 export default function GroupRow({
   group,
   selected,
   online,
   currentUserId,
+  size,
   onClick,
   onTogglePin,
   onToggleArchive,
@@ -60,8 +67,10 @@ export default function GroupRow({
   selected: boolean
   // Live online user-id set (presence). Drives the DM status dot.
   online: Set<string>
-  // Viewing user — decides the "You:" / name prefix on the Normal-view preview.
+  // Viewing user — decides the "You:" / name prefix on the preview line.
   currentUserId: string
+  // Identity-slot diameter in design px (tracks display density).
+  size: number
   onClick: () => void
   // Per-conversation row actions (the hover ⋮ menu). Each takes the row's group
   // plus the desired next state where it's a toggle.
@@ -90,31 +99,23 @@ export default function GroupRow({
   // Unread @-mentions get their own compact badge, separate from the regular
   // unread dot/count, so being mentioned stands out from ordinary traffic.
   const hasUnreadMention = !selected && (group.unreadMentionCount ?? 0) > 0
-  // Leading identity slot depends on the VIEW MODE:
-  //  - compact (default): the original small type glyph — CircleUser for a DM,
-  //    Users for a vehicle room — kept faint so the name stays the focus. Dense.
-  //  - normal: a larger avatar-like slot (DM photo or generic contact icon,
-  //    generated vehicle icon), sized to the density tier — preview-ready layout.
-  const viewMode = useViewMode()
-  const TypeIcon = group.type === 'direct' ? CircleUser : Users
 
   // Active-trip indicator for vehicle rooms: a compact status line read off the
-  // manual ops blob. Null when there's no trip, so the row keeps its existing
-  // (non-trip) subtitle/metadata. `full` (status · Next: …) is used on the
-  // breathable Normal row; `short` (status only) on the dense Compact row.
+  // manual ops blob. Null when there's no trip.
   const trip = group.type === 'vehicle' ? tripSummary(getOps(group)) : null
   const tripLineFull = trip
     ? [trip.statusLabel, trip.nextLabel && `Next: ${trip.nextLabel}`].filter(Boolean).join(' · ')
     : null
 
+  const preview = groupPreview(group, currentUserId)
+  const time = relTime(group.lastMessageAt)
+
   // ── Per-conversation row actions (hover ⋮ menu) ────────────────────────────
   // While the ⋮ menu is open the row stays in its "actions active" state — the
   // trigger stays visible and the right-side metadata stays hidden — even after
-  // the cursor leaves the row, so the timestamp/status never reappears behind the
-  // open menu. Reset when the menu closes (then hover alone governs again).
+  // the cursor leaves the row.
   const [menuOpen, setMenuOpen] = useState(false)
-  // Right-clicking anywhere on the row opens the SAME actions menu at the cursor,
-  // via the menu's imperative handle (a desktop affordance alongside the ⋮ button).
+  // Right-clicking anywhere on the row opens the SAME actions menu at the cursor.
   const rowMenuRef = useRef<ConversationRowMenuHandle>(null)
   const openMenuAtCursor = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -123,9 +124,8 @@ export default function GroupRow({
   const archived = Boolean(group.archivedAt)
   const pinned = Boolean(group.pinnedAt)
   const muted = Boolean(group.muted)
-  // Class fragment shared by every right-side metadata element: it fades on row
-  // hover AND while the menu is open (kept hidden so nothing peeks out from
-  // behind/around the popover).
+  // Shared fragment: the right-side metadata fades on row hover AND while the
+  // menu is open, so nothing peeks out from behind/around the popover.
   const metaFade = `transition-opacity group-hover/row:opacity-0${menuOpen ? ' opacity-0' : ''}`
   // The menu's read/unread label reflects the ACTUAL stored unread, not the
   // selected→0 view used for the badge.
@@ -166,12 +166,9 @@ export default function GroupRow({
     },
   ]
   // On-hover/focus overlay holding the ⋮ menu, anchored to the row's right edge,
-  // vertically centred over the WHOLE row. The conflicting right-side metadata
-  // (trip badge + timestamp/counts) fades out on hover (see the matching
-  // group-hover/row:opacity-0 below) so the button sits cleanly on its own at the
-  // far right instead of wedged between the badge and the timestamp. pointer-
-  // events stay off until revealed so the hidden trigger never blocks a click on
-  // the row beneath it; it stays visible while its menu is open (focus-within).
+  // vertically centred. The conflicting right-side metadata fades out on hover so
+  // the button sits cleanly on its own. pointer-events stay off until revealed so
+  // the hidden trigger never blocks a click on the row beneath it.
   const rowActions = (
     <div
       className={`absolute right-2 top-1/2 -translate-y-1/2 z-10 transition-opacity group-hover/row:opacity-100 group-hover/row:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto ${
@@ -186,18 +183,14 @@ export default function GroupRow({
       />
     </div>
   )
-  // Small muted indicator shared by both view densities. Fades with the rest of
-  // the right-side metadata on hover so the action button owns the far right.
+  // Muted indicator — fades with the rest of the right-side metadata on hover.
   const mutedIcon = muted ? (
     <BellOff size="0.75rem" strokeWidth={1.7} className={`shrink-0 text-faint ${metaFade}`} aria-label="Muted" />
   ) : null
-  // Pinned indicator — a prominent pin on the row's RIGHT edge (the same area the
-  // metadata/actions live), vertically centred over the whole row. It stays
-  // visible at all times; on hover/focus — or while the actions menu is open — it
-  // slides left so the ⋮ actions button can take the far-right slot without
-  // overlapping it. Decorative + pointer-events-none so it never blocks the row
-  // click. The Pin/Unpin menu action and the top-of-list sort live elsewhere.
-  // Applies to both DMs and groups/vehicle rooms; rendered in each view below.
+  // Pinned indicator — a prominent pin on the row's RIGHT edge, vertically
+  // centred. It stays visible at all times; on hover/focus — or while the actions
+  // menu is open — it slides left so the ⋮ actions button can take the far-right
+  // slot without overlapping. Decorative + pointer-events-none.
   const pinnedOverlay = pinned ? (
     <div
       title="Pinned"
@@ -205,34 +198,40 @@ export default function GroupRow({
         menuOpen ? '-translate-x-9' : ''
       }`}
     >
-      <Pin size="1rem" strokeWidth={1.8} aria-label="Pinned" />
+      <Pin size="0.875rem" strokeWidth={1.8} aria-label="Pinned" />
     </div>
   ) : null
 
-  // ── Normal view: breathable two-line rows with a last-message preview ──────
-  // Larger avatar, more padding, name on line 1 (+ time), preview on line 2 (+
-  // unread/mention badges). Compact view is left exactly as it was below.
-  if (viewMode === 'normal') {
-    const NORMAL_AVATAR = 44
-    const preview = groupPreview(group, currentUserId)
-    const time = relTime(group.lastMessageAt)
-    return (
-      <div className="relative group/row" onContextMenu={openMenuAtCursor}>
+  return (
+    <div className="relative group/row" onContextMenu={openMenuAtCursor}>
       <button
         onClick={onClick}
-        className={`w-full flex items-center gap-3 px-3 py-2.5 min-h-[3.875rem] rounded-chip text-left transition-colors ${
-          pinned ? 'pr-7' : ''
-        } ${selected ? 'bg-white/[0.06] text-text' : 'text-muted hover:bg-white/[0.025] hover:text-text'}`}
+        style={{
+          minHeight: 'var(--sidebar-row-height)',
+          gap: 'var(--sidebar-row-gap)',
+          paddingLeft: 'var(--sidebar-row-pad-x)',
+          // Reserve room on the right for the pinned indicator so it never sits on
+          // top of the metadata badge in the resting state.
+          paddingRight: pinned ? 'calc(var(--sidebar-row-pad-x) + 20px)' : 'var(--sidebar-row-pad-x)',
+          paddingTop: 'var(--sidebar-row-pad-y)',
+          paddingBottom: 'var(--sidebar-row-pad-y)',
+        }}
+        className={`w-full flex items-center rounded-btn text-left transition-colors ${
+          selected ? 'bg-white/[0.06] text-text' : 'text-muted hover:bg-white/[0.03] hover:text-text'
+        }`}
       >
+        {/* Identity — shape encodes the conversation type: circle = person,
+            squircle = vehicle room. Monochrome; no coloured fills. */}
         <span className="relative shrink-0 flex">
           {group.type === 'direct' ? (
-            <Avatar
-              userId={peer?.id ?? ''}
-              name={peer?.name ?? groupLabel(group)}
-              size={NORMAL_AVATAR}
-            />
+            <Avatar userId={peer?.id ?? ''} name={peer?.name ?? groupLabel(group)} size={size} />
           ) : (
-            <GroupAvatar groupId={group.id} hasAvatar={Boolean(group.hasAvatar)} size={NORMAL_AVATAR} />
+            <GroupAvatar
+              groupId={group.id}
+              hasAvatar={Boolean(group.hasAvatar)}
+              shape="rounded"
+              size={size}
+            />
           )}
           {peerDot && (
             <span
@@ -242,40 +241,57 @@ export default function GroupRow({
             />
           )}
         </span>
+
+        {/* Two-line body. Line 1: name (+ inline vehicle trip status). Line 2:
+            last-message preview on the left, metadata on the right. Tight
+            line-height groups the two lines into one block, vertically centred
+            against the avatar. */}
         <span className="flex-1 min-w-0 flex flex-col gap-px">
-          {/* Line 1 — just the name. No company/timestamp here: the timestamp
-              sits with the preview on line 2, keeping the name row clean. The
-              vehicle's active-trip status chip is the one small indicator that
-              belongs on the title line. Tight line-height on both lines groups
-              the name + preview into one block, vertically centred against the
-              avatar (button is items-center) without touching row height. */}
-          <span className="flex items-center gap-2">
-            <span className={`flex-1 truncate text-[0.96875rem] leading-tight ${unread ? 'text-text font-semibold' : 'text-text/90'}`}>
+          {/* Line 1 — the name stays primary and only shrinks as a last resort;
+              a vehicle's trip status ellipsizes first (shrinks 3×). */}
+          <span className="flex items-baseline gap-1.5 min-w-0">
+            <span
+              className={`min-w-0 shrink truncate leading-tight ${
+                unread ? 'text-text font-semibold' : 'text-text/90 font-medium'
+              }`}
+              style={{ fontSize: 'var(--sidebar-conv-font-size)' }}
+            >
               {groupLabel(group)}
             </span>
             {trip && (
-              <span className={`shrink-0 ${metaFade}`} title={tripLineFull ?? trip.statusLabel}>
-                <StatusChip tone={trip.statusTone} label={trip.statusLabel} />
-              </span>
+              <TripStatusInline
+                tone={trip.statusTone}
+                label={trip.statusLabel}
+                title={tripLineFull ?? trip.statusLabel}
+                className="shrink-[3] leading-tight"
+                style={{ fontSize: 'var(--sidebar-conv-meta-font-size)' }}
+              />
             )}
           </span>
+          {/* Line 2 — latest-message preview + the right-side metadata cluster,
+              which fades on hover so the ⋮ actions button can take the far-right
+              slot without crowding it. */}
           <span className="flex items-center gap-2">
-            {/* Latest-message preview — always shown (incl. vehicle rooms with an
-                active trip); the trip status lives in the chip on the title line. */}
-            <span className={`flex-1 truncate text-[0.875rem] leading-tight ${unread ? 'text-muted' : 'text-faint'}`}>
+            <span
+              className={`flex-1 min-w-0 truncate leading-tight ${unread ? 'text-muted' : 'text-faint'}`}
+              style={{ fontSize: 'var(--sidebar-conv-meta-font-size)' }}
+            >
               {preview.prefix && (
                 <span className={unread ? 'text-muted font-medium' : 'text-faint'}>{preview.prefix} </span>
               )}
               {preview.text}
             </span>
-            {/* Right-side metadata cluster — fades out on row hover so the action
-                button can take the far-right slot without crowding it. */}
             <span className={`flex items-center gap-2 shrink-0 ${metaFade}`}>
               {hasUnreadMention && (
                 <span
                   aria-label="You were mentioned"
                   title="You were mentioned"
-                  className="h-[1.125rem] min-w-[1.125rem] px-1 rounded-full bg-active/20 text-active text-[0.65625rem] font-bold leading-none flex items-center justify-center"
+                  style={{
+                    height: 'var(--sidebar-badge-size)',
+                    minWidth: 'var(--sidebar-badge-size)',
+                    fontSize: 'var(--sidebar-meta-font-size)',
+                  }}
+                  className="px-1 rounded-full bg-active/20 text-active font-bold leading-none flex items-center justify-center"
                 >
                   @
                 </span>
@@ -283,120 +299,28 @@ export default function GroupRow({
               {unread && hasCount && unreadCount > 0 && (
                 <span
                   aria-label={`${unreadCount} unread`}
-                  className="h-[1.125rem] min-w-[1.125rem] px-1.5 rounded-full bg-active text-bg text-[0.65625rem] font-semibold leading-none flex items-center justify-center"
+                  style={{
+                    minWidth: 'var(--sidebar-badge-size)',
+                    height: 'var(--sidebar-badge-size)',
+                    fontSize: 'var(--sidebar-meta-font-size)',
+                  }}
+                  className="px-1.5 rounded-full bg-active text-bg font-semibold leading-none flex items-center justify-center"
                 >
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
               )}
-              {muted && mutedIcon}
-              {/* Last-activity stamp — lives on the preview line (right side), not
-                  the name line, so all rows share the same metadata baseline. */}
-              {time && <span className="text-[0.78125rem] text-faint tabular-nums">{time}</span>}
+              {mutedIcon}
+              {time && (
+                <span className="tabular-nums text-faint" style={{ fontSize: 'var(--sidebar-conv-meta-font-size)' }}>
+                  {time}
+                </span>
+              )}
             </span>
           </span>
         </span>
       </button>
       {pinnedOverlay}
       {rowActions}
-      </div>
-    )
-  }
-
-  return (
-    <div className="relative group/row" onContextMenu={openMenuAtCursor}>
-    <button
-      onClick={onClick}
-      style={{
-        minHeight: 'var(--sidebar-row-height)',
-        gap: 'var(--sidebar-row-gap)',
-        paddingLeft: 'var(--sidebar-row-pad-x)',
-        // Reserve room on the right for the pinned indicator so it never sits on
-        // top of the workspace label / unread badge in the resting state.
-        paddingRight: pinned ? 'calc(var(--sidebar-row-pad-x) + 22px)' : 'var(--sidebar-row-pad-x)',
-        paddingTop: 'var(--sidebar-row-pad-y)',
-        paddingBottom: 'var(--sidebar-row-pad-y)',
-      }}
-      className={`w-full flex items-center rounded-chip text-left transition-colors ${
-        selected
-          ? 'bg-white/[0.06] text-text'
-          : 'text-muted hover:bg-white/[0.025] hover:text-text'
-      }`}
-    >
-      <span
-        className={`h-1.5 w-1.5 rounded-full shrink-0 ${unread ? 'bg-active' : 'bg-transparent'}`}
-      />
-      <span className="relative shrink-0 flex">
-        <TypeIcon
-          strokeWidth={1.6}
-          style={{ width: 'var(--sidebar-icon-size)', height: 'var(--sidebar-icon-size)' }}
-          className={`shrink-0 ${unread ? 'text-muted' : 'text-faint'}`}
-        />
-        {/* DM peer presence: live online/offline via socket, coloured by the
-            peer's declared status when online and dim grey when offline. */}
-        {peerDot && (
-          <span
-            title={peerDot.label}
-            className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-rail"
-            style={{ backgroundColor: peerDot.color }}
-          />
-        )}
-      </span>
-      <span className="flex-1 min-w-0 flex items-center gap-1.5">
-        <span
-          className={`min-w-0 truncate ${unread ? 'text-text font-medium' : ''}`}
-          style={{ fontSize: 'var(--sidebar-conv-font-size)' }}
-        >
-          {groupLabel(group)}
-        </span>
-        {/* Vehicle-room active trip → a tiny colored status dot hugging the room
-            name. The Compact row is a single dense line, so a dot (not a chip)
-            keeps it uncluttered; the full status shows on hover. */}
-        {trip && <StatusDot tone={trip.statusTone} title={tripLineFull ?? trip.statusLabel} />}
-      </span>
-      {/* DM-only: the peer's company/workspace on the right, filling the unused
-          Compact-view space so cross-company users are identifiable without a
-          full preview row. Muted + capped + truncated; `peer` is null for
-          vehicle rooms so they get no right-side metadata. */}
-      {peer?.workspace && (
-        <span
-          title={peer.workspace}
-          className={`shrink truncate text-right text-faint ${metaFade}`}
-          style={{ fontSize: 'var(--sidebar-conv-meta-font-size)', maxWidth: '46%' }}
-        >
-          {peer.workspace}
-        </span>
-      )}
-      {muted && mutedIcon}
-      {hasUnreadMention && (
-        <span
-          aria-label="You were mentioned"
-          title="You were mentioned"
-          style={{
-            height: 'var(--sidebar-badge-size)',
-            width: 'var(--sidebar-badge-size)',
-            fontSize: 'var(--sidebar-meta-font-size)',
-          }}
-          className={`shrink-0 rounded-full bg-active/20 text-active font-bold leading-none flex items-center justify-center ${metaFade}`}
-        >
-          @
-        </span>
-      )}
-      {unread && hasCount && unreadCount > 0 && (
-        <span
-          aria-label={`${unreadCount} unread`}
-          style={{
-            minWidth: 'var(--sidebar-badge-size)',
-            height: 'var(--sidebar-badge-size)',
-            fontSize: 'var(--sidebar-meta-font-size)',
-          }}
-          className={`shrink-0 px-1.5 rounded-full bg-active text-bg font-semibold leading-none flex items-center justify-center ${metaFade}`}
-        >
-          {unreadCount > 99 ? '99+' : unreadCount}
-        </span>
-      )}
-    </button>
-    {pinnedOverlay}
-    {rowActions}
     </div>
   )
 }

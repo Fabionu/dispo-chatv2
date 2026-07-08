@@ -1,16 +1,18 @@
-import { Users } from 'lucide-react'
 import type { GroupInvite } from '../../lib/types'
+import GroupAvatar from '../GroupAvatar'
 
 type Props = {
   invite: GroupInvite
+  // Identity-slot diameter in design px (tracks display density).
+  size: number
   selected: boolean
   onClick: () => void
 }
 
-// One pending vehicle-group invite in the sidebar. Reads as unread (active dot)
-// until handled, mirroring the connection-request row, but uses the group glyph
-// and shows the tractor plate as the secondary detail.
-export default function GroupInviteRow({ invite, selected, onClick }: Props) {
+// One pending vehicle-group invite in the sidebar. Uses the same rounded-square
+// vehicle identity slot as a real vehicle-room row (so an invite reads as a room,
+// not a person) and shows the tractor plate as the quiet secondary detail.
+export default function GroupInviteRow({ invite, size, selected, onClick }: Props) {
   return (
     <button
       onClick={onClick}
@@ -22,30 +24,30 @@ export default function GroupInviteRow({ invite, selected, onClick }: Props) {
         paddingTop: 'var(--sidebar-row-pad-y)',
         paddingBottom: 'var(--sidebar-row-pad-y)',
       }}
-      className={`w-full flex items-center rounded-chip text-left transition-colors ${
-        selected ? 'bg-white/[0.06] text-text' : 'text-muted hover:bg-white/[0.025] hover:text-text'
+      className={`w-full flex items-center rounded-btn text-left transition-colors ${
+        selected ? 'bg-white/[0.06] text-text' : 'text-muted hover:bg-white/[0.03] hover:text-text'
       }`}
     >
-      <span className="h-1.5 w-1.5 rounded-full shrink-0 bg-active" />
-      <Users
-        strokeWidth={1.6}
-        className="shrink-0 text-faint"
-        style={{ width: 'var(--sidebar-icon-size)', height: 'var(--sidebar-icon-size)' }}
-      />
-      <span
-        className="flex-1 truncate text-text font-medium"
-        style={{ fontSize: 'var(--sidebar-conv-font-size)' }}
-      >
-        {invite.groupName ?? 'Vehicle group'}
-      </span>
-      {invite.tractorPlate && (
+      <GroupAvatar shape="rounded" size={size} />
+      <span className="flex-1 min-w-0 flex flex-col gap-px">
         <span
-          className="font-mono text-faint shrink-0"
-          style={{ fontSize: 'var(--sidebar-conv-meta-font-size)' }}
+          className="truncate leading-tight text-text font-semibold"
+          style={{ fontSize: 'var(--sidebar-conv-font-size)' }}
         >
-          {invite.tractorPlate}
+          {invite.groupName ?? 'Vehicle group'}
         </span>
-      )}
+        <span className="flex items-center gap-2">
+          <span
+            className="flex-1 min-w-0 truncate leading-tight font-mono text-faint"
+            style={{ fontSize: 'var(--sidebar-conv-meta-font-size)' }}
+          >
+            {invite.tractorPlate ?? 'Pending invitation'}
+          </span>
+          <span className="shrink-0 h-[1.1875rem] px-2 rounded-full bg-active/15 text-active text-[0.65625rem] font-semibold leading-none flex items-center justify-center">
+            Invite
+          </span>
+        </span>
+      </span>
     </button>
   )
 }

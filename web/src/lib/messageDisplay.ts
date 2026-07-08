@@ -4,7 +4,7 @@
 //   - 'plain': the no-bubble grouped "operational log" stream.
 //
 // Reintroduced 2026-07-03 as a real preference (it was briefly retired with
-// 'plain' forced). Same persistence model as lib/viewMode.ts — localStorage is
+// 'plain' forced). Same persistence model as lib/density.ts — localStorage is
 // the single source of truth, mirrored onto <html data-msg-style> for
 // first-paint parity, with same-tab listeners + the cross-tab `storage` event
 // so every MessageRow updates live when the setting changes.

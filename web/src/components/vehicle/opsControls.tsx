@@ -73,6 +73,35 @@ export function StatusDot({ tone, title, className = '' }: { tone: ChipTone; tit
   return <span title={title} className={`h-2 w-2 rounded-full shrink-0 ${TONE_DOT[tone]} ${className}`} />
 }
 
+// Inline trip status for the SIDEBAR rows — no pill, no background: a faint
+// separator dot then the status label in its tone colour, sitting right after
+// the group name (`SV01HLC · Going to loading`). Truncates as a flex item
+// (needs a `min-w-0` parent + its own `shrink`), so a long status ellipsizes
+// while the name stays primary. Sizing/shrink priority come from the caller via
+// `className` + `style` so Compact/Normal rows keep their own scale.
+export function TripStatusInline({
+  tone,
+  label,
+  title,
+  className = '',
+  style,
+}: {
+  tone: ChipTone
+  label: string
+  title?: string
+  className?: string
+  style?: React.CSSProperties
+}) {
+  return (
+    <span title={title ?? label} style={style} className={`min-w-0 truncate ${TONE_TEXT[tone]} ${className}`}>
+      <span className="text-faint" aria-hidden>
+        ·
+      </span>{' '}
+      {label}
+    </span>
+  )
+}
+
 // A labelled row that edits a value chosen from a fixed option list. Read-only
 // (just the label text) unless `editable`; editing is a styled native <select>
 // that saves on change. Mirrors EditableRow's layout/spacing for a uniform tab.
@@ -107,14 +136,14 @@ export function SelectRow<T extends string>({
   }
 
   return (
-    <div className="py-2 border-b border-white/[0.04] last:border-0">
-      <label className="block text-[0.6875rem] text-muted mb-1">{label}</label>
+    <div className="py-2 border-b border-white/[0.03] last:border-0">
+      <label className="block text-[0.6875rem] text-faint mb-1">{label}</label>
       {editable ? (
         <select
           value={value ?? ''}
           disabled={saving}
           onChange={(e) => void change((e.target.value || undefined) as T | undefined)}
-          className="h-8 w-full rounded-card border border-white/[0.08] bg-white/[0.03] px-2 text-[0.78125rem] text-text outline-none focus:border-white/[0.22] disabled:opacity-50"
+          className="h-8 w-full cursor-pointer rounded-card border border-white/[0.06] bg-white/[0.02] px-2 text-[0.78125rem] text-text outline-none transition-colors hover:border-white/[0.12] focus:border-white/[0.16] disabled:opacity-50"
         >
           <option value="">Not set</option>
           {options.map((o) => (

@@ -21,6 +21,10 @@ type Props = {
   hasAvatar?: boolean
   /** Bump to bust the cache after a manager changes/removes the image. */
   version?: number | string
+  /** Slot geometry. 'circle' (default) matches the DM avatar; 'rounded' is a
+   *  squircle used in the sidebar list so a vehicle room reads as a room — not a
+   *  person — by SHAPE alone, at a glance, with no extra colour. */
+  shape?: 'circle' | 'rounded'
   className?: string
 }
 
@@ -35,9 +39,13 @@ export default function GroupAvatar({
   groupId,
   hasAvatar,
   version,
+  shape = 'circle',
   className = '',
 }: Props) {
   const showImage = Boolean(groupId && hasAvatar)
+  // Circular by default (matches the DM avatar); a `card`-radius squircle in the
+  // sidebar list so rooms are distinguishable from people by shape, not colour.
+  const radius = shape === 'rounded' ? 'rounded-card' : 'rounded-full'
   const [failed, setFailed] = useState(() => !showImage || isAvatarFailed('group', groupId!, version))
   const [loaded, setLoaded] = useState(() => showImage && isAvatarLoaded('group', groupId!, version))
 
@@ -64,7 +72,7 @@ export default function GroupAvatar({
   const fallback = (
     <span
       style={style}
-      className={`rounded-full bg-bg border border-white/[0.08] flex items-center justify-center shrink-0 text-text ${className}`}
+      className={`${radius} bg-bg border border-white/[0.08] flex items-center justify-center shrink-0 text-text ${className}`}
     >
       <Users size={rem(Math.max(12, Math.round(size * 0.46)))} strokeWidth={1.7} />
     </span>
@@ -88,7 +96,7 @@ export default function GroupAvatar({
           setFailed(true)
         }}
         style={style}
-        className={`absolute inset-0 rounded-full object-cover bg-surface transition-opacity duration-200 ${
+        className={`absolute inset-0 ${radius} object-cover bg-surface transition-opacity duration-200 ${
           loaded ? 'opacity-100' : 'opacity-0'
         }`}
       />

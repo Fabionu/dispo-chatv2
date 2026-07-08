@@ -55,24 +55,42 @@ function placeLabel(s: VehicleStop | undefined): string {
   return compact || stopFullAddress(s)
 }
 
-// One "Loading: <date> · <place>" / "Unloading: …" line in the summary card. The
-// date is the relevant stop's planned time; both fall back to a subtle "Not set"
-// when nothing is known.
-function SummaryStopLine({ label, stop }: { label: string; stop: VehicleStop | undefined }) {
-  const date = stop?.plannedAt?.trim()
+// One leg of the trip's journey in the summary card — a timeline node: a dot
+// (with a connector line down to the next leg) alongside the leg's label,
+// planned time and place. The origin dot is hollow, the destination dot filled,
+// so the direction of travel reads at a glance. Details fall back to a subtle
+// "Not set" when the stop or its fields are unknown.
+function JourneyNode({
+  label,
+  stop,
+  origin = false,
+}: {
+  label: string
+  stop: VehicleStop | undefined
+  // The pickup leg: renders the hollow dot + the connector line to the next leg.
+  origin?: boolean
+}) {
+  const time = stop?.plannedAt?.trim()
   const place = placeLabel(stop)
   return (
-    <div className="text-[0.71875rem] leading-[1.5] truncate">
-      <span className="text-faint">{label}: </span>
-      {date || place ? (
-        <>
-          {date && <span className="text-text tabular-nums">{date}</span>}
-          {date && place && <span className="text-faint"> · </span>}
-          {place && <span className="text-muted">{place}</span>}
-        </>
-      ) : (
-        <span className="text-faint">Not set</span>
-      )}
+    <div className="flex gap-2.5">
+      <div className="flex flex-col items-center pt-[3px]">
+        <span
+          className={`h-2 w-2 rounded-full shrink-0 ${
+            origin ? 'border border-white/40' : 'bg-white/60'
+          }`}
+        />
+        {origin && <span className="w-px flex-1 bg-white/[0.12] mt-1" />}
+      </div>
+      <div className={`min-w-0 flex-1 ${origin ? 'pb-2.5' : ''}`}>
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-[0.6875rem] text-faint">{label}</span>
+          {time && <span className="text-[0.71875rem] text-text tabular-nums">{time}</span>}
+        </div>
+        <div className={`text-[0.71875rem] leading-[1.4] truncate mt-0.5 ${place ? 'text-muted' : 'text-faint'}`}>
+          {place || 'Not set'}
+        </div>
+      </div>
     </div>
   )
 }
@@ -142,6 +160,9 @@ export default function TripTab({
   }
 
   const route = trip.route
+  // The computed route total shown in the summary footer — only when a valid
+  // ("ok") route exists (distance + duration text are present then).
+  const routeOk = route?.status === 'ok' ? route : null
   // Route availability is derived from the STOPS (the source of truth), not from
   // legacy address fields — so it's never "unavailable" while ≥2 stops carry
   // valid coordinates, even if the stored route hasn't been (re)computed yet.
@@ -172,41 +193,52 @@ export default function TripTab({
         )}
       </div>
 
-      {/* Summary card — the scannable overview. Click anywhere to expand into the
-          full editable detail below. Matches the dark card style used across the
-          panel (rounded, hairline border, subtle fill). */}
+      {/* Summary card — the scannable overview. A header (order + status), the
+          loading → unloading journey as a small timeline, and a footer carrying
+          the route total + the expand affordance. Click anywhere to expand into
+          the full editable detail below. */}
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
-        className="w-full text-left rounded-card border border-white/[0.08] bg-white/[0.025] hover:bg-white/[0.04] transition-colors px-3 py-2.5 flex flex-col gap-1"
+        className="w-full text-left rounded-card border border-white/[0.08] bg-white/[0.025] hover:bg-white/[0.04] transition-colors p-3"
       >
+        {/* Header — order reference + client, with the status on the right. */}
         <div className="flex items-start justify-between gap-2">
-          <div className="text-[0.8125rem] font-semibold leading-tight min-w-0 truncate">
-            Order{' '}
-            {trip.reference ? (
-              <span className="text-text">#{trip.reference}</span>
-            ) : (
-              <span className="text-faint font-normal">Not set</span>
+          <div className="min-w-0">
+            <div className="text-[0.8125rem] font-semibold leading-tight truncate">
+              {trip.reference ? (
+                `#${trip.reference}`
+              ) : (
+                <span className="text-faint font-normal">No order reference</span>
+              )}
+            </div>
+            {trip.client && (
+              <div className="text-[0.75rem] text-muted leading-tight truncate mt-0.5">{trip.client}</div>
             )}
           </div>
           <StatusChip tone={tripStatusTone(trip.status)} label={statusLabel} />
         </div>
-        <div className="text-[0.75rem] leading-tight truncate">
-          {trip.client ? (
-            <span className="text-muted">{trip.client}</span>
-          ) : (
-            <span className="text-faint">Not set</span>
-          )}
+
+        {/* Journey — loading → unloading as a compact timeline. */}
+        <div className="mt-3">
+          <JourneyNode label="Loading" stop={loadingStop} origin />
+          <JourneyNode label="Unloading" stop={unloadingStop} />
         </div>
-        <SummaryStopLine label="Loading" stop={loadingStop} />
-        <SummaryStopLine label="Unloading" stop={unloadingStop} />
-        <div className="flex justify-center pt-0.5 text-faint">
-          <ChevronDown
-            size="1rem"
-            strokeWidth={2}
-            className={`transition-transform ${expanded ? 'rotate-180' : ''}`}
-          />
+
+        {/* Footer — route total (when computed) on the left, expand toggle right. */}
+        <div className="flex items-center justify-between gap-2 mt-2.5 pt-2 border-t border-white/[0.05]">
+          <span className="text-[0.6875rem] text-faint tabular-nums truncate">
+            {routeOk ? `${routeOk.distanceText} · ${routeOk.durationText}` : ''}
+          </span>
+          <span className="flex items-center gap-1 text-[0.6875rem] text-faint shrink-0">
+            {expanded ? 'Less' : 'Details'}
+            <ChevronDown
+              size="0.875rem"
+              strokeWidth={2}
+              className={`transition-transform ${expanded ? 'rotate-180' : ''}`}
+            />
+          </span>
         </div>
       </button>
 

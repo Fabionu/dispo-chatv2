@@ -116,7 +116,7 @@ export default function ForwardModal({ fromGroupId, message, onClose, onForwarde
                     size={32}
                   />
                 ) : (
-                  <GroupAvatar groupId={g.id} hasAvatar={Boolean(g.hasAvatar)} size={32} />
+                  <GroupAvatar groupId={g.id} hasAvatar={Boolean(g.hasAvatar)} shape="rounded" size={32} />
                 )}
                 <span className="min-w-0 flex-1">
                   <span className="block text-[0.78125rem] truncate">{groupLabel(g)}</span>

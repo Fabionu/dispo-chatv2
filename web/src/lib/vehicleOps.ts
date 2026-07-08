@@ -425,6 +425,35 @@ export function stopPlace(s: VehicleStop): TripPlace {
   return { code, text }
 }
 
+// The forward lifecycle order of a trip — used ONLY as a progress fallback when a
+// trip has no stops to measure against. Interlude/terminal states (customs, ferry,
+// break, service, cancelled) are intentionally excluded; they aren't linear.
+const TRIP_LIFECYCLE: readonly TripStatus[] = [
+  'planned', 'to_loading', 'at_loading', 'loaded', 'in_transit',
+  'to_unloading', 'at_unloading', 'unloaded', 'completed',
+]
+
+// How much of the trip is completed, as a fraction 0..1 plus the done/total stop
+// counts. Measured HONESTLY from the stops the dispatcher marks 'done' (the real
+// signal); a 'completed' trip is 100%, a 'cancelled' one has no progress. When a
+// trip has no stops yet, we approximate from its status' position in the linear
+// lifecycle so the ring still reads roughly right. Returns null when there's
+// nothing meaningful to show (no trip, cancelled, or a fresh planned trip).
+export type TripProgress = { pct: number; done: number; total: number }
+export function tripProgress(ops: VehicleOps): TripProgress | null {
+  const t = ops.trip
+  if (!t || t.status === 'cancelled') return null
+  const active = ops.stops.filter((s) => s.status !== 'cancelled')
+  const total = active.length
+  const done = active.filter((s) => s.status === 'done').length
+  if (t.status === 'completed') return { pct: 1, done: total, total }
+  if (total > 0) return { pct: done / total, done, total }
+  // No stops to measure — approximate from the status lifecycle position.
+  const idx = t.status ? TRIP_LIFECYCLE.indexOf(t.status) : -1
+  if (idx <= 0) return null
+  return { pct: idx / (TRIP_LIFECYCLE.length - 1), done: 0, total: 0 }
+}
+
 // ── Compact summaries (header + sidebar) ─────────────────────────────────────
 // The next stop a driver is heading to: the first stop still marked planned
 // (stops are kept in dispatcher-entered order). Undefined when none remain.
@@ -438,6 +467,8 @@ export function nextPlannedStop(stops: VehicleStop[]): VehicleStop | undefined {
 // ops blob — no computed routing/ETA.
 export type TripSummary = {
   reference?: string
+  /** Client / customer name (for the header trip bar), when set. */
+  client?: string
   statusLabel: string
   statusTone: ChipTone
   /** "Customs, Nadlac" — the next planned stop's type + location. */
@@ -446,6 +477,12 @@ export type TripSummary = {
    *  the room header. Empty arrays when there are no such stops. */
   loadingPlaces: TripPlace[]
   unloadingPlaces: TripPlace[]
+  /** Total non-cancelled stops — lets the header bar show intermediate stops
+   *  between the origin and destination. */
+  stopCount: number
+  /** Completion (done stops / total, or a lifecycle estimate) — null when there's
+   *  nothing meaningful to show. Drives the header bar's progress ring. */
+  progress: TripProgress | null
   /** Route summary computed from the stop coordinates (may be undefined). */
   route?: TripRoute
 }
@@ -459,11 +496,14 @@ export function tripSummary(ops: VehicleOps): TripSummary | null {
     : undefined
   return {
     reference: t.reference,
+    client: t.client,
     statusLabel: labelOf(TRIP_STATUSES, t.status) || 'Planned',
     statusTone: tripStatusTone(t.status),
     nextLabel,
     loadingPlaces: loadingStops(ops.stops).map(stopPlace),
     unloadingPlaces: unloadingStops(ops.stops).map(stopPlace),
+    stopCount: ops.stops.filter((s) => s.status !== 'cancelled').length,
+    progress: tripProgress(ops),
     route: t.route,
   }
 }

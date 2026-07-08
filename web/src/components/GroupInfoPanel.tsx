@@ -30,7 +30,7 @@ import MembersTab from './vehicle/MembersTab'
 // The operational tabs in the vehicle-room info panel. Stops are managed inside
 // the Trip tab (no separate Stops tab) so there's a single place to manage a
 // trip and its stops.
-type PanelTab = 'info' | 'trip' | 'docs' | 'members'
+export type PanelTab = 'info' | 'trip' | 'docs' | 'members'
 const PANEL_TABS: ReadonlyArray<{ id: PanelTab; label: string }> = [
   { id: 'info', label: 'Info' },
   { id: 'trip', label: 'Trip' },
@@ -64,6 +64,9 @@ type Props = {
   // body). Undefined when the active trip isn't routable (no/too-few coordinates)
   // — the Trip tab's "Edit route" control is hidden in that case.
   onOpenRouteMap?: () => void
+  // Which tab to open on mount (e.g. the header trip bar opens straight to 'trip').
+  // Defaults to 'info'.
+  initialTab?: PanelTab
 }
 
 // Right-side panel with a vehicle group's operational details and membership.
@@ -91,12 +94,14 @@ export default function GroupInfoPanel({
   onOpenProfile,
   onGroupUpdated,
   onOpenRouteMap,
+  initialTab = 'info',
 }: Props) {
   const [error, setError] = useState<string | null>(null)
   // The member whose role is currently being changed (drives the row spinner).
   const [roleBusyId, setRoleBusyId] = useState<string | null>(null)
-  // Active operational tab (Info / Trip / Stops / Docs / Members).
-  const [tab, setTab] = useState<PanelTab>('info')
+  // Active operational tab (Info / Trip / Stops / Docs / Members). Seeded from
+  // initialTab so the header trip bar can deep-link straight to the Trip tab.
+  const [tab, setTab] = useState<PanelTab>(initialTab)
   // The picked vehicle image awaiting crop confirmation (no upload until the
   // crop is confirmed). Local version busts the image cache after a change so
   // the hero updates instantly; `onGroupUpdated({ hasAvatar })` flows the new
@@ -367,6 +372,7 @@ export default function GroupInfoPanel({
               hasImage={Boolean(group.hasAvatar)}
               canEdit={canManage}
               noun="vehicle photo"
+              shape="card"
               viewSrc={group.hasAvatar ? avatarUrl('group', group.id, avatarVersion) : undefined}
               viewTitle={groupLabel(group)}
               onFile={(file) => {
@@ -380,6 +386,7 @@ export default function GroupInfoPanel({
                 groupId={group.id}
                 hasAvatar={Boolean(group.hasAvatar)}
                 version={avatarVersion}
+                shape="rounded"
                 size={120}
               />
             </AvatarPhotoEditor>

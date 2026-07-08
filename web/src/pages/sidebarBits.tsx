@@ -3,17 +3,21 @@
 // create/options menu). Kept together so the rail's row/menu chrome lives in one
 // place; behaviour is identical to the previous inline definitions.
 
-// Compact pill toggle for the rail's unified-list filter. Theme-native: no
-// border, a subtle filled state when active, quiet hover otherwise. Sized off
-// the rail's meta-font token so it scales with display density.
-export function FilterPill({
+import type { ReactNode } from 'react'
+
+// One item in the rail's TYPE segmented control (All / Groups / Direct). Lives
+// inside a recessed track (see Workspace): the active option lifts to a soft
+// white pill, the others stay quiet and warm on hover. Sized off the rail's
+// meta-font token so it scales with display density. The Archived STATE lives on
+// its own toggle (ArchiveToggle) — never mixed in here.
+export function FilterTab({
   active,
   onClick,
   children,
 }: {
   active: boolean
   onClick: () => void
-  children: React.ReactNode
+  children: ReactNode
 }) {
   return (
     <button
@@ -21,8 +25,37 @@ export function FilterPill({
       onClick={onClick}
       aria-pressed={active}
       style={{ fontSize: 'var(--sidebar-meta-font-size)' }}
-      className={`h-8 px-3.5 rounded-full font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
-        active ? 'bg-white/[0.08] text-text' : 'text-muted hover:text-text hover:bg-white/[0.04]'
+      className={`h-7 px-3 rounded-btn font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+        active ? 'bg-white/[0.08] text-text' : 'text-muted hover:text-text'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+// The Archived-state toggle — a quiet icon button sitting apart from the type
+// tabs, so the two filter axes (what TYPE vs. archived STATE) never read as peers.
+export function ArchiveToggle({
+  active,
+  onClick,
+  children,
+  label,
+}: {
+  active: boolean
+  onClick: () => void
+  children: ReactNode
+  label: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      aria-label={label}
+      title={label}
+      className={`h-7 w-7 flex items-center justify-center rounded-btn transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+        active ? 'bg-white/[0.07] text-text' : 'text-faint hover:text-text hover:bg-white/[0.03]'
       }`}
     >
       {children}

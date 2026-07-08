@@ -12,7 +12,6 @@ import {
   Trash2,
   Users,
 } from 'lucide-react'
-import { useViewMode, setViewMode, type ViewMode } from '../../lib/viewMode'
 import {
   useMessageDisplay,
   setMessageDisplay,
@@ -111,7 +110,7 @@ export default function WorkspaceSettingsPanel({ onBack }: Props) {
         <CategoryCard
           icon={<Palette size="1rem" strokeWidth={1.8} />}
           title="Appearance"
-          description="Conversation list density and message style."
+          description="Message display style."
           onClick={() => setCategory('appearance')}
         />
         <CategoryCard
@@ -188,7 +187,6 @@ function CategoryCard({
 // layout" heading. Settings are separated by generous spacing rather than
 // dividers, so nothing competes. Subscribes to the prefs only while mounted.
 function AppearanceSettings() {
-  const viewMode = useViewMode()
   const messageDisplay = useMessageDisplay()
 
   return (
@@ -199,34 +197,19 @@ function AppearanceSettings() {
 
       <div className="rounded-card border border-white/[0.06] bg-white/[0.015] px-4 py-4">
         <div className="text-[0.71875rem] text-muted mb-4">Conversation layout</div>
-        <div className="space-y-5">
-          <SettingBlock
-            label="List density"
-            description="Choose how much space each conversation uses."
-          >
-            <Segmented
-              value={viewMode}
-              options={[
-                { value: 'compact', label: 'Compact' },
-                { value: 'normal', label: 'Normal' },
-              ]}
-              onChange={(v) => setViewMode(v as ViewMode)}
-            />
-          </SettingBlock>
-          <SettingBlock
-            label="Message display"
-            description="Bubbles align messages left/right; plain stream reads as a log."
-          >
-            <Segmented
-              value={messageDisplay}
-              options={[
-                { value: 'bubble', label: 'Bubbles' },
-                { value: 'plain', label: 'Plain stream' },
-              ]}
-              onChange={(v) => setMessageDisplay(v as MessageDisplay)}
-            />
-          </SettingBlock>
-        </div>
+        <SettingBlock
+          label="Message display"
+          description="Bubbles align messages left/right; plain stream reads as a log."
+        >
+          <Segmented
+            value={messageDisplay}
+            options={[
+              { value: 'bubble', label: 'Bubbles' },
+              { value: 'plain', label: 'Plain stream' },
+            ]}
+            onChange={(v) => setMessageDisplay(v as MessageDisplay)}
+          />
+        </SettingBlock>
       </div>
     </div>
   )
@@ -500,7 +483,7 @@ function StatusBadge({ status }: { status: WorkspaceInvite['status'] }) {
 // Rows are separated by a hairline divider (none after the last).
 function FieldRow({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="flex items-center justify-between gap-3 py-2.5 border-b border-white/[0.05] last:border-0">
+    <div className="flex items-center justify-between gap-3 py-2.5 border-b border-white/[0.03] last:border-0">
       <span className="shrink-0 text-[0.75rem] text-muted">{label}</span>
       <span
         title={value}

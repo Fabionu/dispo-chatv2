@@ -37,7 +37,8 @@ const GroupInfoPanel = lazy(() => import('./GroupInfoPanel'))
 const AddTripPanel = lazy(() => import('./vehicle/AddTripPanel'))
 const StopLocationMap = lazy(() => import('./vehicle/StopLocationMap'))
 const TripRouteMap = lazy(() => import('./vehicle/TripRouteMap'))
-import { StatusChip } from './vehicle/opsControls'
+import TripBar from './vehicle/TripBar'
+import type { PanelTab } from './GroupInfoPanel'
 import { getOps, tripSummary, type VehicleOps } from '../lib/vehicleOps'
 import { canRouteStops, persistOpsWithRoute } from '../lib/tripRoute'
 import ConversationSearch from './ConversationSearch'
@@ -55,7 +56,6 @@ import { useChatScroll } from '../hooks/useChatScroll'
 import { devlog } from '../lib/devlog'
 import { useMessageCache } from '../hooks/useMessageCache'
 import { preloadImage } from '../lib/attachmentCache'
-import HeaderPlace from './ChatHeaderPlace'
 import ToolTab from './ChatToolTab'
 import { toReplyPreview, attachmentTabLabel } from './chatViewUtils'
 import { useTypingIndicator } from '../hooks/useTypingIndicator'
@@ -154,6 +154,9 @@ export default function ChatView({
   const [inviteOpen, setInviteOpen] = useState(false)
   // Whether the group-info drawer is open (vehicle groups only).
   const [groupInfoOpen, setGroupInfoOpen] = useState(false)
+  // Which Group-info tab to open on the next open — the header trip bar deep-links
+  // to 'trip', the header Info button to 'info'.
+  const [groupInfoTab, setGroupInfoTab] = useState<PanelTab>('info')
   // The user whose read-only details panel is open (avatar click on a message
   // row, the DM header, or a group-member row). Null = closed. The name is the
   // display name known at click time, so the panel's hero renders instantly
@@ -1055,39 +1058,11 @@ export default function ChatView({
           Same structure for every type (DM + vehicle). The message column's own
           centering (`.chat-column`) is separate and unaffected. */}
       <header className="relative h-16 flex items-center gap-2 px-4 shrink-0 overflow-hidden">
-        {/* LEFT — the trip status + stops banner in its OWN left-edge column,
-            independent of the centered identity (never attached to the title).
-            Vehicle rooms with an active trip only; nothing for DMs / trip-less
-            rooms. The stop lines hide on narrow widths (md:) so they never crowd
-            the centered title or the right actions — the status pill always
-            stays. Truncates within its column. */}
-        <div className="flex-1 min-w-0 flex items-center">
-          {trip && (
-            <div className="flex items-center gap-2.5 min-w-0">
-              <span className="shrink-0">
-                <StatusChip tone={trip.statusTone} label={trip.statusLabel} size="lg" />
-              </span>
-              {(trip.loadingPlaces.length > 0 || trip.unloadingPlaces.length > 0) && (
-                <div className="hidden md:flex min-w-0 flex-col gap-0.5 leading-tight">
-                  {trip.loadingPlaces[0] && (
-                    <HeaderPlace
-                      kind="loading"
-                      place={trip.loadingPlaces[0]}
-                      extra={trip.loadingPlaces.length - 1}
-                    />
-                  )}
-                  {trip.unloadingPlaces[0] && (
-                    <HeaderPlace
-                      kind="unloading"
-                      place={trip.unloadingPlaces[0]}
-                      extra={trip.unloadingPlaces.length - 1}
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        {/* LEFT spacer — balances the right-edge actions so the identity cluster
+            stays centred. The active-trip context (status, route, progress) now
+            lives in its OWN bar directly under the header (see TripBar below),
+            never crammed into this corner. */}
+        <div className="flex-1 min-w-0" />
 
         {/* CENTER — group identity (avatar + name + subtitle), centered between
             the left banner and the right actions. Unchanged for DMs and vehicles;
@@ -1113,8 +1088,9 @@ export default function ChatView({
             </button>
           ) : (
             // Vehicle identity — the group's uploaded image when set, else the
-            // generated generic icon, in the same circular 56px slot as a DM.
-            <GroupAvatar groupId={group.id} hasAvatar={Boolean(group.hasAvatar)} size={56} />
+            // generated generic icon. A rounded-square slot (vs the DM circle) so
+            // a room reads as a room by shape, matching the sidebar + Group info.
+            <GroupAvatar groupId={group.id} hasAvatar={Boolean(group.hasAvatar)} shape="rounded" size={56} />
           )}
           <div className="min-w-0">
             <div className="text-[1rem] font-semibold truncate leading-tight">{groupLabel(group)}</div>
@@ -1185,12 +1161,31 @@ export default function ChatView({
             </HeaderIconButton>
           )}
           {group.type === 'vehicle' && (
-            <HeaderIconButton label="Group info" onClick={() => setGroupInfoOpen(true)}>
+            <HeaderIconButton
+              label="Group info"
+              onClick={() => {
+                setGroupInfoTab('info')
+                setGroupInfoOpen(true)
+              }}
+            >
               <Info size="1.25rem" strokeWidth={1.8} />
             </HeaderIconButton>
           )}
         </div>
       </header>
+
+      {/* Active-trip bar — a slim, glanceable strip under the header for vehicle
+          rooms with a trip: completion ring + status, the origin → destination
+          route, and the order/client. Opens the Group info Trip tab on click. */}
+      {group.type === 'vehicle' && trip && (
+        <TripBar
+          trip={trip}
+          onOpen={() => {
+            setGroupInfoTab('trip')
+            setGroupInfoOpen(true)
+          }}
+        />
+      )}
 
       {/* Tool tabs — a compact banner under the header, shown ONLY when a chat-
           window tool is open (today: the stop-location Map). Lets the user flip
@@ -1558,6 +1553,7 @@ export default function ChatView({
           onOpenProfile={(m) => openProfile(m.id, m.displayName)}
           onGroupUpdated={(partial) => onGroupUpdated?.(group.id, partial)}
           onOpenRouteMap={routeMapAvailable ? openTripRoute : undefined}
+          initialTab={groupInfoTab}
         />
         </Suspense>
       )}

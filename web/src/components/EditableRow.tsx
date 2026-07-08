@@ -101,8 +101,8 @@ export default function EditableRow({
 
   if (editing) {
     return (
-      <div className="py-2 border-b border-white/[0.04] last:border-0">
-        <label className="block text-[0.6875rem] text-muted mb-1">
+      <div className="py-2 border-b border-white/[0.03] last:border-0">
+        <label className="block text-[0.6875rem] text-faint mb-1">
           {label}
           {required && <span className="text-faint"> *</span>}
         </label>
@@ -156,9 +156,9 @@ export default function EditableRow({
   }
 
   return (
-    <div className="group py-2 border-b border-white/[0.04] last:border-0">
+    <div className="group py-2 border-b border-white/[0.03] last:border-0">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[0.6875rem] text-muted">{label}</span>
+        <span className="text-[0.6875rem] text-faint">{label}</span>
         {hint && <span className="text-[0.625rem] text-faint shrink-0">{hint}</span>}
       </div>
       <div className="flex items-center gap-2 mt-0.5">

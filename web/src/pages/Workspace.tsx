@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Archive,
   Building2,
   ChevronDown,
   CircleUser,
   LogOut,
-  MoreVertical,
   PanelLeftClose,
   PanelLeftOpen,
+  Plus,
   Search,
   Settings,
   X,
@@ -51,7 +52,7 @@ import { statusMeta, AWAY } from '../lib/availability'
 import { useAuth } from '../auth/AuthContext'
 import GroupRow from './SidebarGroupRow'
 import ContactRow from './SidebarContactRow'
-import { FilterPill, EmptyHint, MenuItem, CreateMenuItem } from './sidebarBits'
+import { FilterTab, ArchiveToggle, EmptyHint, MenuItem, CreateMenuItem } from './sidebarBits'
 import { byRecent, optimisticDirectGroup } from './workspaceUtils'
 
 type Props = {
@@ -947,16 +948,16 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           <div className="relative shrink-0" ref={newMenuRef}>
             <button
               onClick={() => setNewMenuOpen((v) => !v)}
-              aria-label="Conversation list options"
+              aria-label="New conversation"
               aria-haspopup="menu"
               aria-expanded={newMenuOpen}
               className={`h-[var(--sidebar-search-height)] w-[var(--sidebar-search-height)] flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
                 newMenuOpen
-                  ? 'bg-white/[0.08] text-text'
-                  : 'text-muted hover:text-text hover:bg-white/[0.05]'
+                  ? 'bg-white/[0.16] text-text'
+                  : 'bg-white/[0.08] text-text hover:bg-white/[0.14]'
               }`}
             >
-              <MoreVertical size="1.1875rem" strokeWidth={2} />
+              <Plus size="1.1875rem" strokeWidth={2} />
             </button>
 
             {newMenuOpen && (
@@ -983,22 +984,30 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           </div>
         </div>
 
-        {/* Pill filters — compact, theme-native toggles under search that switch
-            the single list below between everything / vehicle rooms / direct
-            conversations. They replace the old visible section grouping. */}
-        <div className="px-3 pb-2 flex items-center gap-1">
-          <FilterPill active={filter === 'all'} onClick={() => setFilter('all')}>
-            All
-          </FilterPill>
-          <FilterPill active={filter === 'archived'} onClick={() => setFilter('archived')}>
-            Archived
-          </FilterPill>
-          <FilterPill active={filter === 'groups'} onClick={() => setFilter('groups')}>
-            Groups
-          </FilterPill>
-          <FilterPill active={filter === 'dms'} onClick={() => setFilter('dms')}>
-            Direct
-          </FilterPill>
+        {/* Filters — the TYPE segmented control (everything / vehicle rooms /
+            direct) sits on the left; the Archived STATE is a separate icon toggle
+            on the right, so the two filter axes never read as peers. Opening
+            Archived clears the type selection; picking a type leaves Archived. */}
+        <div className="px-3 pb-2 flex items-center gap-1.5">
+          <div className="inline-flex items-center gap-0.5 rounded-card bg-black/20 p-0.5">
+            <FilterTab active={filter === 'all'} onClick={() => setFilter('all')}>
+              All
+            </FilterTab>
+            <FilterTab active={filter === 'groups'} onClick={() => setFilter('groups')}>
+              Groups
+            </FilterTab>
+            <FilterTab active={filter === 'dms'} onClick={() => setFilter('dms')}>
+              Direct
+            </FilterTab>
+          </div>
+          <div className="flex-1" />
+          <ArchiveToggle
+            active={filter === 'archived'}
+            label={filter === 'archived' ? 'Show conversations' : 'Show archived'}
+            onClick={() => setFilter((f) => (f === 'archived' ? 'all' : 'archived'))}
+          >
+            <Archive size="0.9375rem" strokeWidth={1.8} />
+          </ArchiveToggle>
         </div>
 
         {/* Rail list. Pending actionable items keep their OWN separated,
@@ -1030,6 +1039,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                   onRetry={() => void refreshConnections()}
                   selectedId={selection?.kind === 'request' ? selection.id : null}
                   onSelect={(id) => setSelection({ kind: 'request', id })}
+                  size={sidebarAvatar}
                 />
               )}
               {!searching && filter !== 'archived' && (
@@ -1037,6 +1047,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                   invites={groupInvites}
                   selectedId={selection?.kind === 'invite' ? selection.id : null}
                   onSelect={(id) => setSelection({ kind: 'invite', id })}
+                  size={sidebarAvatar}
                 />
               )}
 
@@ -1056,6 +1067,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                         group={item.group}
                         online={onlineIds}
                         currentUserId={user.id}
+                        size={sidebarAvatar}
                         selected={selection?.kind === 'group' && selection.id === item.group.id}
                         onClick={() => setSelection({ kind: 'group', id: item.group.id })}
                         onTogglePin={togglePin}
