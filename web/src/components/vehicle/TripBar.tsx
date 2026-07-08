@@ -8,6 +8,10 @@ import type { ChipTone, TripPlace, TripProgress, TripSummary } from '../../lib/v
 // route as origin → destination (with a "+N" when there are stops in between).
 // Right: the order / client, when set. The whole bar opens the Trip tab.
 //
+// Rendered as an inset, card-rounded strip (the shared `card` radius token, no
+// border/shadow — the faint fill alone defines it) so it reads like the rest of
+// the rounded surfaces instead of a hard edge-to-edge band.
+//
 // Only rendered for vehicle rooms with an active trip (the caller gates on
 // `trip`), so there's always something to show; empty pieces simply drop out and
 // the bar collapses to what's known.
@@ -26,7 +30,7 @@ export default function TripBar({ trip, onOpen }: { trip: TripSummary; onOpen: (
       type="button"
       onClick={onOpen}
       title="View trip details"
-      className="group/tripbar w-full shrink-0 h-11 px-4 flex items-center gap-3 text-left bg-white/[0.02] border-b border-white/[0.06] hover:bg-white/[0.035] transition-colors"
+      className="group/tripbar shrink-0 mx-3 mb-1.5 h-11 px-3.5 flex items-center gap-3 text-left rounded-card bg-white/[0.03] hover:bg-white/[0.05] active:bg-white/[0.06] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
     >
       {/* Status + completion. */}
       <span className="flex items-center gap-2.5 shrink-0">

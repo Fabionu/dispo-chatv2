@@ -13,6 +13,7 @@ import ComposerContextRow from '../messages/ComposerContextRow'
 import { useComposerAutosize } from '../../hooks/useComposerAutosize'
 import AttachMenu from './AttachMenu'
 import MentionPicker from './MentionPicker'
+import TripMentionPicker from './TripMentionPicker'
 
 export type EditContext = { id: string; originalBody: string }
 
@@ -28,6 +29,11 @@ type Props = {
 
   // Members of the current conversation — the source for the @-mention picker.
   members: GroupMember[]
+
+  // The room's active trip/order, when one exists — enables the `#reference`
+  // trip-mention suggestion. Undefined in DMs or rooms without a trip, which
+  // disables the `#` trigger entirely.
+  activeTrip?: { reference: string; subtitle?: string }
 
   // A picked file is not staged inline anymore — it's handed straight to the
   // parent, which opens the pre-send preview modal.
@@ -52,19 +58,20 @@ type Props = {
   onClearError: () => void
 }
 
-// An active @-mention being typed: where the `@` sits and the text typed after
-// it (used to filter members).
+// An active mention being typed: where the trigger char sits and the text typed
+// after it (used to filter members / match the trip reference).
 type MentionState = { anchor: number; query: string }
 
 const MAX_PICKER_RESULTS = 6
 
-// Find an active mention immediately left of the caret: an `@` at the start of
-// input or after whitespace, with no whitespace between it and the caret.
-function detectMention(value: string, caret: number): MentionState | null {
+// Find an active mention immediately left of the caret: the trigger char (`@`
+// for members, `#` for the trip) at the start of input or after whitespace,
+// with no whitespace between it and the caret.
+function detectMention(value: string, caret: number, trigger: '@' | '#'): MentionState | null {
   let i = caret - 1
   while (i >= 0) {
     const ch = value[i]
-    if (ch === '@') {
+    if (ch === trigger) {
       const before = i > 0 ? value[i - 1] : ''
       if (i === 0 || /\s/.test(before)) return { anchor: i, query: value.slice(i + 1, caret) }
       return null
@@ -85,6 +92,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
     text,
     onTextChange,
     members,
+    activeTrip,
     onFilePicked,
     onAddTrip,
     replyContext,
@@ -107,6 +115,8 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
   const pendingSelectionRef = useRef<[number, number] | null>(null)
 
   const [mention, setMention] = useState<MentionState | null>(null)
+  // A `#` trip mention being typed (vehicle rooms with an active trip only).
+  const [tripMention, setTripMention] = useState<MentionState | null>(null)
   const [activeIndex, setActiveIndex] = useState(0)
   // Whether a non-empty selection exists in the textarea — drives the floating
   // bold/italic format bar above the input.
@@ -130,6 +140,16 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
   }, [mention, members, editContext])
 
   const pickerOpen = mention !== null && matches.length > 0
+
+  // The trip suggestion shows while the typed `#query` is a prefix of the active
+  // trip's reference (case-insensitive; a bare `#` matches too). Like member
+  // mentions, disabled while editing.
+  const tripOpen =
+    !pickerOpen &&
+    !editContext &&
+    tripMention !== null &&
+    activeTrip !== undefined &&
+    activeTrip.reference.toLowerCase().startsWith(tripMention.query.toLowerCase())
 
   // Restore the caret/selection after a programmatic edit — a mention insert
   // (collapsed caret) or a bold/italic wrap (a range). The value is controlled,
@@ -155,7 +175,8 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
   // Drop a stale picker when the textarea empties (e.g. after send).
   useEffect(() => {
     if (!text && mention) setMention(null)
-  }, [text, mention])
+    if (!text && tripMention) setTripMention(null)
+  }, [text, mention, tripMention])
 
   useImperativeHandle(ref, () => ({
     focus() {
@@ -213,7 +234,8 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
     const value = e.target.value
     onTextChange(value)
     const caret = e.target.selectionStart ?? value.length
-    setMention(members.length ? detectMention(value, caret) : null)
+    setMention(members.length ? detectMention(value, caret, '@') : null)
+    setTripMention(activeTrip ? detectMention(value, caret, '#') : null)
     setActiveIndex(0)
     // Typing collapses any selection — hide the format bar.
     setHasSelection((e.target.selectionEnd ?? 0) > (e.target.selectionStart ?? 0))
@@ -229,6 +251,18 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
     onTextChange(next)
     pendingCaretRef.current = mention.anchor + insert.length
     setMention(null)
+  }
+
+  // Replace the `#query` span with `#Reference ` and close the trip suggestion.
+  function selectTrip() {
+    if (!tripMention || !activeTrip) return
+    const el = textareaRef.current
+    const caret = el?.selectionStart ?? text.length
+    const insert = `#${activeTrip.reference} `
+    const next = text.slice(0, tripMention.anchor) + insert + text.slice(caret)
+    onTextChange(next)
+    pendingCaretRef.current = tripMention.anchor + insert.length
+    setTripMention(null)
   }
 
   // Track whether there's a non-empty selection so the format bar shows only
@@ -279,6 +313,19 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
         return
       }
     }
+    // Trip suggestion: a single row, so only select/dismiss keys are hijacked.
+    if (tripOpen) {
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault()
+        selectTrip()
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setTripMention(null)
+        return
+      }
+    }
     // Ctrl/Cmd+B / +I wrap the selection in bold / italic markers.
     if ((e.metaKey || e.ctrlKey) && !e.altKey) {
       const k = e.key.toLowerCase()
@@ -321,12 +368,19 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           onSelect={selectMember}
         />
       )}
+      {tripOpen && activeTrip && (
+        <TripMentionPicker
+          reference={activeTrip.reference}
+          subtitle={activeTrip.subtitle}
+          onSelect={selectTrip}
+        />
+      )}
       {/* Floating format bar — a small tooltip above the input that appears while
           text is selected, offering Bold / Italic. Buttons use onMouseDown +
           preventDefault so clicking them doesn't blur the textarea (which would
           drop the selection before the wrap runs). Hidden while the @-mention
           picker is open to avoid stacking two popovers. */}
-      {hasSelection && !pickerOpen && (
+      {hasSelection && !pickerOpen && !tripOpen && (
         <div className="absolute left-1/2 -translate-x-1/2 bottom-[calc(100%+8px)] z-20 flex items-center gap-0.5 rounded-chip border border-white/[0.12] bg-surface-2 px-1 py-1 shadow-[0_2px_12px_rgba(0,0,0,0.5)]">
           <FormatButton label="Bold" shortcut="Ctrl/Cmd+B" onClick={() => applyFormat('*')}>
             <Bold size="0.9375rem" strokeWidth={2.4} />

@@ -143,10 +143,11 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // only DMs depending on this. Replaces the old visible section grouping.
   const [filter, setFilter] = useState<SidebarFilter>('all')
   const [connections, setConnections] = useState<ConnectionsResponse>(EMPTY_CONNECTIONS)
-  // Connection-request fetch status, surfaced as compact rail states. `loading`
-  // only drives a visible hint on the very first load (no data yet); `error`
-  // keeps the existing rows and offers a retry instead of hiding the section.
-  const [loadingConnections, setLoadingConnections] = useState(true)
+  // Connection-request fetch status. The section itself is hidden entirely when
+  // there are no pending requests, so the first-load "loading" state no longer
+  // drives any UI — we keep the setter (fetch bookkeeping) but discard the value.
+  // `error` still keeps existing rows and offers a retry instead of hiding.
+  const [, setLoadingConnections] = useState(true)
   const [connectionsError, setConnectionsError] = useState(false)
   // Pending vehicle-group invitations addressed to the current user.
   const [groupInvites, setGroupInvites] = useState<GroupInvite[]>([])
@@ -1034,7 +1035,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               {!searching && filter !== 'archived' && (
                 <ConnectionRequestsSection
                   pendingReceived={pendingReceived}
-                  loading={loadingConnections}
                   error={connectionsError}
                   onRetry={() => void refreshConnections()}
                   selectedId={selection?.kind === 'request' ? selection.id : null}

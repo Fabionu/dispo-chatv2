@@ -5,12 +5,9 @@ import ConnectionRequestRow from './ConnectionRequestRow'
 
 type Props = {
   pendingReceived: Connection[]
-  // True while the initial connections fetch is in flight. Surfaced as a compact
-  // "Loading requests…" line only when there's nothing to show yet, so a silent
-  // background refresh (which keeps the existing rows) never flashes it.
-  loading: boolean
   // The last connections fetch failed. We keep whatever rows we already had and
-  // show a compact, retryable error line rather than hiding the section.
+  // show a compact, retryable error line rather than hiding the section (this is
+  // also why an errored, empty section still renders — see the early return).
   error: boolean
   onRetry: () => void
   selectedId: string | null
@@ -25,7 +22,6 @@ type Props = {
 // overriding their preference.
 export default function ConnectionRequestsSection({
   pendingReceived,
-  loading,
   error,
   onRetry,
   selectedId,
@@ -45,6 +41,13 @@ export default function ConnectionRequestsSection({
     toggledRef.current = true
     setOpen((v) => !v)
   }
+
+  // Nothing pending → render no section at all (no header, chevron, badge, or
+  // reserved spacing). The one exception is a failed fetch: keep the section so
+  // its retryable error line stays reachable. Placed after the hooks so the
+  // component stays mounted and preserves the user's collapse preference across
+  // count changes (a live-arriving request re-shows it exactly as before).
+  if (count === 0 && !error) return null
 
   return (
     <div>
@@ -73,10 +76,11 @@ export default function ConnectionRequestsSection({
 
       {open && (
         <div className="space-y-0.5">
-          {/* Status line: error (with retry) takes precedence; otherwise a
-              first-load spinner-less hint, otherwise the empty copy. Existing
-              rows below are kept regardless, so an error never hides data. */}
-          {error ? (
+          {/* The section only renders with pending rows OR a fetch error (see the
+              early return above), so the sole status line left is the retryable
+              error — shown above whatever rows we already had, so a failed
+              refresh never hides existing data. */}
+          {error && (
             <div className="flex items-center justify-between gap-2 px-2 py-1 text-[0.75rem] leading-[1.45]">
               <span className="text-alert">Couldn’t load requests.</span>
               <button
@@ -87,15 +91,7 @@ export default function ConnectionRequestsSection({
                 Retry
               </button>
             </div>
-          ) : loading && count === 0 ? (
-            <div className="text-[0.75rem] text-faint px-2 py-1 leading-[1.45]">
-              Loading requests…
-            </div>
-          ) : count === 0 ? (
-            <div className="text-[0.75rem] text-faint px-2 py-1 leading-[1.45]">
-              No pending connection invitations.
-            </div>
-          ) : null}
+          )}
 
           {count > 0 &&
             pendingReceived.map((c) => (

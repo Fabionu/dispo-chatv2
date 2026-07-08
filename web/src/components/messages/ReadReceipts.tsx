@@ -27,6 +27,11 @@ type Props = {
   // 'right' opens to the RIGHT of the ticks (used by the plain stream), flipping
   // left only when it would run off the viewport edge.
   align?: 'auto' | 'right'
+  // Glyph size for the tick/clock icon (any CSS length). Defaults to the plain-
+  // stream size; the bubble footer passes a smaller value so the tick fits the
+  // timestamp's line box and my own bubbles stay the same height as incoming
+  // ones (the tick is otherwise taller than the time text, adding a few px).
+  glyphSize?: string
 }
 
 // Spec colours (kept local so they're explicit and don't drift):
@@ -51,14 +56,20 @@ function seenAt(iso: string): string {
 //   • fully read       → double check, accent
 //     (DM: the one peer has seen it; group: ALL other members have — a partial
 //      group read stays muted.)
-export default function ReadReceipts({ others, createdAt, pending, align = 'auto' }: Props) {
+export default function ReadReceipts({
+  others,
+  createdAt,
+  pending,
+  align = 'auto',
+  glyphSize = '0.875rem',
+}: Props) {
   const [open, setOpen] = useState(false)
   const btnRef = useRef<HTMLButtonElement>(null)
 
   if (pending) {
     return (
       <span className="inline-flex items-center" aria-label="Sending" title="Sending…">
-        <Clock size="0.8125rem" strokeWidth={2} style={{ color: MUTED }} />
+        <Clock size={glyphSize} strokeWidth={2} style={{ color: MUTED }} />
       </span>
     )
   }
@@ -77,7 +88,7 @@ export default function ReadReceipts({ others, createdAt, pending, align = 'auto
   if (others.length === 0) {
     return (
       <span className="inline-flex items-center" aria-label="Sent" title="Sent">
-        <CheckCheck size="0.875rem" strokeWidth={2} style={{ color: MUTED }} />
+        <CheckCheck size={glyphSize} strokeWidth={2} style={{ color: MUTED }} />
       </span>
     )
   }
@@ -96,7 +107,7 @@ export default function ReadReceipts({ others, createdAt, pending, align = 'auto
         aria-expanded={open}
         className="inline-flex items-center"
       >
-        <CheckCheck size="0.875rem" strokeWidth={2} style={{ color: fullyRead ? ACCENT : MUTED }} />
+        <CheckCheck size={glyphSize} strokeWidth={2} style={{ color: fullyRead ? ACCENT : MUTED }} />
       </button>
       {open && (
         <ReceiptsPopover

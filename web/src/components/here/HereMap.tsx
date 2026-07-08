@@ -67,6 +67,11 @@ type Props = {
   // frames structural route changes), so a single picked point can center the
   // map. Used by the stop-location picker; the route planner never sets it.
   center?: LatLng | null
+  // Whether the waypoint markers + route line can be grabbed/dragged. Default
+  // true (the Route Planner's always-editable behaviour). The read-only trip
+  // route map sets it false, flipping to true only in its "Edit route" mode, so
+  // markers can't be nudged when nobody's editing.
+  objectsDraggable?: boolean
   className?: string
 }
 
@@ -88,6 +93,7 @@ export default function HereMap({
   onRouteDragEnd,
   panelInsetPx = 0,
   center,
+  objectsDraggable = true,
   className,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -506,7 +512,7 @@ export default function HereMap({
   useEffect(() => {
     draw()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, markers, routePolylines, routeDistanceLabel])
+  }, [ready, markers, routePolylines, routeDistanceLabel, objectsDraggable])
 
   // ── Toggle the HGV / logistics overlay (no route recalculation) ───────────
   useEffect(() => {
@@ -612,15 +618,16 @@ export default function HereMap({
         style: { lineWidth: 3.5, strokeColor: ROUTE_COLOR, lineJoin: 'round', lineCap: 'round' },
       })
       for (const poly of [casing, main]) {
-        poly.draggable = true
+        poly.draggable = objectsDraggable
         // Volatile for the SAME reason as the markers below: HERE only delivers
         // drag gestures for objects it re-renders per frame. Without this the
         // line is drawn into the static cache and `dragstart/drag/dragend` never
         // fire for it, so the route line can't be grabbed. (This regressed when
         // the hover listeners that used to keep it interactive were removed for
         // the default-cursor change — volatility restores drag without any
-        // cursor styling, keeping the normal arrow cursor.)
-        poly.setVolatility(true)
+        // cursor styling, keeping the normal arrow cursor.) Only needed while
+        // draggable; a static (read-only) line stays in the render cache.
+        poly.setVolatility(objectsDraggable)
         poly.setData({ section: sectionIndex })
         group.addObject(poly)
       }
@@ -647,8 +654,9 @@ export default function HereMap({
     for (const marker of markers) {
       // `volatility: true` is REQUIRED for dragging — without it HERE keeps the
       // marker in its optimised render cache and never delivers drag gestures.
-      const m = new H.map.Marker(marker.position, { icon: iconFor(H, marker), volatility: true })
-      m.draggable = true
+      // A read-only map (objectsDraggable=false) keeps markers static/cached.
+      const m = new H.map.Marker(marker.position, { icon: iconFor(H, marker), volatility: objectsDraggable })
+      m.draggable = objectsDraggable
       m.setData({ id: marker.id, kind: marker.kind })
       // No hover cursor change — markers keep the default arrow cursor; they are
       // still draggable (the .here-map-surface CSS keeps the cursor as default,

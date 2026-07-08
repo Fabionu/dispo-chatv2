@@ -52,12 +52,17 @@ export const opsSchema = z.object({
       notes: opsStr(2000),
       // Route summary computed from the stop coordinates (manual planning data,
       // never live GPS). Geometry polylines are stored for a future driver app.
+      // A single HERE flexible polyline for a long-haul leg can run to tens of
+      // thousands of characters (a ~670 km route is ~33k), so the per-string cap
+      // is generous — the old 8k limit silently rejected real routes, which is
+      // why trips never persisted their geometry. Widening only accepts more, so
+      // it's backward compatible. The 1mb JSON body limit remains the backstop.
       route: z
         .object({
           status: z.enum(['ok', 'incomplete', 'failed']).optional(),
           distanceText: opsStr(40),
           durationText: opsStr(40),
-          polylines: z.array(z.string().max(8000)).max(60).optional(),
+          polylines: z.array(z.string().max(60000)).max(100).optional(),
           computedAt: opsStr(40),
         })
         .optional(),

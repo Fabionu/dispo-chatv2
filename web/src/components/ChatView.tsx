@@ -930,6 +930,11 @@ export default function ChatView({
   // shows a compact trip line instead of the static vehicle subtitle.
   const ops = group.type === 'vehicle' ? getOps(group) : null
   const trip = ops ? tripSummary(ops) : null
+  // The active trip's order reference, when set — enables `#reference` trip
+  // mentions (the composer's `#` suggestion + the clickable token in message
+  // bodies). Undefined in DMs / rooms without a trip or an order number, which
+  // turns the whole feature off.
+  const tripMentionRef = trip?.reference?.trim() || undefined
   // The header "Trip route" button shows only for vehicle rooms with an active
   // trip whose stops carry ≥2 valid coordinates (enough to draw a route).
   const routeMapAvailable = Boolean(ops?.trip) && Boolean(ops && canRouteStops(ops.stops))
@@ -1247,7 +1252,31 @@ export default function ChatView({
           onCancel={closeMapPick}
         />
       ) : tripRouteOpen && activeTool === 'route' ? (
-        <TripRouteMap stops={ops?.stops ?? []} route={ops?.trip?.route} />
+        <TripRouteMap
+          stops={ops?.stops ?? []}
+          route={ops?.trip?.route}
+          // Editing the route is a "manage this group" action — the same boundary
+          // the server enforces on the PATCH, so a non-manager never sees a save
+          // that would 403. Requires an active trip to attach the route to.
+          canEdit={group.type === 'vehicle' && canManageGroup && Boolean(ops?.trip)}
+          onSaveRoute={async (editedStops, editedRoute) => {
+            const currentOps = ops
+            if (!currentOps?.trip) return
+            // Persist the edited stops + freshly computed route, flagging the save
+            // as a deliberate edit so the server logs the "… edited the trip route"
+            // system message (deduped server-side when nothing actually changed).
+            const nextOps: VehicleOps = {
+              ...currentOps,
+              stops: editedStops,
+              trip: { ...currentOps.trip, route: editedRoute },
+            }
+            const { group: updated } = await api.groups.update(group.id, {
+              ops: nextOps,
+              routeEdited: true,
+            })
+            onGroupUpdated?.(group.id, { meta: updated.meta })
+          }}
+        />
       ) : activeAttachmentTab ? (
         <AttachmentTabView
           attachment={activeAttachmentTab.attachment}
@@ -1373,6 +1402,14 @@ export default function ChatView({
                           }
                           onJumpToMessage={jumpToMessage}
                           onOpenProfile={openProfile}
+                          // `#reference` trip mentions — clicking one deep-links
+                          // to the Group info Trip tab (opening the panel if
+                          // it's closed). Undefined without an active trip.
+                          tripRef={tripMentionRef}
+                          onOpenTrip={() => {
+                            setGroupInfoTab('trip')
+                            setGroupInfoOpen(true)
+                          }}
                         />
                       )
                     })}
@@ -1441,6 +1478,18 @@ export default function ChatView({
                   text={text}
                   onTextChange={setText}
                   members={members}
+                  // Enables the `#` trip-mention suggestion; the subtitle echoes
+                  // the client + status so the picker row reads like the trip.
+                  activeTrip={
+                    tripMentionRef
+                      ? {
+                          reference: tripMentionRef,
+                          subtitle:
+                            [trip?.client, trip?.statusLabel].filter(Boolean).join(' · ') ||
+                            undefined,
+                        }
+                      : undefined
+                  }
                   onFilePicked={setPendingFile}
                   // Trip creation is a vehicle-room, manage-capable action; the
                   // composer hides the "Trip" menu item when this is undefined

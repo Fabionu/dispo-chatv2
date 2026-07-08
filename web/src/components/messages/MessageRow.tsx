@@ -57,6 +57,11 @@ type Props = {
   onJumpToMessage: (messageId: string) => void
   // Open the read-only user-details panel for a message author (avatar click).
   onOpenProfile: (userId: string, name: string) => void
+  // The room's active trip reference — `#<reference>` tokens in the body render
+  // as clickable trip mentions that open the Trip tab. Undefined in DMs / rooms
+  // without a trip, where the token stays plain text.
+  tripRef?: string
+  onOpenTrip?: () => void
 }
 
 function MessageRow({
@@ -84,7 +89,12 @@ function MessageRow({
   onDeleteForEveryone,
   onJumpToMessage,
   onOpenProfile,
+  tripRef,
+  onOpenTrip,
 }: Props) {
+  // Context for renderBody's `#reference` trip tokens — only when the room
+  // actually has an active trip and a way to open it.
+  const tripCtx = tripRef && onOpenTrip ? { reference: tripRef, onOpen: onOpenTrip } : undefined
   // Collapse the author line when the previous message is from the same
   // author within a couple of minutes — keeps bursts readable. A system
   // activity row in between breaks the run, so the author chrome reappears.
@@ -469,7 +479,7 @@ function MessageRow({
                     //     bottom corner (on the text baseline) as before.
                     // A ~4px lead keeps each attached; both stay one-piece (nowrap).
                     <div className="max-w-full text-[length:var(--chat-plain-font-size)] leading-[1.55] text-text whitespace-pre-wrap break-words">
-                      {renderBody(message.body, message.mentions, currentUserId)}
+                      {renderBody(message.body, message.mentions, currentUserId, tripCtx)}
                       {actionsTrigger &&
                         (ownBubble ? (
                           // Inside a bubble the expand animation would visibly
@@ -617,7 +627,7 @@ function MessageRow({
                         hasAttachment ? 'px-1.5 pt-0.5' : ''
                       }`}
                     >
-                      {renderBody(message.body, message.mentions, currentUserId)}
+                      {renderBody(message.body, message.mentions, currentUserId, tripCtx)}
                     </span>
                   )}
                   {/* Subtle footer row: the time (and `edited`) on their own line,
@@ -637,6 +647,10 @@ function MessageRow({
                         others={readers ?? []}
                         createdAt={message.createdAt}
                         pending={pending}
+                        // Fit the tick to the timestamp's line box so my own
+                        // bubble's meta row is the same height as an incoming
+                        // one's (a full-size tick would make it a few px taller).
+                        glyphSize="0.6875rem"
                       />
                     )}
                   </span>
@@ -708,7 +722,10 @@ function propsEqual(a: Props, b: Props): boolean {
     a.readers === b.readers &&
     a.groupType === b.groupType &&
     a.highlighted === b.highlighted &&
-    a.imagePriority === b.imagePriority
+    a.imagePriority === b.imagePriority &&
+    // Active-trip reference — rows re-tokenize their `#ref` trip mentions when
+    // the trip changes/clears. onOpenTrip is a callback → intentionally skipped.
+    a.tripRef === b.tripRef
   )
 }
 

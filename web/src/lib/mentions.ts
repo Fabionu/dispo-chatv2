@@ -46,7 +46,7 @@ export function resolveMentionIds(text: string, members: NamedUser[]): string[] 
   return ids
 }
 
-export type BodySegment = { text: string; mention?: Mention }
+export type BodySegment = { text: string; mention?: Mention; trip?: boolean }
 
 // Split a message body into plain-text and mention segments for tokenized
 // rendering. Only the mentions actually attached to the message are
@@ -71,4 +71,45 @@ export function splitBodyByMentions(body: string, mentions: Mention[] | undefine
   }
   if (last < body.length) segments.push({ text: body.slice(last) })
   return segments
+}
+
+// Further split the plain-text segments on the active trip's `#<reference>`
+// token. Trip mentions are DISPLAY-ONLY: the token is stored as plain text in
+// the body and resolved against the group's *current* active trip at render
+// time, so nothing structured is persisted and a `#ref` from a past trip
+// naturally degrades to plain text once the trip changes. Same word boundaries
+// as @-mentions ("#12" doesn't light up inside "#123"); already-tokenized
+// mention segments are never re-scanned.
+export function splitSegmentsByTripRef(segments: BodySegment[], reference: string): BodySegment[] {
+  const ref = reference.trim()
+  if (!ref) return segments
+  const token = '#' + ref
+  const out: BodySegment[] = []
+  for (const seg of segments) {
+    if (seg.mention || !seg.text.includes('#')) {
+      out.push(seg)
+      continue
+    }
+    const text = seg.text
+    let last = 0
+    let from = 0
+    for (;;) {
+      const idx = text.indexOf(token, from)
+      if (idx === -1) break
+      // The `#` must start the text or follow a non-word char (and not another
+      // `#`), and the reference must end at a word boundary.
+      const beforeOk = idx === 0 || (!isWordChar(text[idx - 1]) && text[idx - 1] !== '#')
+      const afterOk = !isWordChar(text[idx + token.length])
+      if (beforeOk && afterOk) {
+        if (idx > last) out.push({ text: text.slice(last, idx) })
+        out.push({ text: token, trip: true })
+        last = idx + token.length
+        from = last
+      } else {
+        from = idx + 1
+      }
+    }
+    if (last < text.length) out.push({ text: text.slice(last) })
+  }
+  return out
 }

@@ -125,7 +125,8 @@ function renderActivity(
         </>
       )
     case 'route_edited':
-      return <>Route was edited</>
+      // Names the actor per the trip-route edit UX ("… edited the trip route").
+      return <>{actor} edited the trip route</>
     default:
       return <>{actor} updated the conversation</>
   }
