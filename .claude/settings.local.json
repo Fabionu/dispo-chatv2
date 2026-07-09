@@ -280,7 +280,9 @@
       "Bash(sed -i 's/rounded-\\\\[1\\\\.125rem\\\\]/rounded-soft/g' components/vehicle/StopForm.tsx components/inbox/InboxView.tsx)",
       "Bash(sed -i 's/rounded-2xl/rounded-soft/g' components/vehicle/StopLocationMap.tsx)",
       "Bash(python -)",
-      "PowerShell(npm run build --workspace web)"
+      "PowerShell(npm run build --workspace web)",
+      "PowerShell(\\(Get-Content web\\\\src\\\\index.css -Raw\\) -replace '--sidebar-user-avatar-size: 36px;', '--sidebar-user-avatar-size: 40px;' -replace '--sidebar-user-avatar-size: 34px;', '--sidebar-user-avatar-size: 38px;' -replace '--sidebar-user-avatar-size: 43px;', '--sidebar-user-avatar-size: 47px;' -replace 'design px: 38 × 1\\\\.125 ≈ the 43px avatar below', 'design px: 42 × 1.125 ≈ the 47px avatar below' | Set-Content web\\\\src\\\\index.css -Encoding utf8 -NoNewline)",
+      "PowerShell(git checkout -- web/src/index.css)"
     ]
   }
 }

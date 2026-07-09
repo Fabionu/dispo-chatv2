@@ -1,5 +1,6 @@
 import type { GroupInvite } from '../../lib/types'
 import GroupAvatar from '../GroupAvatar'
+import IdentitySlot from '../IdentitySlot'
 
 type Props = {
   invite: GroupInvite
@@ -28,7 +29,9 @@ export default function GroupInviteRow({ invite, size, selected, onClick }: Prop
         selected ? 'bg-white/[0.06] text-text' : 'text-muted hover:bg-white/[0.03] hover:text-text'
       }`}
     >
-      <GroupAvatar shape="rounded" size={size} />
+      <IdentitySlot>
+        <GroupAvatar shape="rounded" size={size} />
+      </IdentitySlot>
       <span className="flex-1 min-w-0 flex flex-col gap-px">
         <span
           className="truncate leading-tight text-text font-semibold"

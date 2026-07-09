@@ -1,5 +1,6 @@
 import type { WorkspaceMember } from '../lib/types'
 import Avatar from '../components/Avatar'
+import IdentitySlot from '../components/IdentitySlot'
 
 // One company colleague who has no open DM yet, shown inline in the unified rail
 // list (All + Direct filters). A quiet people-row (circular avatar + name)
@@ -31,7 +32,9 @@ export default function ContactRow({
       }}
       className="w-full flex items-center rounded-btn text-left text-muted hover:bg-white/[0.03] hover:text-text transition-colors"
     >
-      <Avatar userId={member.id} name={member.displayName} size={size} />
+      <IdentitySlot>
+        <Avatar userId={member.id} name={member.displayName} size={size} />
+      </IdentitySlot>
       <span className="min-w-0 flex-1 flex flex-col gap-px">
         <span
           className="truncate leading-tight text-text/90 font-medium"

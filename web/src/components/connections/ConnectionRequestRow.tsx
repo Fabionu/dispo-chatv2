@@ -1,5 +1,6 @@
 import type { Connection } from '../../lib/types'
 import Avatar from '../Avatar'
+import IdentitySlot from '../IdentitySlot'
 
 type Props = {
   connection: Connection
@@ -30,7 +31,9 @@ export default function ConnectionRequestRow({ connection, selected, size, onCli
         selected ? 'bg-white/[0.06] text-text' : 'text-muted hover:bg-white/[0.03] hover:text-text'
       }`}
     >
-      <Avatar userId={peer.id} name={peer.displayName} size={size} />
+      <IdentitySlot>
+        <Avatar userId={peer.id} name={peer.displayName} size={size} />
+      </IdentitySlot>
       <span className="flex-1 min-w-0 flex flex-col gap-px">
         <span
           className="truncate leading-tight text-text font-semibold"

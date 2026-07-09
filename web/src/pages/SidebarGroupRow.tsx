@@ -15,6 +15,7 @@ import { getOps, tripSummary } from '../lib/vehicleOps'
 import { TripStatusInline } from '../components/vehicle/opsControls'
 import Avatar from '../components/Avatar'
 import GroupAvatar from '../components/GroupAvatar'
+import IdentitySlot from '../components/IdentitySlot'
 import ConversationRowMenu, {
   type ConversationRowMenuHandle,
   type RowMenuAction,
@@ -221,8 +222,9 @@ export default function GroupRow({
         }`}
       >
         {/* Identity — shape encodes the conversation type: circle = person,
-            squircle = vehicle room. Monochrome; no coloured fills. */}
-        <span className="relative shrink-0 flex">
+            squircle = vehicle room. Monochrome; no coloured fills. The zero-
+            height IdentitySlot keeps the larger avatar from adding row height. */}
+        <IdentitySlot>
           {group.type === 'direct' ? (
             <Avatar userId={peer?.id ?? ''} name={peer?.name ?? groupLabel(group)} size={size} />
           ) : (
@@ -240,7 +242,7 @@ export default function GroupRow({
               style={{ backgroundColor: peerDot.color }}
             />
           )}
-        </span>
+        </IdentitySlot>
 
         {/* Two-line body. Line 1: name (+ inline vehicle trip status). Line 2:
             last-message preview on the left, metadata on the right. Tight

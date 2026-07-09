@@ -1628,6 +1628,7 @@ export default function ChatView({
           key={profileTarget.id}
           userId={profileTarget.id}
           name={profileTarget.name}
+          currentUserId={currentUserId}
           groupRole={
             group.type === 'vehicle'
               ? members.find((m) => m.id === profileTarget.id)?.role

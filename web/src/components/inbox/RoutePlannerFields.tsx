@@ -1,5 +1,9 @@
+import { useEffect, useRef, useState } from 'react'
+import { Check, Copy, X } from 'lucide-react'
+
 // Small presentational controls for the Route planner panel: a labelled numeric
-// input (truck-profile fields) and a labelled read-only stat (route summary).
+// input (truck-profile fields), a labelled read-only stat (route summary), and a
+// compact copy-to-clipboard icon button (context-menu coordinate header).
 export function NumberField({
   label,
   value,
@@ -24,6 +28,50 @@ export function NumberField({
         className="h-8 rounded-card border border-white/[0.06] bg-white/[0.04] px-2.5 text-[0.8125rem] outline-none transition-colors focus:border-white/[0.16] focus:bg-white/[0.05] placeholder:text-faint"
       />
     </label>
+  )
+}
+
+// Tiny circular copy button for a coordinate string — the map context menu's
+// header sits tighter than ICON_ACTION_SMALL's 24px, so this is its 20px
+// sibling with the same borderless muted-glyph-warms-on-hover look. Shows a
+// brief ✓ (done) after a successful copy and a quiet ✗ (alert) when the
+// clipboard is unavailable/refused, then settles back to idle.
+export function CopyCoordButton({ text }: { text: string }) {
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle')
+  const timer = useRef<number>()
+  useEffect(() => () => window.clearTimeout(timer.current), [])
+
+  async function copy() {
+    let next: 'copied' | 'failed' = 'failed'
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text)
+        next = 'copied'
+      }
+    } catch {
+      /* clipboard refused — show the failed state below */
+    }
+    setState(next)
+    window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => setState('idle'), 1200)
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      aria-label="Copy coordinates"
+      title={state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : 'Copy coordinates'}
+      className="h-5 w-5 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+    >
+      {state === 'copied' ? (
+        <Check size="0.75rem" strokeWidth={2.4} className="text-done" />
+      ) : state === 'failed' ? (
+        <X size="0.75rem" strokeWidth={2.4} className="text-alert" />
+      ) : (
+        <Copy size="0.75rem" strokeWidth={1.8} />
+      )}
+    </button>
   )
 }
 

@@ -20,14 +20,19 @@ export const rem = (px: number): string => `${px / 16}rem`
 
 // Sidebar avatar / company-logo diameter per tier, in DESIGN px (pre-rem-scale
 // — Avatar/CompanyLogo render size/16 rem, so the comfortable root bump adds
-// its ×1.125 on top: 38 → ~42.75 actual, matching the tuned
+// its ×1.125 on top: 42 → ~47.25 actual, matching the tuned
 // --sidebar-user-avatar-size token in index.css). Components that take a
 // numeric `size` can't read the CSS density tokens, so they read this map via
 // useDensity() instead.
+//
+// These run LARGER than each tier's row text block on purpose (identity should
+// read at a glance); rail rows wrap the avatar in IdentitySlot (zero-height
+// flex slot) so the extra diameter centres into the row's existing padding
+// instead of growing the row.
 export const SIDEBAR_AVATAR_SIZE: Record<Density, number> = {
-  compact: 34,
-  default: 36,
-  comfortable: 38,
+  compact: 38,
+  default: 40,
+  comfortable: 42,
 }
 
 const STORAGE_KEY = 'dispo:density'

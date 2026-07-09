@@ -38,7 +38,7 @@ import type {
   TruckRoute,
 } from '../../lib/here/types'
 import PointRow from './RoutePointRow'
-import { NumberField, Stat } from './RoutePlannerFields'
+import { CopyCoordButton, NumberField, Stat } from './RoutePlannerFields'
 import {
   EMPTY_TRUCK,
   MAX_STOPS,
@@ -1095,8 +1095,14 @@ export default function RoutePlanner({ onBack }: Props) {
             className={`absolute z-30 min-w-[11.25rem] ${MENU_SURFACE} py-1`}
             style={{ left: menu.x, top: menu.y }}
           >
-            <div className="px-3 py-1.5 text-[0.625rem] uppercase tracking-wide text-muted border-b border-white/[0.06] mb-1">
-              {fmtCoord({ lat: menu.lat, lng: menu.lng })}
+            {/* Coordinate header — the copy button copies EXACTLY the displayed
+                string. Clicking it keeps the menu open (it's inside the menu, so
+                the outside-click closer ignores it). */}
+            <div className="pl-3 pr-1.5 py-1 flex items-center justify-between gap-2 border-b border-white/[0.06] mb-1">
+              <span className="text-[0.625rem] uppercase tracking-wide text-muted tabular-nums truncate">
+                {fmtCoord({ lat: menu.lat, lng: menu.lng })}
+              </span>
+              <CopyCoordButton text={fmtCoord({ lat: menu.lat, lng: menu.lng })} />
             </div>
             {menuActions.map((opt) => (
               <button

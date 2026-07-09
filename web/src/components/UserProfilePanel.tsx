@@ -3,7 +3,8 @@ import { X } from 'lucide-react'
 import type { PublicProfile } from '../lib/types'
 import { api } from '../lib/api'
 import { avatarUrl } from '../lib/avatarCache'
-import { statusMeta } from '../lib/availability'
+import { statusMeta, OFFLINE } from '../lib/availability'
+import { usePresence } from '../hooks/usePresence'
 import { ICON_ACTION_BASE, ICON_ACTION_IDLE } from './HeaderIconButton'
 import { ROLE_LABEL } from './settings/ProfileSidebarPanel'
 import Avatar from './Avatar'
@@ -18,6 +19,9 @@ type Props = {
   /** Display name already known from the click context (message author, DM
    *  peer, member row) — renders the hero immediately while the fetch runs. */
   name: string
+  /** The signed-in viewer. Presence snapshots cover *peers* only, so viewing
+   *  your own profile treats you as online (you're using the app). */
+  currentUserId: string
   /** The target's role IN THE CURRENT GROUP ('admin' | 'member'), when the
    *  panel was opened from a vehicle-room context. Omitted for DMs. */
   groupRole?: 'admin' | 'member'
@@ -36,7 +40,7 @@ type Props = {
 // pencil affordances anywhere. Missing values render as the standard muted
 // "Not set". Editing your own profile stays where it always was — the
 // "My profile" sidebar drawer.
-export default function UserProfilePanel({ userId, name, groupRole, onClose }: Props) {
+export default function UserProfilePanel({ userId, name, currentUserId, groupRole, onClose }: Props) {
   const [profile, setProfile] = useState<PublicProfile | null>(null)
   const [failed, setFailed] = useState(false)
   // Bump to refetch after a failed load ("Try again").
@@ -71,9 +75,24 @@ export default function UserProfilePanel({ userId, name, groupRole, onClose }: P
     return () => document.removeEventListener('keydown', onKey, true)
   }, [onClose])
 
+  // Live presence — the SAME socket-driven source the sidebar DM dots and the
+  // group members list read, so all three always agree. The hook resyncs a
+  // fresh snapshot on mount and tracks presence:update deltas, so the pill
+  // flips live while the panel is open.
+  const { online } = usePresence()
+  const isOnline = userId === currentUserId || online.has(userId)
+
   const displayName = profile?.displayName ?? name
   const roleLabel = profile?.role ? ROLE_LABEL[profile.role] : null
-  const status = profile?.availabilityStatus ? statusMeta(profile.availabilityStatus) : null
+  // Live presence wins over the stored profile preference: a disconnected user
+  // shows Offline no matter what status they last selected; only while online
+  // does their chosen availability (Available / Busy / Off duty) show.
+  // (Mirrors MemberRow / SidebarGroupRow's `online ? statusMeta(...) : OFFLINE`.)
+  const status: { label: string; color: string } | null = !isOnline
+    ? OFFLINE
+    : profile?.availabilityStatus
+      ? statusMeta(profile.availabilityStatus)
+      : null
   const isDriver = profile?.role === 'driver'
   const memberSince = profile?.memberSince
     ? new Date(profile.memberSince).toLocaleDateString(undefined, {
