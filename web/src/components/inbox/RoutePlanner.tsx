@@ -38,7 +38,7 @@ import type {
   TruckRoute,
 } from '../../lib/here/types'
 import PointRow from './RoutePointRow'
-import { CopyCoordButton, NumberField, Stat } from './RoutePlannerFields'
+import { CopyCoordButton, NumberField, PresetSelect, Stat } from './RoutePlannerFields'
 import {
   EMPTY_TRUCK,
   MAX_STOPS,
@@ -943,11 +943,18 @@ export default function RoutePlanner({ onBack }: Props) {
                 aria-expanded={truckOpen}
                 className="w-full h-9 flex items-center justify-between gap-2 px-2.5 rounded-card text-left hover:bg-white/[0.04] transition-colors"
               >
-                <span className="flex items-center gap-2 text-[0.75rem] font-medium">
+                {/* Left section is fixed (icon + label never wrap or shrink);
+                    the collapsed value takes the leftover width and truncates,
+                    with the chevron pinned on the far right. */}
+                <span className="flex items-center gap-2 text-[0.75rem] font-medium shrink-0 whitespace-nowrap">
                   <Truck size="0.875rem" strokeWidth={1.8} className="text-muted shrink-0" /> Truck profile
                 </span>
-                <span className="flex items-center gap-1.5 text-[0.6875rem] text-muted min-w-0">
-                  {!truckOpen && <span className="truncate max-w-[9.375rem]">{collapsedTruckLabel}</span>}
+                <span className="flex-1 min-w-0 flex items-center justify-end gap-1.5 text-[0.6875rem] text-muted">
+                  {!truckOpen && (
+                    <span className="truncate" title={collapsedTruckLabel}>
+                      {collapsedTruckLabel}
+                    </span>
+                  )}
                   {truckOpen ? <ChevronUp size="0.9375rem" strokeWidth={2} className="shrink-0" /> : <ChevronDown size="0.9375rem" strokeWidth={2} className="shrink-0" />}
                 </span>
               </button>
@@ -956,29 +963,12 @@ export default function RoutePlanner({ onBack }: Props) {
                 <div className="flex flex-col gap-2.5 pt-2">
                   {/* Presets */}
                   <div className="flex items-center gap-1.5">
-                    <select
-                      value={activePresetId ?? ''}
-                      onChange={(e) => (e.target.value ? applyPreset(e.target.value) : setActivePresetId(null))}
-                      className="h-8 flex-1 min-w-0 rounded-card border border-white/[0.06] bg-white/[0.04] px-2 text-[0.75rem] text-text outline-none transition-colors focus:border-white/[0.16]"
-                    >
-                      <option value="">Preset…</option>
-                      <optgroup label="Built-in">
-                        {builtInPresets().map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                      {userPresets.length > 0 && (
-                        <optgroup label="Saved">
-                          {userPresets.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name}
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                    </select>
+                    <PresetSelect
+                      builtIn={builtInPresets()}
+                      saved={userPresets}
+                      activeId={activePresetId}
+                      onSelect={(id) => (id ? applyPreset(id) : setActivePresetId(null))}
+                    />
                     <button
                       onClick={() => setSavingPreset((s) => !s)}
                       title="Save current profile as a preset"

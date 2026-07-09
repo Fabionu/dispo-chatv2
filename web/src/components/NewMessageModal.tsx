@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
-import { Search } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Search, SearchX } from 'lucide-react'
 import type { DirectoryUser, Group } from '../lib/types'
 import { api, ApiError } from '../lib/api'
 import Avatar from './Avatar'
 import Modal from './Modal'
+import Spinner from './Spinner'
 
 type Props = {
   onClose: () => void
@@ -96,51 +97,89 @@ export default function NewMessageModal({ onClose, onOpenGroup }: Props) {
     }
   }
 
+  // Titled to match its opener (the sidebar's "Add connection" menu item);
+  // same-company / already-connected people can still be messaged directly
+  // from their row.
   return (
     <Modal
-      title="New message"
+      title="Add connection"
       subtitle="Search anyone on Dispo-chat by name, email, or company."
       onClose={onClose}
     >
       <div className="space-y-3">
-        <label className="flex items-center gap-2 h-8 px-2.5 rounded-chip border border-white/[0.06] bg-white/[0.02] focus-within:border-white/[0.16] transition-colors cursor-text">
-          <Search size="0.75rem" strokeWidth={1.6} className="text-faint shrink-0" />
+        {/* Search field — the app's standard input recipe (card radius, faint
+            fill, calm focus), sized as the modal's primary control. */}
+        <label className="flex items-center gap-2.5 h-9 px-3 rounded-card border border-white/[0.06] bg-white/[0.04] focus-within:border-white/[0.16] focus-within:bg-white/[0.05] transition-colors cursor-text">
+          <Search size="0.875rem" strokeWidth={1.6} className="text-faint shrink-0" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             autoFocus
             placeholder="Search people…"
-            className="bg-transparent text-[0.78125rem] flex-1 outline-none placeholder:text-faint min-w-0"
+            className="bg-transparent text-[0.8125rem] flex-1 outline-none placeholder:text-faint min-w-0"
           />
         </label>
 
-        <div className="max-h-72 overflow-y-auto -mx-1">
+        {/* Results region. A fixed minimum height keeps the modal from
+            collapsing/jumping as it moves between the hint, loading, empty and
+            result states; only a long result list grows it (then scrolls). */}
+        <div className="max-h-72 min-h-[8.5rem] overflow-y-auto -mx-2 flex flex-col">
           {query.trim().length < 2 ? (
-            <div className="px-2 py-3 text-[0.75rem] text-faint">
-              Type at least 2 characters to search.
-            </div>
+            <EmptyState icon={<Search size="0.9375rem" strokeWidth={1.6} className="text-faint" />}>
+              <p className="text-[0.75rem] text-muted">Start typing to search</p>
+              <p className="text-[0.6875rem] text-faint mt-0.5">
+                At least 2 characters — name, email, or company.
+              </p>
+            </EmptyState>
           ) : loading ? (
-            <div className="px-2 py-3 text-[0.75rem] text-faint">Searching…</div>
+            <div className="flex-1 flex items-center justify-center">
+              <Spinner label="Searching…" />
+            </div>
           ) : searched && results.length === 0 ? (
-            <div className="px-2 py-3 text-[0.75rem] text-faint">No people found.</div>
+            <EmptyState icon={<SearchX size="0.9375rem" strokeWidth={1.6} className="text-faint" />}>
+              <p className="text-[0.75rem] text-muted">No people found</p>
+              <p className="text-[0.6875rem] text-faint mt-0.5">
+                Try a different name, email, or company.
+              </p>
+            </EmptyState>
           ) : (
-            results.map((u) => (
-              <ResultRow
-                key={u.id}
-                user={u}
-                busy={busyId === u.id}
-                disabled={busyId !== null}
-                justRequested={requested.has(u.id)}
-                onMessage={() => void message(u)}
-                onConnect={() => void connect(u)}
-              />
-            ))
+            <div className="py-0.5">
+              {results.map((u) => (
+                <ResultRow
+                  key={u.id}
+                  user={u}
+                  busy={busyId === u.id}
+                  disabled={busyId !== null}
+                  justRequested={requested.has(u.id)}
+                  onMessage={() => void message(u)}
+                  onConnect={() => void connect(u)}
+                />
+              ))}
+            </div>
           )}
         </div>
 
-        {error && <div className="text-[0.75rem] text-alert">{error}</div>}
+        {error && (
+          <div className="text-[0.75rem] text-alert border border-alert/30 bg-alert/5 rounded-card px-3 py-2">
+            {error}
+          </div>
+        )}
       </div>
     </Modal>
+  )
+}
+
+// Centered, compact empty-state block shared by the pre-search hint and the
+// no-results state, so the region reads as designed rather than as stray
+// disabled text. A small glyph tile anchors it; copy stays two quiet lines.
+function EmptyState({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-4">
+      <div className="h-9 w-9 rounded-full border border-white/[0.06] bg-white/[0.03] flex items-center justify-center mb-2.5">
+        {icon}
+      </div>
+      {children}
+    </div>
   )
 }
 
@@ -163,10 +202,10 @@ function ResultRow({
   const pending = justRequested || user.connection?.status === 'pending'
 
   return (
-    <div className="flex items-center gap-2.5 px-2 py-2 rounded-chip hover:bg-white/[0.02] transition-colors">
+    <div className="flex items-center gap-2.5 px-2 py-2 rounded-card hover:bg-white/[0.04] transition-colors">
       <Avatar userId={user.id} name={user.displayName} size={28} />
       <div className="min-w-0 flex-1">
-        <div className="text-[0.78125rem] truncate">{user.displayName}</div>
+        <div className="text-[0.78125rem] text-text truncate">{user.displayName}</div>
         <div className="text-[0.6875rem] text-faint truncate">
           {user.sameWorkspace ? 'Your company' : user.workspace.name} · {user.email}
         </div>
