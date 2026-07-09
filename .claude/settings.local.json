@@ -279,7 +279,8 @@
       "Bash(xargs wc -l)",
       "Bash(sed -i 's/rounded-\\\\[1\\\\.125rem\\\\]/rounded-soft/g' components/vehicle/StopForm.tsx components/inbox/InboxView.tsx)",
       "Bash(sed -i 's/rounded-2xl/rounded-soft/g' components/vehicle/StopLocationMap.tsx)",
-      "Bash(python -)"
+      "Bash(python -)",
+      "PowerShell(npm run build --workspace web)"
     ]
   }
 }

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Check, Copy, Flag, GripVertical, Navigation, Pencil, X } from 'lucide-react'
+import { ICON_ACTION_SMALL } from '../HeaderIconButton'
 import type { LatLng, RoutePoint, RoutePointRole } from '../../lib/here/types'
 
 // ── Compact row for a committed point (start / stop / destination) ──────────
@@ -78,8 +79,8 @@ export default function PointRow({
       // (done on dragenter) sticks and the cursor reads as "movable".
       onDragOver={draggable ? (e) => e.preventDefault() : undefined}
       onDragEnd={draggable ? () => onDragEndRow?.() : undefined}
-      className={`flex items-center gap-2 rounded-card border bg-white/[0.02] px-2 py-1.5 transition-[opacity,border-color] ${
-        dragging ? 'opacity-50 border-active/40' : 'border-white/[0.08]'
+      className={`flex items-center gap-2 rounded-card border bg-white/[0.04] px-2.5 py-1.5 transition-[opacity,border-color] ${
+        dragging ? 'opacity-50 border-active/40' : 'border-white/[0.06]'
       }`}
     >
       {draggable && (
@@ -141,7 +142,7 @@ function IconBtn({ label, onClick, children }: { label: string; onClick: () => v
       aria-label={label}
       title={label}
       onClick={onClick}
-      className="h-6 w-6 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
+      className={`${ICON_ACTION_SMALL} transition-colors`}
     >
       {children}
     </button>

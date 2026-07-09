@@ -716,7 +716,7 @@ export default function RoutePlanner({ onBack }: Props) {
         <button
           onClick={() => setEditingId(null)}
           aria-label="Cancel edit"
-          className="h-8 w-8 mt-1 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
+          className="h-9 w-9 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.05] transition-colors"
         >
           <X size="0.9375rem" strokeWidth={2} />
         </button>
@@ -772,8 +772,8 @@ export default function RoutePlanner({ onBack }: Props) {
               ? 'Toggle HERE truck/HGV restriction overlay'
               : 'Truck overlay not available on this HERE plan'
           }
-          className={`absolute z-20 top-3 right-3 flex items-center gap-1.5 h-8 px-3 rounded-full border text-[0.75rem] font-medium shadow-lg transition-colors ${
-            truckOverlay ? 'bg-active text-bg border-active' : 'bg-rail/90 text-text border-white/[0.12] hover:bg-rail'
+          className={`absolute z-20 top-3 right-3 flex items-center gap-1.5 h-8 px-3 rounded-full border text-[0.75rem] font-medium shadow-[0_4px_14px_rgba(0,0,0,0.3)] transition-colors ${
+            truckOverlay ? 'bg-active text-bg border-active' : 'bg-rail/90 text-text border-white/[0.08] hover:bg-rail'
           } disabled:opacity-40 disabled:cursor-not-allowed`}
         >
           <Truck size="0.875rem" strokeWidth={2} />
@@ -784,7 +784,7 @@ export default function RoutePlanner({ onBack }: Props) {
         <button
           onClick={() => setPanelCollapsed(false)}
           aria-label="Open route panel"
-          className={`absolute z-20 top-3 left-3 flex items-center gap-1.5 h-9 pl-2.5 pr-3 rounded-full border border-white/[0.12] bg-rail/90 text-text text-[0.75rem] font-medium shadow-lg transition-opacity hover:bg-rail ${
+          className={`absolute z-20 top-3 left-3 flex items-center gap-1.5 h-9 pl-2.5 pr-3 rounded-full border border-white/[0.08] bg-rail/90 text-text text-[0.75rem] font-medium shadow-[0_4px_14px_rgba(0,0,0,0.3)] transition-opacity hover:bg-rail ${
             panelCollapsed ? 'opacity-100' : 'opacity-0 pointer-events-none'
           }`}
         >
@@ -794,11 +794,11 @@ export default function RoutePlanner({ onBack }: Props) {
 
         {/* Floating route panel — compact; collapses horizontally to the left. */}
         <div
-          className="absolute z-20 top-3 left-3 w-[18.75rem] max-w-[calc(100%-1.5rem)] max-h-[calc(100%-1.5rem)] flex flex-col rounded-panel border border-white/[0.12] bg-rail/95 backdrop-blur-sm shadow-2xl transition-transform duration-300 ease-out"
+          className="absolute z-20 top-3 left-3 w-[18.75rem] max-w-[calc(100%-1.5rem)] max-h-[calc(100%-1.5rem)] flex flex-col rounded-panel border border-white/[0.08] bg-rail/95 backdrop-blur-sm shadow-[0_8px_28px_rgba(0,0,0,0.35)] transition-transform duration-300 ease-out"
           style={{ transform: panelCollapsed ? 'translateX(calc(-100% - 1rem))' : 'translateX(0)' }}
           aria-hidden={panelCollapsed}
         >
-          <div className="flex items-center justify-between pl-3.5 pr-2 h-10 border-b border-white/[0.08] shrink-0">
+          <div className="flex items-center justify-between pl-3.5 pr-2 h-10 border-b border-white/[0.06] shrink-0">
             <span className="text-[0.8125rem] font-semibold tracking-[-0.1px]">Route</span>
             <div className="flex items-center gap-0.5">
               {points.length > 0 && (
@@ -895,15 +895,17 @@ export default function RoutePlanner({ onBack }: Props) {
                   <button
                     onClick={() => setAddingStop(false)}
                     aria-label="Cancel add stop"
-                    className="h-8 w-8 mt-1 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
+                    className="h-9 w-9 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.05] transition-colors"
                   >
                     <X size="0.9375rem" strokeWidth={2} />
                   </button>
                 </div>
               ) : (
+                // Aligned with the point rows/fields: a quiet dashed "insert
+                // here" slot, not floating text — clear but secondary.
                 <button
                   onClick={() => setAddingStop(true)}
-                  className="self-start flex items-center gap-1.5 text-[0.75rem] text-muted hover:text-text transition-colors"
+                  className="w-full h-8 flex items-center gap-2 px-2.5 rounded-card border border-dashed border-white/[0.08] text-[0.75rem] text-muted hover:text-text hover:border-white/[0.14] hover:bg-white/[0.02] transition-colors"
                 >
                   <Plus size="0.875rem" strokeWidth={2} /> Add stop
                 </button>
@@ -935,14 +937,18 @@ export default function RoutePlanner({ onBack }: Props) {
             )}
 
             {/* Truck profile (collapsible, with presets) */}
-            <div className="border-t border-white/[0.08] pt-1.5">
-              <button onClick={() => setTruckOpen((o) => !o)} className="w-full flex items-center justify-between py-1 text-left">
-                <span className="flex items-center gap-2 text-[0.75rem] font-semibold tracking-[-0.1px]">
-                  <Truck size="0.875rem" strokeWidth={1.8} className="text-muted" /> Truck profile
+            <div className="border-t border-white/[0.06] pt-2">
+              <button
+                onClick={() => setTruckOpen((o) => !o)}
+                aria-expanded={truckOpen}
+                className="w-full h-9 flex items-center justify-between gap-2 px-2.5 rounded-card text-left hover:bg-white/[0.04] transition-colors"
+              >
+                <span className="flex items-center gap-2 text-[0.75rem] font-medium">
+                  <Truck size="0.875rem" strokeWidth={1.8} className="text-muted shrink-0" /> Truck profile
                 </span>
                 <span className="flex items-center gap-1.5 text-[0.6875rem] text-muted min-w-0">
                   {!truckOpen && <span className="truncate max-w-[9.375rem]">{collapsedTruckLabel}</span>}
-                  {truckOpen ? <ChevronUp size="0.9375rem" strokeWidth={2} /> : <ChevronDown size="0.9375rem" strokeWidth={2} />}
+                  {truckOpen ? <ChevronUp size="0.9375rem" strokeWidth={2} className="shrink-0" /> : <ChevronDown size="0.9375rem" strokeWidth={2} className="shrink-0" />}
                 </span>
               </button>
 
@@ -953,7 +959,7 @@ export default function RoutePlanner({ onBack }: Props) {
                     <select
                       value={activePresetId ?? ''}
                       onChange={(e) => (e.target.value ? applyPreset(e.target.value) : setActivePresetId(null))}
-                      className="h-8 flex-1 min-w-0 rounded-card border border-white/[0.08] bg-rail px-2 text-[0.75rem] text-text outline-none focus:border-white/[0.22]"
+                      className="h-8 flex-1 min-w-0 rounded-card border border-white/[0.06] bg-white/[0.04] px-2 text-[0.75rem] text-text outline-none transition-colors focus:border-white/[0.16]"
                     >
                       <option value="">Preset…</option>
                       <optgroup label="Built-in">
@@ -1001,12 +1007,12 @@ export default function RoutePlanner({ onBack }: Props) {
                         onKeyDown={(e) => e.key === 'Enter' && commitSavePreset()}
                         placeholder="Preset name"
                         autoFocus
-                        className="h-8 flex-1 min-w-0 rounded-card border border-white/[0.08] bg-white/[0.03] px-2.5 text-[0.75rem] outline-none focus:border-white/[0.22] placeholder:text-faint"
+                        className="h-8 flex-1 min-w-0 rounded-card border border-white/[0.06] bg-white/[0.04] px-2.5 text-[0.75rem] outline-none transition-colors focus:border-white/[0.16] focus:bg-white/[0.05] placeholder:text-faint"
                       />
                       <button
                         onClick={commitSavePreset}
                         disabled={!presetName.trim()}
-                        className="h-8 px-2.5 flex items-center gap-1 rounded-card bg-active/90 text-bg text-[0.75rem] font-semibold hover:bg-active disabled:opacity-40 transition-colors"
+                        className="h-8 px-2.5 flex items-center gap-1 rounded-btn bg-active text-bg text-[0.75rem] font-semibold hover:bg-active/90 disabled:opacity-40 transition-colors"
                       >
                         <Check size="0.8125rem" strokeWidth={2.4} /> Save
                       </button>
@@ -1025,14 +1031,27 @@ export default function RoutePlanner({ onBack }: Props) {
               )}
             </div>
 
-            {/* Create / update route — the explicit action that draws it. */}
+            {/* Create / update route — the explicit action that draws it. The
+                accent button is only "loud" while there is something to do;
+                loading and up-to-date settle into a quiet neutral fill (the
+                Spinner's accent ring wouldn't read on bg-active anyway). */}
             <button
               onClick={calculate}
               disabled={routeButtonDisabled}
               title={!hasEndpoints ? 'Set a start and destination first' : undefined}
-              className="h-10 rounded-card bg-active/90 text-bg font-semibold text-[0.8125rem] flex items-center justify-center gap-2 transition-colors hover:bg-active disabled:opacity-40 disabled:cursor-not-allowed"
+              className={`h-9 rounded-btn font-semibold text-[0.8125rem] flex items-center justify-center gap-2 transition-colors ${
+                loading || routeUpToDate
+                  ? 'bg-white/[0.04] text-muted cursor-default'
+                  : 'bg-active text-bg hover:bg-active/90 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-active'
+              }`}
             >
-              {routeUpToDate ? <Check size="1rem" strokeWidth={2.4} /> : <RouteIcon size="1rem" strokeWidth={2} />}
+              {loading ? (
+                <Spinner size={14} />
+              ) : routeUpToDate ? (
+                <Check size="1rem" strokeWidth={2.4} className="text-done" />
+              ) : (
+                <RouteIcon size="1rem" strokeWidth={2} />
+              )}
               {routeButtonLabel}
             </button>
             {route && dirty && !loading && (
@@ -1040,29 +1059,24 @@ export default function RoutePlanner({ onBack }: Props) {
             )}
 
             {/* Status */}
-            {loading && (
-              <div className="flex items-center gap-2 text-[0.75rem] text-muted">
-                <Spinner size={14} /> Calculating route…
-              </div>
-            )}
             {error && (
-              <div className="text-[0.75rem] text-alert bg-alert/10 border border-alert/20 rounded-card px-3 py-2">{error}</div>
+              <div className="text-[0.71875rem] leading-snug text-alert bg-alert/10 border border-alert/20 rounded-card px-2.5 py-2">{error}</div>
             )}
             {snapNote && <div className="text-[0.6875rem] text-amber-200/80">{snapNote}</div>}
 
             {/* Summary + notices */}
             {route && !loading && (
-              <div className="flex flex-col gap-2.5 border-t border-white/[0.08] pt-2.5">
-                <div className="grid grid-cols-3 gap-2">
+              <div className="flex flex-col gap-2 border-t border-white/[0.06] pt-2.5">
+                <div className="grid grid-cols-3 gap-1.5">
                   <Stat label="Distance" value={formatDistance(route.summary.length)} />
                   <Stat label="Duration" value={formatDuration(route.summary.duration)} />
                   <Stat label="ETA" value={formatEta(route.summary.duration)} />
                 </div>
                 {notices.length > 0 && (
                   <div className="flex flex-col gap-1.5">
-                    <div className="text-[0.6875rem] font-semibold text-muted uppercase tracking-wide">Notices</div>
+                    <div className="text-[0.625rem] font-semibold text-faint uppercase tracking-badge">Notices</div>
                     {notices.map((n, i) => (
-                      <div key={`${n.code}-${i}`} className="flex items-start gap-2 text-[0.75rem] text-amber-200/90">
+                      <div key={`${n.code}-${i}`} className="flex items-start gap-2 text-[0.71875rem] leading-snug text-amber-200/90">
                         <TriangleAlert size="0.8125rem" className="mt-0.5 shrink-0" strokeWidth={1.8} />
                         <span>{n.title || n.code || 'Route notice'}</span>
                       </div>

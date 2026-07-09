@@ -5,6 +5,13 @@ import { looksLikeCoordPair, parseLatLng } from '../../lib/here/geo'
 import type { HerePlace, LatLng } from '../../lib/here/types'
 import { MENU_SURFACE } from '../menuStyles'
 
+// One field surface for both the query input and the locked selected chip so
+// the two states read as the SAME control: hairline border, subtle fill and a
+// calm brighten on focus (mirrors tripFormStyles / the sidebar search).
+const FIELD_SURFACE =
+  'h-9 rounded-card border border-white/[0.06] bg-white/[0.04] px-3 transition-colors'
+const FIELD_FOCUS = 'outline-none focus:border-white/[0.16] focus:bg-white/[0.05]'
+
 // Build a HerePlace from directly-entered coordinates so the selection flow is
 // identical to picking a search result (caller reads `position` + `label`).
 function coordPlace(c: LatLng): HerePlace {
@@ -109,11 +116,11 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
 
   return (
     <div ref={rootRef} className="relative flex flex-col gap-1.5">
-      {label && <label className="text-[0.75rem] font-medium text-muted">{label}</label>}
+      {label && <label className="text-[0.6875rem] font-medium text-muted">{label}</label>}
 
       {value ? (
         // Selected state — locked chip with the chosen place + clear button.
-        <div className="flex items-center gap-2 rounded-card border border-white/[0.08] bg-white/[0.03] px-3 h-10">
+        <div className={`flex items-center gap-2 ${FIELD_SURFACE}`}>
           <MapPin size="0.9375rem" className="shrink-0 text-active" strokeWidth={1.8} />
           <span className="flex-1 truncate text-[0.8125rem]" title={value.label}>
             {value.label || value.title}
@@ -146,7 +153,7 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
           aria-controls={listboxId}
           autoComplete="off"
           autoFocus={autoFocus}
-          className="h-10 rounded-card border border-white/[0.08] bg-white/[0.03] px-3 text-[0.8125rem] outline-none focus:border-white/[0.22] placeholder:text-faint"
+          className={`${FIELD_SURFACE} ${FIELD_FOCUS} text-[0.8125rem] placeholder:text-faint`}
         />
       )}
 
