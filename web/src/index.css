@@ -11,19 +11,36 @@
    on 2K+ displays, without transform/zoom (layout px stay real, so canvas maps
    and getBoundingClientRect popup positioning stay exact).
    16px root × n/16 rem reproduces today's px sizes EXACTLY on compact/default,
-   so 1080p and laptops render pixel-identical to before. */
+   so 1080p and laptops render pixel-identical to before.
+
+   --ui-scale is THE single scale knob for all rem-sized chrome:
+     1        — compact/default (≤1080p-class displays): pixel-identical baseline
+     1.125    — comfortable (2K/QHD, ≥2200×1200): noticeable without being
+                cartoonish
+     1.1875   — comfortable on ultra-wide/4K (≥3000px wide): one further step so
+                a 3840-wide display doesn't read as a miniature
+   The px density tokens below add their own tuned bump for chat/sidebar. */
 html {
-  font-size: 16px;
+  --ui-scale: 1;
+  font-size: calc(16px * var(--ui-scale));
 }
 html[data-density='comfortable'] {
-  /* 1.125× — noticeable on QHD without being cartoonish; the px density tokens
-     below add their own tuned bump on top for chat/sidebar. */
-  font-size: 18px;
+  --ui-scale: 1.125;
 }
-/* No-JS / pre-hydration fallback, mirroring the token fallbacks below. */
-@media (min-width: 2200px) {
+@media (min-width: 3000px) and (min-height: 1200px) {
+  html[data-density='comfortable'] {
+    --ui-scale: 1.1875;
+  }
+}
+/* No-JS / pre-hydration fallbacks, mirroring the token fallbacks below. */
+@media (min-width: 2200px) and (min-height: 1200px) {
   html:not([data-density]) {
-    font-size: 18px;
+    --ui-scale: 1.125;
+  }
+}
+@media (min-width: 3000px) and (min-height: 1200px) {
+  html:not([data-density]) {
+    --ui-scale: 1.1875;
   }
 }
 
@@ -156,9 +173,9 @@ html[data-density='comfortable'] {
 /* comfortable — 2K/QHD and larger: noticeably more scale so a 2560×1440 (and up)
    display reads clearly instead of as a miniature, while staying dense enough for
    dispatch work. Tuned against a 2560-wide @100% monitor (the common QHD case).
-   Works together with the 18px root font-size above, which scales all the
-   rem-sized chrome (modals, buttons, icons, menus, panels) by ×1.125; these px
-   tokens carry the chat/sidebar's own tuned bump. Keep in sync with the no-JS
+   Works together with --ui-scale: 1.125 above, which scales all the rem-sized
+   chrome (modals, buttons, icons, menus, panels); these px tokens carry the
+   chat/sidebar's own tuned bump. Keep in sync with the no-JS
    @media(min-width:2200px) fallback below AND SIDEBAR_AVATAR_SIZE.comfortable
    in lib/density.ts (design px: 42 × 1.125 ≈ the 47px avatar below). */
 [data-density='comfortable'] {
@@ -214,7 +231,7 @@ html[data-density='comfortable'] {
     --sidebar-section-gap: 27px;
   }
 }
-@media (min-width: 2200px) {
+@media (min-width: 2200px) and (min-height: 1200px) {
   :root:not([data-density]) {
     --app-font-size: 17.5px;
     --chat-msg-font-size: 16px;
@@ -237,6 +254,41 @@ html[data-density='comfortable'] {
     --sidebar-row-pad-x: 15px;
     --sidebar-row-pad-y: 12px;
     --sidebar-section-gap: 36px;
+  }
+}
+
+/* comfortable, ultra-wide/4K refinement (≥3000px wide): the density tier stays
+   `comfortable` (density.ts knows only three tiers) — this media layer bumps
+   the chat/sidebar px tokens ~1.055× on top of the tuned QHD values, pairing
+   with the --ui-scale step 1.125 → 1.1875 above so chat, rail and rem-sized
+   chrome grow together. Values are plain px literals (never calc()) because
+   MessageActionsMenu/ReadReceipts parseInt() --sidebar-width from JS. Covers
+   the no-JS root too, and sits AFTER the ≥2200 fallback so it wins the
+   cascade there. */
+@media (min-width: 3000px) and (min-height: 1200px) {
+  [data-density='comfortable'],
+  :root:not([data-density]) {
+    --app-font-size: 18.5px;
+    --chat-msg-font-size: 17px;
+    --header-height: 76px;
+    --sidebar-width: 676px;
+    --composer-size: 34px;
+    --chat-max-width: 1440px;
+    --chat-gutter: 30px;
+
+    --sidebar-title-font-size: 21px;
+    --sidebar-row-font-size: 18px;
+    --sidebar-meta-font-size: 15.5px;
+    --sidebar-section-font-size: 13px;
+    --sidebar-icon-size: 26px;
+    --sidebar-user-avatar-size: 50px;
+    --sidebar-search-height: 51px;
+    --sidebar-row-height: 57px;
+    --sidebar-badge-size: 25px;
+    --sidebar-row-gap: 16px;
+    --sidebar-row-pad-x: 16px;
+    --sidebar-row-pad-y: 13px;
+    --sidebar-section-gap: 38px;
   }
 }
 
@@ -372,15 +424,15 @@ button {
   position: absolute;
   left: 0;
   top: 0;
-  transform: translate(-50%, calc(-100% - 8px));
+  transform: translate(-50%, calc(-100% - 0.5rem));
   pointer-events: none;
   white-space: nowrap;
   background: rgba(20, 20, 20, 0.92);
   color: #f5f5f5;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 9999px;
-  padding: 1px 7px;
-  font-size: 11px;
+  padding: 1px 0.4375rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   line-height: 1.55;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
@@ -412,15 +464,15 @@ button {
   left: 0;
   top: 0;
   z-index: 15;
-  transform: translate(-50%, calc(-100% - 9px));
+  transform: translate(-50%, calc(-100% - 0.5625rem));
   pointer-events: none;
   white-space: nowrap;
   background: rgba(20, 20, 20, 0.9);
   color: #f5f5f5;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 6px;
-  padding: 2px 7px;
-  font-size: 11px;
+  border-radius: 0.375rem;
+  padding: 2px 0.4375rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   line-height: 1.5;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
@@ -440,7 +492,7 @@ button {
 }
 /* Flipped variant near the top edge: pill BELOW the point, tail pointing up. */
 .route-hover-label--below {
-  transform: translate(-50%, 9px);
+  transform: translate(-50%, 0.5625rem);
 }
 .route-hover-label--below::after {
   top: auto;
@@ -456,7 +508,7 @@ button {
   width: 100%;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  border-radius: 0.5rem;
   padding: 0.4375rem 0.625rem;
   font-size: 0.8125rem;
   outline: none;

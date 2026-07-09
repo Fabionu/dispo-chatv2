@@ -67,13 +67,16 @@ export default {
       //           tripFormStyles), plus the workspace tool cards. Anything
       //           that must visually pair with a pill uses this, never an
       //           arbitrary value.
+      // Values are rem (design px / 16) so corners keep their proportion under
+      // the --ui-scale root bump on 2K/4K displays; at the 16px baseline root
+      // they render exactly the design px above.
       borderRadius: {
-        chip: '4px',
-        btn: '6px',
-        card: '8px',
-        modal: '10px',
-        panel: '12px',
-        soft: '18px',
+        chip: '0.25rem',
+        btn: '0.375rem',
+        card: '0.5rem',
+        modal: '0.625rem',
+        panel: '0.75rem',
+        soft: '1.125rem',
       },
       letterSpacing: {
         eyebrow: '0.14em',

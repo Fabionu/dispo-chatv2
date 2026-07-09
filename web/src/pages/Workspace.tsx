@@ -970,7 +970,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 style={{ width: 'max-content', maxWidth: '13.75rem' }}
                 className={`absolute right-0 top-[calc(100%+6px)] ${MENU_SURFACE} overflow-hidden z-20 py-1`}
               >
-                <CreateMenuItem label="Vehicle chat" onClick={() => startCreate('vehicle')} />
+                <CreateMenuItem label="Vehicle room" onClick={() => startCreate('vehicle')} />
                 <CreateMenuItem label="Add connection" onClick={() => startCreate('direct')} />
                 <div className="my-1 border-t border-white/[0.06]" />
                 <CreateMenuItem

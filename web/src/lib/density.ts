@@ -12,10 +12,11 @@ import { useEffect, useState } from 'react'
 export type Density = 'compact' | 'default' | 'comfortable'
 
 // Design-px → rem string. The whole app is sized in rem so the root font-size
-// (16px normally, 18px on `comfortable` — see index.css) scales it uniformly on
-// 2K+ displays. Size-prop components (Avatar, GroupAvatar, CompanyLogo,
-// AppMark, Spinner) keep their numeric px API but render through this, so a
-// `size={28}` is 28px at 1080p and 31.5px on the comfortable tier.
+// (16px × --ui-scale: 16px normally, 18px on `comfortable`, 19px on 4K — see
+// index.css) scales it uniformly on 2K+ displays. Size-prop components (Avatar,
+// GroupAvatar, CompanyLogo, AppMark, Spinner, DocIcon) keep their numeric px
+// API but render through this, so a `size={28}` is 28px at 1080p and 31.5px on
+// the comfortable tier.
 export const rem = (px: number): string => `${px / 16}rem`
 
 // Sidebar avatar / company-logo diameter per tier, in DESIGN px (pre-rem-scale
@@ -37,8 +38,12 @@ export const SIDEBAR_AVATAR_SIZE: Record<Density, number> = {
 
 const STORAGE_KEY = 'dispo:density'
 // 2K/QHD (2560-wide) and up → comfortable. Below 1536 → compact (laptops).
-// In between → default (1080p desktops).
-const COMFORTABLE_MQ = '(min-width: 2200px)'
+// In between → default (1080p desktops). The height gate keeps 2560×1080-class
+// ultrawides (1080p-height displays) on the default tier. Ultra-wide/4K
+// (≥3000px) is NOT a fourth tier — it's a pure-CSS refinement layered on
+// comfortable in index.css (--ui-scale 1.1875 + bumped px tokens); keep this
+// MQ in sync with index.css's fallbacks.
+const COMFORTABLE_MQ = '(min-width: 2200px) and (min-height: 1200px)'
 const COMPACT_MQ = '(max-width: 1535px)'
 
 function isDensity(v: unknown): v is Density {
