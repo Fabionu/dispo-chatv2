@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Maximize, ZoomIn, ZoomOut } from 'lucide-react'
+import { Image as ImageIcon, Maximize, ZoomIn, ZoomOut } from 'lucide-react'
 import type { Attachment } from '../../lib/types'
 import type { LocalMessage } from '../messages/types'
 import PreviewActionBar from './PreviewActionBar'
@@ -219,13 +219,22 @@ export default function ImagePreviewModal({
       }
       onClick={embedded ? undefined : onClose}
     >
-      {/* Modal-only top bar: filename + in-flow actions. In a tab the filename is
-          in the tab label and the actions FLOAT over the image (below), so no
-          height is reserved here. */}
+      {/* Modal-only top bar: image glyph + filename on the left, actions on the
+          right, on an inset card-rounded strip (TripBar language — shared `card`
+          radius, faint fill, no border/shadow; slightly stronger fill so it reads
+          over the black backdrop). The modal's own p-4 keeps the radius clear of
+          the screen edges. In a tab the filename is in the tab label and the
+          actions FLOAT over the image (below), so no height is reserved here. */}
       {!embedded && (
-        <div className="flex items-center justify-between gap-3 px-3 py-2 shrink-0" onClick={stop}>
-          <div className="text-[0.78125rem] text-text truncate flex-1 min-w-0">
-            {attachment.originalName}
+        <div
+          className="shrink-0 mb-2 h-11 flex items-center justify-between gap-3 px-3.5 rounded-card bg-white/[0.05]"
+          onClick={stop}
+        >
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <ImageIcon size="0.9375rem" strokeWidth={1.6} className="text-muted shrink-0" />
+            <div className="text-[0.78125rem] text-text truncate min-w-0">
+              {attachment.originalName}
+            </div>
           </div>
           <PreviewActionBar
             attachment={attachment}

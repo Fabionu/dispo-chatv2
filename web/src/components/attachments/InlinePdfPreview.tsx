@@ -42,10 +42,12 @@ export default function InlinePdfPreview({
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       {/* Modal-only top bar: PDF glyph + filename on the left, icon-only actions
-          on the right. In a tab the filename is in the tab label and the actions
-          FLOAT over the page (below), so no banner height is reserved. */}
+          on the right. An inset, card-rounded strip in the TripBar language (the
+          shared `card` radius, faint fill, no border/shadow) rather than an
+          edge-to-edge band. In a tab the filename is in the tab label and the
+          actions FLOAT over the page (below), so no banner height is reserved. */}
       {!embedded && (
-        <div className="h-12 flex items-center justify-between gap-3 px-4 border-b border-white/[0.06] bg-rail shrink-0">
+        <div className="shrink-0 mx-3 mt-2 h-11 flex items-center justify-between gap-3 px-3.5 rounded-card bg-white/[0.03]">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <FileText size="0.9375rem" strokeWidth={1.6} className="text-muted shrink-0" />
             <div className="text-[0.78125rem] text-text truncate min-w-0">

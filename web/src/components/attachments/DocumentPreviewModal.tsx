@@ -3,6 +3,7 @@ import type { Attachment } from '../../lib/types'
 import type { LocalMessage } from '../messages/types'
 import DocumentCard from './DocumentCard'
 import PreviewActionBar from './PreviewActionBar'
+import { DocIcon } from './attachmentUtils'
 
 type Props = {
   attachment: Attachment
@@ -50,13 +51,22 @@ export default function DocumentPreviewModal({
       }
       onClick={embedded ? undefined : onClose}
     >
-      {/* Modal-only top action row; in a tab the actions FLOAT (below) so no
-          height is reserved and the card uses the full area. */}
+      {/* Modal-only top bar: type glyph + filename on the left, actions on the
+          right, on an inset card-rounded strip (TripBar language — shared `card`
+          radius, faint fill, no border/shadow) matching the image/PDF preview
+          banners. In a tab the actions FLOAT (below) so no height is reserved
+          and the card uses the full area. */}
       {!embedded && (
         <div
-          className="flex items-center justify-end px-3 py-2 shrink-0"
+          className="shrink-0 mb-2 h-11 flex items-center justify-between gap-3 px-3.5 rounded-card bg-white/[0.05]"
           onClick={(e) => e.stopPropagation()}
         >
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <DocIcon mime={attachment.mimeType} size={15} className="text-muted shrink-0" />
+            <div className="text-[0.78125rem] text-text truncate min-w-0">
+              {attachment.originalName}
+            </div>
+          </div>
           <PreviewActionBar
             attachment={attachment}
             message={message}
