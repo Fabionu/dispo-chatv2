@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Download, Eye, Image as ImageIcon, ImageOff, Loader2, RotateCw } from 'lucide-react'
 import type { Attachment } from '../../lib/types'
 import { DocIcon, formatBytes } from './attachmentUtils'
+import PdfThumb from './PdfThumb'
 import {
   clearImageFailed,
   isImageFailed,
@@ -324,13 +325,23 @@ export default function AttachmentBlock({
       aria-label={isPdf ? `Preview ${attachment.originalName}` : `Open ${attachment.originalName}`}
       className="block w-[15rem] max-w-full overflow-hidden rounded-card border border-white/[0.05] bg-white/[0.02] hover:bg-white/[0.03] disabled:cursor-default transition-colors text-left"
     >
-      {/* Preview band */}
+      {/* Preview band. The generic glyph always renders; for sent PDFs a
+          lazily-rasterised first-page thumbnail (PdfThumb) layers over it once
+          ready — if that render fails the glyph is simply what remains. The
+          type badge and action icon render after the thumbnail layer so they
+          stay on top of it. Non-PDF documents keep the glyph only (see
+          lib/pdfThumbCache for the DOC/XLS thumbnail TODOs). */}
       <div className="relative h-[6.5rem] bg-bg border-b border-white/[0.06] flex items-center justify-center">
         <div className="absolute inset-0 opacity-[0.04] bg-gradient-to-b from-white to-transparent pointer-events-none" />
         <div className="h-12 w-12 rounded-card border border-white/[0.10] bg-white/[0.03] flex items-center justify-center">
           <DocIcon mime={attachment.mimeType} size={24} />
         </div>
-        <span className="absolute top-2 left-2 rounded-chip border border-white/[0.10] bg-black/40 px-1.5 py-0.5 text-[0.59375rem] font-semibold tracking-wide text-muted">
+        {isPdf && hasUrl && !uploading && (
+          <PdfThumb attachmentId={attachment.id} url={attachment.url} />
+        )}
+        {/* Opaque-enough pill + bright text so the label stays readable over a
+            white page thumbnail as well as the dark placeholder band. */}
+        <span className="absolute top-2 left-2 rounded-chip border border-white/[0.10] bg-black/65 backdrop-blur-[2px] px-1.5 py-0.5 text-[0.59375rem] font-semibold tracking-wide text-white/90">
           {docExt}
         </span>
         {uploading && (

@@ -282,7 +282,8 @@
       "Bash(python -)",
       "PowerShell(npm run build --workspace web)",
       "PowerShell(\\(Get-Content web\\\\src\\\\index.css -Raw\\) -replace '--sidebar-user-avatar-size: 36px;', '--sidebar-user-avatar-size: 40px;' -replace '--sidebar-user-avatar-size: 34px;', '--sidebar-user-avatar-size: 38px;' -replace '--sidebar-user-avatar-size: 43px;', '--sidebar-user-avatar-size: 47px;' -replace 'design px: 38 × 1\\\\.125 ≈ the 43px avatar below', 'design px: 42 × 1.125 ≈ the 47px avatar below' | Set-Content web\\\\src\\\\index.css -Encoding utf8 -NoNewline)",
-      "PowerShell(git checkout -- web/src/index.css)"
+      "PowerShell(git checkout -- web/src/index.css)",
+      "PowerShell(node \"C:\\\\Users\\\\Home\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Home-Desktop-dispo-chatv2\\\\8a744d6a-8844-4032-9f72-6738ca41d6dd\\\\scratchpad\\\\findpdf.cjs\")"
     ]
   }
 }

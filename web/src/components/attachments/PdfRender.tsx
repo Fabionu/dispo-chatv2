@@ -1,23 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type * as PdfjsModule from 'pdfjs-dist'
 import Spinner from '../Spinner'
-
-// pdf.js is heavy (~300KB + a web worker), so it must never sit in the initial
-// bundle. We lazy-import it (and its worker as a Vite `?url` asset) the first
-// time a PDF preview is actually shown, then cache the module promise so a
-// second preview reuses it. The worker keeps rasterisation off the main thread.
-let pdfjsPromise: Promise<typeof PdfjsModule> | null = null
-async function loadPdfjs(): Promise<typeof PdfjsModule> {
-  if (!pdfjsPromise) {
-    pdfjsPromise = (async () => {
-      const pdfjs = await import('pdfjs-dist')
-      const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default
-      pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
-      return pdfjs
-    })()
-  }
-  return pdfjsPromise
-}
+// Shared lazy pdf.js loader (lib/pdfjs) — one cached module promise across the
+// preview surfaces here and the chat-card thumbnails (lib/pdfThumbCache).
+import { loadPdfjs } from '../../lib/pdfjs'
 
 // Resolve the document source: a just-picked File (pre-send) becomes raw bytes;
 // a sent attachment is a same-origin URL fetched with the session cookie.
