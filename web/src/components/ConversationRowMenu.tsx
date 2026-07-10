@@ -9,7 +9,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { MoreHorizontal } from 'lucide-react'
-import { MENU_SURFACE } from './menuStyles'
+import { MENU_CONTAINER, MENU_SEPARATOR, menuIconClass, menuItemClass } from './menuStyles'
 
 // One entry in a conversation row's hover-actions menu.
 export type RowMenuAction = {
@@ -23,6 +23,9 @@ export type RowMenuAction = {
   // danger styling) and a second click runs onSelect — an inline confirmation
   // for destructive actions, no separate modal. Reset when the menu closes.
   confirmLabel?: string
+  // Render the shared hairline divider above this item — used to set the
+  // destructive group apart, same as the message actions menu.
+  separator?: boolean
 }
 
 // Imperative handle so a row can open the SAME menu from a right-click, anchored
@@ -183,29 +186,27 @@ const ConversationRowMenu = forwardRef<
             bottom: pos.bottom,
             maxWidth: MENU_MAX,
           }}
-          className={`z-50 w-max ${MENU_SURFACE} overflow-hidden py-1`}
+          className={`z-50 w-max ${MENU_CONTAINER}`}
         >
           {actions.map((a) => {
             const confirming = confirmKey === a.key
-            const danger = a.danger || confirming
+            const tone = a.danger || confirming ? 'danger' : 'default'
             return (
-              <button
-                key={a.key}
-                type="button"
-                role="menuitem"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  select(a)
-                }}
-                className={`w-full flex items-center gap-2.5 px-2.5 py-2 text-[0.78125rem] text-left whitespace-nowrap transition-colors ${
-                  danger ? 'text-alert hover:bg-alert/10' : 'text-text hover:bg-white/[0.04]'
-                }`}
-              >
-                {a.icon && (
-                  <span className={`shrink-0 ${danger ? 'text-alert' : 'text-muted'}`}>{a.icon}</span>
-                )}
-                <span className="flex-1">{confirming ? a.confirmLabel : a.label}</span>
-              </button>
+              <div key={a.key}>
+                {a.separator && <div className={MENU_SEPARATOR} />}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    select(a)
+                  }}
+                  className={menuItemClass(tone)}
+                >
+                  {a.icon && <span className={menuIconClass(tone)}>{a.icon}</span>}
+                  <span className="flex-1">{confirming ? a.confirmLabel : a.label}</span>
+                </button>
+              </div>
             )
           })}
         </div>,

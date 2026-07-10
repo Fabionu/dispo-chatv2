@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { MENU_SURFACE } from '../menuStyles'
+import { MENU_CONTAINER, MENU_SEPARATOR, menuIconClass, menuItemClass } from '../menuStyles'
 
 export type MessageAction = {
   label: string
@@ -107,31 +107,30 @@ export default function MessageActionsMenu({ anchorEl, anchorPoint, actions, onC
         zIndex: 60,
         visibility: pos.visible ? 'visible' : 'hidden',
       }}
-      className={`min-w-[9.5rem] ${MENU_SURFACE} overflow-hidden py-1`}
+      className={`min-w-[9.5rem] ${MENU_CONTAINER}`}
     >
-      {actions.map((a, i) => (
-        <div key={i}>
-          {a.separator && <div className="my-1 h-px bg-white/[0.06]" />}
-          <button
-            type="button"
-            role="menuitem"
-            disabled={a.disabled}
-            onClick={() => {
-              if (a.disabled) return
-              a.onClick()
-              onClose()
-            }}
-            className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 text-[0.78125rem] whitespace-nowrap transition-colors disabled:opacity-30 disabled:cursor-default ${
-              a.tone === 'alert'
-                ? 'text-alert hover:bg-alert/10'
-                : 'text-muted hover:text-text hover:bg-white/[0.04]'
-            }`}
-          >
-            {a.icon && <span className="shrink-0 inline-flex">{a.icon}</span>}
-            <span className="flex-1 text-left">{a.label}</span>
-          </button>
-        </div>
-      ))}
+      {actions.map((a, i) => {
+        const tone = a.tone === 'alert' ? 'danger' : 'default'
+        return (
+          <div key={i}>
+            {a.separator && <div className={MENU_SEPARATOR} />}
+            <button
+              type="button"
+              role="menuitem"
+              disabled={a.disabled}
+              onClick={() => {
+                if (a.disabled) return
+                a.onClick()
+                onClose()
+              }}
+              className={menuItemClass(tone)}
+            >
+              {a.icon && <span className={`inline-flex ${menuIconClass(tone)}`}>{a.icon}</span>}
+              <span className="flex-1 text-left">{a.label}</span>
+            </button>
+          </div>
+        )
+      })}
     </div>,
     document.body,
   )

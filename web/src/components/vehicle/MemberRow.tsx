@@ -4,7 +4,7 @@ import type { GroupMember } from '../../lib/types'
 import { statusMeta, OFFLINE } from '../../lib/availability'
 import Avatar from '../Avatar'
 import Spinner from '../Spinner'
-import { MENU_SURFACE } from '../menuStyles'
+import { MENU_CONTAINER, MENU_SEPARATOR, menuItemClass } from '../menuStyles'
 
 // One entry in a member's text-based actions menu. `separator` draws a faint
 // divider above the item; `tone: 'danger'` renders it as an alert (destructive)
@@ -180,23 +180,18 @@ export default function MemberRow({
             {menuOpen && (
               <div
                 role="menu"
-                className={`absolute right-0 top-[calc(100%+4px)] z-20 min-w-[8.5rem] ${MENU_SURFACE} overflow-hidden py-1`}
-                style={{ boxShadow: '0 12px 32px rgba(0,0,0,0.5)' }}
+                className={`absolute right-0 top-[calc(100%+4px)] z-20 min-w-[8.5rem] ${MENU_CONTAINER}`}
               >
                 {actions.map((a, i) => (
                   <div key={i}>
-                    {a.separator && <div className="my-1 h-px bg-white/[0.06]" />}
+                    {a.separator && <div className={MENU_SEPARATOR} />}
                     <button
                       type="button"
                       role="menuitem"
                       onClick={a.onClick}
                       disabled={a.disabled}
                       title={a.hint}
-                      className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-[0.75rem] text-left whitespace-nowrap transition-colors disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent ${
-                        a.tone === 'danger'
-                          ? 'text-alert hover:bg-alert/10'
-                          : 'text-text hover:bg-white/[0.04]'
-                      }`}
+                      className={menuItemClass(a.tone === 'danger' ? 'danger' : 'default')}
                     >
                       <span className="flex-1">{a.label}</span>
                       {a.hint && <span className="text-[0.625rem] text-faint shrink-0">{a.hint}</span>}

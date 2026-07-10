@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import type { Attachment } from '../../lib/types'
 import { downloadAttachment } from '../attachments/attachmentUtils'
+import { MENU_GLYPH } from '../menuStyles'
 import { type MessageAction } from './MessageActionsMenu'
 import type { LocalMessage } from './types'
 
@@ -38,9 +39,6 @@ export type MessageActionParams = {
   onDeleteForEveryone: (m: LocalMessage) => void
 }
 
-// rem so the menu glyphs track the global UI scale (14px design size).
-const iconSize = '0.875rem'
-
 // Build the ordered action list for a message's actions menu. Pure — the order,
 // labels, disabled/tone/separator flags and click handlers are unchanged from
 // the original inline construction in MessageRow.
@@ -65,23 +63,23 @@ export function buildMessageActions({
   onDeleteForEveryone,
 }: MessageActionParams): MessageAction[] {
   return [
-    { label: 'Reply', onClick: () => onReply(message), icon: <Reply size={iconSize} strokeWidth={1.8} /> },
+    { label: 'Reply', onClick: () => onReply(message), icon: <Reply {...MENU_GLYPH} /> },
     {
       label: pinned ? 'Unpin message' : 'Pin message',
       onClick: () => (pinned ? onUnpin(message) : onPin(message)),
       icon: pinned ? (
-        <PinOff size={iconSize} strokeWidth={1.8} />
+        <PinOff {...MENU_GLYPH} />
       ) : (
-        <Pin size={iconSize} strokeWidth={1.8} />
+        <Pin {...MENU_GLYPH} />
       ),
     },
     {
       label: 'Copy',
       onClick: () => onCopy(message),
       disabled: !canCopy,
-      icon: <Copy size={iconSize} strokeWidth={1.8} />,
+      icon: <Copy {...MENU_GLYPH} />,
     },
-    { label: 'Forward', onClick: () => onForward(message), icon: <Forward size={iconSize} strokeWidth={1.8} /> },
+    { label: 'Forward', onClick: () => onForward(message), icon: <Forward {...MENU_GLYPH} /> },
     // Download sits with Copy/Forward, before the delete group. Only present
     // when the message has at least one server-backed attachment. One file →
     // direct download; multiple → each is downloaded in turn.
@@ -90,7 +88,7 @@ export function buildMessageActions({
           {
             label: 'Download',
             onClick: () => downloadable.forEach((a) => downloadAttachment(a)),
-            icon: <Download size={iconSize} strokeWidth={1.8} />,
+            icon: <Download {...MENU_GLYPH} />,
           },
         ]
       : []),
@@ -99,12 +97,12 @@ export function buildMessageActions({
           {
             label: 'Reply privately',
             onClick: () => onReplyPrivately(message),
-            icon: <Reply size={iconSize} strokeWidth={1.8} />,
+            icon: <Reply {...MENU_GLYPH} />,
           },
           {
             label: 'Send private message',
             onClick: () => onSendPrivate(message),
-            icon: <MessageCircle size={iconSize} strokeWidth={1.8} />,
+            icon: <MessageCircle {...MENU_GLYPH} />,
           },
         ]
       : []),
@@ -114,7 +112,7 @@ export function buildMessageActions({
             label: 'Edit',
             onClick: () => onEdit(message),
             disabled: !canEdit,
-            icon: <Pencil size={iconSize} strokeWidth={1.8} />,
+            icon: <Pencil {...MENU_GLYPH} />,
           },
         ]
       : []),
@@ -123,7 +121,7 @@ export function buildMessageActions({
       onClick: () => onDeleteForMe(message),
       tone: 'alert' as const,
       separator: true,
-      icon: <Trash2 size={iconSize} strokeWidth={1.8} />,
+      icon: <Trash2 {...MENU_GLYPH} />,
     },
     ...(mine
       ? [
@@ -132,7 +130,7 @@ export function buildMessageActions({
             onClick: () => onDeleteForEveryone(message),
             disabled: !canDeleteForEveryone,
             tone: 'alert' as const,
-            icon: <Trash2 size={iconSize} strokeWidth={1.8} />,
+            icon: <Trash2 {...MENU_GLYPH} />,
           },
         ]
       : []),

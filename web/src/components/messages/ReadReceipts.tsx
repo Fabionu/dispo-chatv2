@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Check, CheckCheck, Clock } from 'lucide-react'
 import Avatar from '../Avatar'
 import { formatDay, formatTime } from './messageUtils'
-import { MENU_SURFACE } from '../menuStyles'
+import { MENU_SEPARATOR, MENU_SURFACE } from '../menuStyles'
 
 // One potential reader of a sent message — a group member other than the
 // author. `lastReadAt` is their conversation "read up to" marker; the message
@@ -246,7 +246,7 @@ function ReceiptsPopover({
 
       {notSeen.length > 0 && (
         <>
-          {seen.length > 0 && <div className="my-1 h-px bg-white/[0.06]" />}
+          {seen.length > 0 && <div className={MENU_SEPARATOR} />}
           <div className="flex items-center gap-1.5 px-3 pb-1 pt-0.5">
             <Check size="0.75rem" strokeWidth={2} className="text-faint" />
             <span className="text-[0.625rem] uppercase tracking-[0.08em] text-faint">Not seen yet</span>

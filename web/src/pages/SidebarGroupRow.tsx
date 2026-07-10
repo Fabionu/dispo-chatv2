@@ -20,6 +20,7 @@ import ConversationRowMenu, {
   type ConversationRowMenuHandle,
   type RowMenuAction,
 } from '../components/ConversationRowMenu'
+import { MENU_GLYPH } from '../components/menuStyles'
 import { statusMeta, OFFLINE } from '../lib/availability'
 
 // Compact last-activity stamp: today → HH:MM, yesterday → "Yesterday", otherwise
@@ -131,7 +132,7 @@ export default function GroupRow({
   // The menu's read/unread label reflects the ACTUAL stored unread, not the
   // selected→0 view used for the badge.
   const actuallyUnread = (group.unreadCount ?? 0) > 0
-  const ICON = { size: 13, strokeWidth: 1.7 } as const
+  const ICON = MENU_GLYPH
   const menuActions: RowMenuAction[] = [
     {
       key: 'pin',
@@ -162,6 +163,7 @@ export default function GroupRow({
       label: 'Delete conversation',
       icon: <Trash2 {...ICON} />,
       danger: true,
+      separator: true,
       confirmLabel: 'Confirm delete',
       onSelect: () => onDelete(group),
     },

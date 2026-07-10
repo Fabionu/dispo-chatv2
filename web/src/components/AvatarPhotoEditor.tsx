@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Eye, MoreVertical, Trash2, Upload } from 'lucide-react'
 import ImageLightbox from './ImageLightbox'
-import { MENU_SURFACE } from './menuStyles'
+import { MENU_CONTAINER, MENU_GLYPH, menuIconClass, menuItemClass } from './menuStyles'
 
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024
 
@@ -147,7 +147,7 @@ export default function AvatarPhotoEditor({
             {menuOpen && (
               <div
                 role="menu"
-                className={`absolute right-0 top-[calc(100%+4px)] z-20 min-w-[9.375rem] ${MENU_SURFACE} overflow-hidden py-1`}
+                className={`absolute right-0 top-[calc(100%+4px)] z-20 min-w-[9.375rem] ${MENU_CONTAINER}`}
               >
                 <MenuItem
                   onClick={() => {
@@ -155,7 +155,9 @@ export default function AvatarPhotoEditor({
                     openPicker()
                   }}
                 >
-                  <Upload size="0.8125rem" strokeWidth={1.8} />
+                  <span className={menuIconClass()}>
+                    <Upload {...MENU_GLYPH} />
+                  </span>
                   Change
                 </MenuItem>
                 <MenuItem
@@ -166,7 +168,9 @@ export default function AvatarPhotoEditor({
                     onRemove()
                   }}
                 >
-                  <Trash2 size="0.8125rem" strokeWidth={1.8} />
+                  <span className={menuIconClass('danger')}>
+                    <Trash2 {...MENU_GLYPH} />
+                  </span>
                   Remove
                 </MenuItem>
               </div>
@@ -203,9 +207,7 @@ function MenuItem({
       role="menuitem"
       disabled={disabled}
       onClick={onClick}
-      className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-[0.75rem] text-left whitespace-nowrap transition-colors disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent ${
-        tone === 'danger' ? 'text-alert hover:bg-alert/10' : 'text-text hover:bg-white/[0.04]'
-      }`}
+      className={menuItemClass(tone)}
     >
       {children}
     </button>

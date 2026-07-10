@@ -56,7 +56,7 @@ import {
   truckSummary,
   uid,
 } from './routePlannerUtils'
-import { MENU_SURFACE } from '../menuStyles'
+import { MENU_CONTAINER, MENU_GLYPH, menuIconClass, menuItemClass } from '../menuStyles'
 
 type Props = {
   onBack: () => void
@@ -644,12 +644,12 @@ export default function RoutePlanner({ onBack }: Props) {
   }
 
   const menuActions: { action: MenuAction; label: string; icon: React.ReactNode }[] = (() => {
-    if (!start) return [{ action: 'start', label: 'Set as start', icon: <Navigation size="0.875rem" /> }]
-    if (!destination) return [{ action: 'destination', label: 'Set as destination', icon: <Flag size="0.875rem" /> }]
+    if (!start) return [{ action: 'start', label: 'Set as start', icon: <Navigation {...MENU_GLYPH} /> }]
+    if (!destination) return [{ action: 'destination', label: 'Set as destination', icon: <Flag {...MENU_GLYPH} /> }]
     const list: { action: MenuAction; label: string; icon: React.ReactNode }[] = []
     if (route && nearOnRoute !== null)
-      list.push({ action: 'add-on-route', label: 'Add stop on route', icon: <MapPin size="0.875rem" /> })
-    list.push({ action: 'add', label: 'Add stop', icon: <MapPin size="0.875rem" /> })
+      list.push({ action: 'add-on-route', label: 'Add stop on route', icon: <MapPin {...MENU_GLYPH} /> })
+    list.push({ action: 'add', label: 'Add stop', icon: <MapPin {...MENU_GLYPH} /> })
     return list
   })()
 
@@ -1082,7 +1082,7 @@ export default function RoutePlanner({ onBack }: Props) {
         {menu && (
           <div
             id="route-context-menu"
-            className={`absolute z-30 min-w-[11.25rem] ${MENU_SURFACE} py-1`}
+            className={`absolute z-30 min-w-[11.25rem] ${MENU_CONTAINER}`}
             style={{ left: menu.x, top: menu.y }}
           >
             {/* Coordinate header — the copy button copies EXACTLY the displayed
@@ -1098,9 +1098,9 @@ export default function RoutePlanner({ onBack }: Props) {
               <button
                 key={opt.action}
                 onClick={() => applyMenuAction(opt.action)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-left text-[0.8125rem] hover:bg-white/[0.06] transition-colors"
+                className={menuItemClass()}
               >
-                <span className="text-muted">{opt.icon}</span>
+                <span className={menuIconClass()}>{opt.icon}</span>
                 {opt.label}
               </button>
             ))}
@@ -1122,7 +1122,7 @@ export default function RoutePlanner({ onBack }: Props) {
           return (
             <div
               id="route-marker-menu"
-              className={`absolute z-30 min-w-[11.25rem] ${MENU_SURFACE} py-1`}
+              className={`absolute z-30 min-w-[11.25rem] ${MENU_CONTAINER}`}
               style={{ left: markerMenu.x, top: markerMenu.y }}
             >
               <div className="px-3 py-1.5 border-b border-white/[0.06] mb-1">
@@ -1131,27 +1131,24 @@ export default function RoutePlanner({ onBack }: Props) {
                   {point.label}
                 </div>
               </div>
-              <button
-                onClick={() => copyPointCoord(markerMenu.id)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-left text-[0.8125rem] hover:bg-white/[0.06] transition-colors"
-              >
-                <span className="text-muted"><Copy size="0.875rem" /></span>
+              <button onClick={() => copyPointCoord(markerMenu.id)} className={menuItemClass()}>
+                <span className={menuIconClass()}><Copy {...MENU_GLYPH} /></span>
                 Copy coordinates
               </button>
               {markerMenu.role === 'stop' ? (
                 <button
                   onClick={() => removeStopFromMap(markerMenu.id)}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-[0.8125rem] text-alert hover:bg-alert/10 transition-colors"
+                  className={menuItemClass('danger')}
                 >
-                  <span><Trash2 size="0.875rem" /></span>
+                  <span className={menuIconClass('danger')}><Trash2 {...MENU_GLYPH} /></span>
                   Remove stop
                 </button>
               ) : (
                 <button
                   onClick={() => clearEndpointFromMap(markerMenu.id)}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-[0.8125rem] text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
+                  className={menuItemClass()}
                 >
-                  <span><X size="0.875rem" /></span>
+                  <span className={menuIconClass()}><X {...MENU_GLYPH} /></span>
                   {markerMenu.role === 'start' ? 'Clear start' : 'Clear destination'}
                 </button>
               )}

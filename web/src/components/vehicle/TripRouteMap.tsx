@@ -7,7 +7,7 @@ import { bestInsertionIndex } from '../../lib/here/geo'
 import { computeTripRoute, type TripRoute } from '../../lib/tripRoute'
 import { parseCoordinates, stopId, type VehicleStop } from '../../lib/vehicleOps'
 import type { LatLng, RouteMarker, RouteMarkerKind, ScreenGeoCandidate } from '../../lib/here/types'
-import { MENU_SURFACE } from '../menuStyles'
+import { MENU_CONTAINER, MENU_GLYPH, menuIconClass, menuItemClass } from '../menuStyles'
 
 type Props = {
   // The active trip's stops — the route + markers derive from their coordinates.
@@ -439,19 +439,15 @@ export default function TripRouteMap({ stops, route, canEdit = false, onSaveRout
         {editing && menu && (
           <div
             id="trip-route-menu"
-            className={`absolute z-30 min-w-[10rem] ${MENU_SURFACE} py-1`}
+            className={`absolute z-30 min-w-[10rem] ${MENU_CONTAINER}`}
             style={{ left: menu.x, top: menu.y }}
           >
             <div className="px-3 py-1.5 text-[0.625rem] uppercase tracking-wide text-muted border-b border-white/[0.06] mb-1">
               {menu.lat.toFixed(5)}, {menu.lng.toFixed(5)}
             </div>
-            <button
-              type="button"
-              onClick={addStopFromMenu}
-              className="w-full flex items-center gap-2 px-3 py-2 text-left text-[0.8125rem] hover:bg-white/[0.06] transition-colors"
-            >
-              <span className="text-muted">
-                <MapPin size="0.875rem" strokeWidth={1.8} />
+            <button type="button" onClick={addStopFromMenu} className={menuItemClass()}>
+              <span className={menuIconClass()}>
+                <MapPin {...MENU_GLYPH} />
               </span>
               Add stop
             </button>
@@ -463,7 +459,7 @@ export default function TripRouteMap({ stops, route, canEdit = false, onSaveRout
         {editing && markerMenu && (
           <div
             id="trip-route-marker-menu"
-            className={`absolute z-30 min-w-[10rem] ${MENU_SURFACE} py-1`}
+            className={`absolute z-30 min-w-[10rem] ${MENU_CONTAINER}`}
             style={{ left: markerMenu.x, top: markerMenu.y }}
           >
             <div className="px-3 py-1.5 text-[0.625rem] uppercase tracking-wide text-muted border-b border-white/[0.06] mb-1">
@@ -476,10 +472,10 @@ export default function TripRouteMap({ stops, route, canEdit = false, onSaveRout
             <button
               type="button"
               onClick={() => copyStopCoord(markerMenu.id)}
-              className="w-full flex items-center gap-2 px-3 py-2 text-left text-[0.8125rem] hover:bg-white/[0.06] transition-colors"
+              className={menuItemClass()}
             >
-              <span className="text-muted">
-                <Copy size="0.875rem" strokeWidth={1.8} />
+              <span className={menuIconClass()}>
+                <Copy {...MENU_GLYPH} />
               </span>
               Copy coordinates
             </button>
@@ -487,10 +483,10 @@ export default function TripRouteMap({ stops, route, canEdit = false, onSaveRout
               <button
                 type="button"
                 onClick={() => removeStop(markerMenu.id)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-left text-[0.8125rem] text-alert hover:bg-alert/10 transition-colors"
+                className={menuItemClass('danger')}
               >
-                <span>
-                  <Trash2 size="0.875rem" strokeWidth={1.8} />
+                <span className={menuIconClass('danger')}>
+                  <Trash2 {...MENU_GLYPH} />
                 </span>
                 Remove stop
               </button>

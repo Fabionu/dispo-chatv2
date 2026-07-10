@@ -286,7 +286,30 @@
       "PowerShell(node \"C:\\\\Users\\\\Home\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Home-Desktop-dispo-chatv2\\\\8a744d6a-8844-4032-9f72-6738ca41d6dd\\\\scratchpad\\\\findpdf.cjs\")",
       "PowerShell($candidates = @\\(\"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\", \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jre\", \"$env:LOCALAPPDATA\\\\Programs\\\\Android Studio\\\\jbr\"\\); foreach \\($c in $candidates\\) { if \\(Test-Path \"$c\\\\bin\\\\java.exe\"\\) { Write-Output \"FOUND: $c\" } })",
       "PowerShell(Set-Location C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat; $env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; .\\\\gradlew.bat assembleDebug --console=plain -q)",
-      "mcp__claude-in-chrome__tabs_context_mcp"
+      "mcp__claude-in-chrome__tabs_context_mcp",
+      "Bash(find \"/c/Users/Home/AndroidStudioProjects/DispoChat/app/src/main\" -name \"*.kt\" | head -50 && echo \"---\" && find \"/c/Users/Home/AndroidStudioProjects/DispoChat/app/src/main\" -name \"*.kt\" | wc -l)",
+      "Bash(grep -n \"minSdk\\\\|compileSdk\\\\|targetSdk\\\\|kotlinCompilerExtensionVersion\" \"/c/Users/Home/AndroidStudioProjects/DispoChat/app/build.gradle.kts\"; echo ====; grep -n \"router.get\\\\|res.json\" \"/c/Users/Home/Desktop/dispo-chatv2/server/src/routes/workspace.ts\" | head)",
+      "Bash(cat \"/c/Users/Home/AndroidStudioProjects/DispoChat/gradle/libs.versions.toml\" 2>/dev/null; echo ====; grep -n \"implementation\\\\|compose\" \"/c/Users/Home/AndroidStudioProjects/DispoChat/app/build.gradle.kts\")",
+      "PowerShell(Set-Location \"C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat\"; $env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; .\\\\gradlew.bat assembleDebug --console=plain -q)",
+      "PowerShell($adb = \"$env:LOCALAPPDATA\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\"; & $adb devices)",
+      "PowerShell($adb = \"$env:LOCALAPPDATA\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\"; & $adb -s emulator-5554 install -r \"C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat\\\\app\\\\build\\\\outputs\\\\apk\\\\debug\\\\app-debug.apk\"; & $adb -s emulator-5554 shell am start -n com.example.dispochat/.MainActivity)",
+      "Bash(sleep 8 && cat \"/c/Users/Home/AppData/Local/Temp/claude/C--Users-Home-Desktop-dispo-chatv2/40b5656d-886a-4a91-a09e-6457ca8ab639/tasks/bsxw2g7n8.output\")",
+      "Bash(\"/c/Users/Home/AppData/Local/Android/Sdk/platform-tools/adb.exe\" -s emulator-5554 shell pidof com.example.dispochat)",
+      "Bash(\"/c/Users/Home/AppData/Local/Android/Sdk/platform-tools/adb.exe\" devices *)",
+      "Bash(/c/Users/Home/AppData/Local/Android/Sdk/platform-tools/adb.exe kill-server *)",
+      "Bash(/c/Users/Home/AppData/Local/Android/Sdk/platform-tools/adb.exe start-server *)",
+      "Bash(/c/Users/Home/AppData/Local/Android/Sdk/platform-tools/adb.exe devices *)",
+      "Bash(/c/Users/Home/AppData/Local/Android/Sdk/platform-tools/adb.exe reconnect *)",
+      "Bash(/c/Users/Home/AppData/Local/Android/Sdk/platform-tools/adb.exe get-state *)",
+      "Bash(/c/Users/Home/AppData/Local/Android/Sdk/platform-tools/adb.exe connect *)",
+      "PowerShell(Get-Process | Where-Object { $_.Name -match 'emulator|qemu' } | Select-Object Id, Name, StartTime)",
+      "PowerShell(\\(Get-CimInstance Win32_Process -Filter \"ProcessId = 33256\"\\).CommandLine; \\(Get-CimInstance Win32_Process -Filter \"ProcessId = 12824\"\\).CommandLine)",
+      "Bash(true)",
+      "Bash(/c/Users/Home/AppData/Local/Android/Sdk/platform-tools/adb.exe install *)",
+      "Bash(/c/Users/Home/AppData/Local/Android/Sdk/platform-tools/adb.exe shell *)",
+      "Bash(/c/Users/Home/AppData/Local/Android/Sdk/platform-tools/adb.exe exec-out *)",
+      "Read(//c/Users/Home/AppData/Local/Temp/claude/C--Users-Home-Desktop-dispo-chatv2/40b5656d-886a-4a91-a09e-6457ca8ab639/scratchpad/**)",
+      "Bash(ADB=\"/c/Users/Home/AppData/Local/Android/Sdk/platform-tools/adb.exe\"; \"$ADB\" shell input keyevent 4; sleep 1.5; \"$ADB\" exec-out screencap -p > \"/c/Users/Home/AppData/Local/Temp/claude/C--Users-Home-Desktop-dispo-chatv2/40b5656d-886a-4a91-a09e-6457ca8ab639/scratchpad/app5.png\")"
     ]
   }
 }

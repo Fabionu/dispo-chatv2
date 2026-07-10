@@ -5,11 +5,14 @@ import {
   ChevronDown,
   CircleUser,
   LogOut,
+  MailOpen,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
   Search,
   Settings,
+  UserPlus,
+  Users,
   X,
 } from 'lucide-react'
 import type { User, Workspace as WorkspaceT } from '../auth/AuthContext'
@@ -34,7 +37,7 @@ import ConnectionRequestsSection from '../components/connections/ConnectionReque
 import GroupInvitesSection from '../components/invites/GroupInvitesSection'
 import GroupInviteView from '../components/invites/GroupInviteView'
 import Avatar from '../components/Avatar'
-import { MENU_SURFACE } from '../components/menuStyles'
+import { MENU_CONTAINER, MENU_GLYPH, MENU_SEPARATOR } from '../components/menuStyles'
 import Spinner from '../components/Spinner'
 import CompanyLogo from '../components/CompanyLogo'
 import CreateVehicleGroupModal from '../components/CreateVehicleGroupModal'
@@ -52,7 +55,7 @@ import { statusMeta, AWAY } from '../lib/availability'
 import { useAuth } from '../auth/AuthContext'
 import GroupRow from './SidebarGroupRow'
 import ContactRow from './SidebarContactRow'
-import { FilterTab, ArchiveToggle, EmptyHint, MenuItem, CreateMenuItem } from './sidebarBits'
+import { FilterTab, ArchiveToggle, EmptyHint, MenuItem } from './sidebarBits'
 import { byRecent, optimisticDirectGroup } from './workspaceUtils'
 
 type Props = {
@@ -968,18 +971,24 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 // than a utility class) is immune to purge/override and to the
                 // abs-positioning shrink-to-fit of the narrow button wrapper.
                 style={{ width: 'max-content', maxWidth: '13.75rem' }}
-                className={`absolute right-0 top-[calc(100%+6px)] ${MENU_SURFACE} overflow-hidden z-20 py-1`}
+                className={`absolute right-0 top-[calc(100%+6px)] ${MENU_CONTAINER} z-20`}
               >
-                <CreateMenuItem label="Vehicle room" onClick={() => startCreate('vehicle')} />
-                <CreateMenuItem label="Add connection" onClick={() => startCreate('direct')} />
-                <div className="my-1 border-t border-white/[0.06]" />
-                <CreateMenuItem
-                  label="Mark all as read"
+                <MenuItem icon={<Users {...MENU_GLYPH} />} onClick={() => startCreate('vehicle')}>
+                  Vehicle room
+                </MenuItem>
+                <MenuItem icon={<UserPlus {...MENU_GLYPH} />} onClick={() => startCreate('direct')}>
+                  Add connection
+                </MenuItem>
+                <div className={MENU_SEPARATOR} />
+                <MenuItem
+                  icon={<MailOpen {...MENU_GLYPH} />}
                   onClick={() => {
                     setNewMenuOpen(false)
                     void handleMarkAllRead()
                   }}
-                />
+                >
+                  Mark all as read
+                </MenuItem>
               </div>
             )}
           </div>
@@ -1095,9 +1104,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         {/* User menu */}
         <div className="relative border-t border-white/[0.05]" ref={userMenuRef}>
           {userMenuOpen && (
-            <div className={`absolute bottom-full left-2 w-[15rem] max-w-[calc(100%-1rem)] mb-2 ${MENU_SURFACE} overflow-hidden`}>
+            <div className={`absolute bottom-full left-2 w-[15rem] max-w-[calc(100%-1rem)] mb-2 ${MENU_CONTAINER}`}>
               <MenuItem
-                icon={<CircleUser size="0.875rem" strokeWidth={1.6} />}
+                icon={<CircleUser {...MENU_GLYPH} />}
                 onClick={() => {
                   setUserMenuOpen(false)
                   setProfilePanelOpen(true)
@@ -1106,7 +1115,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 My profile
               </MenuItem>
               <MenuItem
-                icon={<Building2 size="0.875rem" strokeWidth={1.6} />}
+                icon={<Building2 {...MENU_GLYPH} />}
                 onClick={() => {
                   setUserMenuOpen(false)
                   setCompanyPanelOpen(true)
@@ -1115,7 +1124,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 Company profile
               </MenuItem>
               <MenuItem
-                icon={<Settings size="0.875rem" strokeWidth={1.6} />}
+                icon={<Settings {...MENU_GLYPH} />}
                 onClick={() => {
                   setUserMenuOpen(false)
                   setSettingsPanelOpen(true)
@@ -1123,8 +1132,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               >
                 Workspace settings
               </MenuItem>
+              <div className={MENU_SEPARATOR} />
               <MenuItem
-                icon={<LogOut size="0.875rem" strokeWidth={1.6} />}
+                icon={<LogOut {...MENU_GLYPH} />}
                 tone="danger"
                 onClick={() => {
                   setUserMenuOpen(false)

@@ -11,7 +11,7 @@ import AvatarPhotoEditor from '../AvatarPhotoEditor'
 import EditableRow from '../EditableRow'
 import ConfirmDialog from '../ConfirmDialog'
 import AvatarCropModal from './AvatarCropModal'
-import { MENU_SURFACE } from '../menuStyles'
+import { MENU_CONTAINER, menuItemClass } from '../menuStyles'
 
 type Props = {
   // Prefetched profile (warmed at app mount) so the drawer renders instantly
@@ -348,8 +348,7 @@ function StatusSelect({
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} aria-hidden />
           <div
             role="listbox"
-            className={`absolute left-1/2 -translate-x-1/2 mt-1.5 z-20 w-[9.375rem] ${MENU_SURFACE} py-1`}
-            style={{ boxShadow: '0 12px 32px rgba(0,0,0,0.5)' }}
+            className={`absolute left-1/2 -translate-x-1/2 mt-1.5 z-20 w-[10rem] ${MENU_CONTAINER}`}
           >
             {AVAILABILITY.map((a) => (
               <button
@@ -360,10 +359,10 @@ function StatusSelect({
                   setOpen(false)
                   if (a.value !== value) onChange(a.value)
                 }}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left hover:bg-white/[0.04] transition-colors"
+                className={menuItemClass()}
               >
                 <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: a.color }} />
-                <span className="flex-1 text-[0.75rem] text-text">{a.label}</span>
+                <span className="flex-1">{a.label}</span>
                 {a.value === value && <Check size="0.8125rem" strokeWidth={2} className="text-muted shrink-0" />}
               </button>
             ))}

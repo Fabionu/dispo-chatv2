@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { FileText, Image as ImageIcon, Plus, Route } from 'lucide-react'
 import { DOC_ACCEPT, IMAGE_ACCEPT } from '../attachments/attachmentUtils'
-import { MENU_SURFACE } from '../menuStyles'
+import { MENU_CONTAINER, MENU_GLYPH, menuIconClass, menuItemClass } from '../menuStyles'
 
 type Props = {
   disabled?: boolean
@@ -67,22 +67,22 @@ export default function AttachMenu({ disabled, onPickKind, onAddTrip }: Props) {
       {open && (
         <div
           role="menu"
-          className={`absolute bottom-[calc(100%+6px)] left-0 w-[11.25rem] ${MENU_SURFACE} overflow-hidden z-20 py-1`}
+          className={`absolute bottom-[calc(100%+6px)] left-0 w-[11.25rem] ${MENU_CONTAINER} z-20`}
         >
           <AttachMenuItem
-            icon={<ImageIcon size="0.875rem" strokeWidth={1.6} />}
+            icon={<ImageIcon {...MENU_GLYPH} />}
             onClick={() => pick(IMAGE_ACCEPT)}
           >
             Photo
           </AttachMenuItem>
           <AttachMenuItem
-            icon={<FileText size="0.875rem" strokeWidth={1.6} />}
+            icon={<FileText {...MENU_GLYPH} />}
             onClick={() => pick(DOC_ACCEPT)}
           >
             Document
           </AttachMenuItem>
           {onAddTrip && (
-            <AttachMenuItem icon={<Route size="0.875rem" strokeWidth={1.6} />} onClick={addTrip}>
+            <AttachMenuItem icon={<Route {...MENU_GLYPH} />} onClick={addTrip}>
               Trip
             </AttachMenuItem>
           )}
@@ -102,13 +102,8 @@ function AttachMenuItem({
   children: React.ReactNode
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      role="menuitem"
-      className="w-full flex items-center gap-2.5 px-3 py-2 text-[0.78125rem] hover:bg-white/[0.03] transition-colors text-left"
-    >
-      <span className="text-muted">{icon}</span>
+    <button type="button" onClick={onClick} role="menuitem" className={menuItemClass()}>
+      <span className={menuIconClass()}>{icon}</span>
       {children}
     </button>
   )

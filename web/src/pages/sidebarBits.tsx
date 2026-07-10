@@ -4,6 +4,7 @@
 // place; behaviour is identical to the previous inline definitions.
 
 import type { ReactNode } from 'react'
+import { menuIconClass, menuItemClass } from '../components/menuStyles'
 
 // One item in the rail's TYPE segmented control (All / Groups / Direct). Lives
 // inside a recessed track (see Workspace): the active option lifts to a soft
@@ -74,6 +75,9 @@ export function EmptyHint({ children }: { children: React.ReactNode }) {
   )
 }
 
+// One rail menu row (user menu + the create/options menu) — the shared action-
+// menu recipe from menuStyles, so the sidebar's menus read identically to the
+// message and conversation-row menus.
 export function MenuItem({
   icon,
   onClick,
@@ -87,28 +91,10 @@ export function MenuItem({
   // red hover — used for destructive actions like Sign out.
   tone?: 'default' | 'danger'
 }) {
-  const danger = tone === 'danger'
   return (
-    <button
-      onClick={onClick}
-      className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-[0.8125rem] transition-colors text-left ${
-        danger ? 'text-alert hover:bg-alert/10' : 'hover:bg-white/[0.03]'
-      }`}
-    >
-      <span className={danger ? 'text-alert' : 'text-muted'}>{icon}</span>
+    <button onClick={onClick} role="menuitem" className={menuItemClass(tone)}>
+      <span className={menuIconClass(tone)}>{icon}</span>
       {children}
-    </button>
-  )
-}
-
-export function CreateMenuItem({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      role="menuitem"
-      className="w-full px-2.5 py-2 text-[0.8125rem] hover:bg-white/[0.03] transition-colors text-left whitespace-nowrap"
-    >
-      {label}
     </button>
   )
 }
