@@ -76,6 +76,18 @@ export type RouteMarker = {
   label?: string
 }
 
+// A live-driver marker to render on the map — visually distinct from the
+// waypoint markers (a labelled teal dot, DOM-rendered so it can carry a name
+// pill + tooltip). `stale` mutes it when the last update is old; `detail` is
+// the tooltip's second line ("Updated 3 min ago · 72 km/h").
+export type DriverMapMarker = {
+  id: string
+  name: string
+  position: LatLng
+  stale: boolean
+  detail?: string
+}
+
 // The single shared structure for every route point — start, intermediate
 // stops, and destination all use it. `coordinates` is the coordinate actually
 // used for routing/markers/display. `source` records how it was added (HERE

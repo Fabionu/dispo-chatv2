@@ -184,7 +184,7 @@ function AppearanceSettings() {
         <MessageDisplaySetting />
         <DensitySetting />
       </div>
-      <p className="text-[0.6875rem] text-faint mt-2 px-1 leading-[1.5]">
+      <p className="text-[0.6875rem] text-faint mt-2.5 px-1 leading-[1.5]">
         Saved in this browser — applies to this device only.
       </p>
     </div>
@@ -800,16 +800,18 @@ function SettingBlock({
   children: ReactNode
 }) {
   return (
-    <div className="py-3.5">
+    <div className="py-4">
       <div className="text-[0.8125rem] text-text font-medium leading-tight">{label}</div>
-      <div className="text-[0.71875rem] text-faint mt-0.5 leading-[1.4]">{description}</div>
-      <div className="mt-2.5">{children}</div>
+      <div className="text-[0.71875rem] text-faint mt-1 leading-[1.4]">{description}</div>
+      <div className="mt-3">{children}</div>
     </div>
   )
 }
 
-// A light segmented control: a quietly recessed track with a soft accent-tinted
-// pill for the active option — clear, but calmer than a fully-filled button.
+// The app's neutral segmented control — the same idiom as the rail's type
+// filter (FilterTab) and the Group Info tab bar: a quietly recessed track
+// where the active option lifts to a soft white pill. No accent color; the
+// constant font-medium keeps labels from shifting width when selection moves.
 // The setting's label/description live in the SettingBlock above it.
 function Segmented({
   value,
@@ -821,18 +823,17 @@ function Segmented({
   onChange: (value: string) => void
 }) {
   return (
-    <div className="inline-flex gap-0.5 rounded-card bg-black/20 p-0.5">
+    <div className="inline-flex items-center gap-0.5 rounded-card bg-black/20 p-0.5">
       {options.map((o) => {
         const active = o.value === value
         return (
           <button
             key={o.value}
+            type="button"
             onClick={() => onChange(o.value)}
             aria-pressed={active}
-            className={`h-7 px-3.5 rounded-btn text-[0.75rem] transition-colors ${
-              active
-                ? 'bg-active/15 text-active font-semibold'
-                : 'text-muted hover:text-text hover:bg-white/[0.03]'
+            className={`h-7 px-3 rounded-btn text-[0.75rem] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+              active ? 'bg-white/[0.08] text-text' : 'text-muted hover:text-text'
             }`}
           >
             {o.label}

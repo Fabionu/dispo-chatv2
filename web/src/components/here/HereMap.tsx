@@ -2,7 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { decode } from '@here/flexpolyline'
 import { loadHere } from '../../lib/here/loadHere'
 import { pathMidpoint, haversineMeters, nearestPointOnPath } from '../../lib/here/geo'
-import type { LatLng, RouteMarker, RouteMarkerKind, ScreenGeoCandidate } from '../../lib/here/types'
+import type {
+  DriverMapMarker,
+  LatLng,
+  RouteMarker,
+  RouteMarkerKind,
+  ScreenGeoCandidate,
+} from '../../lib/here/types'
 import {
   DEFAULT_CENTER,
   DEFAULT_ZOOM,
@@ -18,6 +24,11 @@ import { ROUTE_COLOR, ghostSvg, iconFor } from './hereMapIcons'
 type Props = {
   // Waypoint markers in route order (origin → stops → destination).
   markers: RouteMarker[]
+  // Live-driver positions (assigned drivers of the trip being shown). Rendered
+  // as DOM markers so they carry a name pill + tooltip; visually distinct from
+  // (and never replacing) the waypoint markers. Deliberately EXCLUDED from the
+  // auto-fit, so a position update never re-centers the user's view.
+  driverMarkers?: DriverMapMarker[]
   // Encoded HERE flexible polylines, one per route section. Empty = no route.
   routePolylines: string[]
   // Pre-formatted total route distance (e.g. "84 km"), shown as a small badge at
@@ -82,6 +93,7 @@ type Props = {
 // loadHere() from the auth-gated proxy, never bundled.
 export default function HereMap({
   markers,
+  driverMarkers,
   routePolylines,
   routeDistanceLabel,
   truckOverlay,
@@ -513,6 +525,87 @@ export default function HereMap({
     draw()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, markers, routePolylines, routeDistanceLabel, objectsDraggable])
+
+  // ── Live-driver DOM overlay ────────────────────────────────────────────────
+  // Driver markers are plain DOM elements appended to the map container and
+  // positioned imperatively via geoToScreen — NOT H.map.DomMarker, which the
+  // v3.2 HARP engine simply doesn't render (its DOM overlay layer stays
+  // empty). Same pattern as the route hover readout above: reposition on a
+  // rAF-throttled `mapviewchange`, so panning/zooming keeps them glued to
+  // their coordinate without ever re-rendering React. Deliberately excluded
+  // from the auto-fit — a 60-second position update must never move the
+  // viewport (follow mode can come later).
+  const driverElsRef = useRef<Map<string, HTMLDivElement>>(new Map())
+  useEffect(() => {
+    const map = mapRef.current
+    const container = containerRef.current
+    if (!ready || !map || !container) return
+    const els = driverElsRef.current
+    const list = driverMarkers ?? []
+
+    // Sync one element per driver: create missing, update existing (class for
+    // the stale look, tooltip detail, name pill), remove departed.
+    const seen = new Set<string>()
+    for (const d of list) {
+      seen.add(d.id)
+      let el = els.get(d.id)
+      if (!el) {
+        el = document.createElement('div')
+        const dot = document.createElement('div')
+        dot.className = 'driver-marker-dot'
+        const name = document.createElement('div')
+        name.className = 'driver-marker-name'
+        el.appendChild(dot)
+        el.appendChild(name)
+        container.appendChild(el)
+        els.set(d.id, el)
+      }
+      el.className = d.stale ? 'driver-marker driver-marker--stale' : 'driver-marker'
+      ;(el.children[0] as HTMLElement).title = d.detail ? `${d.name} — ${d.detail}` : d.name
+      ;(el.children[1] as HTMLElement).textContent = d.name
+    }
+    for (const [id, el] of els) {
+      if (!seen.has(id)) {
+        el.remove()
+        els.delete(id)
+      }
+    }
+
+    const position = () => {
+      for (const d of list) {
+        const el = els.get(d.id)
+        if (!el) continue
+        const s = map.geoToScreen({ lat: d.position.lat, lng: d.position.lng })
+        if (!s) {
+          el.style.display = 'none'
+          continue
+        }
+        el.style.display = ''
+        el.style.left = `${s.x}px`
+        el.style.top = `${s.y}px`
+      }
+    }
+    position()
+
+    let raf = 0
+    const onView = () => {
+      if (!raf)
+        raf = requestAnimationFrame(() => {
+          raf = 0
+          position()
+        })
+    }
+    // `mapviewchange` streams during a pan/zoom; `mapviewchangeend` settles the
+    // final camera (the last `mapviewchange` can precede it by a few pixels).
+    map.addEventListener('mapviewchange', onView)
+    map.addEventListener('mapviewchangeend', onView)
+    return () => {
+      map.removeEventListener('mapviewchange', onView)
+      map.removeEventListener('mapviewchangeend', onView)
+      if (raf) cancelAnimationFrame(raf)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, driverMarkers])
 
   // ── Toggle the HGV / logistics overlay (no route recalculation) ───────────
   useEffect(() => {

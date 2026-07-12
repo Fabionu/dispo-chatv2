@@ -400,7 +400,17 @@
       "Bash(git --no-pager grep -rln \"invite\" -- web/src/pages web/src/components)",
       "Bash(git --no-pager grep -rn \"partner\\\\|'dispatcher'\\\\|COMPANY_ROLES\\\\|WorkspaceRole\\\\|type Role\" -- server/src)",
       "Bash(curl -s -o /dev/null -w \"5173: %{http_code}\\\\n\" http://localhost:5173 --max-time 5)",
-      "Bash(curl -s -o /dev/null -w \"3001 health: %{http_code}\\\\n\" http://localhost:3001/api/health --max-time 5)"
+      "Bash(curl -s -o /dev/null -w \"3001 health: %{http_code}\\\\n\" http://localhost:3001/api/health --max-time 5)",
+      "PowerShell(cd C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat; $env:JAVA_HOME = 'C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr'; .\\\\gradlew.bat compileDebugKotlin --console=plain -q)",
+      "PowerShell(cd C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat; $env:JAVA_HOME = 'C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr'; .\\\\gradlew.bat compileDebugKotlin --console=plain; Write-Output \"EXIT=$LASTEXITCODE\")",
+      "Bash(npx tsx -e ' *)",
+      "PowerShell(cd C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat; $env:JAVA_HOME = 'C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr'; .\\\\gradlew.bat assembleDebug --console=plain; Write-Output \"EXIT=$LASTEXITCODE\")",
+      "PowerShell(cd C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat; $env:JAVA_HOME = 'C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr'; .\\\\gradlew.bat assembleDebug --console=plain -q; Write-Output \"EXIT=$LASTEXITCODE\"; Get-Item app\\\\build\\\\outputs\\\\apk\\\\debug\\\\app-debug.apk | Select-Object FullName, Length, LastWriteTime)",
+      "PowerShell(& \"$env:LOCALAPPDATA\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" devices)",
+      "PowerShell(& \"$env:LOCALAPPDATA\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" -s 5b24c513 install -r C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat\\\\app\\\\build\\\\outputs\\\\apk\\\\debug\\\\app-debug.apk)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://192.168.1.26:3001/api/health)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://192.168.1.26:3001/)",
+      "PowerShell(cd C:\\\\Users\\\\Home\\\\Desktop\\\\dispo-chatv2\\\\server; npx tsc --noEmit; Write-Output \"server-ts=$LASTEXITCODE\"; cd C:\\\\Users\\\\Home\\\\Desktop\\\\dispo-chatv2\\\\web; npx tsc --noEmit; Write-Output \"web-ts=$LASTEXITCODE\")"
     ]
   }
 }

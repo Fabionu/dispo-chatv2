@@ -1276,6 +1276,13 @@ export default function ChatView({
         <TripRouteMap
           stops={ops?.stops ?? []}
           route={ops?.trip?.route}
+          // Live driver positions: subscribe to this room's driver:location
+          // events, scoped to the active trip (canonical id = trip.id, falling
+          // back to the room id exactly like the server's buildDriverTrip),
+          // seeded from the stored last-known blob on the group meta.
+          groupId={group.id}
+          tripId={ops?.trip ? (ops.trip.id ?? group.id) : undefined}
+          driverLocationsSeed={group.meta.driverLocations}
           // Editing the route is a "manage this group" action — the same boundary
           // the server enforces on the PATCH, so a non-manager never sees a save
           // that would 403. Requires an active trip to attach the route to.

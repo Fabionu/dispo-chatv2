@@ -734,16 +734,13 @@ export default function RoutePlanner({ onBack }: Props) {
         >
           <ArrowLeft size="1.25rem" strokeWidth={1.8} />
         </button>
-        <div className="min-w-0">
-          <div className="text-[0.9375rem] font-semibold tracking-[-0.2px] leading-tight">Route planner</div>
-          <div className="text-[0.75rem] text-muted leading-tight mt-0.5">
-            Truck routing with HERE · right-click the map to add points
-          </div>
+        <div className="min-w-0 text-[0.9375rem] font-semibold tracking-[-0.2px] leading-tight truncate">
+          Route planner
         </div>
       </header>
 
       {/* Map region — the panel floats over this and never resizes it. */}
-      <div ref={regionRef} className="relative flex-1 min-h-[22.5rem] mt-3 rounded-card overflow-hidden border border-white/[0.08]">
+      <div ref={regionRef} className="relative flex-1 min-h-[22.5rem] rounded-card overflow-hidden border border-white/[0.08]">
         <HereMap
           markers={markers}
           routePolylines={polylines}

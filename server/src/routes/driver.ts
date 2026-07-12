@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { pool } from '../db/pool.js'
 import { requireAuth } from '../auth.js'
 import { asyncHandler, withTransaction, HttpError } from '../http.js'
+import { getIOIfReady, roomForGroup } from '../realtime.js'
 import { opsSchema } from './groups/ops.js'
 
 // ── Driver-facing trip API ────────────────────────────────────────────────
@@ -251,6 +252,115 @@ driverRouter.get(
         truckProfile: ops.vehicle.truckProfile ?? null,
       },
     })
+  }),
+)
+
+// ── POST /api/driver/location ─────────────────────────────────────────────
+// A live location ping from the assigned driver's phone while they have the
+// trip's navigation view open. Strictly permission-gated: the SAME assigned-
+// driver boundary as every other driver read (member + assignedDriverIds, via
+// resolveAssignedTrip → 404/403), PLUS the trip must still be active — a
+// completed/cancelled trip accepts no further pings. Storage is deliberately
+// minimal (latest-only, no history): one entry per driver under the room's
+// `meta.driverLocations`, written with jsonb_set so concurrent drivers (and
+// the dispatcher's wholesale `meta.ops` saves, which merge top-level keys)
+// never clobber each other. The realtime fan-out goes to the GROUP room only,
+// so exactly the room's members — the people entitled to see the trip — can
+// see the driver's position.
+const locationSchema = z.object({
+  tripId: z.string().min(1).max(64),
+  groupId: z.string().uuid(),
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  // Optional GPS extras (SI units): metres, degrees clockwise from north, m/s.
+  accuracyM: z.number().min(0).max(100_000).optional(),
+  headingDeg: z.number().min(0).max(360).optional(),
+  speedMps: z.number().min(0).max(150).optional(),
+  // Device capture time (ISO-8601). Validated below; the server clock wins
+  // when it's absent, unparsable, or implausibly far from now.
+  recordedAt: z.string().max(40).optional(),
+})
+
+// The stored/broadcast shape of one driver's latest position.
+type DriverLocationEntry = {
+  userId: string
+  tripId: string
+  name: string
+  lat: number
+  lng: number
+  accuracyM?: number
+  headingDeg?: number
+  speedMps?: number
+  recordedAt: string
+}
+
+driverRouter.post(
+  '/location',
+  asyncHandler(async (req, res) => {
+    const parsed = locationSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'invalid_input' })
+    const body = parsed.data
+    const { userId } = req.session!
+
+    // Full permission boundary (membership + assignment) — 404/403 on failure.
+    const { groupId, trip } = await resolveAssignedTrip(userId, body.tripId)
+    // The payload's room must be the room the trip actually lives in.
+    if (groupId !== body.groupId) throw new HttpError(400, 'group_mismatch')
+    // No tracking outside an active trip.
+    if (!isActiveStatus(trip.status)) throw new HttpError(409, 'trip_not_active')
+
+    // Trust the device timestamp only when it parses and sits within ±10
+    // minutes of now (phone clocks drift; a stale queued ping shouldn't
+    // masquerade as fresh).
+    const now = Date.now()
+    let recordedAt = new Date(now).toISOString()
+    if (body.recordedAt) {
+      const t = Date.parse(body.recordedAt)
+      if (Number.isFinite(t) && Math.abs(now - t) <= 10 * 60_000) {
+        recordedAt = new Date(t).toISOString()
+      }
+    }
+
+    const names = await driverNameMap([userId])
+    const entry: DriverLocationEntry = {
+      userId,
+      // Store the CANONICAL trip id (falls back to the room id exactly like
+      // buildDriverTrip), not the raw lookup key the phone sent.
+      tripId: trip.id ?? groupId,
+      name: names.get(userId) ?? 'Driver',
+      lat: body.lat,
+      lng: body.lng,
+      ...(body.accuracyM !== undefined ? { accuracyM: body.accuracyM } : {}),
+      ...(body.headingDeg !== undefined ? { headingDeg: body.headingDeg } : {}),
+      ...(body.speedMps !== undefined ? { speedMps: body.speedMps } : {}),
+      recordedAt,
+    }
+
+    // Latest-only upsert of THIS driver's entry: ensure `driverLocations`
+    // exists (preserving other drivers' entries), then set ours — a single
+    // atomic UPDATE, no read-modify-write race between concurrent drivers.
+    await pool.query(
+      `update groups
+          set meta = jsonb_set(
+            coalesce(meta, '{}'::jsonb)
+              || jsonb_build_object(
+                   'driverLocations',
+                   coalesce(meta->'driverLocations', '{}'::jsonb)
+                 ),
+            array['driverLocations', $2],
+            $3::jsonb,
+            true
+          )
+        where id = $1`,
+      [groupId, userId, JSON.stringify(entry)],
+    )
+
+    // Live fan-out to the vehicle room's members (and only them).
+    getIOIfReady()
+      ?.to(roomForGroup(groupId))
+      .emit('driver:location', { groupId, ...entry })
+
+    res.json({ ok: true })
   }),
 )
 

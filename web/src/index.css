@@ -501,6 +501,61 @@ button {
   border-bottom: 6px solid rgba(20, 20, 20, 0.9);
 }
 
+/* Live-driver map marker (HERE DomMarker): a teal dot centred exactly on the
+   driver's coordinate with the driver's name in a compact dark pill beneath.
+   Teal = the app's in-transit tone, clearly apart from the route's tan stops,
+   green origin and coral destination. The container is non-interactive so map
+   gestures pass through; only the dot itself takes pointer events, giving the
+   hover tooltip (name · last update · speed) without blocking drags nearby.
+   The stale variant (last update > 5 min) desaturates to slate and drops the
+   halo — "last known position", not a live one. */
+.driver-marker {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 14; /* above the map canvases, below the hover readout (15) */
+  pointer-events: none;
+}
+.driver-marker-dot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0.875rem;
+  height: 0.875rem;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  background: #4fb3a7;
+  border: 2px solid #ffffff;
+  box-shadow:
+    0 0 0 3px rgba(79, 179, 167, 0.28),
+    0 1px 4px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+}
+.driver-marker-name {
+  position: absolute;
+  top: 0.6875rem;
+  left: 0;
+  transform: translateX(-50%);
+  pointer-events: none;
+  white-space: nowrap;
+  background: rgba(20, 20, 20, 0.92);
+  color: #f5f5f5;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 9999px;
+  padding: 1px 0.4375rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1.55;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+.driver-marker--stale .driver-marker-dot {
+  background: #8a93a6;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+.driver-marker--stale .driver-marker-name {
+  color: #a3a3a3;
+}
+
 /* Shared modal/panel text field. Radius matches the `card` token (inputs and
    cards share the 8px step of the radius scale); focus is a calm border
    brighten + a whisper of fill — never a bright ring or colour change. */

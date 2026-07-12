@@ -3,10 +3,25 @@ import { Check, Copy, MapPin, Pencil, Trash2, X } from 'lucide-react'
 import Spinner from '../Spinner'
 import HereMap from '../here/HereMap'
 import { api } from '../../lib/api'
+import { getSocket } from '../../lib/socket'
 import { bestInsertionIndex } from '../../lib/here/geo'
 import { computeTripRoute, type TripRoute } from '../../lib/tripRoute'
 import { parseCoordinates, stopId, type VehicleStop } from '../../lib/vehicleOps'
-import type { LatLng, RouteMarker, RouteMarkerKind, ScreenGeoCandidate } from '../../lib/here/types'
+import {
+  DRIVER_EXPIRE_MS,
+  DRIVER_STALE_MS,
+  driverLocationAgo,
+  parseDriverLocationEvent,
+  parseDriverLocations,
+  type DriverLocation,
+} from '../../lib/driverLocation'
+import type {
+  DriverMapMarker,
+  LatLng,
+  RouteMarker,
+  RouteMarkerKind,
+  ScreenGeoCandidate,
+} from '../../lib/here/types'
 import { MENU_CONTAINER, MENU_GLYPH, menuIconClass, menuItemClass } from '../menuStyles'
 
 type Props = {
@@ -15,6 +30,15 @@ type Props = {
   // The trip's last-computed route (if any) — used to draw the line instantly
   // before a fresh recompute returns.
   route?: TripRoute
+  // Live driver position wiring (vehicle rooms only). `groupId` subscribes the
+  // map to the room's `driver:location` socket events; `tripId` scopes stored/
+  // incoming positions to THIS trip (the canonical id — the room id for trips
+  // created before trips had ids); `driverLocationsSeed` is the room's raw
+  // `meta.driverLocations` blob, seeding "last known position" before the
+  // first live ping arrives. All optional — omitted by other callers.
+  groupId?: string
+  tripId?: string
+  driverLocationsSeed?: unknown
   // Whether the current user may edit the route. Gated by the caller on the same
   // "manage this group" permission the server enforces on save; false hides the
   // Edit button entirely (read-only map).
@@ -85,7 +109,15 @@ type MarkerMenuState = { id: string; kind: RouteMarkerKind; x: number; y: number
 // intermediate stop, click a stop to remove it. Save recomputes and persists the
 // route + stops and the server logs a "… edited the trip route" system message;
 // Cancel discards.
-export default function TripRouteMap({ stops, route, canEdit = false, onSaveRoute }: Props) {
+export default function TripRouteMap({
+  stops,
+  route,
+  canEdit = false,
+  onSaveRoute,
+  groupId,
+  tripId,
+  driverLocationsSeed,
+}: Props) {
   const [editing, setEditing] = useState(false)
   // Working copy of ALL stops while editing (so non-routable stops are preserved
   // on save); edits mutate only the affected stops.
@@ -136,6 +168,55 @@ export default function TripRouteMap({ stops, route, canEdit = false, onSaveRout
     // activeStops is captured via the coordinate signature; recompute on change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sig])
+
+  // ── Live driver positions ─────────────────────────────────────────────────
+  // Seeded from the room's stored `meta.driverLocations` (last known position),
+  // then kept live by the group room's `driver:location` socket events. Only
+  // entries for THIS trip are kept — a position from a previous trip is noise.
+  const [driverLocs, setDriverLocs] = useState<Record<string, DriverLocation>>(() =>
+    tripId ? parseDriverLocations(driverLocationsSeed, tripId) : {},
+  )
+  useEffect(() => {
+    if (!groupId || !tripId) return
+    const socket = getSocket()
+    const onLocation = (payload: unknown) => {
+      const entry = parseDriverLocationEvent(payload, groupId, tripId)
+      if (entry) setDriverLocs((cur) => ({ ...cur, [entry.userId]: entry }))
+    }
+    socket.on('driver:location', onLocation)
+    return () => {
+      socket.off('driver:location', onLocation)
+    }
+  }, [groupId, tripId])
+
+  // Staleness is a function of time, not just data — tick every 30s so a
+  // driver who stops pinging fades to "stale" without any new event.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(t)
+  }, [])
+
+  const driverMarkers = useMemo<DriverMapMarker[]>(() => {
+    const out: DriverMapMarker[] = []
+    for (const loc of Object.values(driverLocs)) {
+      const age = now - Date.parse(loc.recordedAt)
+      if (age > DRIVER_EXPIRE_MS) continue
+      const stale = age > DRIVER_STALE_MS
+      const speedKmh =
+        loc.speedMps !== undefined && loc.speedMps > 0.5
+          ? ` · ${Math.round(loc.speedMps * 3.6)} km/h`
+          : ''
+      out.push({
+        id: loc.userId,
+        name: loc.name,
+        position: { lat: loc.lat, lng: loc.lng },
+        stale,
+        detail: `Updated ${driverLocationAgo(loc.recordedAt, now).toLowerCase()}${stale ? ' (last known)' : ''}${speedKmh}`,
+      })
+    }
+    return out
+  }, [driverLocs, now])
 
   const markers = useMemo<RouteMarker[]>(
     () =>
@@ -340,6 +421,7 @@ export default function TripRouteMap({ stops, route, canEdit = false, onSaveRout
         <HereMap
           className="absolute inset-0"
           markers={markers}
+          driverMarkers={driverMarkers}
           routePolylines={polylines}
           routeDistanceLabel={ok ? (data?.distanceText ?? null) : null}
           truckOverlay={false}
