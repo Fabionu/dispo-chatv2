@@ -53,6 +53,8 @@ import ConfirmDialog from './ConfirmDialog'
 import Spinner from './Spinner'
 import type { LocalMessage } from './messages/types'
 import { useChatScroll } from '../hooks/useChatScroll'
+import { useMessageDrafts } from '../hooks/useMessageDrafts'
+import { getDraft } from '../lib/draftStorage'
 import { devlog } from '../lib/devlog'
 import { useMessageCache } from '../hooks/useMessageCache'
 import { preloadImage } from '../lib/attachmentCache'
@@ -129,7 +131,11 @@ export default function ChatView({
 
   // ── Core state ─────────────────────────────────────────────────────────
   const [loadingOlder, setLoadingOlder] = useState(false)
-  const [text, setText] = useState('')
+  // Composer text, seeded from any saved draft for THIS conversation so an
+  // unfinished message is restored when the user returns. ChatView is keyed by
+  // group id (remounts per conversation), so this lazy initializer reads the
+  // right draft on every open. See useMessageDrafts for the persistence side.
+  const [text, setText] = useState<string>(() => getDraft(currentUserId, group.id))
   const [error, setError] = useState<string | null>(null)
   // A picked file awaiting confirmation in the pre-send preview modal. The file
   // is not "staged" in the composer anymore — it lives here until the user
@@ -148,6 +154,16 @@ export default function ChatView({
   // Edit context: when set, the composer is in "Editing message" mode and
   // pressing send PATCHes the existing message instead of POSTing a new one.
   const [editContext, setEditContext] = useState<EditContext | null>(null)
+  // Draft persistence for the composer text. Writes are debounced and flushed on
+  // conversation switch (unmount); disabled while editing so an edit-in-progress
+  // (which reuses the composer text) is never saved as a draft. `clearDraft` is
+  // called on a successful send below. Purely local — never hits the backend.
+  const { clearDraft: clearDraftForConversation } = useMessageDrafts({
+    userId: currentUserId,
+    conversationId: group.id,
+    text,
+    enabled: !editContext,
+  })
   // Message currently being forwarded (drives the picker modal).
   const [forwardTarget, setForwardTarget] = useState<LocalMessage | null>(null)
   // Whether the "Invite members" picker is open (vehicle groups only).
@@ -686,6 +702,9 @@ export default function ChatView({
     // deletions of a mention token before send naturally drop it.
     const mentionIds = resolveMentionIds(body, members)
     setText('')
+    // Sending consumes the draft — clear it now so the sidebar preview reverts
+    // to the real last message immediately (not after the write debounce).
+    clearDraftForConversation()
     setReplyContext(null)
     setError(null)
     void sendBody(body, null, reply, mentionIds)
@@ -704,6 +723,8 @@ export default function ChatView({
     const mentionIds = resolveMentionIds(caption, members)
     setPendingFile(null)
     setText('')
+    // The caption (seeded from the draft) is being sent — clear the draft too.
+    clearDraftForConversation()
     setReplyContext(null)
     setError(null)
     void sendBody(caption, f, reply, mentionIds)

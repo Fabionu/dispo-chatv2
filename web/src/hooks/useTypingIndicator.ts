@@ -22,6 +22,11 @@ export function useTypingIndicator(
   text: string,
 ): TypingUser[] {
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([])
+  // Skips the mount run of the outbound effect so a RESTORED DRAFT (which seeds
+  // the composer text on open) never announces "typing" — only genuine
+  // post-mount text changes emit. This hook is remounted per conversation (its
+  // ChatView is keyed by group id), so the guard resets for each conversation.
+  const didMountRef = useRef(false)
   // Typing-emission bookkeeping (outbound).
   const typingActiveRef = useRef(false)
   const typingSentAtRef = useRef(0)
@@ -40,6 +45,12 @@ export function useTypingIndicator(
         typingActiveRef.current = false
         socket.emit('typing:stop', { groupId })
       }
+    }
+    // Never emit on the initial render: at mount the composer holds either an
+    // empty field or a restored draft, and neither is the user actively typing.
+    if (!didMountRef.current) {
+      didMountRef.current = true
+      return
     }
     if (text.trim().length === 0) {
       sendStop()

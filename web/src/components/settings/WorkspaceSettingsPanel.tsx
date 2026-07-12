@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowLeft,
   Check,
+  ChevronDown,
   ChevronRight,
   Copy,
   Info,
@@ -17,109 +18,175 @@ import {
   setMessageDisplay,
   type MessageDisplay,
 } from '../../lib/messageDisplay'
+import {
+  useDensity,
+  getStoredDensity,
+  setDensity,
+  clearDensityOverride,
+  type Density,
+} from '../../lib/density'
 import { useAuth } from '../../auth/AuthContext'
 import { api, ApiError } from '../../lib/api'
-import type { WorkspaceInvite, WorkspaceInviteCreated } from '../../lib/types'
+import type { Role, WorkspaceInvite, WorkspaceInviteCreated } from '../../lib/types'
+import { ROLE_LABEL } from './ProfileSidebarPanel'
 import { ICON_ACTION_BASE, ICON_ACTION_IDLE } from '../HeaderIconButton'
+import { MENU_CONTAINER, menuItemClass } from '../menuStyles'
+
+// Roles an invite can grant, in menu order (the default first, admin last as the
+// most privileged). Labels come from the shared ROLE_LABEL map so every surface
+// names roles identically; the short hints describe each role in the picker.
+const INVITE_ROLE_ORDER: readonly Role[] = ['dispatcher', 'driver', 'partner', 'admin']
+const INVITE_ROLE_HINT: Record<Role, string> = {
+  dispatcher: 'Plans trips, manages vehicles and members',
+  driver: 'Drives assigned trips (mobile driver access)',
+  partner: 'External partner with limited access',
+  admin: 'Full company administration',
+}
+// The role a new invite defaults to — matches the server default so an admin who
+// doesn't touch the picker gets the previous behaviour.
+const DEFAULT_INVITE_ROLE: Role = 'dispatcher'
 
 type Props = { onBack: () => void }
 
 // The settings categories. New ones (Notifications, Integrations …) drop in as
-// another CategoryCard + detail view.
+// another CategoryRow + detail view.
 type Category = 'appearance' | 'members' | 'about'
+
+// The app version, shared by the About detail and the category list summary.
+const APP_VERSION: string = import.meta.env.VITE_APP_VERSION ?? '0.3.2'
 
 // Workspace settings as a sidebar drawer — consistent with "My profile" /
 // "Company profile" (replaces the conversation list; the chat stays on the
 // right) and rendered inside the sidebar card so it shares the same shell.
 //
 // Two-level, category-based UX: the FIRST screen lists settings CATEGORIES as
-// cards; clicking one opens that category's DETAIL view. Holds APP/DISPLAY
-// preferences ONLY — never personal profile fields (those live in "My
-// profile"). Each setting is a device-local pref persisted in localStorage by
-// its lib module — toggling in a detail view applies live.
+// rows of ONE grouped card (a deliberate settings menu, not floating cards),
+// each showing its LIVE value as the subtitle; clicking one opens that
+// category's DETAIL view. Holds APP/DISPLAY preferences ONLY — never personal
+// profile fields (those live in "My profile"). Each appearance setting is a
+// device-local pref persisted in localStorage by its lib module — changing it
+// in a detail view applies live.
 export default function WorkspaceSettingsPanel({ onBack }: Props) {
   // Which category's detail is open (null = the category list). Local UI state;
   // no routing needed — the drawer is a self-contained master/detail.
   const [category, setCategory] = useState<Category | null>(null)
-  // Only workspace admins manage company members; the card is hidden otherwise
+  // Only workspace admins manage company members; the row is hidden otherwise
   // (the server enforces this too). Auth is always signed-in inside this panel.
   const auth = useAuth()
   const isAdmin = auth.status === 'signed_in' && auth.user.role === 'admin'
+  // Live values for the category-list subtitles (the hooks subscribe, so the
+  // summaries refresh when the user returns from a detail view).
+  const messageDisplay = useMessageDisplay()
+  const densityOverride = getStoredDensity()
 
-  // ── Detail: Company members ────────────────────────────────────────────────
-  if (category === 'members') {
+  // ── Detail views ────────────────────────────────────────────────────────────
+  if (category) {
+    const title = { appearance: 'Appearance', members: 'Company members', about: 'About' }[category]
     return (
       <div className="flex flex-col h-full">
         <PanelHeader
-          title="Company members"
+          title={title}
           onBack={() => setCategory(null)}
           backLabel="Back to Workspace settings"
         />
         <div className="flex-1 overflow-y-auto px-4 py-5">
-          <CompanyMembersSettings />
-        </div>
-      </div>
-    )
-  }
-
-  // ── Detail: Appearance ─────────────────────────────────────────────────────
-  if (category === 'appearance') {
-    return (
-      <div className="flex flex-col h-full">
-        <PanelHeader
-          title="Appearance"
-          onBack={() => setCategory(null)}
-          backLabel="Back to Workspace settings"
-        />
-        <div className="flex-1 overflow-y-auto px-4 py-5">
-          <AppearanceSettings />
-        </div>
-      </div>
-    )
-  }
-
-  // ── Detail: About ───────────────────────────────────────────────────────────
-  if (category === 'about') {
-    return (
-      <div className="flex flex-col h-full">
-        <PanelHeader
-          title="About"
-          onBack={() => setCategory(null)}
-          backLabel="Back to Workspace settings"
-        />
-        <div className="flex-1 overflow-y-auto px-4 py-5">
-          <AboutSettings />
+          {category === 'appearance' ? (
+            <AppearanceSettings />
+          ) : category === 'members' ? (
+            <CompanyMembersSettings />
+          ) : (
+            <AboutSettings />
+          )}
         </div>
       </div>
     )
   }
 
   // ── Category list ───────────────────────────────────────────────────────────
+  const appearanceValue = `${messageDisplay === 'bubble' ? 'Bubbles' : 'Plain stream'} · ${
+    densityOverride ? DENSITY_LABEL[densityOverride] : 'Auto'
+  } density`
+
   return (
     <div className="flex flex-col h-full">
       <PanelHeader title="Workspace settings" onBack={onBack} backLabel="Back to inbox" />
-      <div className="flex-1 overflow-y-auto px-4 py-5 space-y-2.5">
-        {isAdmin && (
-          <CategoryCard
-            icon={<Users size="1rem" strokeWidth={1.8} />}
-            title="Company members"
-            description="Invite people to your company with a secure link."
-            onClick={() => setCategory('members')}
+      <div className="flex-1 overflow-y-auto px-4 py-4">
+        <div className="rounded-card border border-white/[0.06] bg-white/[0.015] divide-y divide-white/[0.05] overflow-hidden">
+          <CategoryRow
+            icon={<Palette size="1rem" strokeWidth={1.8} />}
+            title="Appearance"
+            value={appearanceValue}
+            onClick={() => setCategory('appearance')}
           />
-        )}
-        <CategoryCard
-          icon={<Palette size="1rem" strokeWidth={1.8} />}
-          title="Appearance"
-          description="Message display style."
-          onClick={() => setCategory('appearance')}
-        />
-        <CategoryCard
-          icon={<Info size="1rem" strokeWidth={1.8} />}
-          title="About"
-          description="Version and build information."
-          onClick={() => setCategory('about')}
-        />
+          {isAdmin && (
+            <CategoryRow
+              icon={<Users size="1rem" strokeWidth={1.8} />}
+              title="Company members"
+              value="Invite people with a secure link"
+              onClick={() => setCategory('members')}
+            />
+          )}
+          <CategoryRow
+            icon={<Info size="1rem" strokeWidth={1.8} />}
+            title="About"
+            value={`Version ${APP_VERSION}`}
+            onClick={() => setCategory('about')}
+          />
+        </div>
+        <p className="text-[0.6875rem] text-faint mt-2.5 px-1 leading-[1.5]">
+          Appearance preferences are saved in this browser and apply to this device only.
+        </p>
       </div>
+    </div>
+  )
+}
+
+// A settings CATEGORY entry: one row of the grouped list card — leading glyph
+// chip, title over its live current value, trailing chevron. Rows share the
+// card's border and are separated by hairlines; hover brightens the row only,
+// so the group reads as one calm menu.
+function CategoryRow({
+  icon,
+  title,
+  value,
+  onClick,
+}: {
+  icon: ReactNode
+  title: string
+  value: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-white/[0.03]"
+    >
+      <span className="h-8 w-8 shrink-0 flex items-center justify-center rounded-btn border border-white/[0.06] bg-white/[0.02] text-muted">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[0.8125rem] font-medium text-text leading-tight">{title}</span>
+        <span className="block text-[0.71875rem] text-faint mt-0.5 leading-[1.4] truncate">
+          {value}
+        </span>
+      </span>
+      <ChevronRight size="1rem" strokeWidth={1.8} className="shrink-0 text-faint" />
+    </button>
+  )
+}
+
+// Appearance detail: both display preferences in ONE hairline-divided card,
+// with the device-local note as a quiet footnote underneath.
+function AppearanceSettings() {
+  return (
+    <div>
+      <div className="rounded-card border border-white/[0.06] bg-white/[0.015] px-4 divide-y divide-white/[0.05]">
+        <MessageDisplaySetting />
+        <DensitySetting />
+      </div>
+      <p className="text-[0.6875rem] text-faint mt-2 px-1 leading-[1.5]">
+        Saved in this browser — applies to this device only.
+      </p>
     </div>
   )
 }
@@ -150,77 +217,77 @@ function PanelHeader({
   )
 }
 
-// A settings CATEGORY entry on the list screen: a subtle bordered card with a
-// leading glyph, a title + short description, and a trailing chevron. Brightens
-// on hover so it reads as tappable, while staying compact and native to the
-// dark theme.
-function CategoryCard({
-  icon,
-  title,
-  description,
-  onClick,
-}: {
-  icon: ReactNode
-  title: string
-  description: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="w-full flex items-center gap-3 rounded-card border border-white/[0.07] bg-white/[0.015] px-3 py-3 text-left transition-colors hover:bg-white/[0.03] hover:border-white/[0.12]"
-    >
-      <span className="h-8 w-8 shrink-0 flex items-center justify-center rounded-btn border border-white/[0.06] bg-white/[0.02] text-muted">
-        {icon}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-[0.8125rem] font-semibold text-text leading-tight">{title}</span>
-        <span className="block text-[0.71875rem] text-faint mt-0.5 leading-[1.4]">{description}</span>
-      </span>
-      <ChevronRight size="1rem" strokeWidth={1.8} className="shrink-0 text-faint" />
-    </button>
-  )
-}
-
-// Appearance detail content. Kept deliberately calm: a short muted lead-in, then
-// ONE light card grouping the display controls under a quiet "Conversation
-// layout" heading. Settings are separated by generous spacing rather than
-// dividers, so nothing competes. Subscribes to the prefs only while mounted.
-function AppearanceSettings() {
+// Message display style: bubbles vs the plain "operational log" stream.
+// Applies live to every open conversation via the messageDisplay listeners.
+function MessageDisplaySetting() {
   const messageDisplay = useMessageDisplay()
-
   return (
-    <div className="space-y-5">
-      <p className="text-[0.75rem] text-faint leading-[1.5]">
-        Personalize how conversations look on this device.
-      </p>
-
-      <div className="rounded-card border border-white/[0.06] bg-white/[0.015] px-4 py-4">
-        <div className="text-[0.71875rem] text-muted mb-4">Conversation layout</div>
-        <SettingBlock
-          label="Message display"
-          description="Bubbles align messages left/right; plain stream reads as a log."
-        >
-          <Segmented
-            value={messageDisplay}
-            options={[
-              { value: 'bubble', label: 'Bubbles' },
-              { value: 'plain', label: 'Plain stream' },
-            ]}
-            onChange={(v) => setMessageDisplay(v as MessageDisplay)}
-          />
-        </SettingBlock>
-      </div>
-    </div>
+    <SettingBlock
+      label="Message display"
+      description="Bubbles align messages left and right; plain stream reads like a log."
+    >
+      <Segmented
+        value={messageDisplay}
+        options={[
+          { value: 'bubble', label: 'Bubbles' },
+          { value: 'plain', label: 'Plain stream' },
+        ]}
+        onChange={(v) => setMessageDisplay(v as MessageDisplay)}
+      />
+    </SettingBlock>
   )
 }
 
-// About detail content: app/version/build metadata in a clean label/value
-// card. Values come from optional build-time env (injected by CI) and fall back
-// to the package version / "Not available" so nothing sensitive is exposed.
+const DENSITY_LABEL: Record<Density, string> = {
+  compact: 'Compact',
+  default: 'Standard',
+  comfortable: 'Comfortable',
+}
+
+// Interface density: the manual override for lib/density's UI-scale tiers.
+// "Auto" (the default) clears the override and follows the screen size; picking
+// a tier pins it on this device. The choice mirrors localStorage, so it's local
+// state seeded from getStoredDensity() — useDensity() supplies the live tier so
+// the Auto description can say what it resolves to right now.
+function DensitySetting() {
+  const [choice, setChoice] = useState<Density | 'auto'>(() => getStoredDensity() ?? 'auto')
+  const live = useDensity()
+
+  function change(v: string) {
+    if (v === 'auto') clearDensityOverride()
+    else setDensity(v as Density)
+    setChoice(v as Density | 'auto')
+  }
+
+  return (
+    <SettingBlock
+      label="Interface density"
+      description={
+        choice === 'auto'
+          ? `Sizes text and controls. Auto follows your screen — currently ${DENSITY_LABEL[live]}.`
+          : 'Sizes text and controls. Auto follows your screen size.'
+      }
+    >
+      <Segmented
+        value={choice}
+        options={[
+          { value: 'auto', label: 'Auto' },
+          { value: 'compact', label: 'Compact' },
+          { value: 'default', label: 'Standard' },
+          { value: 'comfortable', label: 'Comfortable' },
+        ]}
+        onChange={change}
+      />
+    </SettingBlock>
+  )
+}
+
+// App/version/build metadata in a clean, read-only label/value card. Values
+// come from optional build-time env (injected by CI) and fall back to the
+// package version / "Not available" so nothing sensitive is exposed.
 function AboutSettings() {
-  const appVersion = import.meta.env.VITE_APP_VERSION ?? '0.3.2'
-  const environment = import.meta.env.MODE
+  const mode: string = import.meta.env.MODE
+  const environment = mode.charAt(0).toUpperCase() + mode.slice(1)
   const buildDate = import.meta.env.VITE_BUILD_DATE ?? 'Not available'
   const commitRaw = import.meta.env.VITE_COMMIT_SHA ?? 'Not available'
   // Show a short SHA when a full one is provided; leave the fallback untouched.
@@ -228,15 +295,11 @@ function AboutSettings() {
     commitRaw !== 'Not available' && commitRaw.length > 10 ? commitRaw.slice(0, 7) : commitRaw
 
   return (
-    <div className="space-y-5">
-      <p className="text-[0.75rem] text-faint leading-[1.5]">Version and build information for this app.</p>
-
-      <div className="rounded-card border border-white/[0.06] bg-white/[0.015] px-4 py-1.5">
-        <FieldRow label="App version" value={appVersion} />
-        <FieldRow label="Environment" value={environment} />
-        <FieldRow label="Build date" value={buildDate} />
-        <FieldRow label="Commit" value={commit} mono />
-      </div>
+    <div className="rounded-card border border-white/[0.06] bg-white/[0.015] px-4 py-1.5">
+      <FieldRow label="App version" value={APP_VERSION} />
+      <FieldRow label="Environment" value={environment} />
+      <FieldRow label="Build date" value={buildDate} />
+      <FieldRow label="Commit" value={commit} mono />
     </div>
   )
 }
@@ -254,6 +317,9 @@ function CompanyMembersSettings() {
   // The just-created link, surfaced prominently with copy + countdown. Cleared
   // on the next generate so only the freshest link shows its raw token.
   const [fresh, setFresh] = useState<WorkspaceInviteCreated | null>(null)
+  // Role the NEXT generated invite will grant. Chosen before generating; the
+  // server validates + stores it and applies it when the invitee registers.
+  const [role, setRole] = useState<Role>(DEFAULT_INVITE_ROLE)
 
   const load = useCallback(async () => {
     try {
@@ -275,7 +341,7 @@ function CompanyMembersSettings() {
     setGenerating(true)
     setGenError(null)
     try {
-      const { invite } = await api.workspaceInvites.create()
+      const { invite } = await api.workspaceInvites.create(role)
       setFresh(invite)
       await load()
     } catch (err) {
@@ -286,6 +352,19 @@ function CompanyMembersSettings() {
       )
     } finally {
       setGenerating(false)
+    }
+  }
+
+  // Change the role a still-pending invite will grant. Optimistic — update the
+  // row (and the fresh card, if it's the same invite) immediately, then reconcile
+  // from the server; on failure, reload to restore the true value.
+  async function changeInviteRole(id: string, next: Role) {
+    setInvites((prev) => prev.map((i) => (i.id === id ? { ...i, role: next } : i)))
+    if (fresh && fresh.id === id) setFresh({ ...fresh, role: next })
+    try {
+      await api.workspaceInvites.setRole(id, next)
+    } catch {
+      void load()
     }
   }
 
@@ -302,51 +381,82 @@ function CompanyMembersSettings() {
 
   return (
     <div className="space-y-5">
-      <p className="text-[0.75rem] text-faint leading-[1.5]">
-        Invite people to join <span className="text-muted">your company</span>. Each link works
-        once, expires after 15 minutes, and can’t be reused after someone signs up.
-      </p>
+      {/* ── Generate + link ──────────────────────────────────────────────────
+          One card for the whole create flow: role picker and Generate as a
+          single row, the role hint underneath, and — past a hairline — the
+          link slot (the fresh link with copy/countdown, or a quiet explainer
+          while no link exists). */}
+      <section>
+        <div className="eyebrow mb-2">New invite link</div>
+        <div className="rounded-card border border-white/[0.06] bg-white/[0.015] p-3.5">
+          <label htmlFor="invite-role" className="block text-[0.71875rem] text-muted">
+            Invite as
+          </label>
+          <div className="mt-1.5 flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <RoleSelect id="invite-role" value={role} onChange={setRole} disabled={generating} />
+            </div>
+            <button
+              onClick={generate}
+              disabled={generating}
+              className="shrink-0 h-9 px-3.5 flex items-center gap-1.5 rounded-btn bg-text text-bg font-semibold text-[0.78125rem] hover:bg-text/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {generating ? (
+                <Loader2 size="0.875rem" strokeWidth={2.2} className="animate-spin" />
+              ) : (
+                <Plus size="0.875rem" strokeWidth={2.2} />
+              )}
+              Generate
+            </button>
+          </div>
+          <p className="text-[0.6875rem] text-faint mt-1.5 leading-[1.45]">
+            {INVITE_ROLE_HINT[role]}
+          </p>
+          {genError && <div className="mt-2 text-[0.71875rem] text-alert">{genError}</div>}
 
-      <button
-        onClick={generate}
-        disabled={generating}
-        className="w-full h-9 flex items-center justify-center gap-2 rounded-btn bg-text text-bg font-semibold text-[0.78125rem] hover:bg-text/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-      >
-        {generating ? (
-          <Loader2 size="0.875rem" strokeWidth={2.2} className="animate-spin" />
-        ) : (
-          <Plus size="0.875rem" strokeWidth={2.2} />
-        )}
-        Generate invite link
-      </button>
-
-      {genError && (
-        <div className="text-[0.75rem] text-alert border border-alert/30 bg-alert/5 rounded-btn px-3 py-2">
-          {genError}
+          <div className="mt-3 pt-3 border-t border-white/[0.05]">
+            {fresh ? (
+              <FreshInviteLink invite={fresh} />
+            ) : (
+              <div className="flex items-start gap-2 text-[0.6875rem] text-faint leading-[1.45]">
+                <Link2 size="0.8125rem" strokeWidth={1.8} className="shrink-0 mt-px" />
+                <span>
+                  Your link appears here once generated — single-use, valid for 15 minutes.
+                </span>
+              </div>
+            )}
+          </div>
         </div>
-      )}
+      </section>
 
-      {fresh && <FreshInviteCard invite={fresh} />}
-
-      {/* Recent invites */}
-      <div>
-        <div className="text-[0.71875rem] text-muted mb-2">Recent invites</div>
+      {/* ── Recent invites ─────────────────────────────────────────────────── */}
+      <section>
+        <div className="eyebrow mb-2">Recent invites</div>
         {loading ? (
-          <div className="flex items-center gap-2 text-[0.75rem] text-faint px-1 py-2">
-            <Loader2 size="0.8125rem" className="animate-spin" /> Loading…
+          <div className="flex items-center gap-2 text-[0.75rem] text-faint px-1 py-1">
+            <Loader2 size="0.8125rem" className="animate-spin" /> Loading invites…
           </div>
         ) : loadError ? (
-          <div className="text-[0.75rem] text-alert px-1 py-2">Could not load invites.</div>
+          <div className="text-[0.75rem] text-alert px-1 py-1">Could not load invites.</div>
         ) : invites.length === 0 ? (
-          <div className="text-[0.75rem] text-faint px-1 py-2">No invites yet.</div>
+          <div className="rounded-card border border-white/[0.06] bg-white/[0.015] px-3.5 py-3 text-[0.71875rem] text-faint leading-[1.45]">
+            No invites yet — generate a link above to add your first member.
+          </div>
         ) : (
+          // No overflow-hidden — the row role dropdown must be able to open past
+          // the card edge; first/last rows round their own hover corners instead.
           <div className="rounded-card border border-white/[0.06] bg-white/[0.015] divide-y divide-white/[0.05]">
             {invites.map((inv) => (
-              <InviteListRow key={inv.id} invite={inv} onRevoke={() => revoke(inv.id)} />
+              <InviteListRow
+                key={inv.id}
+                invite={inv}
+                onRevoke={() => revoke(inv.id)}
+                onChangeRole={(next) => void changeInviteRole(inv.id, next)}
+              />
             ))}
           </div>
         )}
-      </div>
+      </section>
     </div>
   )
 }
@@ -371,110 +481,290 @@ function remaining(expiresAt: string, now: number): string | null {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-// The freshly-generated link: copyable, with a live countdown. This is the only
-// place the raw link is ever shown.
-function FreshInviteCard({ invite }: { invite: WorkspaceInviteCreated }) {
+// The freshly-generated link, rendered in the link slot of the "New invite
+// link" card: copyable, with a live countdown. This is the only place the raw
+// link is ever shown, hence the "shown only once" note.
+function FreshInviteLink({ invite }: { invite: WorkspaceInviteCreated }) {
   const now = useNow()
   const [copied, setCopied] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
   const left = remaining(invite.expiresAt, now)
 
   async function copy() {
+    let ok = false
     try {
-      await navigator.clipboard?.writeText(invite.url)
+      if (!navigator.clipboard) throw new Error('clipboard unavailable')
+      await navigator.clipboard.writeText(invite.url)
+      ok = true
+    } catch {
+      // The async Clipboard API can be missing or permission-denied (embedded
+      // webviews, older browsers) — select the field and use the legacy command.
+      const el = inputRef.current
+      if (el) {
+        el.focus()
+        el.select()
+        ok = document.execCommand('copy')
+      }
+    }
+    if (ok) {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
-    } catch {
-      /* clipboard unavailable — the field is selectable as a fallback */
     }
   }
 
   return (
-    <div className="rounded-card border border-active/30 bg-active/[0.06] px-3.5 py-3 space-y-2.5">
-      <div className="flex items-center gap-2 text-[0.75rem] font-semibold text-active">
-        <Link2 size="0.875rem" strokeWidth={2} /> Invite link ready
+    <div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-[0.71875rem] font-medium text-done">
+          <span className="h-1.5 w-1.5 rounded-full bg-done" aria-hidden />
+          Link ready — shown only once
+        </div>
+        <RoleBadge role={invite.role} />
       </div>
-      <div className="flex items-center gap-2">
+      <div className="mt-2 flex items-center gap-1">
         <input
+          ref={inputRef}
           readOnly
           value={invite.url}
           onFocus={(e) => e.currentTarget.select()}
-          className="flex-1 min-w-0 bg-black/20 border border-white/[0.08] rounded-btn px-2.5 py-2 text-[0.71875rem] text-text font-mono truncate focus:outline-none focus:border-white/[0.2]"
+          className="flex-1 min-w-0 h-9 bg-black/20 border border-white/[0.06] rounded-btn px-2.5 text-[0.71875rem] text-text font-mono truncate outline-none transition-colors focus:border-white/[0.16]"
         />
         <button
           onClick={copy}
-          className="shrink-0 h-[2.125rem] px-3 flex items-center gap-1.5 rounded-btn bg-white/[0.06] text-text text-[0.75rem] font-medium hover:bg-white/[0.1] transition-colors"
+          title={copied ? 'Copied' : 'Copy link'}
+          aria-label="Copy invite link"
+          className={`${ICON_ACTION_BASE} ${ICON_ACTION_IDLE} shrink-0`}
         >
           {copied ? (
-            <Check size="0.8125rem" strokeWidth={2.4} className="text-done" />
+            <Check size="1rem" strokeWidth={2.4} className="text-done" />
           ) : (
-            <Copy size="0.8125rem" strokeWidth={1.8} />
+            <Copy size="1rem" strokeWidth={1.8} />
           )}
-          {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
-      <div className="text-[0.6875rem] text-muted">
+      <div className="mt-1.5 flex items-center justify-between gap-2 text-[0.6875rem] text-faint">
         {left ? (
-          <>
-            Single-use · expires in <span className="tabular-nums text-text">{left}</span>
-          </>
+          <span>
+            Single-use · expires in <span className="tabular-nums text-muted">{left}</span>
+          </span>
         ) : (
           <span className="text-alert">This link has expired.</span>
         )}
+        <span
+          aria-live="polite"
+          className={`text-done transition-opacity ${copied ? 'opacity-100' : 'opacity-0'}`}
+        >
+          Copied
+        </span>
       </div>
     </div>
   )
 }
 
-// One row in the recent-invites list: status badge, who/when, and a revoke
-// action while the link is still active.
-function InviteListRow({ invite, onRevoke }: { invite: WorkspaceInvite; onRevoke: () => void }) {
+// One row in the recent-invites list, styled like the app's member rows: a
+// circular glyph chip (with a green corner dot while the link is live, echoing
+// the presence dot on avatars), name/status over a detail line, then the
+// trailing controls. An active invite's role is editable inline (a compact
+// select) and revocable — revoke is two-step (icon → explicit "Revoke") so a
+// stray click can't kill a link. A used/expired invite shows its role
+// read-only — the member already exists with that role, so it can't change here.
+function InviteListRow({
+  invite,
+  onRevoke,
+  onChangeRole,
+}: {
+  invite: WorkspaceInvite
+  onRevoke: () => void
+  onChangeRole: (role: Role) => void
+}) {
   const now = useNow(30_000)
-  const left = invite.status === 'active' ? remaining(invite.expiresAt, now) : null
-  const detail =
-    invite.status === 'used'
-      ? invite.usedByName
-        ? `Joined by ${invite.usedByName}`
-        : 'Used'
-      : invite.status === 'expired'
-        ? 'Expired'
-        : left
-          ? `Expires in ${left}`
-          : 'Expiring…'
+  // Arm-then-confirm for revoke; disarms by itself if the admin walks away.
+  const [confirming, setConfirming] = useState(false)
+  useEffect(() => {
+    if (!confirming) return
+    const t = setTimeout(() => setConfirming(false), 3000)
+    return () => clearTimeout(t)
+  }, [confirming])
+
+  const active = invite.status === 'active'
+  const left = active ? remaining(invite.expiresAt, now) : null
+  const by = invite.createdByName ? ` · by ${invite.createdByName}` : ''
+  const primary =
+    invite.status === 'used' ? (invite.usedByName ?? 'Invite used') : 'Invite link'
+  const secondary = active
+    ? `Active · ${left ? `expires in ${left}` : 'expiring…'}${by}`
+    : invite.status === 'used'
+      ? `Joined the company${invite.createdByName ? ` · invited by ${invite.createdByName}` : ''}`
+      : `Expired · not used${by}`
 
   return (
-    <div className="flex items-center gap-2.5 px-3 py-2.5">
-      <StatusBadge status={invite.status} />
-      <div className="min-w-0 flex-1">
-        <div className="text-[0.75rem] text-text leading-tight truncate">{detail}</div>
-        <div className="text-[0.6875rem] text-faint mt-0.5 truncate">
-          {invite.createdByName ? `By ${invite.createdByName}` : 'Invite'}
-        </div>
+    <div className="flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.02] transition-colors first:rounded-t-card last:rounded-b-card">
+      <div className="relative shrink-0">
+        <span className="h-[2.125rem] w-[2.125rem] flex items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.02] text-muted">
+          {invite.status === 'used' ? (
+            <Check size="0.9375rem" strokeWidth={2} />
+          ) : (
+            <Link2
+              size="0.9375rem"
+              strokeWidth={1.8}
+              className={invite.status === 'expired' ? 'opacity-50' : undefined}
+            />
+          )}
+        </span>
+        {active && (
+          <span
+            title="Active"
+            className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border border-rail bg-done"
+          />
+        )}
       </div>
-      {invite.status === 'active' && (
-        <button
-          onClick={onRevoke}
-          title="Revoke link"
-          aria-label="Revoke link"
-          className="shrink-0 h-7 w-7 flex items-center justify-center rounded-full text-muted hover:text-alert hover:bg-white/[0.05] transition-colors"
+      <div className="min-w-0 flex-1 flex flex-col gap-px">
+        <div
+          className={`text-[0.8125rem] leading-tight truncate ${
+            invite.status === 'expired' ? 'text-muted' : 'text-text'
+          }`}
         >
-          <Trash2 size="0.875rem" strokeWidth={1.8} />
-        </button>
+          {primary}
+        </div>
+        <div className="text-[0.6875rem] leading-tight text-faint truncate">{secondary}</div>
+      </div>
+      {active ? (
+        <>
+          <RoleSelect
+            value={invite.role}
+            onChange={onChangeRole}
+            compact
+            ariaLabel="Change invite role"
+          />
+          {confirming ? (
+            <button
+              onClick={() => {
+                setConfirming(false)
+                onRevoke()
+              }}
+              className="shrink-0 h-7 px-2.5 rounded-btn text-[0.6875rem] font-semibold text-alert bg-alert/10 hover:bg-alert/15 transition-colors"
+            >
+              Revoke
+            </button>
+          ) : (
+            <button
+              onClick={() => setConfirming(true)}
+              title="Revoke link"
+              aria-label="Revoke link"
+              className="shrink-0 h-7 w-7 flex items-center justify-center rounded-full text-muted hover:text-alert hover:bg-alert/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+            >
+              <Trash2 size="0.875rem" strokeWidth={1.8} />
+            </button>
+          )}
+        </>
+      ) : (
+        <RoleBadge role={invite.role} />
       )}
     </div>
   )
 }
 
-function StatusBadge({ status }: { status: WorkspaceInvite['status'] }) {
-  const map = {
-    active: { label: 'Active', cls: 'text-done border-done/30 bg-done/10' },
-    used: { label: 'Used', cls: 'text-muted border-white/[0.12] bg-white/[0.04]' },
-    expired: { label: 'Expired', cls: 'text-faint border-white/[0.08] bg-white/[0.02]' },
-  }[status]
+// The role picker — a custom listbox on the app's shared menu recipe
+// (menuStyles), replacing the native <select> so the open menu matches every
+// other project dropdown (no browser-default option rows). The closed trigger
+// reads as a standard field; the menu anchors to it (same width in the default
+// variant, right-aligned in `compact` — the small variant used inline in a
+// list row; the default fills its container in the generate card).
+function RoleSelect({
+  value,
+  onChange,
+  id,
+  disabled = false,
+  compact = false,
+  ariaLabel,
+}: {
+  value: Role
+  onChange: (role: Role) => void
+  id?: string
+  disabled?: boolean
+  compact?: boolean
+  ariaLabel?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  // Close on outside click / Escape — same pattern as the app's other anchored
+  // menus (MemberRow's actions menu).
+  useEffect(() => {
+    if (!open) return
+    function onDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
   return (
-    <span
-      className={`shrink-0 text-[0.625rem] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border ${map.cls}`}
-    >
-      {map.label}
+    <div ref={ref} className={`relative ${compact ? 'shrink-0' : ''}`}>
+      <button
+        id={id}
+        type="button"
+        disabled={disabled}
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className={`flex items-center gap-1.5 rounded-card border bg-white/[0.03] text-text text-left outline-none transition-colors hover:border-white/[0.16] focus-visible:border-white/[0.22] disabled:opacity-50 disabled:cursor-default ${
+          open ? 'border-white/[0.22]' : 'border-white/[0.08]'
+        } ${compact ? 'h-7 w-[6.25rem] px-2 text-[0.6875rem]' : 'h-9 w-full px-2.5 text-[0.78125rem]'}`}
+      >
+        <span className="flex-1 min-w-0 truncate">{ROLE_LABEL[value]}</span>
+        <ChevronDown
+          size={compact ? '0.75rem' : '0.875rem'}
+          strokeWidth={1.8}
+          className={`shrink-0 text-faint transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {open && (
+        <div
+          role="listbox"
+          aria-label={ariaLabel ?? 'Role'}
+          className={`absolute top-full mt-1 z-20 ${MENU_CONTAINER} ${
+            compact ? 'right-0 w-[8.5rem]' : 'left-0 right-0'
+          }`}
+        >
+          {INVITE_ROLE_ORDER.map((r) => (
+            <button
+              key={r}
+              type="button"
+              role="option"
+              aria-selected={r === value}
+              onClick={() => {
+                setOpen(false)
+                if (r !== value) onChange(r)
+              }}
+              className={menuItemClass()}
+            >
+              <span className="flex-1 min-w-0 truncate">{ROLE_LABEL[r]}</span>
+              {r === value && (
+                <Check size="0.8125rem" strokeWidth={2} className="text-muted shrink-0" />
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// A quiet, read-only role pill for used/expired invites and the fresh-link card.
+function RoleBadge({ role }: { role: Role }) {
+  return (
+    <span className="shrink-0 text-[0.625rem] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border border-white/[0.1] bg-white/[0.04] text-muted">
+      {ROLE_LABEL[role]}
     </span>
   )
 }
@@ -497,8 +787,9 @@ function FieldRow({ label, value, mono = false }: { label: string; value: string
   )
 }
 
-// One setting inside a section: a clean label + short description stacked over
-// its control. No borders or dividers of its own — spacing alone sets it apart.
+// One setting inside the Appearance card: a clean label + short description
+// stacked over its control. Blocks stack in a divide-y card, so each carries
+// its own vertical padding; the card's hairlines do the separating.
 function SettingBlock({
   label,
   description,
@@ -509,8 +800,8 @@ function SettingBlock({
   children: ReactNode
 }) {
   return (
-    <div>
-      <div className="text-[0.8125rem] text-text leading-tight">{label}</div>
+    <div className="py-3.5">
+      <div className="text-[0.8125rem] text-text font-medium leading-tight">{label}</div>
       <div className="text-[0.71875rem] text-faint mt-0.5 leading-[1.4]">{description}</div>
       <div className="mt-2.5">{children}</div>
     </div>

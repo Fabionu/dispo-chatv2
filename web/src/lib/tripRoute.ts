@@ -5,7 +5,13 @@
 // trip saved. The geometry is stored so a future driver app can navigate it.
 
 import { api } from './api'
-import { parseCoordinates, type TripRoute, type VehicleOps, type VehicleStop } from './vehicleOps'
+import {
+  parseCoordinates,
+  type TripRoute,
+  type TruckProfile,
+  type VehicleOps,
+  type VehicleStop,
+} from './vehicleOps'
 
 // Re-export so callers don't reach into vehicleOps for the type.
 export type { TripRoute }
@@ -41,10 +47,24 @@ function formatDuration(seconds: number): string {
   return h > 0 ? `${h} h ${min} min` : `${min} min`
 }
 
+// Drop undefined fields so an empty truck profile is omitted entirely from the
+// HERE request (an all-undefined `truck` object would still be sent otherwise).
+// Returns undefined when nothing is set, so the route stays a plain truck route.
+function cleanTruckProfile(profile: TruckProfile | undefined): TruckProfile | undefined {
+  if (!profile) return undefined
+  const entries = Object.entries(profile).filter(([, v]) => typeof v === 'number')
+  return entries.length > 0 ? (Object.fromEntries(entries) as TruckProfile) : undefined
+}
+
 // Compute the route over the stops, in order: first coord = origin, last = dest,
 // the rest = via points. Always resolves (never rejects) so callers can attach
-// the result without a try/catch.
-export async function computeTripRoute(stops: VehicleStop[]): Promise<TripRoute> {
+// the result without a try/catch. When a `truckProfile` is supplied (the vehicle
+// room's persisted truck), HERE routes with its dimensions/weight so the stored
+// route respects truck restrictions and matches the truck that will drive it.
+export async function computeTripRoute(
+  stops: VehicleStop[],
+  truckProfile?: TruckProfile,
+): Promise<TripRoute> {
   const pts = routablePoints(stops)
   const now = new Date().toISOString()
   if (pts.length < 2) return { status: 'incomplete', computedAt: now }
@@ -52,7 +72,8 @@ export async function computeTripRoute(stops: VehicleStop[]): Promise<TripRoute>
     const origin = pts[0]
     const destination = pts[pts.length - 1]
     const via = pts.slice(1, -1)
-    const { route } = await api.here.truckRoute({ origin, destination, via })
+    const truck = cleanTruckProfile(truckProfile)
+    const { route } = await api.here.truckRoute({ origin, destination, via, ...(truck ? { truck } : {}) })
     const polylines = route.sections
       .map((sec) => sec.polyline)
       .filter((p): p is string => Boolean(p))
@@ -82,7 +103,7 @@ export async function persistTripRoute(
   applyMeta: (meta: Record<string, unknown>) => void,
   opts: { flagAsEdit?: boolean } = {},
 ): Promise<TripRoute> {
-  const route = await computeTripRoute(ops.stops)
+  const route = await computeTripRoute(ops.stops, ops.vehicle.truckProfile)
   const trip = ops.trip
   if (!trip) return route
   const { group } = await api.groups.update(groupId, {
@@ -109,7 +130,7 @@ export async function persistOpsWithRoute(
   if (!trip) return
   // Fire-and-forget: enrich the just-saved trip with route data.
   void (async () => {
-    const route = await computeTripRoute(ops.stops)
+    const route = await computeTripRoute(ops.stops, ops.vehicle.truckProfile)
     try {
       const { group: g2 } = await api.groups.update(groupId, {
         ops: { ...ops, trip: { ...trip, route } },

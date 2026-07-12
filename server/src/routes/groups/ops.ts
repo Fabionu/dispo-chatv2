@@ -16,11 +16,28 @@ export const opsSchema = z.object({
       status: z
         .enum(['available', 'driving', 'loading', 'unloading', 'waiting', 'break', 'service', 'completed'])
         .optional(),
+      // Structured truck dimensions/weight (HERE units: cm/kg). Same caps as the
+      // route proxy's `truckRouteSchema` (server/src/routes/here.ts) so a stored
+      // profile always routes. Used for restriction-aware routing + the mobile
+      // truck-navigation handoff.
+      truckProfile: z
+        .object({
+          heightCm: z.number().int().positive().max(1000).optional(),
+          widthCm: z.number().int().positive().max(500).optional(),
+          lengthCm: z.number().int().positive().max(3000).optional(),
+          grossWeightKg: z.number().int().positive().max(80000).optional(),
+          axleCount: z.number().int().min(2).max(12).optional(),
+          trailerCount: z.number().int().min(0).max(4).optional(),
+        })
+        .optional(),
       notes: opsStr(2000),
     })
     .default({}),
   trip: z
     .object({
+      // Stable trip id (client-generated UUID at creation) so the mobile driver
+      // API can address this trip; optional for trips created before the field.
+      id: z.string().max(64).optional(),
       reference: opsStr(120),
       loadingAddress: opsStr(300),
       loadingAt: opsStr(80),
@@ -48,6 +65,10 @@ export const opsSchema = z.object({
           'cancelled',
         ])
         .optional(),
+      // Assigned driver user ids (real room members). Drives the mobile
+      // "trips assigned to me" filter + the driver-assignment activity row.
+      // Membership is re-validated server-side (see update.ts) before persisting.
+      assignedDriverIds: z.array(z.string().uuid()).max(10).optional(),
       eta: opsStr(80),
       notes: opsStr(2000),
       // Route summary computed from the stop coordinates (manual planning data,
@@ -108,15 +129,32 @@ export const opsSchema = z.object({
 })
 
 // Minimal shape of the ops blob we diff for activity rows (the zod schema owns
-// the full validation). Only the trip status/reference and the route summary
-// participate in the diff.
+// the full validation). Only the trip status/reference, assigned drivers, and the
+// route summary participate in the diff.
 export type OpsLite = {
   trip?: {
     status?: string
     reference?: string
+    assignedDriverIds?: string[]
     route?: { status?: string; distanceText?: string; durationText?: string; polylines?: string[] }
   } | null
 } | null
+
+// The set of driver ids added / removed between two ops snapshots. Pure and
+// order-insensitive, so a save that re-sends the same assignment yields empty
+// arrays (no duplicate activity row). Used by update.ts to log
+// trip_driver_assigned / trip_driver_unassigned.
+export function assignedDriverDelta(
+  oldOps: OpsLite | null,
+  newOps: OpsLite,
+): { added: string[]; removed: string[] } {
+  const before = new Set((oldOps?.trip?.assignedDriverIds ?? []).filter(Boolean))
+  const after = new Set((newOps?.trip?.assignedDriverIds ?? []).filter(Boolean))
+  return {
+    added: [...after].filter((id) => !before.has(id)),
+    removed: [...before].filter((id) => !after.has(id)),
+  }
+}
 
 type TripActivity = { event: SystemEvent; payload: Record<string, unknown> | null }
 

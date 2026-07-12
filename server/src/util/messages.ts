@@ -177,6 +177,8 @@ export type SystemEvent =
   | 'trip_created' // legacy — superseded by trip_added
   | 'trip_added' // a trip was added to the room (payload.tripLabel = reference)
   | 'trip_status_changed' // payload.from / payload.to = TripStatus codes
+  | 'trip_driver_assigned' // driver(s) assigned to the trip (payload.driverNames[])
+  | 'trip_driver_unassigned' // driver(s) removed from the trip (payload.driverNames[])
   | 'route_edited' // the trip route was (re)computed/edited
 
 // Insert a system row in a group's timeline. Returns the new message id (load +

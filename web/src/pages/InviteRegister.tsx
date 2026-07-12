@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Box, Building2, Eye, EyeOff, Loader2, Lock, TriangleAlert } from 'lucide-react'
+import { Box, Building2, Eye, EyeOff, Loader2, Lock, TriangleAlert, UserCog } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { api, ApiError } from '../lib/api'
 import type { InviteValidation } from '../lib/types'
+import { ROLE_LABEL } from '../components/settings/ProfileSidebarPanel'
 
 type Props = { token: string }
 
@@ -101,13 +102,23 @@ export default function InviteRegister({ token }: Props) {
               </p>
 
               <form onSubmit={onSubmit} className="space-y-4">
-                {/* Company — fixed by the invite, shown read-only so the user
-                    knows exactly which company they're joining. */}
-                <div>
-                  <label className="block text-[0.78125rem] text-text mb-1.5">Company</label>
-                  <div className="flex items-center gap-2 w-full bg-white/[0.03] border border-white/[0.08] rounded-btn px-3 py-2.5 text-[0.84375rem] text-muted">
-                    <Building2 size="0.9375rem" strokeWidth={1.6} className="text-faint shrink-0" />
-                    <span className="truncate">{validation.companyName}</span>
+                {/* Company + role — both fixed by the invite, shown read-only so
+                    the user knows exactly which company they're joining and the
+                    role they'll have. */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[0.78125rem] text-text mb-1.5">Company</label>
+                    <div className="flex items-center gap-2 w-full bg-white/[0.03] border border-white/[0.08] rounded-btn px-3 py-2.5 text-[0.84375rem] text-muted">
+                      <Building2 size="0.9375rem" strokeWidth={1.6} className="text-faint shrink-0" />
+                      <span className="truncate">{validation.companyName}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[0.78125rem] text-text mb-1.5">Role</label>
+                    <div className="flex items-center gap-2 w-full bg-white/[0.03] border border-white/[0.08] rounded-btn px-3 py-2.5 text-[0.84375rem] text-muted">
+                      <UserCog size="0.9375rem" strokeWidth={1.6} className="text-faint shrink-0" />
+                      <span className="truncate">{ROLE_LABEL[validation.role]}</span>
+                    </div>
                   </div>
                 </div>
 

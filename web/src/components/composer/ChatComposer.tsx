@@ -180,7 +180,14 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
 
   useImperativeHandle(ref, () => ({
     focus() {
-      textareaRef.current?.focus()
+      const el = textareaRef.current
+      if (!el) return
+      el.focus()
+      // Land the caret at the END of the current value — so a restored draft
+      // (and an edited message body) continues where the text stops rather than
+      // at the start. Harmless for an empty field (end === 0).
+      const end = el.value.length
+      el.setSelectionRange(end, end)
     },
   }))
 

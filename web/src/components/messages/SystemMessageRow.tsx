@@ -55,6 +55,15 @@ function tripStatusLabel(code: string | null | undefined): string {
   return labelOf(TRIP_STATUSES, (code ?? undefined) as TripStatus | undefined) || 'Planned'
 }
 
+// Join the driver names carried in a driver-assignment payload into a readable
+// list ("Ana", "Ana and Bo", "Ana, Bo and Cy"). Falls back to "a driver".
+function driverNamesLabel(names: string[] | undefined): string {
+  const list = (names ?? []).filter(Boolean)
+  if (list.length === 0) return 'a driver'
+  if (list.length === 1) return list[0]
+  return `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`
+}
+
 // Build the sentence for one activity row. Unknown events degrade to a neutral
 // "updated the conversation" rather than leaking an internal event code.
 function renderActivity(
@@ -122,6 +131,22 @@ function renderActivity(
         <>
           Trip status changed from <Detail>{tripStatusLabel(payload.from)}</Detail> to{' '}
           <Detail>{tripStatusLabel(payload.to)}</Detail>
+        </>
+      )
+    case 'trip_driver_assigned':
+      // "Fabio assigned Claudiu Cojocar as driver for trip #123" — actor prefix,
+      // then the assigned driver name(s), and the trip reference when present.
+      return (
+        <>
+          {actor} assigned <Detail>{driverNamesLabel(payload.driverNames)}</Detail> as driver
+          {payload.tripLabel ? <> for trip <Detail>#{payload.tripLabel}</Detail></> : null}
+        </>
+      )
+    case 'trip_driver_unassigned':
+      return (
+        <>
+          {actor} unassigned <Detail>{driverNamesLabel(payload.driverNames)}</Detail>
+          {payload.tripLabel ? <> from trip <Detail>#{payload.tripLabel}</Detail></> : null}
         </>
       )
     case 'route_edited':

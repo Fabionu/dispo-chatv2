@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { clearUserDrafts } from '../lib/draftStorage'
 
 export type User = {
   id: string
@@ -52,7 +53,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await fetch('/api/auth/signout', { method: 'POST', credentials: 'include' })
-    setState({ status: 'signed_out' })
+    // Drop this user's local drafts so nothing lingers on a shared device after
+    // the account signs out (drafts are namespaced by user id regardless).
+    setState((prev) => {
+      if (prev.status === 'signed_in') clearUserDrafts(prev.user.id)
+      return { status: 'signed_out' }
+    })
   }, [])
 
   useEffect(() => {

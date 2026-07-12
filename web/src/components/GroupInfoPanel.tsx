@@ -5,6 +5,8 @@ import { groupLabel, tractorPlate, trailerPlate } from '../lib/types'
 import {
   getOps,
   labelOf,
+  tripDriverIds,
+  tripId,
   vehicleStatusTone,
   VEHICLE_STATUSES,
   type ActiveTrip,
@@ -296,9 +298,20 @@ export default function GroupInfoPanel({
     saveOps({ ...ops, vehicle: { ...ops.vehicle, ...patch } })
   const saveTrip = (patch: Partial<ActiveTrip>) =>
     saveOps({ ...ops, trip: { ...(ops.trip ?? {}), ...patch } })
+  // Structured assigned drivers live on the active trip (the model the mobile
+  // driver API filters on). Setting drivers when there's no trip yet mints a
+  // minimal Planned trip to hold them (with an id the driver API can address);
+  // clearing drivers with no trip is a no-op (nothing to persist). The server
+  // re-validates that every id is a current room member before saving.
+  const saveDrivers = (ids: string[]) => {
+    if (ids.length === 0 && !ops.trip) return Promise.resolve()
+    const base = ops.trip ?? { id: tripId(), status: 'planned' as const }
+    return saveOps({ ...ops, trip: { ...base, assignedDriverIds: ids } })
+  }
   // Start a brand-new, CLEAN trip: a fresh Planned trip with NO carried-over
   // fields and NO stops (stops belong to the trip, so a new trip starts empty).
-  const addTrip = () => saveOps({ ...ops, trip: { status: 'planned' }, stops: [] })
+  // A fresh id is minted so the mobile driver API can address this trip.
+  const addTrip = () => saveOps({ ...ops, trip: { id: tripId(), status: 'planned' }, stops: [] })
   // Clearing a trip also drops its stops — they belong to the trip, so leaving
   // them behind would resurface on the next trip as stale data.
   const clearTrip = () => saveOps({ ...ops, trip: null, stops: [] })
@@ -432,8 +445,11 @@ export default function GroupInfoPanel({
                 group={group}
                 canManage={canManage}
                 vehicle={ops.vehicle}
+                members={members}
+                assignedDriverIds={tripDriverIds(ops.trip)}
                 onSaveField={saveField}
                 onSaveVehicle={saveVehicle}
+                onSaveDrivers={saveDrivers}
               />
             )}
             {tab === 'trip' && (

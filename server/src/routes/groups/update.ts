@@ -1,9 +1,21 @@
 import { Router } from 'express'
 import { z } from 'zod'
+import { type DbClient } from '../../db/pool.js'
 import { asyncHandler, withTransaction } from '../../http.js'
 import { insertSystemMessage, emitSystemMessage } from '../../util/messages.js'
 import { authorizeInviter } from './authz.js'
-import { opsSchema, tripActivityEvents, type OpsLite } from './ops.js'
+import { opsSchema, tripActivityEvents, assignedDriverDelta, type OpsLite } from './ops.js'
+
+// Resolve user ids → display names for a driver-assignment activity row. Returns
+// a map so the caller can preserve the original id order in the payload.
+async function resolveUserNames(client: DbClient, ids: string[]): Promise<Map<string, string>> {
+  if (ids.length === 0) return new Map()
+  const { rows } = await client.query<{ id: string; display_name: string }>(
+    'select id, display_name from users where id = any($1::uuid[])',
+    [ids],
+  )
+  return new Map(rows.map((r) => [r.id, r.display_name]))
+}
 
 export const updateRouter = Router()
 
@@ -50,6 +62,23 @@ updateRouter.patch(
           [groupId],
         )
         oldOps = (pre[0]?.meta?.ops as OpsLite | undefined) ?? null
+      }
+
+      // Driver assignment references real accounts, so it must be trustworthy:
+      // the client owns the whole ops blob, so re-validate that every assigned id
+      // is an ACTIVE member of THIS group and drop any that isn't before it's
+      // persisted (the driver API trusts assignedDriverIds for access control).
+      if (data.ops?.trip?.assignedDriverIds && data.ops.trip.assignedDriverIds.length > 0) {
+        const ids = data.ops.trip.assignedDriverIds
+        const { rows: memberRows } = await client.query<{ user_id: string }>(
+          `select gm.user_id
+             from group_members gm
+             join users u on u.id = gm.user_id
+            where gm.group_id = $1 and gm.user_id = any($2::uuid[]) and u.deleted_at is null`,
+          [groupId, ids],
+        )
+        const memberIds = new Set(memberRows.map((r) => r.user_id))
+        data.ops.trip.assignedDriverIds = ids.filter((id) => memberIds.has(id))
       }
 
       const sets: string[] = []
@@ -104,6 +133,36 @@ updateRouter.patch(
       if (data.ops !== undefined) {
         for (const ev of tripActivityEvents(oldOps, data.ops as OpsLite, data.routeEdited === true)) {
           systemIds.push(await insertSystemMessage(client, { groupId, actorId: userId, ...ev }))
+        }
+
+        // Driver-assignment activity — derived from the (already membership-
+        // filtered) old→new diff, so re-saving the same assignment is silent.
+        // Resolves ids → display names for a stable, human-readable row
+        // ("Fabio assigned Claudiu Cojocar as driver for trip #123").
+        const { added, removed } = assignedDriverDelta(oldOps, data.ops as OpsLite)
+        if (added.length > 0 || removed.length > 0) {
+          const names = await resolveUserNames(client, [...added, ...removed])
+          const tripLabel = (data.ops as OpsLite)?.trip?.reference ?? null
+          if (added.length > 0) {
+            systemIds.push(
+              await insertSystemMessage(client, {
+                groupId,
+                actorId: userId,
+                event: 'trip_driver_assigned',
+                payload: { driverIds: added, driverNames: added.map((id) => names.get(id) ?? 'Someone'), tripLabel },
+              }),
+            )
+          }
+          if (removed.length > 0) {
+            systemIds.push(
+              await insertSystemMessage(client, {
+                groupId,
+                actorId: userId,
+                event: 'trip_driver_unassigned',
+                payload: { driverIds: removed, driverNames: removed.map((id) => names.get(id) ?? 'Someone'), tripLabel },
+              }),
+            )
+          }
         }
       }
 

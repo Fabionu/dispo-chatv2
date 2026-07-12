@@ -119,7 +119,10 @@ export function initDensity() {
   if (typeof window === 'undefined') return
   const stored = getStoredDensity()
   apply(stored ?? autoDensity())
-  if (stored) return
+  // Always arm the auto-follow listeners: reapply() re-checks for an override
+  // on every fire, so they stand down while one exists — and take over again
+  // if the override is cleared later (Workspace settings → Appearance → Auto)
+  // without needing a reload.
   const reapply = () => {
     if (!getStoredDensity()) apply(autoDensity())
   }

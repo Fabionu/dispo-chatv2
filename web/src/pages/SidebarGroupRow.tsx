@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import type { Group } from '../lib/types'
 import { groupHasUnread, groupLabel, groupPreview } from '../lib/types'
+import { useDraft } from '../lib/draftStorage'
 import { getOps, tripSummary } from '../lib/vehicleOps'
 import { TripStatusInline } from '../components/vehicle/opsControls'
 import Avatar from '../components/Avatar'
@@ -111,6 +112,10 @@ export default function GroupRow({
 
   const preview = groupPreview(group, currentUserId)
   const time = relTime(group.lastMessageAt)
+  // Local unsent draft for THIS conversation (this user/device only — never
+  // synced). When present it replaces the last-message preview with a subtle
+  // "Draft: …" line; the timestamp keeps showing the real last message's time.
+  const draft = useDraft(currentUserId, group.id).replace(/\s+/g, ' ').trim()
 
   // ── Per-conversation row actions (hover ⋮ menu) ────────────────────────────
   // While the ⋮ menu is open the row stays in its "actions active" state — the
@@ -280,10 +285,24 @@ export default function GroupRow({
               className={`flex-1 min-w-0 truncate leading-tight ${unread ? 'text-muted' : 'text-faint'}`}
               style={{ fontSize: 'var(--sidebar-conv-meta-font-size)' }}
             >
-              {preview.prefix && (
-                <span className={unread ? 'text-muted font-medium' : 'text-faint'}>{preview.prefix} </span>
+              {draft ? (
+                // A local unsent draft takes over the preview line, its "Draft:"
+                // tag in the app's accent so it reads as a distinct, personal
+                // state. The line truncates, so a long draft ellipsizes.
+                <>
+                  <span className="text-active font-medium">Draft: </span>
+                  {draft}
+                </>
+              ) : (
+                <>
+                  {preview.prefix && (
+                    <span className={unread ? 'text-muted font-medium' : 'text-faint'}>
+                      {preview.prefix}{' '}
+                    </span>
+                  )}
+                  {preview.text}
+                </>
               )}
-              {preview.text}
             </span>
             <span className={`flex items-center gap-2 shrink-0 ${metaFade}`}>
               {hasUnreadMention && (

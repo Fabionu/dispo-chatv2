@@ -148,8 +148,9 @@ authRouter.get(
       used_at: string | null
       expires_at: string
       company_name: string
+      role: string
     }>(
-      `select wi.used_at, wi.expires_at, w.name as company_name
+      `select wi.used_at, wi.expires_at, wi.role, w.name as company_name
          from workspace_invites wi
          join workspaces w on w.id = wi.workspace_id
         where wi.token_hash = $1
@@ -161,7 +162,8 @@ authRouter.get(
     if (row.used_at) return res.json({ status: 'used' as const })
     if (new Date(row.expires_at).getTime() <= Date.now())
       return res.json({ status: 'expired' as const })
-    res.json({ status: 'valid' as const, companyName: row.company_name })
+    // `role` lets the registration page show the invitee which role they'll get.
+    res.json({ status: 'valid' as const, companyName: row.company_name, role: row.role })
   }),
 )
 
@@ -200,8 +202,9 @@ authRouter.post(
         workspace_id: string
         used_at: string | null
         expires_at: string
+        role: string
       }>(
-        `select id, workspace_id, used_at, expires_at
+        `select id, workspace_id, used_at, expires_at, role
            from workspace_invites
           where token_hash = $1
           for update`,
@@ -215,13 +218,15 @@ authRouter.post(
 
       let userId: string
       try {
-        // Invited members join as a regular dispatcher, not an admin (the admin
-        // role is reserved for the workspace's original creator).
+        // The new member joins with the role the admin chose when generating the
+        // link (stored on the invite, validated there against the fixed role set
+        // and re-checked by the users.role constraint). Invites created before the
+        // role column default to 'dispatcher' — the previous hardcoded behaviour.
         const userRow = await client.query<{ id: string }>(
           `insert into users (workspace_id, email, password_hash, display_name, role)
-           values ($1, $2, $3, $4, 'dispatcher')
+           values ($1, $2, $3, $4, $5)
            returning id`,
-          [invite.workspace_id, normEmail, hash, displayName],
+          [invite.workspace_id, normEmail, hash, displayName, invite.role],
         )
         userId = userRow.rows[0].id
       } catch (err: unknown) {
@@ -234,7 +239,7 @@ authRouter.post(
         `update workspace_invites set used_at = now(), used_by = $1 where id = $2`,
         [userId, invite.id],
       )
-      return { userId, workspaceId: invite.workspace_id }
+      return { userId, workspaceId: invite.workspace_id, role: invite.role }
     })
 
     issueSession(res, { userId: result.userId, workspaceId: result.workspaceId })
@@ -251,7 +256,7 @@ authRouter.post(
         id: result.userId,
         email: normEmail,
         displayName,
-        role: 'dispatcher',
+        role: result.role,
         workspaceId: result.workspaceId,
       },
     })

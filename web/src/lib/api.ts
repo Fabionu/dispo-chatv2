@@ -11,6 +11,7 @@ import type {
   Message,
   Profile,
   PublicProfile,
+  Role,
   WorkspaceInvite,
   WorkspaceInviteCreated,
   WorkspaceMember,
@@ -299,8 +300,18 @@ export const api = {
   // the list afterwards exposes only status/expiry, never the token.
   workspaceInvites: {
     list: () => request<{ invites: WorkspaceInvite[] }>('/workspace-invites'),
-    create: () =>
-      request<{ invite: WorkspaceInviteCreated }>('/workspace-invites', { method: 'POST' }),
+    // The admin picks the role the new member joins with; the server validates it.
+    create: (role: Role) =>
+      request<{ invite: WorkspaceInviteCreated }>('/workspace-invites', {
+        method: 'POST',
+        body: JSON.stringify({ role }),
+      }),
+    // Change the role of a still-pending (active) invite before it's accepted.
+    setRole: (id: string, role: Role) =>
+      request<{ invite: { id: string; role: Role } }>(`/workspace-invites/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ role }),
+      }),
     revoke: (id: string) =>
       request<{ ok: true }>(`/workspace-invites/${id}`, { method: 'DELETE' }),
   },

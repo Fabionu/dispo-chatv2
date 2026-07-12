@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { env, isProd } from './env.js'
 import { authRouter } from './routes/auth.js'
 import { groupsRouter } from './routes/groups.js'
+import { driverRouter } from './routes/driver.js'
 import { connectionsRouter } from './routes/connections.js'
 import { groupInvitesRouter } from './routes/groupInvites.js'
 import { workspaceRouter } from './routes/workspace.js'
@@ -52,6 +53,7 @@ app.use(requestLog)
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
 app.use('/api/auth', authRouter)
 app.use('/api/groups', groupsRouter)
+app.use('/api/driver', driverRouter)
 app.use('/api/connections', connectionsRouter)
 app.use('/api/group-invites', groupInvitesRouter)
 app.use('/api/workspace', workspaceRouter)

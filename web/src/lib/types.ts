@@ -274,6 +274,11 @@ export type Message = {
     /** trip_status_changed: the previous / next TripStatus codes. */
     from?: string | null
     to?: string | null
+    /** trip_driver_assigned / trip_driver_unassigned: the affected driver ids +
+     *  their display names (names carried so the row is stable if a user is later
+     *  anonymized). */
+    driverIds?: string[]
+    driverNames?: string[]
   } | null
   /** Users @-mentioned in this message. Drives the highlighted mention tokens
    *  in the bubble. Absent/empty when the message mentions no one. */
@@ -323,6 +328,9 @@ export type WorkspaceMember = {
 export type WorkspaceInviteStatus = 'active' | 'used' | 'expired'
 export type WorkspaceInvite = {
   id: string
+  /** Workspace role the invitee receives on registration (admin picks it when
+   *  generating the link). Editable while the invite is still active. */
+  role: Role
   status: WorkspaceInviteStatus
   createdAt: string
   expiresAt: string
@@ -335,6 +343,7 @@ export type WorkspaceInvite = {
 // link and raw token (never persisted server-side, never re-fetchable).
 export type WorkspaceInviteCreated = {
   id: string
+  role: Role
   token: string
   url: string
   status: 'active'
@@ -342,9 +351,10 @@ export type WorkspaceInviteCreated = {
   expiresAt: string
 }
 
-// Result of validating an invite token on the public registration page.
+// Result of validating an invite token on the public registration page. `role`
+// on the valid branch lets the page tell the invitee which role they'll join as.
 export type InviteValidation =
-  | { status: 'valid'; companyName: string }
+  | { status: 'valid'; companyName: string; role: Role }
   | { status: 'used' | 'expired' | 'invalid' }
 
 // A person returned by the platform-wide directory search. `connection` is

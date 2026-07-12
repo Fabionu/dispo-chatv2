@@ -5,6 +5,15 @@ import { env } from '../env.js'
 // Company invite links expire 15 minutes after creation.
 export const INVITE_TTL_MS = 15 * 60 * 1000
 
+// The workspace roles an invite may grant, mirroring users.role's check
+// constraint (server/src/db/migrations/0001_init.sql) and workspace_invites.role
+// (0024). The route validates the requested role against this list, and the
+// accept handler stamps the stored role onto the new user. 'dispatcher' is the
+// default (the role invites granted before the column existed).
+export const COMPANY_ROLES = ['admin', 'dispatcher', 'driver', 'partner'] as const
+export type CompanyRole = (typeof COMPANY_ROLES)[number]
+export const DEFAULT_INVITE_ROLE: CompanyRole = 'dispatcher'
+
 // A fresh, unguessable invite token: 32 random bytes (256 bits) as URL-safe
 // base64. This raw value is handed to the invitee in the link and NEVER stored —
 // only its hash goes to the DB.

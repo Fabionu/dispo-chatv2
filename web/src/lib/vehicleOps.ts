@@ -9,6 +9,14 @@
 // edits these fields by hand. (Future map/live-tracking integration points are
 // marked with TODOs in the components, never wired here.)
 
+// The truck's physical profile (dimensions/weight/axles), in HERE units
+// (centimetres/kilograms). Reused verbatim so the vehicle-room truck profile,
+// the route calculation, and a future mobile truck-navigation request all speak
+// the same shape. It belongs to the VEHICLE (one truck per room) and is surfaced
+// under the trip payload for the driver app.
+import type { TruckProfile } from './here/types'
+export type { TruckProfile }
+
 // ── Option enums + English labels ───────────────────────────────────────────
 // Each option list is the single source of truth for both the <select> controls
 // and the read-only label lookups, so the UI and stored values never drift.
@@ -203,10 +211,16 @@ export function stopStatusTone(s: StopStatus): StatusTone {
 export type VehicleInfo = {
   vehicleType?: string
   trailerType?: string
-  /** Manually-entered assigned driver(s) — free text (the Members tab lists the
-   *  actual room participants and their roles). */
+  /** Manually-entered assigned driver(s) — free text (an informal note). The
+   *  STRUCTURED, mobile-facing assignment lives on the trip
+   *  (`ActiveTrip.assignedDriverIds`) so the driver API can filter by real user;
+   *  this free-text field is kept for legacy/quick notes. */
   assignedDrivers?: string
   status?: VehicleStatus
+  /** Structured truck dimensions/weight (cm/kg) for restriction-aware routing and
+   *  a future mobile truck-navigation handoff. Belongs to the vehicle (the truck),
+   *  entered once; the route calc and driver trip payload both read it. */
+  truckProfile?: TruckProfile
   notes?: string
 }
 
@@ -227,6 +241,11 @@ export type TripRoute = {
 }
 
 export type ActiveTrip = {
+  /** Stable id for this trip (assigned when the trip is created). Lets the mobile
+   *  driver API address a specific trip (`/driver/trips/:tripId`) even though the
+   *  trip itself lives inside the room's `meta.ops`. Optional so trips created
+   *  before this field still load; the driver API falls back to the room id. */
+  id?: string
   reference?: string
   /** @deprecated Legacy free-text loading address. New trips derive loading from
    *  the first Loading stop; kept so older trips still display. */
@@ -241,6 +260,11 @@ export type ActiveTrip = {
   weight?: string
   pallets?: string
   status?: TripStatus
+  /** User ids of the driver(s) assigned to this trip — REAL room members, so the
+   *  mobile driver API can return "trips assigned to me" and the room can log a
+   *  "assigned X as driver" activity row. Distinct from the free-text
+   *  `vehicle.assignedDrivers` note. Empty/absent when nobody is assigned. */
+  assignedDriverIds?: string[]
   /** Manual ETA — typed by the dispatcher, never computed from a map/route. */
   eta?: string
   notes?: string
@@ -313,6 +337,30 @@ export function stopId(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID
     ? crypto.randomUUID()
     : `stop_${Math.random().toString(36).slice(2)}`
+}
+
+// Stable id for a new trip (same generator as stops — a UUID where available).
+// Assigned once at trip creation so the mobile driver API can address the trip.
+export function tripId(): string {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `trip_${Math.random().toString(36).slice(2)}`
+}
+
+// Terminal trip statuses — a trip in one of these is finished and is NOT an
+// "active" trip for a driver (it drops out of the mobile "active trips" list).
+const TERMINAL_TRIP_STATUSES: ReadonlyArray<TripStatus> = ['completed', 'cancelled']
+
+// Whether a trip is still active (drivable) for the mobile app. A missing status
+// means a freshly-planned trip, which is active. Anything not terminal is active.
+export function isTripActive(status: TripStatus | undefined | null): boolean {
+  return !status || !TERMINAL_TRIP_STATUSES.includes(status)
+}
+
+// Normalised list of assigned driver user ids (tolerates absent/duplicate/blank).
+export function tripDriverIds(trip: ActiveTrip | null | undefined): string[] {
+  if (!trip || !Array.isArray(trip.assignedDriverIds)) return []
+  return [...new Set(trip.assignedDriverIds.filter((id) => typeof id === 'string' && id))]
 }
 
 // Parse a free-text coordinate pair ("lat, lng") into decimal degrees. Accepts
