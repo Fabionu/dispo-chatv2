@@ -1054,7 +1054,7 @@ export default function RoutePlanner({ onBack }: Props) {
             {/* Summary + notices */}
             {route && !loading && (
               <div className="flex flex-col gap-2 border-t border-white/[0.06] pt-2.5">
-                <div className="grid grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-3 divide-x divide-white/[0.06]">
                   <Stat label="Distance" value={formatDistance(route.summary.length)} />
                   <Stat label="Duration" value={formatDuration(route.summary.duration)} />
                   <Stat label="ETA" value={formatEta(route.summary.duration)} />

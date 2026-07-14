@@ -225,7 +225,9 @@ export default function GroupRow({
           paddingBottom: 'var(--sidebar-row-pad-y)',
         }}
         className={`w-full flex items-center rounded-btn text-left transition-colors ${
-          selected ? 'bg-white/[0.06] text-text' : 'text-muted hover:bg-white/[0.03] hover:text-text'
+          selected
+            ? 'bg-white/[0.075] text-text'
+            : 'text-muted hover:bg-white/[0.03] hover:text-text'
         }`}
       >
         {/* Identity — shape encodes the conversation type: circle = person,
@@ -245,7 +247,7 @@ export default function GroupRow({
           {peerDot && (
             <span
               title={peerDot.label}
-              className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-rail"
+              className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-bg"
               style={{ backgroundColor: peerDot.color }}
             />
           )}
@@ -327,7 +329,7 @@ export default function GroupRow({
                     height: 'var(--sidebar-badge-size)',
                     fontSize: 'var(--sidebar-meta-font-size)',
                   }}
-                  className="px-1.5 rounded-full bg-active text-bg font-semibold leading-none flex items-center justify-center"
+                  className="px-1.5 rounded-full bg-text text-bg font-semibold leading-none flex items-center justify-center"
                 >
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>

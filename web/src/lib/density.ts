@@ -15,22 +15,32 @@ export type Density = 'compact' | 'default' | 'comfortable'
 // (16px × --ui-scale: 16px normally, 18px on `comfortable`, 19px on 4K — see
 // index.css) scales it uniformly on 2K+ displays. Size-prop components (Avatar,
 // GroupAvatar, CompanyLogo, AppMark, Spinner, DocIcon) keep their numeric px
-// API but render through this, so a `size={28}` is 28px at 1080p and 31.5px on
-// the comfortable tier.
+// API but render through this, so a `size={28}` is ~26.25px at 1080p and
+// ~29.75px on the comfortable tier.
 export const rem = (px: number): string => `${px / 16}rem`
 
 // Sidebar avatar / company-logo diameter per tier, in DESIGN px (pre-rem-scale
 // — Avatar/CompanyLogo render size/16 rem, so the comfortable root bump adds
-// its ×1.125 on top: 42 → ~47.25 actual, matching the tuned
+// its ×1.0625 on top: 36 → ~38.25 actual, matching the tuned
 // --sidebar-user-avatar-size token in index.css). Components that take a
 // numeric `size` can't read the CSS density tokens, so they read this map via
 // useDensity() instead.
 //
-// These run LARGER than each tier's row text block on purpose (identity should
-// read at a glance); rail rows wrap the avatar in IdentitySlot (zero-height
+// These stay slightly larger than each tier's row text block so identity remains
+// readable at a glance; rail rows wrap the avatar in IdentitySlot (zero-height
 // flex slot) so the extra diameter centres into the row's existing padding
 // instead of growing the row.
 export const SIDEBAR_AVATAR_SIZE: Record<Density, number> = {
+  compact: 32,
+  default: 34,
+  comfortable: 36,
+}
+
+// Conversation identities get more visual weight than utility/header avatars.
+// GroupRow renders both direct messages and vehicle groups through the same
+// zero-height IdentitySlot, so these larger sizes do not change row padding or
+// row height. Kept explicit per appearance tier so the progression is stable.
+export const SIDEBAR_CONVERSATION_AVATAR_SIZE: Record<Density, number> = {
   compact: 38,
   default: 40,
   comfortable: 42,
@@ -41,7 +51,7 @@ const STORAGE_KEY = 'dispo:density'
 // In between → default (1080p desktops). The height gate keeps 2560×1080-class
 // ultrawides (1080p-height displays) on the default tier. Ultra-wide/4K
 // (≥3000px) is NOT a fourth tier — it's a pure-CSS refinement layered on
-// comfortable in index.css (--ui-scale 1.1875 + bumped px tokens); keep this
+// comfortable in index.css (--ui-scale 1.125 + bumped px tokens); keep this
 // MQ in sync with index.css's fallbacks.
 const COMFORTABLE_MQ = '(min-width: 2200px) and (min-height: 1200px)'
 const COMPACT_MQ = '(max-width: 1535px)'

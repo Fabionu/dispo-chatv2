@@ -243,11 +243,11 @@ export function PresetSelect({
   )
 }
 
-// Compact metric tile (route summary): a quiet fill so the three stats read as
-// one scannable row without adding border weight to the panel.
+// Compact route-summary metric. The parent row supplies dividers, keeping these
+// values flat inside the route panel instead of nesting three extra cards.
 export function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 flex flex-col gap-0.5 rounded-card bg-white/[0.03] px-2 py-1.5">
+    <div className="min-w-0 flex flex-col gap-0.5 px-2 py-1">
       <span className="text-[0.625rem] uppercase tracking-badge text-faint">{label}</span>
       <span className="text-[0.8125rem] font-semibold tracking-[-0.2px] tabular-nums truncate">{value}</span>
     </div>

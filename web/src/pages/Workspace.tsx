@@ -48,7 +48,11 @@ import WorkspaceSettingsPanel from '../components/settings/WorkspaceSettingsPane
 import InboxView from '../components/inbox/InboxView'
 import { useIdle } from '../hooks/useIdle'
 import { usePresence } from '../hooks/usePresence'
-import { useDensity, SIDEBAR_AVATAR_SIZE } from '../lib/density'
+import {
+  useDensity,
+  SIDEBAR_AVATAR_SIZE,
+  SIDEBAR_CONVERSATION_AVATAR_SIZE,
+} from '../lib/density'
 import { getStoredSidebarCollapsed, setStoredSidebarCollapsed } from '../lib/sidebar'
 import { preloadAvatar } from '../lib/avatarCache'
 import { statusMeta, AWAY } from '../lib/availability'
@@ -102,11 +106,12 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // take a numeric size, so they can't read the CSS density tokens directly).
   const density = useDensity()
   const sidebarAvatar = SIDEBAR_AVATAR_SIZE[density]
+  const conversationAvatar = SIDEBAR_CONVERSATION_AVATAR_SIZE[density]
   // The workspace header logo reads larger than the rail's avatar metric, while
   // the header's padding/height (--header-height) stay fixed — it's still
   // vertically centered, just a bigger image. Footer avatar + collapsed rail keep
   // the standard `sidebarAvatar` size.
-  const headerLogoSize = sidebarAvatar + 9
+  const headerLogoSize = sidebarAvatar + 7
   // Auto-away presence: grey "Away" on the footer status dot when idle / tab
   // hidden. Doesn't change the stored (manual) status — presence only.
   const away = useIdle()
@@ -798,11 +803,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // simplicity (the server enforces the full rule on POST).
   const canInviteMembers = user.role === 'admin' || user.role === 'dispatcher'
 
-  // App shell: the near-black sidebar card sits on the slightly lighter grey
-  // app background (`bg`), with a consistent gap between them — so the rail
-  // reads as the darkest navigation area and the main/chat content as the
-  // lighter primary surface. Outer margin is small on laptops and a touch
-  // larger on big monitors (2xl) so large screens feel contained.
+  // App shell: navigation sits directly on the workspace background while the
+  // main pane owns the raised rail surface. The shared outer gap keeps the two
+  // regions distinct without outlining either one.
   return (
     <div className="h-screen w-full flex gap-3 p-2 2xl:p-3 bg-bg text-text overflow-hidden">
       {/* Collapsed left rail — a slim icon strip so the main area (wide
@@ -811,14 +814,14 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           list state (search, groups, DMs, requests, panels) is preserved and
           returns intact on expand. */}
       {sidebarCollapsed ? (
-        <aside className="w-14 shrink-0 bg-rail rounded-panel overflow-hidden flex flex-col items-center py-3 gap-1.5">
+        <aside className="w-12 shrink-0 overflow-hidden flex flex-col items-center py-2.5 gap-1">
           <button
             onClick={toggleSidebar}
             title="Expand sidebar"
             aria-label="Expand sidebar"
-            className="h-9 w-9 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+            className="h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
           >
-            <PanelLeftOpen size="1.1875rem" strokeWidth={1.8} />
+            <PanelLeftOpen size="1.0625rem" strokeWidth={1.8} />
           </button>
           <button
             onClick={() => setSelection({ kind: 'inbox' })}
@@ -848,11 +851,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           </button>
         </aside>
       ) : (
-      /* Left rail — a borderless rounded card. overflow-hidden clips the
-          header/list to the rounded corners; separation from the darker chat
-          background comes from the panel's own `rail` tone (the same surface as
-          the Group Info panel), not a border. */
-      <aside className="w-[var(--sidebar-width)] shrink-0 bg-rail rounded-panel overflow-hidden flex flex-col">
+      /* Left rail — intentionally flat on the workspace background. It keeps
+          overflow clipping for its drawers and menus, but no outer card surface. */
+      <aside className="w-[var(--sidebar-width)] shrink-0 overflow-hidden flex flex-col">
         {profilePanelOpen ? (
           <ProfileSidebarPanel
             initialProfile={cachedProfile}
@@ -894,7 +895,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             // chat header's identity cluster and the rail's own content edge (the
             // search field + footer avatar sit at px-3), so the logo lines up with
             // everything below it instead of being indented on its own.
-            className="flex-1 min-w-0 flex items-center gap-3 px-3 text-left"
+            className="flex-1 min-w-0 flex items-center gap-2.5 px-2.5 text-left"
           >
             <CompanyLogo size={headerLogoSize} version={logoVersion} className="!rounded-full" />
             <div className="min-w-0 flex-1">
@@ -914,19 +915,19 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             onClick={toggleSidebar}
             title="Collapse sidebar"
             aria-label="Collapse sidebar"
-            className="self-center mr-1.5 h-9 w-9 flex items-center justify-center rounded-full text-muted hover:text-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 shrink-0"
+            className="self-center mr-1 h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 shrink-0"
           >
-            <PanelLeftClose size="1.1875rem" strokeWidth={1.8} />
+            <PanelLeftClose size="1.0625rem" strokeWidth={1.8} />
           </button>
         </div>
 
         {/* Quick search + create */}
-        <div className="px-3 pt-3 pb-2 flex items-center gap-1.5">
+        <div className="px-2.5 pt-2.5 pb-1.5 flex items-center gap-1.5">
           <label
             htmlFor="rail-search"
-            className="flex-1 h-[var(--sidebar-search-height)] flex items-center gap-2 px-3 rounded-panel border border-white/[0.06] bg-white/[0.02] focus-within:border-white/[0.16] hover:border-white/[0.10] transition-colors cursor-text"
+            className="flex-1 h-[var(--sidebar-search-height)] flex items-center gap-1.5 px-2.5 rounded-panel border border-white/[0.06] bg-white/[0.02] focus-within:border-white/[0.16] hover:border-white/[0.10] transition-colors cursor-text"
           >
-            <Search size="0.875rem" strokeWidth={1.6} className="text-faint shrink-0" />
+            <Search size="0.8125rem" strokeWidth={1.6} className="text-faint shrink-0" />
             <input
               id="rail-search"
               value={query}
@@ -944,7 +945,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 aria-label="Clear search"
                 className="text-faint hover:text-text shrink-0 transition-colors"
               >
-                <X size="0.875rem" strokeWidth={1.8} />
+                <X size="0.8125rem" strokeWidth={1.8} />
               </button>
             )}
           </label>
@@ -961,7 +962,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                   : 'bg-white/[0.08] text-text hover:bg-white/[0.14]'
               }`}
             >
-              <Plus size="1.1875rem" strokeWidth={2} />
+              <Plus size="1.0625rem" strokeWidth={2} />
             </button>
 
             {newMenuOpen && (
@@ -998,8 +999,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             direct) sits on the left; the Archived STATE is a separate icon toggle
             on the right, so the two filter axes never read as peers. Opening
             Archived clears the type selection; picking a type leaves Archived. */}
-        <div className="px-3 pb-2 flex items-center gap-1.5">
-          <div className="inline-flex items-center gap-0.5 rounded-card bg-black/20 p-0.5">
+        <div className="px-2.5 pb-1.5 flex items-center gap-1.5">
+          <div className="inline-flex items-center gap-1">
             <FilterTab active={filter === 'all'} onClick={() => setFilter('all')}>
               All
             </FilterTab>
@@ -1016,7 +1017,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             label={filter === 'archived' ? 'Show conversations' : 'Show archived'}
             onClick={() => setFilter((f) => (f === 'archived' ? 'all' : 'archived'))}
           >
-            <Archive size="0.9375rem" strokeWidth={1.8} />
+            <Archive size="0.8125rem" strokeWidth={1.8} />
           </ArchiveToggle>
         </div>
 
@@ -1027,7 +1028,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             Sections use the larger inter-section gap; the unified list inside its
             wrapper stays tight. */}
         <nav
-          className="flex-1 overflow-y-auto px-2 pt-1 pb-2 flex flex-col"
+          className="flex-1 overflow-y-auto px-1.5 pt-1 pb-1.5 flex flex-col"
           style={{ gap: 'var(--sidebar-section-gap)' }}
         >
           {loadingGroups ? (
@@ -1076,7 +1077,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                         group={item.group}
                         online={onlineIds}
                         currentUserId={user.id}
-                        size={sidebarAvatar}
+                        size={conversationAvatar}
                         selected={selection?.kind === 'group' && selection.id === item.group.id}
                         onClick={() => setSelection({ kind: 'group', id: item.group.id })}
                         onTogglePin={togglePin}
@@ -1148,7 +1149,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
 
           <button
             onClick={() => setUserMenuOpen((v) => !v)}
-            className="w-full flex items-center gap-2.5 px-3 py-3 hover:bg-white/[0.02] transition-colors text-left"
+            className="w-full flex items-center gap-2 px-2.5 py-2.5 hover:bg-white/[0.02] transition-colors text-left"
           >
             <div className="relative shrink-0">
               <Avatar userId={user.id} name={user.displayName} size={sidebarAvatar} version={avatarVersion} />
@@ -1157,7 +1158,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               {user.role !== 'driver' && cachedProfile && (
                 <span
                   title={away ? AWAY.label : statusMeta(cachedProfile.availabilityStatus).label}
-                  className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-rail"
+                  className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-bg"
                   style={{
                     backgroundColor: away
                       ? AWAY.color
@@ -1192,11 +1193,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
       </aside>
       )}
 
-      {/* Main — holds the right-side content region. NOT a card: it has no outer
-          border or radius, so the chat / inbox / route / request / invite views
-          read as open content on the app background (the sidebar keeps the card
-          treatment). Each view supplies its own header + internal dividers. */}
-      <main className="flex-1 flex flex-col min-w-0">
+      {/* Main — the single raised workspace card. No white outline: the lighter
+          rail tone, rounded clipping and shell gap provide separation. */}
+      <main className="flex-1 flex flex-col min-w-0 bg-rail rounded-panel overflow-hidden">
         {selectedGroup ? (
           <ChatView
             key={selectedGroup.id}
@@ -1212,7 +1211,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             onGroupUpdated={patchGroup}
           />
         ) : (
-          <div className="flex-1 flex flex-col min-w-0 bg-bg">
+          <div className="flex-1 flex flex-col min-w-0 bg-rail">
             {selectedRequest ? (
               <ConnectionRequestView
                 key={selectedRequest.id}

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from 'react'
-import { Route } from 'lucide-react'
+import { ChevronRight, Route } from 'lucide-react'
 import { PaneLoader } from '../LazyFallback'
 
 // The Route planner pulls in the whole HERE map stack (@here/flexpolyline, the
@@ -63,15 +63,20 @@ function ToolCard({
   return (
     <button
       onClick={onClick}
-      className="group flex flex-col gap-3.5 rounded-soft border border-white/[0.08] bg-white/[0.02] p-5 text-left transition-colors hover:border-white/[0.16] hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+      className="group flex items-center gap-3 rounded-panel border border-white/[0.06] bg-white/[0.015] px-4 py-3.5 text-left transition-colors hover:border-white/[0.12] hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
     >
-      <span className="h-11 w-11 flex items-center justify-center rounded-full bg-white/[0.04] text-active transition-colors group-hover:bg-white/[0.06]">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center text-active">
         {icon}
       </span>
-      <span className="block">
+      <span className="min-w-0 flex-1">
         <span className="block text-[0.875rem] font-semibold tracking-[-0.2px]">{title}</span>
-        <span className="block text-[0.75rem] text-muted mt-1 leading-[1.5]">{subtitle}</span>
+        <span className="mt-0.5 block text-[0.75rem] leading-[1.5] text-muted">{subtitle}</span>
       </span>
+      <ChevronRight
+        size="1rem"
+        strokeWidth={1.7}
+        className="shrink-0 text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-muted"
+      />
     </button>
   )
 }

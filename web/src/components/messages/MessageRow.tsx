@@ -181,11 +181,11 @@ function MessageRow({
   const shapeMine = `rounded-[0.5rem] rounded-br-[0.1875rem]${grouped ? ' rounded-tr-[0.25rem]' : ''}`
   const shapeOther = `rounded-[0.5rem] rounded-bl-[0.1875rem]${grouped ? ' rounded-tl-[0.25rem]' : ''}`
   const deletedSkin = `bg-white/[0.02] text-muted italic ${mine ? shapeMine : shapeOther}`
-  // Minimal flat skins on the neutral chat surface (`bg` #181818): incoming a
-  // quiet neutral lift (`surface` grey), my own a slightly lighter grey warmed
-  // toward the `active` accent — tinted, never bright, so ownership reads at a
-  // glance while the timeline stays calm. Borderless, no shadow. The bubble
-  // itself never changes on hover; only the actions affordance reveals.
+  // Bubble skins sit on the raised chat card (`rail` #262626). Incoming uses
+  // the next neutral surface step (`surface-2` #303030), which separates it
+  // through colour alone — no border or shadow. My own messages keep their
+  // original warmer ownership tint. The bubble itself never changes on hover;
+  // only the actions affordance reveals.
   // (Failed sends keep an alert border as their error cue.)
   const bubbleSkin = deleted
     ? deletedSkin
@@ -193,7 +193,7 @@ function MessageRow({
       ? failed
         ? `bg-bubble-own border border-alert/50 ${shapeMine}`
         : `bg-bubble-own ${shapeMine}`
-      : `bg-surface ${shapeOther}`
+      : `bg-surface-2 ${shapeOther}`
   // Subtle, theme-warm pulse applied when this row is the target of a
   // jump-to-original. Clears after ~1.8s back in ChatView.
   const highlightSkin = highlighted ? 'ring-2 ring-active/60' : ''
