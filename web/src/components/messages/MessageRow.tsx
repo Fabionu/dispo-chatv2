@@ -183,16 +183,17 @@ function MessageRow({
   const deletedSkin = `bg-white/[0.02] text-muted italic ${mine ? shapeMine : shapeOther}`
   // Bubble skins sit on the raised chat card (`rail` #262626). Incoming uses
   // the next neutral surface step (`surface-2` #303030), which separates it
-  // through colour alone — no border or shadow. My own messages keep their
-  // original warmer ownership tint. The bubble itself never changes on hover;
-  // only the actions affordance reveals.
+  // through colour alone — no border or shadow. My own messages use the darker
+  // workspace background (`bg` #181818), relying on right alignment and their
+  // tail shape for ownership. The bubble itself never changes on hover; only
+  // the actions affordance reveals.
   // (Failed sends keep an alert border as their error cue.)
   const bubbleSkin = deleted
     ? deletedSkin
     : mine
       ? failed
-        ? `bg-bubble-own border border-alert/50 ${shapeMine}`
-        : `bg-bubble-own ${shapeMine}`
+        ? `bg-bg border border-alert/50 ${shapeMine}`
+        : `bg-bg ${shapeMine}`
       : `bg-surface-2 ${shapeOther}`
   // Subtle, theme-warm pulse applied when this row is the target of a
   // jump-to-original. Clears after ~1.8s back in ChatView.
@@ -234,9 +235,9 @@ function MessageRow({
   // Slack/Discord-style work-log for INCOMING messages: a group start shows the
   // avatar (in a fixed left gutter) + author name; following rows in the group
   // are bare text indented under that gutter. MY OWN messages are the one
-  // asymmetry: right-aligned AND wrapped in the same warm own-message bubble as
-  // bubble view (`bubble-own` skin + tail shape), so ownership is unmistakable
-  // while the incoming side keeps the bare log structure.
+  // asymmetry: right-aligned AND wrapped in the same dark own-message bubble as
+  // bubble view (`bg` skin + tail shape), so ownership remains clear while the
+  // incoming side keeps the bare log structure.
   // Per-message time trails the body on the row's end (faint, never
   // in the header, never above the text). A single subtle dropdown chevron
   // reveals on hover, ATTACHED to the content: for text it sits just after the

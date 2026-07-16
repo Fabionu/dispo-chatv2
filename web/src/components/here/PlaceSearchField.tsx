@@ -9,7 +9,7 @@ import { MENU_SURFACE } from '../menuStyles'
 // the two states read as the SAME control: hairline border, subtle fill and a
 // calm brighten on focus (mirrors tripFormStyles / the sidebar search).
 const FIELD_SURFACE =
-  'h-9 rounded-card border border-white/[0.06] bg-white/[0.04] px-3 transition-colors'
+  'h-9 border border-white/[0.06] bg-white/[0.04] px-3 transition-colors'
 const FIELD_FOCUS = 'outline-none focus:border-white/[0.16] focus:bg-white/[0.05]'
 
 // Build a HerePlace from directly-entered coordinates so the selection flow is
@@ -31,13 +31,15 @@ type Props = {
   initialQuery?: string
   // Focus the input on mount (inline edit / "add stop" reveal).
   autoFocus?: boolean
+  // Optional pill treatment for compact floating tools such as Route Planner.
+  pill?: boolean
 }
 
 // Address/location autocomplete backed by HERE Discover (via /api/here/search).
 // Debounced; selecting a result locks the field to that place's label, with a
 // clear (×) button to pick again. Stays deliberately simple — no keyboard
 // arrow-nav yet, just click/tap selection.
-export default function PlaceSearchField({ label, value, onChange, placeholder, initialQuery, autoFocus }: Props) {
+export default function PlaceSearchField({ label, value, onChange, placeholder, initialQuery, autoFocus, pill = false }: Props) {
   const [query, setQuery] = useState(initialQuery ?? '')
   const [items, setItems] = useState<HerePlace[]>([])
   const [open, setOpen] = useState(false)
@@ -113,6 +115,7 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
   const trimmed = query.trim()
   const coordShape = !value && looksLikeCoordPair(trimmed)
   const coord = coordShape ? parseLatLng(trimmed) : null
+  const fieldSurface = `${FIELD_SURFACE} ${pill ? 'rounded-full' : 'rounded-card'}`
 
   return (
     <div ref={rootRef} className="relative flex flex-col gap-1.5">
@@ -120,7 +123,7 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
 
       {value ? (
         // Selected state — locked chip with the chosen place + clear button.
-        <div className={`flex items-center gap-2 ${FIELD_SURFACE}`}>
+        <div className={`flex items-center gap-2 ${fieldSurface}`}>
           <MapPin size="0.9375rem" className="shrink-0 text-active" strokeWidth={1.8} />
           <span className="flex-1 truncate text-[0.8125rem]" title={value.label}>
             {value.label || value.title}
@@ -153,7 +156,7 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
           aria-controls={listboxId}
           autoComplete="off"
           autoFocus={autoFocus}
-          className={`${FIELD_SURFACE} ${FIELD_FOCUS} text-[0.8125rem] placeholder:text-faint`}
+          className={`${fieldSurface} ${FIELD_FOCUS} text-[0.8125rem] placeholder:text-faint`}
         />
       )}
 

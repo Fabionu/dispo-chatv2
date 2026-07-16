@@ -697,13 +697,30 @@ export default function RoutePlanner({ onBack }: Props) {
   // the search box with the current address; picking a result replaces the point
   // (keeping its role/order), cancelling leaves the old address untouched.
   function editorRow(p: RoutePoint) {
+    const stopIndex = p.role === 'stop' ? stops.findIndex((s) => s.id === p.id) + 1 : 0
+    const badge =
+      p.role === 'start' ? (
+        <span className="h-5 w-5 rounded-full border border-done/30 bg-done/10 text-done flex items-center justify-center">
+          <Navigation size="0.6875rem" strokeWidth={2.2} />
+        </span>
+      ) : p.role === 'destination' ? (
+        <span className="h-5 w-5 rounded-full border border-alert/30 bg-alert/10 text-alert flex items-center justify-center">
+          <Flag size="0.6875rem" strokeWidth={2.2} />
+        </span>
+      ) : (
+        <span className="h-5 w-5 rounded-full border border-white/[0.22] bg-white/[0.06] text-[0.625rem] font-semibold flex items-center justify-center">
+          {stopIndex}
+        </span>
+      )
     return (
-      <div className="flex items-start gap-1.5">
+      <div className="flex items-center gap-2.5">
+        <div className="shrink-0">{badge}</div>
         <div className="flex-1 min-w-0">
           <PlaceSearchField
             value={null}
             initialQuery={p.label}
             autoFocus
+            pill
             onChange={(place) => {
               if (place) {
                 replacePoint(p.id, place)
@@ -716,7 +733,7 @@ export default function RoutePlanner({ onBack }: Props) {
         <button
           onClick={() => setEditingId(null)}
           aria-label="Cancel edit"
-          className="h-9 w-9 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.05] transition-colors"
+          className="h-8 w-8 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
         >
           <X size="0.9375rem" strokeWidth={2} />
         </button>
@@ -791,12 +808,15 @@ export default function RoutePlanner({ onBack }: Props) {
 
         {/* Floating route panel — compact; collapses horizontally to the left. */}
         <div
-          className="absolute z-20 top-3 left-3 w-[18.75rem] max-w-[calc(100%-1.5rem)] max-h-[calc(100%-1.5rem)] flex flex-col rounded-panel border border-white/[0.08] bg-rail/95 backdrop-blur-sm shadow-[0_8px_28px_rgba(0,0,0,0.35)] transition-transform duration-300 ease-out"
+          className="absolute z-20 top-3 left-3 w-[18.75rem] max-w-[calc(100%-1.5rem)] max-h-[calc(100%-1.5rem)] flex flex-col gap-2 transition-transform duration-300 ease-out"
           style={{ transform: panelCollapsed ? 'translateX(calc(-100% - 1rem))' : 'translateX(0)' }}
           aria-hidden={panelCollapsed}
         >
-          <div className="flex items-center justify-between pl-3.5 pr-2 h-10 border-b border-white/[0.06] shrink-0">
-            <span className="text-[0.8125rem] font-semibold tracking-[-0.1px]">Route</span>
+          <div className="flex items-center justify-between pl-3.5 pr-2 h-11 rounded-[0.875rem] border border-white/[0.08] bg-rail shadow-[0_6px_20px_rgba(0,0,0,0.3)] shrink-0">
+            <div className="min-w-0">
+              <div className="text-[0.8125rem] font-semibold tracking-[-0.1px]">Route</div>
+              <div className="text-[0.625rem] text-faint leading-tight">Plan your delivery path</div>
+            </div>
             <div className="flex items-center gap-0.5">
               {points.length > 0 && (
                 <button
@@ -818,7 +838,11 @@ export default function RoutePlanner({ onBack }: Props) {
             </div>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2.5 flex flex-col gap-2">
+          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2">
+            <section className="rounded-[0.875rem] border border-white/[0.08] bg-rail p-2.5 flex flex-col gap-2">
+              <div className="px-0.5 text-[0.625rem] font-semibold uppercase tracking-badge text-faint">
+                Route points
+              </div>
             {/* Start — draggable so it can be reordered into the route (drop it
                 lower and the next point becomes the new start). */}
             {start ? (
@@ -841,7 +865,14 @@ export default function RoutePlanner({ onBack }: Props) {
                 />
               )
             ) : (
-              <PlaceSearchField label="Start" value={null} onChange={(p) => p && setStart(fromSearch(p))} placeholder="Start address or place…" />
+              <div className="flex items-end gap-2.5">
+                <span className="mb-2 h-5 w-5 shrink-0 rounded-full border border-done/30 bg-done/10 text-done flex items-center justify-center">
+                  <Navigation size="0.6875rem" strokeWidth={2.2} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <PlaceSearchField pill label="Start" value={null} onChange={(p) => p && setStart(fromSearch(p))} placeholder="Start address or place…" />
+                </div>
+              </div>
             )}
 
             {/* Stops — draggable to reorder anywhere in the route. */}
@@ -871,9 +902,13 @@ export default function RoutePlanner({ onBack }: Props) {
             {/* Compact "add stop" — secondary action, not a permanent input. */}
             {stops.length < MAX_STOPS &&
               (addingStop ? (
-                <div className="flex items-start gap-1.5">
+                <div className="flex items-center gap-2.5">
+                  <span className="h-5 w-5 shrink-0 rounded-full border border-white/[0.18] bg-white/[0.06] text-muted flex items-center justify-center">
+                    <Plus size="0.6875rem" strokeWidth={2.2} />
+                  </span>
                   <div className="flex-1 min-w-0">
                     <PlaceSearchField
+                      pill
                       value={null}
                       onChange={(p) => {
                         if (p) {
@@ -892,7 +927,7 @@ export default function RoutePlanner({ onBack }: Props) {
                   <button
                     onClick={() => setAddingStop(false)}
                     aria-label="Cancel add stop"
-                    className="h-9 w-9 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.05] transition-colors"
+                    className="h-8 w-8 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
                   >
                     <X size="0.9375rem" strokeWidth={2} />
                   </button>
@@ -902,9 +937,9 @@ export default function RoutePlanner({ onBack }: Props) {
                 // here" slot, not floating text — clear but secondary.
                 <button
                   onClick={() => setAddingStop(true)}
-                  className="w-full h-8 flex items-center gap-2 px-2.5 rounded-card border border-dashed border-white/[0.08] text-[0.75rem] text-muted hover:text-text hover:border-white/[0.14] hover:bg-white/[0.02] transition-colors"
+                  className="self-start ml-7 h-7 flex items-center gap-1.5 px-2.5 rounded-full bg-white/[0.04] text-[0.71875rem] text-muted hover:text-text hover:bg-white/[0.08] transition-colors"
                 >
-                  <Plus size="0.875rem" strokeWidth={2} /> Add stop
+                  <Plus size="0.8125rem" strokeWidth={2} /> Add stop
                 </button>
               ))}
 
@@ -930,21 +965,32 @@ export default function RoutePlanner({ onBack }: Props) {
                 />
               )
             ) : (
-              <PlaceSearchField label="Destination" value={null} onChange={(p) => p && setDestinationPoint(fromSearch(p))} placeholder="End address or place…" />
+              <div className="flex items-end gap-2.5">
+                <span className="mb-2 h-5 w-5 shrink-0 rounded-full border border-alert/30 bg-alert/10 text-alert flex items-center justify-center">
+                  <Flag size="0.6875rem" strokeWidth={2.2} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <PlaceSearchField pill label="Destination" value={null} onChange={(p) => p && setDestinationPoint(fromSearch(p))} placeholder="End address or place…" />
+                </div>
+              </div>
             )}
+            </section>
 
             {/* Truck profile (collapsible, with presets) */}
-            <div className="border-t border-white/[0.06] pt-2">
+            <div className="rounded-[0.875rem] border border-white/[0.08] bg-rail p-1.5">
               <button
                 onClick={() => setTruckOpen((o) => !o)}
                 aria-expanded={truckOpen}
-                className="w-full h-9 flex items-center justify-between gap-2 px-2.5 rounded-card text-left hover:bg-white/[0.04] transition-colors"
+                className="w-full h-10 flex items-center justify-between gap-2 px-2 rounded-[0.6875rem] text-left hover:bg-white/[0.04] transition-colors"
               >
                 {/* Left section is fixed (icon + label never wrap or shrink);
                     the collapsed value takes the leftover width and truncates,
                     with the chevron pinned on the far right. */}
-                <span className="flex items-center gap-2 text-[0.75rem] font-medium shrink-0 whitespace-nowrap">
-                  <Truck size="0.875rem" strokeWidth={1.8} className="text-muted shrink-0" /> Truck profile
+                <span className="flex items-center gap-2.5 text-[0.75rem] font-medium shrink-0 whitespace-nowrap">
+                  <span className="h-7 w-7 rounded-full bg-white/[0.06] text-muted flex items-center justify-center shrink-0">
+                    <Truck size="0.875rem" strokeWidth={1.8} />
+                  </span>
+                  Truck profile
                 </span>
                 <span className="flex-1 min-w-0 flex items-center justify-end gap-1.5 text-[0.6875rem] text-muted">
                   {!truckOpen && (
@@ -957,7 +1003,7 @@ export default function RoutePlanner({ onBack }: Props) {
               </button>
 
               {truckOpen && (
-                <div className="flex flex-col gap-2.5 pt-2">
+                <div className="flex flex-col gap-2.5 px-1.5 pt-2 pb-1.5 border-t border-white/[0.05]">
                   {/* Presets */}
                   <div className="flex items-center gap-1.5">
                     <PresetSelect
@@ -1022,28 +1068,32 @@ export default function RoutePlanner({ onBack }: Props) {
                 accent button is only "loud" while there is something to do;
                 loading and up-to-date settle into a quiet neutral fill (the
                 Spinner's accent ring wouldn't read on bg-active anyway). */}
-            <button
-              onClick={calculate}
-              disabled={routeButtonDisabled}
-              title={!hasEndpoints ? 'Set a start and destination first' : undefined}
-              className={`h-9 rounded-btn font-semibold text-[0.8125rem] flex items-center justify-center gap-2 transition-colors ${
-                loading || routeUpToDate
-                  ? 'bg-white/[0.04] text-muted cursor-default'
-                  : 'bg-active text-bg hover:bg-active/90 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-active'
-              }`}
-            >
-              {loading ? (
-                <Spinner size={14} />
-              ) : routeUpToDate ? (
-                <Check size="1rem" strokeWidth={2.4} className="text-done" />
-              ) : (
-                <RouteIcon size="1rem" strokeWidth={2} />
+            <div className="rounded-[0.875rem] border border-white/[0.08] bg-rail p-1.5">
+              <button
+                onClick={calculate}
+                disabled={routeButtonDisabled}
+                title={!hasEndpoints ? 'Set a start and destination first' : undefined}
+                className={`w-full h-10 rounded-full font-semibold text-[0.8125rem] flex items-center justify-center gap-2 transition-colors ${
+                  loading || routeUpToDate
+                    ? 'bg-white/[0.05] text-muted cursor-default'
+                    : 'bg-text text-bg hover:bg-white disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-text'
+                }`}
+              >
+                {loading ? (
+                  <Spinner size={14} />
+                ) : routeUpToDate ? (
+                  <Check size="1rem" strokeWidth={2.4} className="text-done" />
+                ) : (
+                  <RouteIcon size="1rem" strokeWidth={2} />
+                )}
+                {routeButtonLabel}
+              </button>
+              {route && dirty && !loading && (
+                <div className="px-2 pt-1.5 pb-0.5 text-[0.6875rem] text-amber-200/80">
+                  Route is outdated — press “Update route”.
+                </div>
               )}
-              {routeButtonLabel}
-            </button>
-            {route && dirty && !loading && (
-              <div className="text-[0.6875rem] text-amber-200/80">Route is outdated — press “Update route”.</div>
-            )}
+            </div>
 
             {/* Status */}
             {error && (
@@ -1053,7 +1103,7 @@ export default function RoutePlanner({ onBack }: Props) {
 
             {/* Summary + notices */}
             {route && !loading && (
-              <div className="flex flex-col gap-2 border-t border-white/[0.06] pt-2.5">
+              <div className="flex flex-col gap-2 rounded-[0.875rem] border border-white/[0.08] bg-rail p-2">
                 <div className="grid grid-cols-3 divide-x divide-white/[0.06]">
                   <Stat label="Distance" value={formatDistance(route.summary.length)} />
                   <Stat label="Duration" value={formatDuration(route.summary.duration)} />

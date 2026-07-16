@@ -135,6 +135,11 @@ export default function HereMap({
   const HRef = useRef<any>(null)
   const mapRef = useRef<any>(null)
   const behaviorRef = useRef<any>(null)
+  // Objects that must be volatile while idle so HERE can start drag gestures.
+  // During a camera pan/zoom we temporarily cache them, then restore volatility
+  // when the view settles. This keeps editing intact without paying their
+  // per-frame rendering cost throughout ordinary map navigation.
+  const draggableObjectsRef = useRef<any[]>([])
   // A single group holding every marker + line, so a redraw is "clear group,
   // add fresh objects" rather than tracking individual handles.
   const groupRef = useRef<any>(null)
@@ -158,6 +163,9 @@ export default function HereMap({
   // True while a marker/route/pan drag is in progress, and while the view is
   // animating — both suppress the hover readout so it doesn't flicker.
   const activeDragRef = useRef(false)
+  // Unlike activeDragRef, this only tracks direct marker/route editing. A plain
+  // camera pan should still switch draggable objects into cached mode.
+  const interactiveDragRef = useRef(false)
   const viewChangingRef = useRef(false)
   // Flips true once the map exists; drives the effects so the first draw/toggle
   // always runs with the latest props (not whatever they were at mount).
@@ -184,10 +192,14 @@ export default function HereMap({
         baseLayerRef.current = baseLayer
         logisticsLayerRef.current = logisticsLayer
 
+        // High-density desktop displays commonly report DPR 2. Rendering the
+        // WebGL basemap at full density multiplies the pixel workload during
+        // every pan/zoom with little practical gain under labels and overlays.
+        const maxPixelRatio = 1.25
         const map = new H.Map(containerRef.current, baseLayer, {
           center: DEFAULT_CENTER,
           zoom: DEFAULT_ZOOM,
-          pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+          pixelRatio: Math.min(window.devicePixelRatio || 1, maxPixelRatio),
         })
 
         const behavior = new H.mapevents.Behavior(new H.mapevents.MapEvents(map))
@@ -269,6 +281,10 @@ export default function HereMap({
           else hideHover()
         }
         const onPointerMove = (e: PointerEvent) => {
+          if (activeDragRef.current || viewChangingRef.current) {
+            hoverPx = null
+            return
+          }
           const rect = container.getBoundingClientRect()
           hoverPx = { x: e.clientX - rect.left, y: e.clientY - rect.top }
           if (!hoverRaf) hoverRaf = requestAnimationFrame(processHover)
@@ -277,8 +293,14 @@ export default function HereMap({
           hoverPx = null
           hideHover()
         }
-        container.addEventListener('pointermove', onPointerMove)
-        container.addEventListener('pointerleave', onPointerLeave)
+        // There is no useful hover state on touch screens. Avoid installing a
+        // high-frequency listener there while the same pointer pans the map.
+        const supportsRouteHover =
+          window.matchMedia?.('(hover: hover) and (pointer: fine)').matches ?? true
+        if (supportsRouteHover) {
+          container.addEventListener('pointermove', onPointerMove)
+          container.addEventListener('pointerleave', onPointerLeave)
+        }
 
         // Right-click → report the geo coordinate under the cursor + the
         // cursor's position within the container (for menu placement).
@@ -306,13 +328,37 @@ export default function HereMap({
 
         // Pan/zoom dismisses any open menu and hides the hover readout; the flag
         // keeps it suppressed for the duration of the gesture.
+        let resumeDraggableRaf = 0
+        const setDraggableVolatility = (volatile: boolean) => {
+          for (const object of draggableObjectsRef.current) object.setVolatility?.(volatile)
+        }
         const onViewChange = () => {
           viewChangingRef.current = true
+          hoverPx = null
+          if (hoverRaf) {
+            cancelAnimationFrame(hoverRaf)
+            hoverRaf = 0
+          }
           hideHover()
+          if (!interactiveDragRef.current) {
+            if (resumeDraggableRaf) {
+              cancelAnimationFrame(resumeDraggableRaf)
+              resumeDraggableRaf = 0
+            }
+            setDraggableVolatility(false)
+          }
           onViewChangeRef.current?.()
         }
         const onViewChangeEnd = () => {
           viewChangingRef.current = false
+          // Let HERE finish the camera's final frame before returning interaction
+          // objects to its live render path.
+          if (!interactiveDragRef.current) {
+            resumeDraggableRaf = requestAnimationFrame(() => {
+              resumeDraggableRaf = 0
+              setDraggableVolatility(true)
+            })
+          }
         }
         map.addEventListener('mapviewchangestart', onViewChange)
         map.addEventListener('mapviewchangeend', onViewChangeEnd)
@@ -327,11 +373,13 @@ export default function HereMap({
           const t = ev.target
           const pointer = ev.currentPointer
           didDragRef.current = false
+          interactiveDragRef.current = false
           // Any drag (marker, route line, or a plain pan) suppresses the hover
           // readout until dragend.
           activeDragRef.current = true
           hideHover()
           if (t instanceof H.map.Marker && pointer) {
+            interactiveDragRef.current = true
             const screen = map.geoToScreen(t.getGeometry())
             t.__dragOffset = new H.math.Point(pointer.viewportX - screen.x, pointer.viewportY - screen.y)
             behavior.disable()
@@ -339,6 +387,7 @@ export default function HereMap({
             // Grabbed the route line — start a drag-to-add-stop segment drag.
             const data = t.getData?.()
             if (data && typeof data.section === 'number') {
+              interactiveDragRef.current = true
               behavior.disable()
               const geo = map.screenToGeo(pointer.viewportX, pointer.viewportY)
               const ghost = new H.map.Marker(geo, {
@@ -451,6 +500,7 @@ export default function HereMap({
             }
           }
           activeDragRef.current = false
+          interactiveDragRef.current = false
         }
         map.addEventListener('dragstart', onDragStart)
         map.addEventListener('drag', onDrag)
@@ -492,6 +542,7 @@ export default function HereMap({
           hoverLabel.remove()
           map.removeEventListener('mapviewchangestart', onViewChange)
           map.removeEventListener('mapviewchangeend', onViewChangeEnd)
+          if (resumeDraggableRaf) cancelAnimationFrame(resumeDraggableRaf)
           map.removeEventListener('pointerdown', onPointerDown)
           map.removeEventListener('dragstart', onDragStart)
           map.removeEventListener('drag', onDrag)
@@ -515,6 +566,7 @@ export default function HereMap({
         mapRef.current.dispose()
         mapRef.current = null
         groupRef.current = null
+        draggableObjectsRef.current = []
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -570,6 +622,9 @@ export default function HereMap({
         els.delete(id)
       }
     }
+    // Route Planner does not show live drivers. Avoid scheduling an empty
+    // animation-frame callback throughout every pan/zoom in that case.
+    if (list.length === 0) return
 
     const position = () => {
       for (const d of list) {
@@ -679,6 +734,7 @@ export default function HereMap({
     if (!H || !map || !group) return
 
     group.removeAll()
+    draggableObjectsRef.current = []
 
     // Accumulate every drawn point so we can frame them all at the end.
     const allPoints: LatLng[] = []
@@ -687,9 +743,9 @@ export default function HereMap({
     const routePath: LatLng[] = []
 
     // Route line: a thin coral stroke over a subtle dark casing so it stays
-    // readable on the basemap without dominating it. One casing+main pair per
-    // section, each tagged with its section index and made draggable so the
-    // existing visible line is itself the drag target (no second hidden line).
+    // readable on the basemap without dominating it. The visible strokes remain
+    // static/cached. One wider transparent volatile line above them handles
+    // route dragging without forcing both visible strokes to redraw every frame.
     routePolylines.forEach((encoded, sectionIndex) => {
       let coords: number[][]
       try {
@@ -711,18 +767,25 @@ export default function HereMap({
         style: { lineWidth: 3.5, strokeColor: ROUTE_COLOR, lineJoin: 'round', lineCap: 'round' },
       })
       for (const poly of [casing, main]) {
-        poly.draggable = objectsDraggable
-        // Volatile for the SAME reason as the markers below: HERE only delivers
-        // drag gestures for objects it re-renders per frame. Without this the
-        // line is drawn into the static cache and `dragstart/drag/dragend` never
-        // fire for it, so the route line can't be grabbed. (This regressed when
-        // the hover listeners that used to keep it interactive were removed for
-        // the default-cursor change — volatility restores drag without any
-        // cursor styling, keeping the normal arrow cursor.) Only needed while
-        // draggable; a static (read-only) line stays in the render cache.
-        poly.setVolatility(objectsDraggable)
-        poly.setData({ section: sectionIndex })
         group.addObject(poly)
+      }
+      if (objectsDraggable) {
+        // HERE requires volatile objects for reliable drag delivery. Keeping that
+        // cost on one interaction line leaves the two visible lines cached. The
+        // tiny non-zero alpha keeps the wider stroke hit-testable but invisible.
+        const dragTarget = new H.map.Polyline(line, {
+          style: {
+            lineWidth: 14,
+            strokeColor: 'rgba(255,255,255,0.001)',
+            lineJoin: 'round',
+            lineCap: 'round',
+          },
+        })
+        dragTarget.draggable = true
+        dragTarget.setVolatility(!viewChangingRef.current)
+        dragTarget.setData({ section: sectionIndex })
+        group.addObject(dragTarget)
+        draggableObjectsRef.current.push(dragTarget)
       }
     })
 
@@ -748,13 +811,17 @@ export default function HereMap({
       // `volatility: true` is REQUIRED for dragging — without it HERE keeps the
       // marker in its optimised render cache and never delivers drag gestures.
       // A read-only map (objectsDraggable=false) keeps markers static/cached.
-      const m = new H.map.Marker(marker.position, { icon: iconFor(H, marker), volatility: objectsDraggable })
+      const m = new H.map.Marker(marker.position, {
+        icon: iconFor(H, marker),
+        volatility: objectsDraggable && !viewChangingRef.current,
+      })
       m.draggable = objectsDraggable
       m.setData({ id: marker.id, kind: marker.kind })
       // No hover cursor change — markers keep the default arrow cursor; they are
       // still draggable (the .here-map-surface CSS keeps the cursor as default,
       // never grab/pointer).
       group.addObject(m)
+      if (objectsDraggable) draggableObjectsRef.current.push(m)
       allPoints.push(marker.position)
     }
 

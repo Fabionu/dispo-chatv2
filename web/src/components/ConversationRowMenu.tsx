@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { MoreHorizontal } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import { MENU_CONTAINER, MENU_SEPARATOR, menuIconClass, menuItemClass } from './menuStyles'
 
 // One entry in a conversation row's hover-actions menu.
@@ -34,8 +34,9 @@ export type ConversationRowMenuHandle = {
   openAt: (x: number, y: number) => void
 }
 
-// Compact "more actions" menu for a sidebar conversation row. The ⋮ trigger is
-// meant to live in an on-hover overlay on the row's right edge; the menu itself
+// Compact "more actions" menu for a sidebar conversation row. The downward
+// arrow trigger lives in an on-hover overlay at the end of the preview line;
+// the menu itself
 // is a FIXED-position popover anchored to the trigger (or to the cursor when
 // opened via right-click), so it never clips inside the sidebar's scroll
 // container and never disturbs the row's own layout. Closes on outside click,
@@ -162,11 +163,15 @@ const ConversationRowMenu = forwardRef<
           e.preventDefault()
           setOpen((v) => !v)
         }}
-        className={`h-9 w-9 flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+        className={`h-5 w-5 flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
           open ? 'bg-white/[0.08] text-text' : 'text-muted hover:text-text hover:bg-white/[0.06]'
         }`}
       >
-        <MoreHorizontal size="1.0625rem" strokeWidth={1.8} />
+        <ChevronDown
+          size="0.75rem"
+          strokeWidth={1.8}
+          className={`transition-transform ${open ? 'rotate-180' : ''}`}
+        />
       </button>
 
       {open &&

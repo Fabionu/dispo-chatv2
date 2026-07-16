@@ -1374,7 +1374,7 @@ export default function ChatView({
                         <button
                           onClick={loadOlder}
                           disabled={loadingOlder}
-                          className="text-[0.71875rem] text-muted hover:text-text border border-white/[0.10] rounded-btn px-3 py-1 transition-colors disabled:opacity-50"
+                          className="text-[0.71875rem] text-muted hover:text-text border border-white/[0.10] rounded-full px-3 py-1 transition-colors disabled:opacity-50"
                         >
                           {loadingOlder ? 'Loading…' : 'Load earlier messages'}
                         </button>

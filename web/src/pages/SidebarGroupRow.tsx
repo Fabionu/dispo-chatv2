@@ -48,10 +48,9 @@ function relTime(iso: string | null): string {
 // Avatar for a direct message (with a live presence dot), a `card`-radius
 // GroupAvatar squircle for a vehicle room (its uploaded photo, or the generated
 // glyph). The name is primary; a vehicle room's active-trip status trails it as
-// quiet tone-coloured text. The right edge carries at most one piece of metadata
-// (unread badge, else last-activity time) plus optional mute/mention markers,
-// all of which fade on hover so the ⋮ actions button owns the far right without
-// overlap or layout shift.
+// quiet tone-coloured text, followed by the last-activity timestamp. The preview
+// line carries pin/mute/mention/unread state; those indicators slide left on
+// hover to expose the downward actions arrow without covering the preview.
 export default function GroupRow({
   group,
   selected,
@@ -117,10 +116,10 @@ export default function GroupRow({
   // "Draft: …" line; the timestamp keeps showing the real last message's time.
   const draft = useDraft(currentUserId, group.id).replace(/\s+/g, ' ').trim()
 
-  // ── Per-conversation row actions (hover ⋮ menu) ────────────────────────────
-  // While the ⋮ menu is open the row stays in its "actions active" state — the
-  // trigger stays visible and the right-side metadata stays hidden — even after
-  // the cursor leaves the row.
+  // ── Per-conversation row actions (hover arrow menu) ────────────────────────
+  // While the menu is open the row stays in its "actions active" state — the
+  // trigger stays visible and the preview-line indicators remain shifted left
+  // even after the cursor leaves the row.
   const [menuOpen, setMenuOpen] = useState(false)
   // Right-clicking anywhere on the row opens the SAME actions menu at the cursor.
   const rowMenuRef = useRef<ConversationRowMenuHandle>(null)
@@ -131,9 +130,12 @@ export default function GroupRow({
   const archived = Boolean(group.archivedAt)
   const pinned = Boolean(group.pinnedAt)
   const muted = Boolean(group.muted)
-  // Shared fragment: the right-side metadata fades on row hover AND while the
-  // menu is open, so nothing peeks out from behind/around the popover.
-  const metaFade = `transition-opacity group-hover/row:opacity-0${menuOpen ? ' opacity-0' : ''}`
+  // Preview-line state slides left exactly one trigger slot on hover/open. The
+  // indicators remain visible; the movement simply frees the far-right edge for
+  // the downward actions arrow.
+  const metaShift = `min-w-5 justify-end transition-transform duration-200 ease-out group-hover/row:-translate-x-5 group-focus-within/row:-translate-x-5${
+    menuOpen ? ' -translate-x-5' : ''
+  }`
   // The menu's read/unread label reflects the ACTUAL stored unread, not the
   // selected→0 view used for the badge.
   const actuallyUnread = (group.unreadCount ?? 0) > 0
@@ -173,13 +175,16 @@ export default function GroupRow({
       onSelect: () => onDelete(group),
     },
   ]
-  // On-hover/focus overlay holding the ⋮ menu, anchored to the row's right edge,
-  // vertically centred. The conflicting right-side metadata fades out on hover so
-  // the button sits cleanly on its own. pointer-events stay off until revealed so
-  // the hidden trigger never blocks a click on the row beneath it.
+  // On-hover/focus overlay holding the arrow menu at the right end of preview
+  // line. The inline indicators slide left to expose this slot. Pointer events
+  // stay off until revealed so the hidden trigger never blocks the row click.
   const rowActions = (
     <div
-      className={`absolute right-2 top-1/2 -translate-y-1/2 z-10 transition-opacity group-hover/row:opacity-100 group-hover/row:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto ${
+      style={{
+        right: 'var(--sidebar-row-pad-x)',
+        bottom: 'var(--sidebar-row-pad-y)',
+      }}
+      className={`absolute z-10 transition-opacity group-hover/row:opacity-100 group-hover/row:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto ${
         menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
       }`}
     >
@@ -191,23 +196,9 @@ export default function GroupRow({
       />
     </div>
   )
-  // Muted indicator — fades with the rest of the right-side metadata on hover.
+  // Muted indicator — part of the preview-line state cluster.
   const mutedIcon = muted ? (
-    <BellOff size="0.75rem" strokeWidth={1.7} className={`shrink-0 text-faint ${metaFade}`} aria-label="Muted" />
-  ) : null
-  // Pinned indicator — a prominent pin on the row's RIGHT edge, vertically
-  // centred. It stays visible at all times; on hover/focus — or while the actions
-  // menu is open — it slides left so the ⋮ actions button can take the far-right
-  // slot without overlapping. Decorative + pointer-events-none.
-  const pinnedOverlay = pinned ? (
-    <div
-      title="Pinned"
-      className={`pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 z-0 text-muted transition-transform duration-200 ease-out group-hover/row:-translate-x-9 group-focus-within/row:-translate-x-9 ${
-        menuOpen ? '-translate-x-9' : ''
-      }`}
-    >
-      <Pin size="0.875rem" strokeWidth={1.8} aria-label="Pinned" />
-    </div>
+    <BellOff size="0.75rem" strokeWidth={1.7} className="shrink-0 text-faint" aria-label="Muted" />
   ) : null
 
   return (
@@ -218,15 +209,13 @@ export default function GroupRow({
           minHeight: 'var(--sidebar-row-height)',
           gap: 'var(--sidebar-row-gap)',
           paddingLeft: 'var(--sidebar-row-pad-x)',
-          // Reserve room on the right for the pinned indicator so it never sits on
-          // top of the metadata badge in the resting state.
-          paddingRight: pinned ? 'calc(var(--sidebar-row-pad-x) + 20px)' : 'var(--sidebar-row-pad-x)',
+          paddingRight: 'var(--sidebar-row-pad-x)',
           paddingTop: 'var(--sidebar-row-pad-y)',
           paddingBottom: 'var(--sidebar-row-pad-y)',
         }}
         className={`w-full flex items-center rounded-btn text-left transition-colors ${
           selected
-            ? 'bg-white/[0.075] text-text'
+            ? 'bg-white/[0.095] text-text'
             : 'text-muted hover:bg-white/[0.03] hover:text-text'
         }`}
       >
@@ -253,35 +242,43 @@ export default function GroupRow({
           )}
         </IdentitySlot>
 
-        {/* Two-line body. Line 1: name (+ inline vehicle trip status). Line 2:
-            last-message preview on the left, metadata on the right. Tight
-            line-height groups the two lines into one block, vertically centred
-            against the avatar. */}
+        {/* Two-line body. Line 1: name + vehicle trip status + timestamp. Line 2:
+            last-message preview + conversation-state icons. Tight line-height
+            groups the two lines into one block, vertically centred by the avatar. */}
         <span className="flex-1 min-w-0 flex flex-col gap-px">
-          {/* Line 1 — the name stays primary and only shrinks as a last resort;
-              a vehicle's trip status ellipsizes first (shrinks 3×). */}
+          {/* Line 1 — name/status take the flexible space; timestamp stays at the
+              far right, aligned with the identity rather than the preview. */}
           <span className="flex items-baseline gap-1.5 min-w-0">
-            <span
-              className={`min-w-0 shrink truncate leading-tight ${
-                unread ? 'text-text font-semibold' : 'text-text/90 font-medium'
-              }`}
-              style={{ fontSize: 'var(--sidebar-conv-font-size)' }}
-            >
-              {groupLabel(group)}
+            <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+              <span
+                className={`min-w-0 shrink truncate leading-tight ${
+                  unread ? 'text-text font-semibold' : 'text-text/90 font-medium'
+                }`}
+                style={{ fontSize: 'var(--sidebar-conv-font-size)' }}
+              >
+                {groupLabel(group)}
+              </span>
+              {trip && (
+                <TripStatusInline
+                  tone={trip.statusTone}
+                  label={trip.statusLabel}
+                  title={tripLineFull ?? trip.statusLabel}
+                  className="shrink-[3] leading-tight opacity-75"
+                  style={{ fontSize: 'var(--sidebar-conv-meta-font-size)' }}
+                />
+              )}
             </span>
-            {trip && (
-              <TripStatusInline
-                tone={trip.statusTone}
-                label={trip.statusLabel}
-                title={tripLineFull ?? trip.statusLabel}
-                className="shrink-[3] leading-tight"
+            {time && (
+              <span
+                className="shrink-0 tabular-nums text-faint leading-tight"
                 style={{ fontSize: 'var(--sidebar-conv-meta-font-size)' }}
-              />
+              >
+                {time}
+              </span>
             )}
           </span>
-          {/* Line 2 — latest-message preview + the right-side metadata cluster,
-              which fades on hover so the ⋮ actions button can take the far-right
-              slot without crowding it. */}
+          {/* Line 2 — the preview remains unchanged. State icons sit inline at
+              the right and slide left on hover/open, exposing the arrow menu. */}
           <span className="flex items-center gap-2">
             <span
               className={`flex-1 min-w-0 truncate leading-tight ${unread ? 'text-muted' : 'text-faint'}`}
@@ -306,7 +303,15 @@ export default function GroupRow({
                 </>
               )}
             </span>
-            <span className={`flex items-center gap-2 shrink-0 ${metaFade}`}>
+            <span className={`flex items-center gap-2 shrink-0 ${metaShift}`}>
+              {pinned && (
+                <Pin
+                  size="0.8125rem"
+                  strokeWidth={1.8}
+                  className="shrink-0 text-muted"
+                  aria-label="Pinned"
+                />
+              )}
               {hasUnreadMention && (
                 <span
                   aria-label="You were mentioned"
@@ -335,16 +340,10 @@ export default function GroupRow({
                 </span>
               )}
               {mutedIcon}
-              {time && (
-                <span className="tabular-nums text-faint" style={{ fontSize: 'var(--sidebar-conv-meta-font-size)' }}>
-                  {time}
-                </span>
-              )}
             </span>
           </span>
         </span>
       </button>
-      {pinnedOverlay}
       {rowActions}
     </div>
   )

@@ -6,9 +6,9 @@ import {
   CircleUser,
   LogOut,
   MailOpen,
+  Menu,
   PanelLeftClose,
   PanelLeftOpen,
-  Plus,
   Search,
   Settings,
   UserPlus,
@@ -925,7 +925,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         <div className="px-2.5 pt-2.5 pb-1.5 flex items-center gap-1.5">
           <label
             htmlFor="rail-search"
-            className="flex-1 h-[var(--sidebar-search-height)] flex items-center gap-1.5 px-2.5 rounded-panel border border-white/[0.06] bg-white/[0.02] focus-within:border-white/[0.16] hover:border-white/[0.10] transition-colors cursor-text"
+            className="flex-1 h-[var(--sidebar-search-height)] flex items-center gap-1.5 px-3 rounded-full border border-transparent bg-white/[0.035] hover:bg-white/[0.05] focus-within:bg-white/[0.05] focus-within:border-white/[0.10] transition-colors cursor-text"
           >
             <Search size="0.8125rem" strokeWidth={1.6} className="text-faint shrink-0" />
             <input
@@ -953,16 +953,16 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           <div className="relative shrink-0" ref={newMenuRef}>
             <button
               onClick={() => setNewMenuOpen((v) => !v)}
-              aria-label="New conversation"
+              aria-label="Sidebar actions"
               aria-haspopup="menu"
               aria-expanded={newMenuOpen}
               className={`h-[var(--sidebar-search-height)] w-[var(--sidebar-search-height)] flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
                 newMenuOpen
-                  ? 'bg-white/[0.16] text-text'
-                  : 'bg-white/[0.08] text-text hover:bg-white/[0.14]'
+                  ? 'bg-white/[0.09] text-text'
+                  : 'text-muted hover:bg-white/[0.05] hover:text-text'
               }`}
             >
-              <Plus size="1.0625rem" strokeWidth={2} />
+              <Menu size="1.0625rem" strokeWidth={1.9} />
             </button>
 
             {newMenuOpen && (
@@ -1062,7 +1062,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               )}
 
               {/* The unified conversation + contact stream for the active filter. */}
-              <div className="flex flex-col gap-0.5">
+              <div className="flex flex-col gap-1">
                 {conversationItems.length === 0 ? (
                   searching ? (
                     <EmptyHint>No conversations match “{query.trim()}”.</EmptyHint>
@@ -1103,7 +1103,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         </nav>
 
         {/* User menu */}
-        <div className="relative border-t border-white/[0.05]" ref={userMenuRef}>
+        <div className="relative px-1.5 pb-1.5" ref={userMenuRef}>
           {userMenuOpen && (
             <div className={`absolute bottom-full left-2 w-[15rem] max-w-[calc(100%-1rem)] mb-2 ${MENU_CONTAINER}`}>
               <MenuItem
@@ -1149,7 +1149,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
 
           <button
             onClick={() => setUserMenuOpen((v) => !v)}
-            className="w-full flex items-center gap-2 px-2.5 py-2.5 hover:bg-white/[0.02] transition-colors text-left"
+            className={`w-full flex items-center gap-2 px-2 py-2 rounded-btn transition-colors text-left ${
+              userMenuOpen ? 'bg-white/[0.055]' : 'hover:bg-white/[0.03]'
+            }`}
           >
             <div className="relative shrink-0">
               <Avatar userId={user.id} name={user.displayName} size={sidebarAvatar} version={avatarVersion} />

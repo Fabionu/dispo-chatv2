@@ -48,18 +48,19 @@ export default function PointRow({
 
   const badge =
     role === 'start' ? (
-      <span className="h-5 w-5 shrink-0 rounded-full bg-done flex items-center justify-center text-bg">
-        <Navigation size="0.6875rem" strokeWidth={2.4} />
+      <span className="h-5 w-5 shrink-0 rounded-full border border-done/30 bg-done/10 flex items-center justify-center text-done">
+        <Navigation size="0.6875rem" strokeWidth={2.2} />
       </span>
     ) : role === 'destination' ? (
-      <span className="h-5 w-5 shrink-0 rounded-full bg-alert flex items-center justify-center text-bg">
-        <Flag size="0.6875rem" strokeWidth={2.4} />
+      <span className="h-5 w-5 shrink-0 rounded-full border border-alert/30 bg-alert/10 flex items-center justify-center text-alert">
+        <Flag size="0.6875rem" strokeWidth={2.2} />
       </span>
     ) : (
-      <span className="h-5 w-5 shrink-0 rounded-full border-2 border-active text-[0.625rem] font-bold flex items-center justify-center">
+      <span className="h-5 w-5 shrink-0 rounded-full border border-white/[0.22] bg-white/[0.06] text-[0.625rem] font-semibold flex items-center justify-center">
         {index}
       </span>
     )
+  const roleLabel = role === 'start' ? 'Start' : role === 'destination' ? 'Destination' : `Stop ${index ?? ''}`
 
   return (
     <div
@@ -79,57 +80,64 @@ export default function PointRow({
       // (done on dragenter) sticks and the cursor reads as "movable".
       onDragOver={draggable ? (e) => e.preventDefault() : undefined}
       onDragEnd={draggable ? () => onDragEndRow?.() : undefined}
-      className={`flex items-center gap-2 rounded-card border bg-white/[0.04] px-2.5 py-1.5 transition-[opacity,border-color] ${
-        dragging ? 'opacity-50 border-active/40' : 'border-white/[0.06]'
-      }`}
+      className={`flex items-center gap-2.5 transition-opacity ${dragging ? 'opacity-50' : ''}`}
     >
-      {draggable && (
-        <span
-          aria-hidden
-          title="Drag to reorder"
-          className="shrink-0 -ml-0.5 -mr-0.5 text-muted/60 hover:text-text cursor-default"
-        >
-          <GripVertical size="0.875rem" strokeWidth={1.8} />
-        </span>
-      )}
       <div className="shrink-0">{badge}</div>
-      <div className="min-w-0 flex-1">
-        {onEdit ? (
-          <button
-            onClick={onEdit}
-            title="Edit address"
-            className="block w-full text-left text-[0.78125rem] leading-tight truncate hover:text-text transition-colors"
+      <div
+        className={`min-w-0 flex-1 flex items-center gap-1.5 rounded-card border bg-white/[0.04] px-2 py-1.5 transition-colors ${
+          dragging ? 'border-white/[0.16]' : 'border-white/[0.06]'
+        }`}
+      >
+        {draggable && (
+          <span
+            aria-hidden
+            title="Drag to reorder"
+            className="shrink-0 text-muted/50 hover:text-text cursor-default"
           >
-            {point.label}
-          </button>
-        ) : (
-          <div className="text-[0.78125rem] leading-tight truncate" title={point.label}>
-            {point.label}
+            <GripVertical size="0.8125rem" strokeWidth={1.8} />
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="text-[0.59375rem] font-semibold uppercase tracking-badge text-faint leading-none mb-1">
+            {roleLabel}
           </div>
-        )}
-        <button
-          onClick={copyCoord}
-          title="Copy coordinates"
-          className="group flex items-center gap-1 text-[0.6875rem] text-muted hover:text-text transition-colors tabular-nums"
-        >
-          {coord.lat.toFixed(5)}, {coord.lng.toFixed(5)}
-          {copied ? (
-            <Check size="0.6875rem" strokeWidth={2.4} className="text-done" />
+          {onEdit ? (
+            <button
+              onClick={onEdit}
+              title="Edit address"
+              className="block w-full text-left text-[0.78125rem] leading-tight truncate hover:text-text transition-colors"
+            >
+              {point.label}
+            </button>
           ) : (
-            <Copy size="0.6875rem" strokeWidth={1.8} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="text-[0.78125rem] leading-tight truncate" title={point.label}>
+              {point.label}
+            </div>
           )}
-          {point.source === 'map' && <span className="text-faint">· map</span>}
-        </button>
-      </div>
-      <div className="flex items-center gap-0.5 shrink-0">
-        {onEdit && (
-          <IconBtn label="Edit address" onClick={onEdit}>
-            <Pencil size="0.8125rem" strokeWidth={1.8} />
+          <button
+            onClick={copyCoord}
+            title="Copy coordinates"
+            className="group flex items-center gap-1 text-[0.65625rem] text-muted hover:text-text transition-colors tabular-nums"
+          >
+            {coord.lat.toFixed(5)}, {coord.lng.toFixed(5)}
+            {copied ? (
+              <Check size="0.6875rem" strokeWidth={2.4} className="text-done" />
+            ) : (
+              <Copy size="0.6875rem" strokeWidth={1.8} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+            )}
+            {point.source === 'map' && <span className="text-faint">· map</span>}
+          </button>
+        </div>
+        <div className="flex items-center gap-0.5 shrink-0">
+          {onEdit && (
+            <IconBtn label="Edit address" onClick={onEdit}>
+              <Pencil size="0.8125rem" strokeWidth={1.8} />
+            </IconBtn>
+          )}
+          <IconBtn label="Remove" onClick={onClear}>
+            <X size="0.875rem" strokeWidth={2} />
           </IconBtn>
-        )}
-        <IconBtn label="Remove" onClick={onClear}>
-          <X size="0.875rem" strokeWidth={2} />
-        </IconBtn>
+        </div>
       </div>
     </div>
   )

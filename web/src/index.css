@@ -411,6 +411,12 @@ button {
 .here-map-surface canvas {
   cursor: default !important;
 }
+.here-map-surface {
+  /* Keep HERE's continuously changing WebGL surface in its own paint boundary
+     so camera movement does not invalidate surrounding route-planner UI. */
+  contain: layout paint;
+  isolation: isolate;
+}
 /* While the cursor is over (or right next to) the drawn route line, HereMap
    adds `.route-hover` to the container. The route line is draggable (drag it to
    add a stop), so we show the standard `grab` affordance — a precise, normal-
