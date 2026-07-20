@@ -244,6 +244,19 @@ html[data-theme='light'] {
   --sidebar-section-gap: 28px;
 }
 
+/* Auto keeps density responsible for text/control scale, but gives the rail
+   more horizontal room on real desktop layouts. This prevents a 1080p-height
+   ultrawide (which correctly resolves to the default density) from falling back
+   to the narrower manually-tuned Default sidebar. Manual density selections
+   retain their exact widths above. */
+html[data-density-mode='auto'][data-density='compact'] {
+  --sidebar-width: 440px;
+}
+
+html[data-density-mode='auto'][data-density='default'] {
+  --sidebar-width: 560px;
+}
+
 /* No-JS / pre-hydration fallback: follow the display size when no explicit
    density is set on the root. lib/density.ts normally sets it before first
    paint; these keep things correct if that script is unavailable. The

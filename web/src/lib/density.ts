@@ -77,8 +77,14 @@ export function getStoredDensity(): Density | null {
   }
 }
 
-function apply(d: Density) {
+type DensityMode = 'auto' | 'manual'
+
+function apply(d: Density, mode: DensityMode) {
   document.documentElement.dataset.density = d
+  // Keep the source of the density visible to CSS. Auto may use the same text /
+  // control tier as a manual choice while still applying viewport-aware layout
+  // refinements such as a wider desktop sidebar.
+  document.documentElement.dataset.densityMode = mode
 }
 
 // Manually pin a density (persisted). Wins over auto-selection.
@@ -88,7 +94,7 @@ export function setDensity(d: Density) {
   } catch {
     /* ignore quota/availability issues — the attribute still applies */
   }
-  apply(d)
+  apply(d, 'manual')
 }
 
 // Drop the manual override and return to width-based auto-selection.
@@ -98,7 +104,7 @@ export function clearDensityOverride() {
   } catch {
     /* ignore */
   }
-  apply(autoDensity())
+  apply(autoDensity(), 'auto')
 }
 
 // React hook: the live density tier. Reads the attribute lib/density.ts writes
@@ -128,13 +134,13 @@ export function useDensity(): Density {
 export function initDensity() {
   if (typeof window === 'undefined') return
   const stored = getStoredDensity()
-  apply(stored ?? autoDensity())
+  apply(stored ?? autoDensity(), stored ? 'manual' : 'auto')
   // Always arm the auto-follow listeners: reapply() re-checks for an override
   // on every fire, so they stand down while one exists — and take over again
   // if the override is cleared later (Workspace settings → Appearance → Auto)
   // without needing a reload.
   const reapply = () => {
-    if (!getStoredDensity()) apply(autoDensity())
+    if (!getStoredDensity()) apply(autoDensity(), 'auto')
   }
   window.matchMedia(COMFORTABLE_MQ).addEventListener('change', reapply)
   window.matchMedia(COMPACT_MQ).addEventListener('change', reapply)

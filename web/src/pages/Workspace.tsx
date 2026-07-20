@@ -961,6 +961,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             onConsumeInitialReply={() => setPendingReply(null)}
             initialAddTripOpen={pendingAddTripGroupId === selectedGroup.id}
             onConsumeInitialAddTrip={() => setPendingAddTripGroupId(null)}
+            vehicleRooms={availableVehicleRooms}
+            onAddTripInGroup={addTripFromWorkspace}
             attachmentTabs={attachmentTabs}
             onOpenAttachmentTab={openAttachmentTab}
             onCloseAttachmentTab={closeAttachmentTab}

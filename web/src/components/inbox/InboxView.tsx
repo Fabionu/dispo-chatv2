@@ -76,7 +76,7 @@ export default function InboxView({ workspaceName, vehicleRooms, canAddTrip, onA
   )
 }
 
-function VehicleRoomPicker({
+export function VehicleRoomPicker({
   rooms,
   onSelect,
   onClose,

@@ -39,9 +39,9 @@ type Props = {
   // parent, which opens the pre-send preview modal.
   onFilePicked: (file: File) => void
 
-  // When provided, the composer's add (+) menu shows a "Trip" option. Wired only
-  // for vehicle rooms (the parent gates on type + manage permission); omitting it
-  // hides the option, e.g. in DMs.
+  // When provided, the composer's add (+) menu shows an "Add trip" option. The
+  // parent either opens the current vehicle room directly or presents a room
+  // chooser when the conversation itself is not vehicle-scoped.
   onAddTrip?: () => void
 
   replyContext: ReplyToPreview | null

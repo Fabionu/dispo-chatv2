@@ -63,6 +63,7 @@ import { devlog } from '../lib/devlog'
 import { useMessageCache } from '../hooks/useMessageCache'
 import { preloadImage } from '../lib/attachmentCache'
 import ToolTab from './ChatToolTab'
+import { VehicleRoomPicker } from './inbox/InboxView'
 import { toReplyPreview, attachmentTabLabel } from './chatViewUtils'
 import { useTypingIndicator } from '../hooks/useTypingIndicator'
 import { usePinnedMessages } from '../hooks/usePinnedMessages'
@@ -106,6 +107,10 @@ type Props = {
   // panel already open, then let the parent clear the one-shot request.
   initialAddTripOpen?: boolean
   onConsumeInitialAddTrip?: () => void
+  // Used when Add trip is opened from a conversation that is not itself a
+  // vehicle room. Workspace owns the room list and the cross-chat navigation.
+  vehicleRooms: Group[]
+  onAddTripInGroup: (groupId: string) => void
   // Attachment tabs live at Workspace level so PDFs/images remain open while
   // the single Chat tab is replaced by another conversation.
   attachmentTabs: AttachmentWorkspaceTab[]
@@ -131,6 +136,8 @@ export default function ChatView({
   onConsumeInitialReply,
   initialAddTripOpen = false,
   onConsumeInitialAddTrip,
+  vehicleRooms,
+  onAddTripInGroup,
   attachmentTabs,
   onOpenAttachmentTab,
   onCloseAttachmentTab,
@@ -218,6 +225,7 @@ export default function ChatView({
   const [addTripOpen, setAddTripOpen] = useState(
     () => group.type === 'vehicle' && canInviteMembers && initialAddTripOpen,
   )
+  const [tripPickerOpen, setTripPickerOpen] = useState(false)
   useEffect(() => {
     if (initialAddTripOpen) onConsumeInitialAddTrip?.()
   }, [initialAddTripOpen, onConsumeInitialAddTrip])
@@ -817,6 +825,15 @@ export default function ChatView({
   // re-enforces the full rule on every mutating endpoint.
   const myGroupRole = members.find((m) => m.id === currentUserId)?.role
   const canManageGroup = canInviteMembers || myGroupRole === 'admin'
+  const canAddTrip = group.type === 'vehicle' ? canManageGroup : canInviteMembers
+  const openAddTrip = useCallback(() => {
+    setReceiptTarget(null)
+    if (group.type === 'vehicle' && canManageGroup) {
+      setAddTripOpen(true)
+      return
+    }
+    setTripPickerOpen(true)
+  }, [group.type, canManageGroup])
 
   // ── Active trip (header summary) ─────────────────────────────────────────
   // Read straight off the group's manual ops blob. `trip` is null until a
@@ -867,6 +884,7 @@ export default function ChatView({
       inviteOpen ||
       groupInfoOpen ||
       pendingDelete ||
+      tripPickerOpen ||
       editContext,
   )
   // Validate the dropped file the same way the picker does, then stage it in
@@ -1266,17 +1284,9 @@ export default function ChatView({
                       : undefined
                   }
                   onFilePicked={setPendingFile}
-                  // Trip creation is a vehicle-room, manage-capable action; the
-                  // composer hides the "Trip" menu item when this is undefined
-                  // (DMs, or members without manage rights).
-                  onAddTrip={
-                    group.type === 'vehicle' && canManageGroup
-                      ? () => {
-                          setReceiptTarget(null)
-                          setAddTripOpen(true)
-                        }
-                      : undefined
-                  }
+                  // In a manageable vehicle room this opens the editor directly;
+                  // from a DM it opens the workspace vehicle-room chooser.
+                  onAddTrip={canAddTrip ? openAddTrip : undefined}
                   replyContext={replyContext}
                   onCancelReply={() => setReplyContext(null)}
                   editContext={editContext}
@@ -1334,6 +1344,17 @@ export default function ChatView({
         onConfirmDelete={confirmPendingDelete}
         onCancelDelete={() => setPendingDelete(null)}
       />
+
+      {tripPickerOpen && (
+        <VehicleRoomPicker
+          rooms={vehicleRooms}
+          onSelect={(groupId) => {
+            setTripPickerOpen(false)
+            onAddTripInGroup(groupId)
+          }}
+          onClose={() => setTripPickerOpen(false)}
+        />
+      )}
 
       {/* Group info, Add trip and the user profile share the single right-hand
           column slot — Add trip takes precedence over Group info, and the user

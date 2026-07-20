@@ -8,14 +8,14 @@ type Props = {
   // Called when the user picks a file category. The parent owns the hidden file
   // input and sets its `accept` attribute before triggering `.click()`.
   onPickKind: (accept: string) => void
-  // When provided, a "Trip" item is shown — used to create a manual trip in
-  // vehicle rooms. Omitted in DMs (no trips), which hides the item entirely.
+  // When provided, an "Add trip" item is shown. Scoped vehicle rooms open the
+  // editor directly; other conversations let the parent choose a vehicle room.
   onAddTrip?: () => void
 }
 
 // The composer "add" trigger (a Plus button) + popover. Lets the user choose
 // what to add: a photo/document (which picks the OS file filter the parent then
-// opens) or — in vehicle rooms — a Trip. Manages its own open state plus
+// opens) or a trip. Manages its own open state plus
 // outside-click / Esc dismissal so the parent stays simple.
 export default function AttachMenu({ disabled, onPickKind, onAddTrip }: Props) {
   const [open, setOpen] = useState(false)
@@ -83,7 +83,7 @@ export default function AttachMenu({ disabled, onPickKind, onAddTrip }: Props) {
           </AttachMenuItem>
           {onAddTrip && (
             <AttachMenuItem icon={<Route {...MENU_GLYPH} />} onClick={addTrip}>
-              Trip
+              Add trip
             </AttachMenuItem>
           )}
         </div>
