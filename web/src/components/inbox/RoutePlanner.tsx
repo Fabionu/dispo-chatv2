@@ -1041,7 +1041,7 @@ export default function RoutePlanner({ onBack }: Props) {
                         onKeyDown={(e) => e.key === 'Enter' && commitSavePreset()}
                         placeholder="Preset name"
                         autoFocus
-                        className="h-8 flex-1 min-w-0 rounded-card border border-white/[0.06] bg-white/[0.04] px-2.5 text-[0.75rem] outline-none transition-colors focus:border-white/[0.16] focus:bg-white/[0.05] placeholder:text-faint"
+                        className="h-8 flex-1 min-w-0 rounded-full border border-white/[0.06] bg-white/[0.04] px-2.5 text-[0.75rem] outline-none transition-colors focus:border-white/[0.16] focus:bg-white/[0.05] placeholder:text-faint"
                       />
                       <button
                         onClick={commitSavePreset}
