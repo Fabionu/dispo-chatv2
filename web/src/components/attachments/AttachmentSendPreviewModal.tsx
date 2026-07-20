@@ -163,11 +163,9 @@ export default function AttachmentSendPreviewModal({
         {error && (
           <div className="text-[0.71875rem] text-alert mb-1.5 text-center">{error}</div>
         )}
-        {/* Caption bar — the same capsule, spacing, input sizing and circular
-            send control as the main ChatComposer. This shared preview handles
-            images, PDFs and other documents, so every attachment type keeps the
-            composer treatment consistent. */}
-        <div className="mx-auto w-full max-w-[51.25rem] rounded-full border border-white/[0.06] bg-composer shadow-[0_3px_12px_rgba(0,0,0,0.22)] transition-colors focus-within:border-white/[0.12]">
+        {/* Caption bar — the same near-black tone, capsule shape, spacing and
+            circular send control as ChatComposer, with no extra edge treatment. */}
+        <div className="mx-auto w-full max-w-[51.25rem] rounded-full bg-composer">
           <div className="flex items-center gap-1.5 px-2.5 py-2">
             <textarea
               ref={textareaRef}

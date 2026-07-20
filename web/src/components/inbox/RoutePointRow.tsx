@@ -60,7 +60,6 @@ export default function PointRow({
         {index}
       </span>
     )
-  const roleLabel = role === 'start' ? 'Start' : role === 'destination' ? 'Destination' : `Stop ${index ?? ''}`
 
   return (
     <div
@@ -98,9 +97,6 @@ export default function PointRow({
           </span>
         )}
         <div className="min-w-0 flex-1">
-          <div className="text-[0.59375rem] font-semibold uppercase tracking-badge text-faint leading-none mb-1">
-            {roleLabel}
-          </div>
           {onEdit ? (
             <button
               onClick={onEdit}

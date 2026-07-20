@@ -18,20 +18,19 @@ import {
 import type { User, Workspace as WorkspaceT } from '../auth/AuthContext'
 import type {
   Connection,
-  ConnectionsResponse,
   ConnectionUser,
   Group,
   GroupInvite,
-  IncomingMessage,
   Profile,
   ReplyToPreview,
   WorkspaceMember,
 } from '../lib/types'
-import { groupHasUnread, groupLabel, tractorPlate } from '../lib/types'
+import { groupLabel, tractorPlate } from '../lib/types'
 import { api } from '../lib/api'
 import { getSocket } from '../lib/socket'
 import { useMessageCache } from '../hooks/useMessageCache'
 import ChatView from '../components/ChatView'
+import type { AttachmentWorkspaceTab } from '../components/messages/types'
 import ConnectionRequestView from '../components/connections/ConnectionRequestView'
 import ConnectionRequestsSection from '../components/connections/ConnectionRequestsSection'
 import GroupInvitesSection from '../components/invites/GroupInvitesSection'
@@ -48,6 +47,9 @@ import WorkspaceSettingsPanel from '../components/settings/WorkspaceSettingsPane
 import InboxView from '../components/inbox/InboxView'
 import { useIdle } from '../hooks/useIdle'
 import { usePresence } from '../hooks/usePresence'
+import { useConnections } from '../hooks/useConnections'
+import { useGroupInvites } from '../hooks/useGroupInvites'
+import { useWorkspaceGroups } from '../hooks/useWorkspaceGroups'
 import {
   useDensity,
   SIDEBAR_AVATAR_SIZE,
@@ -60,7 +62,7 @@ import { useAuth } from '../auth/AuthContext'
 import GroupRow from './SidebarGroupRow'
 import ContactRow from './SidebarContactRow'
 import { FilterTab, ArchiveToggle, EmptyHint, MenuItem } from './sidebarBits'
-import { byRecent, optimisticDirectGroup } from './workspaceUtils'
+import { optimisticDirectGroup } from './workspaceUtils'
 
 type Props = {
   user: User
@@ -93,12 +95,6 @@ type Selection =
   | { kind: 'invite'; id: string }
   | { kind: 'inbox' }
   | null
-
-const EMPTY_CONNECTIONS: ConnectionsResponse = {
-  accepted: [],
-  pendingReceived: [],
-  pendingSent: [],
-}
 
 export default function Workspace({ user, workspace, onSignOut }: Props) {
   const { refresh } = useAuth()
@@ -139,8 +135,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // the browser image cache in the rail.
   const [avatarVersion, setAvatarVersion] = useState(0)
   const [logoVersion, setLogoVersion] = useState(0)
-  const [groups, setGroups] = useState<Group[]>([])
-  const [loadingGroups, setLoadingGroups] = useState(true)
   // Active members of the caller's own company (internal/trusted contacts).
   const [members, setMembers] = useState<WorkspaceMember[]>([])
   const [selection, setSelection] = useState<Selection>(null)
@@ -150,21 +144,19 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // Sidebar pill filter — the single list below shows everything / only groups /
   // only DMs depending on this. Replaces the old visible section grouping.
   const [filter, setFilter] = useState<SidebarFilter>('all')
-  const [connections, setConnections] = useState<ConnectionsResponse>(EMPTY_CONNECTIONS)
-  // Connection-request fetch status. The section itself is hidden entirely when
-  // there are no pending requests, so the first-load "loading" state no longer
-  // drives any UI — we keep the setter (fetch bookkeeping) but discard the value.
-  // `error` still keeps existing rows and offers a retry instead of hiding.
-  const [, setLoadingConnections] = useState(true)
-  const [connectionsError, setConnectionsError] = useState(false)
-  // Pending vehicle-group invitations addressed to the current user.
-  const [groupInvites, setGroupInvites] = useState<GroupInvite[]>([])
   // A quote to seed a DM's composer with, set when a DM is opened via "Reply
   // privately". Scoped to a group id so it only seeds that conversation.
   const [pendingReply, setPendingReply] = useState<{
     groupId: string
     reply: ReplyToPreview
   } | null>(null)
+  // One-shot Workspace-home shortcut: selecting a room from the Add trip card
+  // navigates there and asks the newly-mounted ChatView to open its existing
+  // Add Trip panel immediately.
+  const [pendingAddTripGroupId, setPendingAddTripGroupId] = useState<string | null>(null)
+  // Shared chat-window attachment tabs. ChatView remounts per conversation, but
+  // a PDF/image tab should remain available until the user explicitly closes it.
+  const [attachmentTabs, setAttachmentTabs] = useState<AttachmentWorkspaceTab[]>([])
 
   const userMenuRef = useRef<HTMLDivElement>(null)
   const newMenuRef = useRef<HTMLDivElement>(null)
@@ -174,6 +166,31 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   const openGroupId = selection?.kind === 'group' ? selection.id : null
   const openGroupIdRef = useRef(openGroupId)
   openGroupIdRef.current = openGroupId
+
+  // Deselect handler the groups hook calls when the OPEN conversation is
+  // removed or hidden (kicked, or delete-for-me on another device).
+  const clearSelection = useCallback(() => setSelection(null), [])
+
+  // Conversation list + live socket sync + per-row pref actions.
+  const {
+    groups,
+    loadingGroups,
+    refreshGroups,
+    insertGroup,
+    patchGroup,
+    markGroupRead,
+    togglePin,
+    toggleArchive,
+    toggleMute,
+    handleMarkRead,
+    handleMarkAllRead,
+    handleMarkUnread,
+    handleDeleteConversation,
+  } = useWorkspaceGroups({ userId: user.id, openGroupIdRef, onOpenGroupGone: clearSelection })
+
+  // Cross-workspace connection requests + pending vehicle-group invitations.
+  const { connections, connectionsError, refreshConnections } = useConnections()
+  const { groupInvites, refreshGroupInvites } = useGroupInvites()
 
   const { prefetch } = useMessageCache()
 
@@ -185,23 +202,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
       .then(({ profile }) => setCachedProfile(profile))
       .catch(() => {})
   }, [])
-
-  const refreshGroups = useCallback(async () => {
-    try {
-      const { groups } = await api.groups.list()
-      setGroups([...groups].sort(byRecent))
-    } catch (err) {
-      // A failed groups fetch must never silently EMPTY the rail (which would
-      // hide every conversation + cross-workspace contact and leave the list
-      // looking broken). Keep whatever's already shown and surface the error for
-      // diagnosis — same graceful-degradation as the contacts roster above.
-      console.error('Failed to refresh conversations', err)
-    }
-  }, [])
-
-  useEffect(() => {
-    refreshGroups().finally(() => setLoadingGroups(false))
-  }, [refreshGroups])
 
   // Internal company contacts. Same-workspace members are trusted contacts you
   // can DM directly (no connection handshake — that's cross-company only), so we
@@ -261,178 +261,17 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     resyncPresence()
   }, [groupIdsKey, loadingGroups, resyncPresence])
 
-  // Socket: keep the rail in sync. A new message bumps its group to the top
-  // (and marks it unread unless it's the open one). A new group prompts a
-  // refetch — cheap, and avoids partial state.
+  // A colleague joined (or left) the company → refresh the internal contact
+  // roster so the new person shows up in the rail without a reload. (The rest
+  // of the rail's socket sync lives in useWorkspaceGroups.)
   useEffect(() => {
     const socket = getSocket()
-
-    function onMessageNew(msg: IncomingMessage) {
-      setGroups((prev) => {
-        const idx = prev.findIndex((g) => g.id === msg.groupId)
-        if (idx === -1) {
-          void refreshGroups()
-          return prev
-        }
-        // Bump unread only for messages from others landing in a group that
-        // isn't the one currently open (the open one gets marked read).
-        const bumpUnread =
-          msg.authorId !== user.id && openGroupIdRef.current !== msg.groupId
-        // A separate bump for the @-badge: only when this message mentions me.
-        const bumpMention =
-          bumpUnread && (msg.mentions?.some((m) => m.userId === user.id) ?? false)
-        const updated: Group = {
-          ...prev[idx],
-          lastMessageAt: msg.createdAt,
-          unreadCount: (prev[idx].unreadCount ?? 0) + (bumpUnread ? 1 : 0),
-          unreadMentionCount: (prev[idx].unreadMentionCount ?? 0) + (bumpMention ? 1 : 0),
-          // Keep the Normal-view preview live (system rows don't arrive here).
-          lastMessage: {
-            body: msg.body,
-            authorId: msg.authorId,
-            authorName: msg.authorName,
-            deleted: false,
-            hasAttachments: (msg.attachments?.length ?? 0) > 0,
-          },
-        }
-        const next = prev.filter((_, i) => i !== idx)
-        next.unshift(updated)
-        return next
-      })
-    }
-    // Authoritative unread counters pushed by the server when a delete changed
-    // them (delete-for-everyone decrements every member who still had the
-    // message unread; delete-for-me decrements just my own, across my devices).
-    // We set the exact server values rather than nudging, so the rail badge can
-    // never drift. The open conversation shows 0 regardless (selected → 0).
-    function onGroupUnread(p: {
-      groupId: string
-      unreadCount: number
-      unreadMentionCount: number
-    }) {
-      setGroups((prev) =>
-        prev.map((g) =>
-          g.id === p.groupId
-            ? { ...g, unreadCount: p.unreadCount, unreadMentionCount: p.unreadMentionCount }
-            : g,
-        ),
-      )
-    }
-    function onGroupAdded() {
-      void refreshGroups()
-    }
-    // Removed from a group (kicked by an admin): refresh the rail and, if that
-    // group is the one currently open, drop the selection so we don't keep
-    // showing a conversation we can no longer access.
-    function onGroupRemoved(p: { groupId: string }) {
-      if (openGroupIdRef.current === p.groupId) setSelection(null)
-      void refreshGroups()
-    }
-    // A colleague joined (or left) the company → refresh the internal contact
-    // roster so the new person shows up in the rail without a reload.
-    function onMembersChanged() {
-      void refreshMembers()
-    }
-    // Conversation prefs changed on another tab/device (archive/pin/mute, or a
-    // "delete for me"). Keep this client in lockstep: a hide drops + deselects
-    // the row; otherwise patch the per-user flags in place.
-    function onGroupPrefs(p: {
-      groupId: string
-      archivedAt: string | null
-      pinnedAt: string | null
-      muted: boolean
-      hiddenAt: string | null
-    }) {
-      if (p.hiddenAt) {
-        if (openGroupIdRef.current === p.groupId) setSelection(null)
-        setGroups((prev) => prev.filter((g) => g.id !== p.groupId))
-        return
-      }
-      setGroups((prev) =>
-        prev.map((g) =>
-          g.id === p.groupId
-            ? { ...g, archivedAt: p.archivedAt, pinnedAt: p.pinnedAt, muted: p.muted }
-            : g,
-        ),
-      )
-    }
-
-    socket.on('message:new', onMessageNew)
-    socket.on('group:unread', onGroupUnread)
-    socket.on('group:added', onGroupAdded)
-    socket.on('group:removed', onGroupRemoved)
-    socket.on('group:prefs', onGroupPrefs)
+    const onMembersChanged = () => void refreshMembers()
     socket.on('workspace:members_changed', onMembersChanged)
     return () => {
-      socket.off('message:new', onMessageNew)
-      socket.off('group:unread', onGroupUnread)
-      socket.off('group:added', onGroupAdded)
-      socket.off('group:removed', onGroupRemoved)
-      socket.off('group:prefs', onGroupPrefs)
       socket.off('workspace:members_changed', onMembersChanged)
     }
-  }, [refreshGroups, refreshMembers, user.id])
-
-  // Connections: load once, then refetch whenever a connection event fires.
-  // Refetching (rather than patching) keeps the three buckets consistent.
-  const refreshConnections = useCallback(async () => {
-    setLoadingConnections(true)
-    setConnectionsError(false)
-    try {
-      setConnections(await api.connections.list())
-    } catch {
-      // Keep whatever buckets we already had so the rail doesn't blank out; the
-      // section shows a compact retryable error instead.
-      setConnectionsError(true)
-    } finally {
-      setLoadingConnections(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    void refreshConnections()
-  }, [refreshConnections])
-
-  useEffect(() => {
-    const socket = getSocket()
-    const onChange = () => void refreshConnections()
-    socket.on('connection:requested', onChange)
-    socket.on('connection:accepted', onChange)
-    socket.on('connection:declined', onChange)
-    return () => {
-      socket.off('connection:requested', onChange)
-      socket.off('connection:accepted', onChange)
-      socket.off('connection:declined', onChange)
-    }
-  }, [refreshConnections])
-
-  // Group invitations: load once, then refetch on any invite lifecycle event.
-  // Refetching keeps the pending list authoritative (same approach as
-  // connections). On accept, the server also emits `group:added`, so the group
-  // itself appears via the message/group socket handler above.
-  const refreshGroupInvites = useCallback(async () => {
-    const { invites } = await api.groupInvites.list()
-    setGroupInvites(invites)
-  }, [])
-
-  useEffect(() => {
-    void refreshGroupInvites()
-  }, [refreshGroupInvites])
-
-  useEffect(() => {
-    const socket = getSocket()
-    const onChange = () => void refreshGroupInvites()
-    socket.on('group_invite:created', onChange)
-    socket.on('group_invite:accepted', onChange)
-    socket.on('group_invite:declined', onChange)
-    socket.on('group_invite:cancelled', onChange)
-    return () => {
-      socket.off('group_invite:created', onChange)
-      socket.off('group_invite:accepted', onChange)
-      socket.off('group_invite:declined', onChange)
-      socket.off('group_invite:cancelled', onChange)
-    }
-  }, [refreshGroupInvites])
+  }, [refreshMembers])
 
   // Close menus on outside click / Esc.
   useEffect(() => {
@@ -479,14 +318,10 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // pane don't wait for the follow-up GET /groups round trip.
   const openGroupOptimistically = useCallback(
     (group: Group) => {
-      setGroups((prev) => {
-        if (prev.some((g) => g.id === group.id)) return prev
-        return [group, ...prev].sort(byRecent)
-      })
+      insertGroup(group)
       setSelection({ kind: 'group', id: group.id })
-      void refreshGroups()
     },
-    [refreshGroups],
+    [insertGroup],
   )
 
   function handleCreated(group: Group) {
@@ -580,120 +415,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     await refreshGroupInvites()
     setSelection(null)
   }
-
-  // Merge a partial update into a single group's record (name / plates / image
-  // flag), so an in-chat group-info edit reflects in the header and rail
-  // immediately without a refetch.
-  const patchGroup = useCallback((groupId: string, partial: Partial<Group>) => {
-    setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, ...partial } : g)))
-  }, [])
-
-  // Patch a single group's lastReadAt + clear its unread counter locally so the
-  // badge clears without a full refetch.
-  const markGroupRead = useCallback((groupId: string) => {
-    setGroups((prev) =>
-      prev.map((g) =>
-        g.id === groupId
-          ? { ...g, lastReadAt: new Date().toISOString(), unreadCount: 0, unreadMentionCount: 0 }
-          : g,
-      ),
-    )
-  }, [])
-
-  // ── Per-conversation row actions (sidebar ⋮ menu) ─────────────────────────
-  // Each applies the change OPTIMISTICALLY (patchGroup) for an instant response,
-  // then persists it; on failure we refetch the rail to reconcile rather than
-  // leave it drifted. All prefs are per-user (group_members, migration 0023).
-  const applyPrefs = useCallback(
-    async (
-      groupId: string,
-      optimistic: Partial<Group>,
-      body: Partial<{ archived: boolean; pinned: boolean; muted: boolean }>,
-    ) => {
-      patchGroup(groupId, optimistic)
-      try {
-        await api.groups.setPrefs(groupId, body)
-      } catch {
-        void refreshGroups()
-      }
-    },
-    [patchGroup, refreshGroups],
-  )
-
-  const togglePin = useCallback(
-    (group: Group, pinned: boolean) =>
-      void applyPrefs(group.id, { pinnedAt: pinned ? new Date().toISOString() : null }, { pinned }),
-    [applyPrefs],
-  )
-  const toggleArchive = useCallback(
-    (group: Group, archived: boolean) =>
-      void applyPrefs(
-        group.id,
-        { archivedAt: archived ? new Date().toISOString() : null },
-        { archived },
-      ),
-    [applyPrefs],
-  )
-  const toggleMute = useCallback(
-    (group: Group, muted: boolean) => void applyPrefs(group.id, { muted }, { muted }),
-    [applyPrefs],
-  )
-
-  const handleMarkRead = useCallback(
-    async (group: Group) => {
-      markGroupRead(group.id)
-      try {
-        await api.groups.markRead(group.id)
-      } catch {
-        void refreshGroups()
-      }
-    },
-    [markGroupRead, refreshGroups],
-  )
-  // Mark every conversation read at once (sidebar options menu). Clears all rows
-  // optimistically, then persists each previously-unread one; reconciles on
-  // failure. No-op when nothing is unread.
-  const handleMarkAllRead = useCallback(async () => {
-    const unreadIds = groups
-      .filter((g) => (g.unreadCount ?? 0) > 0 || groupHasUnread(g))
-      .map((g) => g.id)
-    if (!unreadIds.length) return
-    setGroups((prev) =>
-      prev.map((g) => ({ ...g, lastReadAt: new Date().toISOString(), unreadCount: 0, unreadMentionCount: 0 })),
-    )
-    try {
-      await Promise.all(unreadIds.map((id) => api.groups.markRead(id)))
-    } catch {
-      void refreshGroups()
-    }
-  }, [groups, refreshGroups])
-
-  const handleMarkUnread = useCallback(
-    async (group: Group) => {
-      patchGroup(group.id, { unreadCount: Math.max(group.unreadCount ?? 0, 1) })
-      try {
-        await api.groups.markUnread(group.id)
-      } catch {
-        void refreshGroups()
-      }
-    },
-    [patchGroup, refreshGroups],
-  )
-  // "Delete conversation" = delete FOR ME (hidden). Never removes the group or
-  // touches anyone else's view; it reappears on the next message. Drop + deselect
-  // optimistically, then persist.
-  const handleDeleteConversation = useCallback(
-    async (group: Group) => {
-      if (openGroupIdRef.current === group.id) setSelection(null)
-      setGroups((prev) => prev.filter((g) => g.id !== group.id))
-      try {
-        await api.groups.setPrefs(group.id, { hidden: true })
-      } catch {
-        void refreshGroups()
-      }
-    },
-    [refreshGroups],
-  )
 
   const directGroups = useMemo(() => groups.filter((g) => g.type === 'direct'), [groups])
 
@@ -802,6 +523,34 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // allowed server-side; the header button gates on workspace role for
   // simplicity (the server enforces the full rule on POST).
   const canInviteMembers = user.role === 'admin' || user.role === 'dispatcher'
+  const availableVehicleRooms = useMemo(
+    () => groups.filter((group) => group.type === 'vehicle' && !group.archivedAt),
+    [groups],
+  )
+
+  const addTripFromWorkspace = useCallback((groupId: string) => {
+    setPendingAddTripGroupId(groupId)
+    setSelection({ kind: 'group', id: groupId })
+  }, [])
+
+  const openAttachmentTab = useCallback((tab: AttachmentWorkspaceTab) => {
+    setAttachmentTabs((current) =>
+      current.some((item) => item.attachment.id === tab.attachment.id)
+        ? current
+        : [...current, tab],
+    )
+  }, [])
+
+  const closeAttachmentTab = useCallback((attachmentId: string) => {
+    setAttachmentTabs((current) =>
+      current.filter((item) => item.attachment.id !== attachmentId),
+    )
+  }, [])
+
+  const replyToAttachmentTab = useCallback((groupId: string, reply: ReplyToPreview) => {
+    setPendingReply({ groupId, reply })
+    setSelection({ kind: 'group', id: groupId })
+  }, [])
 
   // App shell: navigation sits directly on the workspace background while the
   // main pane owns the raised rail surface. The shared outer gap keeps the two
@@ -819,7 +568,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             onClick={toggleSidebar}
             title="Expand sidebar"
             aria-label="Expand sidebar"
-            className="h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+            className="h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.07] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
           >
             <PanelLeftOpen size="1.0625rem" strokeWidth={1.8} />
           </button>
@@ -830,8 +579,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             aria-current={inboxActive ? 'page' : undefined}
             // Same split as the expanded header: subtle persistent selected state,
             // separate transient hover.
-            className={`flex items-center justify-center rounded-full p-1 transition-colors hover:bg-white/[0.05] ${
-              inboxActive ? 'bg-white/[0.025]' : ''
+            className={`flex items-center justify-center rounded-full p-1 transition-colors hover:bg-white/[0.07] ${
+              inboxActive ? 'bg-white/[0.095]' : ''
             }`}
           >
             <CompanyLogo size={sidebarAvatar} version={logoVersion} className="!rounded-full" />
@@ -845,7 +594,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             }}
             title={user.displayName}
             aria-label="Open account menu"
-            className="rounded-full p-0.5 hover:bg-white/[0.04] transition-colors"
+            className="rounded-full p-0.5 hover:bg-white/[0.07] transition-colors"
           >
             <Avatar userId={user.id} name={user.displayName} size={sidebarAvatar} version={avatarVersion} />
           </button>
@@ -885,7 +634,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             surface, and there's no persistent "selected" tint — the header keeps
             the sidebar colour at rest. The collapse control sits to its right.
             (No workspace switcher — actions live in the user menu below.) */}
-        <div className="h-[var(--header-height)] flex items-stretch transition-colors hover:bg-white/[0.04]">
+        <div className="h-[var(--header-height)] flex items-stretch transition-colors hover:bg-white/[0.07]">
           <button
             onClick={() => setSelection({ kind: 'inbox' })}
             title="Workspace home"
@@ -925,7 +674,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         <div className="px-2.5 pt-2.5 pb-1.5 flex items-center gap-1.5">
           <label
             htmlFor="rail-search"
-            className="flex-1 h-[var(--sidebar-search-height)] flex items-center gap-1.5 px-3 rounded-full border border-transparent bg-white/[0.035] hover:bg-white/[0.05] focus-within:bg-white/[0.05] focus-within:border-white/[0.10] transition-colors cursor-text"
+            className="flex-1 h-[var(--sidebar-search-height)] flex items-center gap-1.5 px-3 rounded-full border border-transparent bg-white/[0.05] hover:bg-white/[0.08] focus-within:bg-white/[0.08] focus-within:border-white/[0.12] transition-colors cursor-text"
           >
             <Search size="0.8125rem" strokeWidth={1.6} className="text-faint shrink-0" />
             <input
@@ -959,7 +708,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               className={`h-[var(--sidebar-search-height)] w-[var(--sidebar-search-height)] flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
                 newMenuOpen
                   ? 'bg-white/[0.09] text-text'
-                  : 'text-muted hover:bg-white/[0.05] hover:text-text'
+                  : 'text-muted hover:bg-white/[0.07] hover:text-text'
               }`}
             >
               <Menu size="1.0625rem" strokeWidth={1.9} />
@@ -1150,7 +899,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           <button
             onClick={() => setUserMenuOpen((v) => !v)}
             className={`w-full flex items-center gap-2 px-2 py-2 rounded-btn transition-colors text-left ${
-              userMenuOpen ? 'bg-white/[0.055]' : 'hover:bg-white/[0.03]'
+              userMenuOpen ? 'bg-white/[0.10]' : 'hover:bg-white/[0.07]'
             }`}
           >
             <div className="relative shrink-0">
@@ -1210,6 +959,12 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               pendingReply?.groupId === selectedGroup.id ? pendingReply.reply : null
             }
             onConsumeInitialReply={() => setPendingReply(null)}
+            initialAddTripOpen={pendingAddTripGroupId === selectedGroup.id}
+            onConsumeInitialAddTrip={() => setPendingAddTripGroupId(null)}
+            attachmentTabs={attachmentTabs}
+            onOpenAttachmentTab={openAttachmentTab}
+            onCloseAttachmentTab={closeAttachmentTab}
+            onReplyToAttachmentTab={replyToAttachmentTab}
             canInviteMembers={canInviteMembers}
             onGroupUpdated={patchGroup}
           />
@@ -1246,7 +1001,12 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 onDeclined={handleInviteDeclined}
               />
             ) : (
-              <InboxView workspaceName={workspace.name} />
+              <InboxView
+                workspaceName={workspace.name}
+                vehicleRooms={availableVehicleRooms}
+                canAddTrip={canInviteMembers}
+                onAddTrip={addTripFromWorkspace}
+              />
             )}
           </div>
         )}

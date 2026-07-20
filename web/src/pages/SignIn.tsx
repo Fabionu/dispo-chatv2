@@ -277,7 +277,7 @@ function AuthBackdrop() {
         className="absolute inset-0 opacity-40"
         style={{
           backgroundImage:
-            'linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px)',
+            'linear-gradient(rgb(var(--color-wash) / 0.025) 1px, transparent 1px), linear-gradient(90deg, rgb(var(--color-wash) / 0.025) 1px, transparent 1px)',
           backgroundSize: '48px 48px',
           maskImage: 'radial-gradient(circle at center, black, transparent 75%)',
         }}

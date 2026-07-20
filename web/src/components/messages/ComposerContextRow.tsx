@@ -7,11 +7,11 @@ type Props = {
   onCancel: () => void
 }
 
-// A small row that lives above the composer's textarea — used by both the
-// reply-context preview and the editing-message indicator. The tone changes
-// the accent bar so the two states are distinguishable at a glance.
+// A compact inset card above the textarea. Keeping it inside the composer's
+// edges (instead of stretching a divider across the entire capsule) makes the
+// reply/edit state feel like contextual content rather than a second toolbar.
 export default function ComposerContextRow({ tone, label, snippet, onCancel }: Props) {
-  const accent = tone === 'reply' ? 'border-active/60' : 'border-white/[0.18]'
+  const accent = tone === 'reply' ? 'bg-active/70' : 'bg-white/[0.22]'
   const icon =
     tone === 'reply' ? (
       <Reply size="0.75rem" strokeWidth={1.8} />
@@ -19,20 +19,24 @@ export default function ComposerContextRow({ tone, label, snippet, onCancel }: P
       <Pencil size="0.75rem" strokeWidth={1.8} />
     )
   return (
-    <div className="flex items-start gap-2.5 px-3 py-2 border-b border-white/[0.06]">
-      <div className={`pl-2 border-l-2 ${accent} flex-1 min-w-0`}>
-        <div className="flex items-center gap-1.5 text-[0.6875rem] text-muted">
-          <span className="text-active">{icon}</span>
-          <span>{label}</span>
+    <div className="mx-2 mt-2 flex items-center gap-2.5 rounded-[1.125rem] bg-white/[0.045] px-2.5 py-2">
+      <span className={`h-8 w-0.5 shrink-0 rounded-full ${accent}`} aria-hidden="true" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 text-[0.75rem] font-medium leading-tight text-text">
+          <span className={tone === 'reply' ? 'text-active' : 'text-muted'}>{icon}</span>
+          <span className="truncate">{label}</span>
         </div>
-        <div className="text-[0.75rem] text-muted truncate italic mt-0.5">{snippet || '…'}</div>
+        <div className="mt-1 truncate text-[0.75rem] leading-tight text-muted">
+          {snippet || '…'}
+        </div>
       </div>
       <button
+        type="button"
         onClick={onCancel}
         aria-label={tone === 'reply' ? 'Cancel reply' : 'Cancel edit'}
-        className="h-6 w-6 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.04] transition-colors"
+        className="h-7 w-7 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.08] transition-colors"
       >
-        <X size="0.8125rem" strokeWidth={1.8} />
+        <X size="0.875rem" strokeWidth={1.9} />
       </button>
     </div>
   )

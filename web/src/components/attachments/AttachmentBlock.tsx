@@ -273,7 +273,7 @@ export default function AttachmentBlock({
                 <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/10 to-black/20" />
                 <div className="absolute inset-0 flex items-center justify-center">
                   <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/55 backdrop-blur-[1px]">
-                    <Loader2 size="1rem" strokeWidth={2} className="animate-spin text-white/90" />
+                    <Loader2 size="1rem" strokeWidth={2} className="animate-spin text-pure-white/90" />
                   </span>
                 </div>
               </div>
@@ -341,11 +341,11 @@ export default function AttachmentBlock({
         )}
         {/* Opaque-enough pill + bright text so the label stays readable over a
             white page thumbnail as well as the dark placeholder band. */}
-        <span className="absolute top-2 left-2 rounded-chip border border-white/[0.10] bg-black/65 backdrop-blur-[2px] px-1.5 py-0.5 text-[0.59375rem] font-semibold tracking-wide text-white/90">
+        <span className="absolute top-2 left-2 rounded-chip border border-pure-white/10 bg-black/65 backdrop-blur-[2px] px-1.5 py-0.5 text-[0.59375rem] font-semibold tracking-wide text-pure-white/90">
           {docExt}
         </span>
         {uploading && (
-          <span className="absolute top-2 right-2 flex items-center gap-1 rounded-chip bg-black/55 px-1.5 py-0.5 text-[0.625rem] text-text/90">
+          <span className="absolute top-2 right-2 flex items-center gap-1 rounded-chip bg-black/55 px-1.5 py-0.5 text-[0.625rem] text-pure-white/90">
             <Loader2 size="0.6875rem" strokeWidth={2} className="animate-spin" />
             Uploading…
           </span>

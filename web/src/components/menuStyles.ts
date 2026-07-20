@@ -4,7 +4,7 @@
 // they open (same exported-constant pattern as ICON_ACTION_* in
 // HeaderIconButton.tsx). Callers add positioning, sizing and z-index only.
 //
-// Surface:   card radius, standard hairline border, `surface` fill, one calm
+// Surface:   card radius, standard hairline border, shared #202020 fill, one calm
 //            elevation shadow. MENU_SURFACE alone is also used by non-menu
 //            popovers (pickers, date fields); action menus use MENU_CONTAINER,
 //            which adds the standard vertical inset.

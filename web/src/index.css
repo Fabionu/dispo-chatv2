@@ -54,6 +54,23 @@ html[data-density='comfortable'] {
 :root {
   color-scheme: dark;
 
+  /* Runtime color palette. Values are RGB channels so Tailwind utilities can
+     preserve opacity modifiers (bg-surface/90, border-white/[0.08], etc.). */
+  --color-bg: 0 0 0;
+  --color-chat: 32 32 32;
+  --color-surface: 32 32 32;
+  --color-surface-2: 48 48 48;
+  --color-rail: 32 32 32;
+  --color-composer: 16 16 16;
+  --color-text: 245 245 245;
+  --color-muted: 163 163 163;
+  --color-faint: 118 118 118;
+  --color-bubble-own: 16 16 16;
+  --color-done: 125 138 120;
+  --color-active: 200 149 114;
+  --color-alert: 217 119 87;
+  --color-wash: 255 255 255;
+
   /* ── Display density tokens ──────────────────────────────────────────────
      The UI scales by swapping a small set of variables — NOT by transform:
      scale() or fluid vw units — so layout stays crisp and predictable. Three
@@ -125,6 +142,24 @@ html[data-density='comfortable'] {
   --sidebar-row-pad-x: 11px;
   --sidebar-row-pad-y: 8px;
   --sidebar-section-gap: 24px;
+}
+
+html[data-theme='light'] {
+  color-scheme: light;
+  --color-bg: 238 238 238;
+  --color-chat: 250 250 250;
+  --color-surface: 250 250 250;
+  --color-surface-2: 232 232 232;
+  --color-rail: 250 250 250;
+  --color-composer: 235 235 235;
+  --color-text: 28 28 28;
+  --color-muted: 88 88 88;
+  --color-faint: 112 112 112;
+  --color-bubble-own: 218 218 218;
+  --color-done: 92 109 86;
+  --color-active: 154 90 50;
+  --color-alert: 185 73 48;
+  --color-wash: 0 0 0;
 }
 
 /* compact — small laptops / dense preference (the previous base scale). */
@@ -318,10 +353,8 @@ html, body, #root {
 
 body {
   margin: 0;
-  /* Neutral dark-grey app/chat base — keep in sync with the `bg` token in
-     tailwind.config.js. */
-  background: #181818;
-  color: #f5f5f5;
+  background: rgb(var(--color-bg));
+  color: rgb(var(--color-text));
   font-family: 'Inter', system-ui, sans-serif;
   font-size: var(--app-font-size);
   line-height: 1.5;
@@ -438,7 +471,7 @@ input, button, textarea, select {
    Firefox falls back to `scrollbar-width` + `scrollbar-color`. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+  scrollbar-color: rgb(var(--color-wash) / 0.12) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -451,7 +484,7 @@ input, button, textarea, select {
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.10);
+  background-color: rgb(var(--color-wash) / 0.10);
   border-radius: 10px;
   /* Transparent border lets the track show through so the thumb looks inset
      and slimmer than the gutter — same trick GitHub/Linear use. */
@@ -460,7 +493,7 @@ input, button, textarea, select {
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.18);
+  background-color: rgb(var(--color-wash) / 0.18);
 }
 
 *::-webkit-scrollbar-corner {
@@ -468,8 +501,7 @@ input, button, textarea, select {
 }
 
 input::placeholder {
-  /* Keep in sync with the `faint` token — readable, not nearly invisible. */
-  color: #767676;
+  color: rgb(var(--color-faint));
 }
 
 /* Native <select> dropdown options. The OS draws the open list itself and
@@ -479,8 +511,8 @@ input::placeholder {
    readable everywhere; the OS still paints its own highlight on the active row.
    Colours mirror the `surface` and `text` tokens (tailwind.config.js). */
 option {
-  background-color: #262626;
-  color: #f5f5f5;
+  background-color: rgb(var(--color-surface));
+  color: rgb(var(--color-text));
 }
 
 button {
@@ -494,7 +526,7 @@ button {
   text-transform: uppercase;
   /* Section eyebrows: slightly brighter than before for legibility, still
      subdued (kept below the `muted` secondary tone). */
-  color: #8a8a8a;
+  color: rgb(var(--color-faint));
 }
 
 /* HERE map: keep the normal (default arrow) cursor everywhere on the map
@@ -671,8 +703,8 @@ button {
    brighten + a whisper of fill — never a bright ring or colour change. */
 .modal-input {
   width: 100%;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgb(var(--color-wash) / 0.03);
+  border: 1px solid rgb(var(--color-wash) / 0.08);
   border-radius: 0.5rem;
   padding: 0.4375rem 0.625rem;
   font-size: 0.8125rem;
@@ -680,8 +712,8 @@ button {
   transition: border-color 120ms, background-color 120ms;
 }
 .modal-input:focus {
-  border-color: rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.04);
+  border-color: rgb(var(--color-wash) / 0.22);
+  background: rgb(var(--color-wash) / 0.04);
 }
 
 /* Custom checkbox */
@@ -689,7 +721,7 @@ button {
   appearance: none;
   width: 1rem;
   height: 1rem;
-  border: 1px solid rgba(255,255,255,0.16);
+  border: 1px solid rgb(var(--color-wash) / 0.16);
   border-radius: 3px;
   background: transparent;
   position: relative;
@@ -697,8 +729,8 @@ button {
   transition: background 120ms, border-color 120ms;
 }
 .checkbox:checked {
-  background: #f5f5f5;
-  border-color: #f5f5f5;
+  background: rgb(var(--color-text));
+  border-color: rgb(var(--color-text));
 }
 .checkbox:checked::after {
   content: '';
@@ -707,7 +739,7 @@ button {
   top: 0.0625rem;
   width: 0.3125rem;
   height: 0.5625rem;
-  border: solid #000000;
+  border: solid rgb(var(--color-bg));
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }

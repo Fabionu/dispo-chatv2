@@ -2,6 +2,7 @@ import { extname } from 'node:path'
 import type { Readable } from 'node:stream'
 import { createClient } from '@supabase/supabase-js'
 import { env } from './env.js'
+import { TtlCache, cachedAsync } from './util/ttlCache.js'
 
 // Attachment storage backed by Supabase Storage (object storage). This keeps
 // the surface narrow (save / read / get / delete) so the rest of the app is
@@ -105,6 +106,38 @@ export async function createSignedUrl(
     .createSignedUrl(storagePath, expiresIn)
   if (error || !data?.signedUrl) throw new FileNotFound(storagePath)
   return data.signedUrl
+}
+
+// ── Cached signed URLs (immutable objects only) ──────────────────────────
+// The attachment-preview route redirects the browser straight to a signed URL
+// instead of proxying the bytes through this process. Minting a URL per request
+// would defeat browser caching (every mint is a unique URL → unique cache key),
+// so we reuse one URL per object for a window comfortably SHORTER than the
+// URL's validity: a redirect issued at the very end of the reuse window still
+// points at a URL with (TTL − reuse window) of life left. Only ever use this
+// for IMMUTABLE objects (attachment previews/originals) — for mutable ones
+// (avatars) a cached URL + Supabase's own CDN caching could pin stale bytes.
+const SIGNED_URL_TTL_SEC = 3600
+const SIGNED_URL_REUSE_SEC = 3000
+const signedUrlCache = new TtlCache<Promise<{ url: string; mintedAt: number }>>(
+  10_000,
+  SIGNED_URL_REUSE_SEC * 1000,
+)
+
+// Signed URL for an immutable object, reused across requests for the reuse
+// window. Returns the URL plus how long (seconds) a redirect to it may safely
+// be cached by the browser — the remainder of the reuse window, floored so a
+// response near the window's edge still caches briefly. Throws FileNotFound
+// (uncached, so a transient storage error doesn't stick) when the object is gone.
+export async function getCachedSignedUrl(
+  storagePath: string,
+): Promise<{ url: string; maxAgeSec: number }> {
+  const entry = await cachedAsync(signedUrlCache, storagePath, async () => ({
+    url: await createSignedUrl(storagePath, SIGNED_URL_TTL_SEC),
+    mintedAt: Date.now(),
+  }))
+  const ageSec = Math.floor((Date.now() - entry.mintedAt) / 1000)
+  return { url: entry.url, maxAgeSec: Math.max(60, SIGNED_URL_REUSE_SEC - ageSec) }
 }
 
 // Read an object fully into memory. Throws FileNotFound if it's gone.

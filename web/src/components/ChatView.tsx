@@ -1,38 +1,41 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import {
   ArrowDown,
   FileText,
   Image as ImageIcon,
-  Info,
   MapPin,
   MessageSquare,
   Route,
-  Search,
   Upload,
-  X,
 } from 'lucide-react'
 import type { Attachment, Group, GroupMember, IncomingMessage, ReplyToPreview } from '../lib/types'
 import { groupLabel, trailerPlate } from '../lib/types'
 import { fileError } from './attachments/attachmentUtils'
 import { resolveMentionIds } from '../lib/mentions'
-import { api, ApiError } from '../lib/api'
+import { api } from '../lib/api'
 import { getSocket } from '../lib/socket'
 import ChatComposer, { type ChatComposerHandle, type EditContext } from './composer/ChatComposer'
-import Avatar from './Avatar'
-import GroupAvatar from './GroupAvatar'
-import HeaderIconButton from './HeaderIconButton'
-import { PaneLoader, ModalLoader, PanelLoader } from './LazyFallback'
+import ChatHeader from './chat/ChatHeader'
+import ChatModals from './chat/ChatModals'
+import type { AttachmentContext } from './chat/chatTypes'
+import { PaneLoader, PanelLoader } from './LazyFallback'
 
 // ── Code-split heavy features ──────────────────────────────────────────────
 // These load only when actually opened, keeping their bundles (pdf.js image/
 // document preview logic, the @here/flexpolyline map stack, the trip + group
 // info panels) out of the initial chat bundle. Each render site is wrapped in a
 // Suspense with a compact loader (see LazyFallback).
-const ImagePreviewModal = lazy(() => import('./attachments/ImagePreviewModal'))
 const InlinePdfPreview = lazy(() => import('./attachments/InlinePdfPreview'))
-const AttachmentSendPreviewModal = lazy(() => import('./attachments/AttachmentSendPreviewModal'))
 const AttachmentTabView = lazy(() => import('./attachments/AttachmentTabView'))
-const DocumentPreviewModal = lazy(() => import('./attachments/DocumentPreviewModal'))
 const GroupInfoPanel = lazy(() => import('./GroupInfoPanel'))
 const AddTripPanel = lazy(() => import('./vehicle/AddTripPanel'))
 const StopLocationMap = lazy(() => import('./vehicle/StopLocationMap'))
@@ -48,12 +51,12 @@ import ReadReceiptsPanel from './messages/ReadReceiptsPanel'
 import SystemMessageRow from './messages/SystemMessageRow'
 import PinnedBar from './messages/PinnedBar'
 import TypingIndicator from './messages/TypingIndicator'
-import ForwardModal from './messages/ForwardModal'
-import InviteMembersModal from './invites/InviteMembersModal'
-import ConfirmDialog from './ConfirmDialog'
 import Spinner from './Spinner'
-import type { LocalMessage } from './messages/types'
+import type { AttachmentWorkspaceTab, LocalMessage } from './messages/types'
 import { useChatScroll } from '../hooks/useChatScroll'
+import { useFileDrop } from '../hooks/useFileDrop'
+import { useMessageActions } from '../hooks/useMessageActions'
+import { useSendMessage } from '../hooks/useSendMessage'
 import { useMessageDrafts } from '../hooks/useMessageDrafts'
 import { getDraft } from '../lib/draftStorage'
 import { devlog } from '../lib/devlog'
@@ -68,10 +71,6 @@ import { usePinnedMessages } from '../hooks/usePinnedMessages'
 // array to useChatScroll on every render.
 const NO_MESSAGES: LocalMessage[] = []
 
-// An attachment paired with the message it belongs to — the context every
-// preview surface needs so Reply/Forward operate on the message.
-type AttachmentContext = { attachment: Attachment; message: LocalMessage }
-
 // How many of the newest messages get their images treated as "recent": loaded
 // eagerly in-bubble and warmed in the browser cache when the thread opens.
 // Older messages stay lazy so a huge backlog doesn't fetch everything at once.
@@ -81,7 +80,7 @@ const RECENT_IMAGE_WINDOW = 15
 // overlays the bottom of the message list (painted ABOVE the bubbles) so the
 // content fades out at the end of the window instead of cutting off — while
 // sitting BELOW the floating composer + chips (z-10/z-20) so the input stays
-// sharp. Fades to the raised chat-card surface (`rail`, #262626).
+// sharp. Fades to the dedicated chat-card surface (`chat`, #202020).
 const CHAT_BOTTOM_FADE_HEIGHT = 56
 
 type Props = {
@@ -103,6 +102,16 @@ type Props = {
   // Called once after the seeded reply context has been consumed, so the
   // parent can drop it (and not re-seed on a later remount of this group).
   onConsumeInitialReply?: () => void
+  // Workspace-home shortcut: mount this vehicle room with its existing Add Trip
+  // panel already open, then let the parent clear the one-shot request.
+  initialAddTripOpen?: boolean
+  onConsumeInitialAddTrip?: () => void
+  // Attachment tabs live at Workspace level so PDFs/images remain open while
+  // the single Chat tab is replaced by another conversation.
+  attachmentTabs: AttachmentWorkspaceTab[]
+  onOpenAttachmentTab: (tab: AttachmentWorkspaceTab) => void
+  onCloseAttachmentTab: (attachmentId: string) => void
+  onReplyToAttachmentTab: (groupId: string, reply: ReplyToPreview) => void
   // Whether the current user may invite members to a vehicle group (admin /
   // dispatcher). Combined with the caller's group-admin role to gate the
   // group-info edit/image/invite controls; the server re-enforces it.
@@ -120,6 +129,12 @@ export default function ChatView({
   onOpenDirectMessage,
   initialReplyContext = null,
   onConsumeInitialReply,
+  initialAddTripOpen = false,
+  onConsumeInitialAddTrip,
+  attachmentTabs,
+  onOpenAttachmentTab,
+  onCloseAttachmentTab,
+  onReplyToAttachmentTab,
   canInviteMembers = false,
   onGroupUpdated,
 }: Props) {
@@ -168,7 +183,10 @@ export default function ChatView({
     enabled: !editContext,
   })
   // Message currently being forwarded (drives the picker modal).
-  const [forwardTarget, setForwardTarget] = useState<LocalMessage | null>(null)
+  const [forwardTarget, setForwardTarget] = useState<{
+    message: LocalMessage
+    groupId: string
+  } | null>(null)
   // Whether the "Invite members" picker is open (vehicle groups only).
   const [inviteOpen, setInviteOpen] = useState(false)
   // Whether the group-info drawer is open (vehicle groups only).
@@ -197,7 +215,12 @@ export default function ChatView({
   }, [])
   // Whether the "Add trip" modal is open (vehicle groups only). Opened from the
   // composer's add (+) menu.
-  const [addTripOpen, setAddTripOpen] = useState(false)
+  const [addTripOpen, setAddTripOpen] = useState(
+    () => group.type === 'vehicle' && canInviteMembers && initialAddTripOpen,
+  )
+  useEffect(() => {
+    if (initialAddTripOpen) onConsumeInitialAddTrip?.()
+  }, [initialAddTripOpen, onConsumeInitialAddTrip])
   // Chat-window tool tabs. Today there's one tool — the stop-location Map, a
   // request from the Add-trip panel to pick a stop's coordinates on a HERE map.
   // `mapPick` carries the seed query + the write-back callback (null = closed);
@@ -211,11 +234,9 @@ export default function ChatView({
   // active, routable trip). Independent of the stop-pick map above — both are
   // tabs in the same chat-window tool banner.
   const [tripRouteOpen, setTripRouteOpen] = useState(false)
-  // Attachment preview tabs: images / PDFs / documents the user pinned via the
-  // preview's "Open in tab" (+) action. Each is keyed by attachment id (opening
-  // the same attachment again just focuses its existing tab). Cleared on group
-  // switch. They live alongside the map/route tools in the same tab banner.
-  const [attachmentTabs, setAttachmentTabs] = useState<AttachmentContext[]>([])
+  // Attachment preview tabs are owned by Workspace rather than this keyed chat
+  // view, so changing conversation replaces only the Chat surface and leaves
+  // PDFs/images available in this shared strip.
   // The active chat-window surface: chat, a tool (map/route), or one of the
   // attachment tabs (`att:<attachmentId>`).
   const [activeTool, setActiveTool] = useState<'chat' | 'map' | 'route' | `att:${string}`>('chat')
@@ -245,15 +266,13 @@ export default function ChatView({
     setImagePreview(null)
     setPdfPreview(null)
     setDocPreview(null)
-    setAttachmentTabs((prev) =>
-      prev.some((t) => t.attachment.id === ctx.attachment.id) ? prev : [...prev, ctx],
-    )
+    onOpenAttachmentTab({ ...ctx, groupId: group.id })
     setActiveTool(`att:${ctx.attachment.id}`)
-  }, [])
+  }, [group.id, onOpenAttachmentTab])
   const closeAttachmentTab = useCallback((id: string) => {
-    setAttachmentTabs((prev) => prev.filter((t) => t.attachment.id !== id))
+    onCloseAttachmentTab(id)
     setActiveTool((t) => (t === `att:${id}` ? 'chat' : t))
-  }, [])
+  }, [onCloseAttachmentTab])
   // In-conversation search (DMs + vehicle groups). The query lives here so the
   // header's inline search field owns it while the results render as a separate
   // floating overlay (ConversationSearch) — no full-width banner that would push
@@ -282,8 +301,8 @@ export default function ChatView({
   useEffect(() => {
     closeMapPick()
     closeTripRoute()
-    // Attachment tabs belong to the conversation — drop them on switch.
-    setAttachmentTabs([])
+    // A conversation switch replaces only the Chat tab. Workspace-owned
+    // attachment tabs remain in the strip until the user closes them.
     setActiveTool('chat')
   }, [group.id, closeMapPick, closeTripRoute])
   // Escape closes search from anywhere; a click outside the search UI (the
@@ -306,10 +325,6 @@ export default function ChatView({
       document.removeEventListener('mousedown', onDown)
     }
   }, [searchOpen, closeSearch])
-  // Whether a file is being dragged over the conversation (drives the drop
-  // overlay). A depth counter keeps it stable across child enter/leave events.
-  const [dragActive, setDragActive] = useState(false)
-  const dragDepth = useRef(0)
   // Pending delete awaiting confirmation. `scope` picks which delete runs.
   const [pendingDelete, setPendingDelete] = useState<{
     message: LocalMessage
@@ -361,6 +376,7 @@ export default function ChatView({
     composerRef,
     onScroll,
     scrollToBottom,
+    syncBottomAfterComposerLayout,
     showScrollDown,
     handleImageLoaded,
     anchorBeforePrepend,
@@ -390,6 +406,12 @@ export default function ChatView({
     },
     [composerRef],
   )
+  // composerHeight is also the message scroller's bottom padding. Re-pin only
+  // after React has applied that padding, avoiding a cross-browser race where
+  // ResizeObserver sees the typing row before the new scrollHeight exists.
+  useLayoutEffect(() => {
+    if (composerHeight > 0) syncBottomAfterComposerLayout()
+  }, [composerHeight, syncBottomAfterComposerLayout])
   useEffect(() => () => composerRoRef.current?.disconnect(), [])
 
   useEffect(
@@ -591,90 +613,15 @@ export default function ChatView({
   }, [])
 
   // ── Send / edit / retry ────────────────────────────────────────────────
-  async function sendBody(
-    body: string,
-    attachedFile: File | null,
-    replyTo: ReplyToPreview | null,
-    mentionUserIds: string[] = [],
-  ) {
-    if (!body && !attachedFile) return
-    const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    // Optimistic mentions: highlight the typed @Names immediately, before the
-    // server echoes the canonical list back.
-    const optimisticMentions = mentionUserIds.length
-      ? members
-          .filter((m) => mentionUserIds.includes(m.id))
-          .map((m) => ({ userId: m.id, displayName: m.displayName }))
-      : undefined
-
-    // For images, show the local blob URL on the optimistic bubble so the
-    // user sees their picture immediately. For documents, we still preview
-    // a card with name/size — no URL needed until the server returns one.
-    const isImg = attachedFile?.type.startsWith('image/') ?? false
-    // One decoded blob URL, used for BOTH the optimistic bubble (via
-    // localPreviewUrl) and carried onto the real message by foldOptimistic (via
-    // url). Same src string before/after the optimistic→real swap → the image
-    // never refetches from the server, so there's no post-upload reload flicker.
-    const blobUrl = attachedFile && isImg ? URL.createObjectURL(attachedFile) : ''
-    const optimisticAttachment: Attachment | null = attachedFile
-      ? {
-          id: `${localId}-att`,
-          originalName: attachedFile.name,
-          mimeType: attachedFile.type,
-          byteSize: attachedFile.size,
-          url: blobUrl,
-          ...(isImg ? { localPreviewUrl: blobUrl } : {}),
-        }
-      : null
-
-    const optimistic: LocalMessage = {
-      id: localId,
-      localId,
-      authorId: currentUserId,
-      authorName: '',
-      body,
-      createdAt: new Date().toISOString(),
-      pending: true,
-      attachments: optimisticAttachment ? [optimisticAttachment] : undefined,
-      pendingFile: attachedFile ?? undefined,
-      replyTo: replyTo,
-      mentions: optimisticMentions,
-    }
-    // Pin BEFORE inserting so the layout effect for this very insert forces the
-    // viewport to the bottom — the user sees their own message (and an image's
-    // reserved box) immediately, not after the upload completes. The upsert is
-    // synchronous and the upload below is async (fetch), so React paints the
-    // optimistic bubble before any network work — no manual defer needed.
-    pinToBottomNext()
-    cache.upsertMessage(group.id, optimistic)
-    devlog('optimistic insert', { localId, hasFile: Boolean(attachedFile) })
-
-    try {
-      devlog('upload start', { localId, hasFile: Boolean(attachedFile) })
-      const res = await api.groups.postMessage(
-        group.id,
-        body,
-        attachedFile,
-        replyTo?.id ?? null,
-        mentionUserIds,
-      )
-      devlog('upload finished → replaceMessage', { localId })
-      // replaceMessage swaps the optimistic for the real one (or drops it if
-      // the socket already delivered the real message), carrying the local
-      // blob preview onto the real attachment so the image doesn't flicker.
-      // The blob is revoked later — on conversation unmount or message removal.
-      cache.replaceMessage(group.id, localId, res.message)
-    } catch (err) {
-      cache.patchMessage(group.id, localId, { pending: false, failed: true })
-      if (err instanceof ApiError) {
-        if (err.code === 'too_many_requests') {
-          setError('Slow down — too many messages.')
-        } else if (err.code === 'image_too_large' || err.code === 'file_too_large') {
-          setError('That file is too large.')
-        }
-      }
-    }
-  }
+  // The optimistic send pipeline (bubble insert → POST → reconcile/fail) lives
+  // in useSendMessage; the thin wrappers below own composer state.
+  const { sendBody, retry } = useSendMessage({
+    groupId: group.id,
+    currentUserId,
+    members,
+    pinToBottomNext,
+    onError: setError,
+  })
 
   // Edit submit: PATCH the message, optimistically reflect locally, revert
   // on failure. The socket message:edited will arrive shortly with the real
@@ -742,11 +689,6 @@ export default function ChatView({
     void sendBody(caption, f, reply, mentionIds)
   }
 
-  function retry(localId: string, body: string, attachedFile: File | null) {
-    cache.removeMessage(group.id, localId)
-    void sendBody(body, attachedFile, null, resolveMentionIds(body, members))
-  }
-
   // ── Message action callbacks ───────────────────────────────────────────
   function startReply(m: LocalMessage) {
     setEditContext(null)
@@ -764,8 +706,13 @@ export default function ChatView({
 
   function forwardFromPreview(m: LocalMessage) {
     closeAllPreviews()
-    setForwardTarget(m)
+    setForwardTarget({ message: m, groupId: group.id })
   }
+
+  const startForward = useCallback(
+    (m: LocalMessage) => setForwardTarget({ message: m, groupId: group.id }),
+    [group.id],
+  )
 
   function startEdit(m: LocalMessage) {
     setReplyContext(null)
@@ -782,39 +729,6 @@ export default function ChatView({
     setText('')
   }
 
-  async function deleteForEveryone(m: LocalMessage) {
-    const original = { body: m.body, attachments: m.attachments }
-    cache.patchMessage(group.id, m.id, {
-      body: '',
-      attachments: [],
-      deletedAt: new Date().toISOString(),
-      deletedBy: currentUserId,
-    })
-    try {
-      await api.groups.deleteForEveryone(group.id, m.id)
-    } catch {
-      cache.patchMessage(group.id, m.id, {
-        body: original.body,
-        attachments: original.attachments,
-        deletedAt: null,
-        deletedBy: null,
-      })
-      setError('Could not delete message.')
-    }
-  }
-
-  // Hide a single message for the current user only. Optimistically remove it;
-  // re-insert (normalize re-sorts it back into place) if the request fails.
-  async function deleteForMe(m: LocalMessage) {
-    cache.removeMessage(group.id, m.id)
-    try {
-      await api.groups.deleteForMe(group.id, m.id)
-    } catch {
-      cache.upsertMessage(group.id, m)
-      setError('Could not delete message.')
-    }
-  }
-
   // The menu actions open a confirmation first; the actual delete runs only
   // once the user confirms.
   function confirmPendingDelete() {
@@ -823,35 +737,6 @@ export default function ChatView({
     setPendingDelete(null)
     if (scope === 'everyone') void deleteForEveryone(message)
     else void deleteForMe(message)
-  }
-
-  // Open (or reuse) a private DM with a message's author. Connection rules are
-  // enforced server-side by createDirect. When `reply` is passed (from "Reply
-  // privately") the quote is carried into the destination DM's composer.
-  async function openPrivate(m: LocalMessage, reply?: ReplyToPreview) {
-    setError(null)
-    try {
-      const { group: dm } = await api.groups.createDirect(m.authorId)
-      onOpenDirectMessage({ groupId: dm.id, peerId: m.authorId, peerName: m.authorName }, reply)
-    } catch (err) {
-      setError(
-        err instanceof ApiError && err.code === 'connection_required'
-          ? 'Connect with this person before messaging.'
-          : 'Could not open a private conversation.',
-      )
-    }
-  }
-
-  // "Reply privately": open a DM with the author and carry the quoted message
-  // as reply context. If the DM already exists this just navigates to it with
-  // the composer pre-seeded.
-  function replyPrivately(m: LocalMessage) {
-    void openPrivate(m, toReplyPreview(m))
-  }
-
-  // "Send message in private": same DM, no quote.
-  function sendPrivate(m: LocalMessage) {
-    void openPrivate(m)
   }
 
   // Open (or reuse) a DM with a group member from the Group-info panel's
@@ -894,59 +779,26 @@ export default function ChatView({
     [scrollRef],
   )
 
-  // ── Copy / pin / unpin ─────────────────────────────────────────────────
-  const copyMessage = useCallback(
-    (m: LocalMessage) => {
-      if (!m.body) return
-      navigator.clipboard
-        .writeText(m.body)
-        .then(() => flashNotice('Copied to clipboard.'))
-        .catch(() => setError('Could not copy message.'))
-    },
-    // flashNotice/setError are stable enough for this handler's lifetime.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  )
-
-  // Optimistically reflect the pin (bubble indicator via cache + bar) and
-  // reconcile with the server's authoritative message; revert on failure.
-  async function pinMessage(m: LocalMessage) {
-    const stampedAt = new Date().toISOString()
-    cache.patchMessage(group.id, m.id, { pinnedAt: stampedAt, pinnedBy: currentUserId })
-    setPinned((prev) => [
-      { ...m, pinnedAt: stampedAt, pinnedBy: currentUserId },
-      ...prev.filter((p) => p.id !== m.id),
-    ])
-    try {
-      const { message } = await api.groups.pin(group.id, m.id)
-      cache.patchMessage(group.id, m.id, {
-        pinnedAt: message.pinnedAt,
-        pinnedBy: message.pinnedBy,
-      })
-      setPinned((prev) => [
-        message as LocalMessage,
-        ...prev.filter((p) => p.id !== m.id),
-      ])
-    } catch {
-      cache.patchMessage(group.id, m.id, { pinnedAt: null, pinnedBy: null })
-      setPinned((prev) => prev.filter((p) => p.id !== m.id))
-      setError('Could not pin message.')
-    }
-  }
-
-  async function unpinMessage(m: LocalMessage) {
-    cache.patchMessage(group.id, m.id, { pinnedAt: null, pinnedBy: null })
-    setPinned((prev) => prev.filter((p) => p.id !== m.id))
-    try {
-      await api.groups.unpin(group.id, m.id)
-    } catch {
-      cache.patchMessage(group.id, m.id, { pinnedAt: m.pinnedAt, pinnedBy: m.pinnedBy })
-      setPinned((prev) =>
-        prev.some((p) => p.id === m.id) ? prev : [m, ...prev],
-      )
-      setError('Could not unpin message.')
-    }
-  }
+  // ── Copy / pin / unpin / delete / private-DM actions ───────────────────
+  // Optimistic cache patches + reverts live in the hook; error/notice chips
+  // stay owned here via the callbacks.
+  const {
+    copyMessage,
+    pinMessage,
+    unpinMessage,
+    deleteForEveryone,
+    deleteForMe,
+    replyPrivately,
+    sendPrivate,
+  } = useMessageActions({
+    groupId: group.id,
+    currentUserId,
+    setPinned,
+    onError: setError,
+    onClearError: () => setError(null),
+    onNotice: flashNotice,
+    onOpenDirectMessage,
+  })
 
   // ── Header subtitle ────────────────────────────────────────────────────
   // Vehicle groups are permanent threads, so the subtitle is compact operational
@@ -1017,9 +869,8 @@ export default function ChatView({
       pendingDelete ||
       editContext,
   )
-  // True only when the drag actually carries files (ignore text/element drags).
-  const dragHasFiles = (e: React.DragEvent) => e.dataTransfer.types.includes('Files')
-
+  // Validate the dropped file the same way the picker does, then stage it in
+  // the pre-send preview modal.
   function stageDroppedFile(file: File) {
     const err = fileError(file)
     if (err) {
@@ -1030,36 +881,10 @@ export default function ChatView({
     setPendingFile(file)
   }
 
-  function onDragEnter(e: React.DragEvent) {
-    if (dropBlocked || !dragHasFiles(e)) return
-    e.preventDefault()
-    dragDepth.current += 1
-    setDragActive(true)
-  }
-  function onDragOver(e: React.DragEvent) {
-    if (dropBlocked || !dragHasFiles(e)) return
-    // preventDefault is required for the drop event to fire.
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'copy'
-  }
-  function onDragLeave(e: React.DragEvent) {
-    if (!dragHasFiles(e)) return
-    dragDepth.current -= 1
-    if (dragDepth.current <= 0) {
-      dragDepth.current = 0
-      setDragActive(false)
-    }
-  }
-  function onDrop(e: React.DragEvent) {
-    if (!dragHasFiles(e)) return
-    e.preventDefault()
-    dragDepth.current = 0
-    setDragActive(false)
-    if (dropBlocked) return
-    // One attachment per message — take the first dropped file.
-    const file = e.dataTransfer.files?.[0]
-    if (file) stageDroppedFile(file)
-  }
+  const { dragActive, dropHandlers } = useFileDrop({
+    blocked: dropBlocked,
+    onFile: stageDroppedFile,
+  })
 
   return (
     // Root is a horizontal row: [chat pane | group info panel]. The chat pane
@@ -1072,17 +897,11 @@ export default function ChatView({
           messages, composer). `flex-1 min-w-0` lets it shrink naturally to the
           remaining width when the Group info column is open, and keeps the
           drag-drop overlay scoped to the chat (never over the panel). */}
-      <div
-      className="relative flex-1 min-w-0 flex flex-col"
-      onDragEnter={onDragEnter}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-    >
+      <div className="relative flex-1 min-w-0 flex flex-col" {...dropHandlers}>
       {/* Drag-and-drop overlay. pointer-events-none so the drop still lands on
           the underlying drop zone; purely a visual affordance. */}
       {dragActive && !dropBlocked && (
-        <div className="absolute inset-0 z-30 pointer-events-none flex items-center justify-center bg-rail/80 backdrop-blur-[2px]">
+        <div className="absolute inset-0 z-30 pointer-events-none flex items-center justify-center bg-chat/80 backdrop-blur-[2px]">
           <div className="flex flex-col items-center gap-2.5 rounded-card border-2 border-dashed border-white/20 px-10 py-8 text-center">
             <Upload size="1.625rem" strokeWidth={1.6} className="text-muted" />
             <div className="text-[0.875rem] font-semibold text-text">Drop to send</div>
@@ -1093,134 +912,27 @@ export default function ChatView({
 
       {/* Chat surface — header + pinned bar + message list. The outer card and
           rounded clipping live in Workspace; this surface inherits its tone. */}
-      <div className="flex-1 flex flex-col min-h-0 bg-rail">
-      {/* Header stays flat inside the chat card, so the conversation identity
-          reads as part of the timeline rather than a nested panel. SLIM by
-          design: a fixed compact height
-          (smaller than the shared --header-height used by the sidebar seam, which
-          we intentionally don't touch) gives the message area more room. The
-          identity (avatar + name + trip/subtitle) is LEFT-ALIGNED at the start of
-          the header; `pr-24` reserves room for the search / group-info actions
-          floated at the right edge so a long title/place never runs under them.
-          Same structure for every type (DM + vehicle). The message column's own
-          centering (`.chat-column`) is separate and unaffected. */}
-      <header className="relative h-16 flex items-center gap-2 px-4 shrink-0 overflow-hidden">
-        {/* LEFT spacer — balances the right-edge actions so the identity cluster
-            stays centred. The active-trip context (status, route, progress) now
-            lives in its OWN bar directly under the header (see TripBar below),
-            never crammed into this corner. */}
-        <div className="flex-1 min-w-0" />
-
-        {/* CENTER — group identity (avatar + name + subtitle), centered between
-            the left banner and the right actions. Unchanged for DMs and vehicles;
-            the trip details live in the left banner, never on the title row. */}
-        <div className="flex items-center gap-3 min-w-0">
-          {group.type === 'direct' ? (
-            // The peer's avatar opens their read-only profile panel (DMs show
-            // no per-message avatars, so the header is the DM's avatar surface).
-            <button
-              type="button"
-              onClick={() =>
-                openProfile(group.directPeer?.id ?? '', group.directPeer?.name ?? groupLabel(group))
-              }
-              aria-label={`View ${group.directPeer?.name ?? 'user'}'s profile`}
-              title={group.directPeer?.name ?? undefined}
-              className="block shrink-0 rounded-full cursor-pointer transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
-            >
-              <Avatar
-                userId={group.directPeer?.id ?? ''}
-                name={group.directPeer?.name ?? groupLabel(group)}
-                size={56}
-              />
-            </button>
-          ) : (
-            // Vehicle identity — the group's uploaded image when set, else the
-            // generated generic icon. A rounded-square slot (vs the DM circle) so
-            // a room reads as a room by shape, matching the sidebar + Group info.
-            <GroupAvatar groupId={group.id} hasAvatar={Boolean(group.hasAvatar)} shape="rounded" size={56} />
-          )}
-          <div className="min-w-0">
-            <div className="text-[1rem] font-semibold truncate leading-tight">{groupLabel(group)}</div>
-            <div className="text-[0.8125rem] text-muted truncate leading-tight mt-0.5">{subtitle}</div>
-          </div>
-        </div>
-
-        {/* RIGHT — spacer that balances the centre column; the search / group-info
-            actions below float over it (absolute) so the search field can expand
-            without shifting the centered identity. */}
-        <div className="flex-1 min-w-0" />
-        {/* Borderless toolbar-style actions floated at the right edge so the
-            identity cluster stays centered. Search is offered in EVERY
-            conversation (DM + vehicle); Group info stays vehicle-only. Same
-            circular hover wash + on-theme focus ring for both. */}
-        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-          {/* Inline search field — expands to the LEFT of the search button when
-              open, so it stays inside the header action area instead of taking a
-              full row under the header. Compact borderless pill on the dark
-              theme; a leading clear (×) appears only with text typed. */}
-          {searchOpen && (
-            <div
-              data-search-region
-              className="flex items-center gap-1 h-9 pl-3 pr-1 mr-0.5 rounded-full bg-white/[0.06]"
-            >
-              <input
-                ref={searchInputRef}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') closeSearch()
-                }}
-                placeholder="Search messages…"
-                aria-label="Search this conversation"
-                className="w-40 sm:w-52 bg-transparent text-[0.8125rem] outline-none placeholder:text-faint"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => {
-                    setSearchQuery('')
-                    searchInputRef.current?.focus()
-                  }}
-                  aria-label="Clear search"
-                  className="h-6 w-6 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.08] transition-colors shrink-0"
-                >
-                  <X size="0.875rem" strokeWidth={2} />
-                </button>
-              )}
-            </div>
-          )}
-          <HeaderIconButton
-            searchRegion
-            active={searchOpen}
-            onClick={() => (searchOpen ? closeSearch() : openSearch())}
-            label={searchOpen ? 'Close search' : 'Search conversation'}
-          >
-            <Search size="1.1875rem" strokeWidth={1.8} />
-          </HeaderIconButton>
-          {routeMapAvailable && (
-            <HeaderIconButton
-              label="Trip route"
-              active={tripRouteOpen && activeTool === 'route'}
-              onClick={() =>
-                tripRouteOpen && activeTool === 'route' ? closeTripRoute() : openTripRoute()
-              }
-            >
-              <Route size="1.1875rem" strokeWidth={1.8} />
-            </HeaderIconButton>
-          )}
-          {group.type === 'vehicle' && (
-            <HeaderIconButton
-              label="Group info"
-              onClick={() => {
-                setGroupInfoTab('info')
-                setReceiptTarget(null)
-                setGroupInfoOpen(true)
-              }}
-            >
-              <Info size="1.25rem" strokeWidth={1.8} />
-            </HeaderIconButton>
-          )}
-        </div>
-      </header>
+      <div className="flex-1 flex flex-col min-h-0 bg-chat">
+      <ChatHeader
+        group={group}
+        subtitle={subtitle}
+        onOpenProfile={openProfile}
+        searchOpen={searchOpen}
+        searchQuery={searchQuery}
+        searchInputRef={searchInputRef}
+        onSearchQueryChange={setSearchQuery}
+        onOpenSearch={openSearch}
+        onCloseSearch={closeSearch}
+        routeMapAvailable={routeMapAvailable}
+        tripRouteActive={tripRouteOpen && activeTool === 'route'}
+        onOpenTripRoute={openTripRoute}
+        onCloseTripRoute={closeTripRoute}
+        onOpenGroupInfo={() => {
+          setGroupInfoTab('info')
+          setReceiptTarget(null)
+          setGroupInfoOpen(true)
+        }}
+      />
 
       {/* Active-trip bar — a slim, glanceable strip under the header for vehicle
           rooms with a trip: completion ring + status, the origin → destination
@@ -1332,8 +1044,17 @@ export default function ChatView({
         <AttachmentTabView
           attachment={activeAttachmentTab.attachment}
           message={activeAttachmentTab.message}
-          onReply={replyFromPreview}
-          onForward={forwardFromPreview}
+          onReply={(message) => {
+            if (activeAttachmentTab.groupId === group.id) {
+              replyFromPreview(message)
+              return
+            }
+            setActiveTool('chat')
+            onReplyToAttachmentTab(activeAttachmentTab.groupId, toReplyPreview(message))
+          }}
+          onForward={(message) =>
+            setForwardTarget({ message, groupId: activeAttachmentTab.groupId })
+          }
           onClose={() => closeAttachmentTab(activeAttachmentTab.attachment.id)}
         />
       ) : pdfPreview ? (
@@ -1444,7 +1165,7 @@ export default function ChatView({
                           onUnpin={unpinMessage}
                           onReply={startReply}
                           onEdit={startEdit}
-                          onForward={setForwardTarget}
+                          onForward={startForward}
                           onReplyPrivately={replyPrivately}
                           onSendPrivate={sendPrivate}
                           onDeleteForMe={(m) => setPendingDelete({ message: m, scope: 'me' })}
@@ -1484,7 +1205,7 @@ export default function ChatView({
               style={{
                 height: CHAT_BOTTOM_FADE_HEIGHT,
                 backgroundImage:
-                  'linear-gradient(to top, rgb(38 38 38) 0%, rgb(38 38 38 / 0) 100%)',
+                  'linear-gradient(to top, rgb(var(--color-chat)) 0%, rgb(var(--color-chat) / 0) 100%)',
               }}
             />
             {showScrollDown && (
@@ -1589,52 +1310,30 @@ export default function ChatView({
       </div>
       {/* end chat pane */}
 
-      {pendingFile && (
-        <Suspense fallback={<ModalLoader />}>
-        <AttachmentSendPreviewModal
-          file={pendingFile}
-          initialCaption={text}
-          onReplace={setPendingFile}
-          onCancel={() => setPendingFile(null)}
-          onSend={sendPendingFile}
-        />
-        </Suspense>
-      )}
-
-      {imagePreview && (
-        <Suspense fallback={<ModalLoader />}>
-        <ImagePreviewModal
-          attachment={imagePreview.attachment}
-          message={imagePreview.message}
-          onReply={replyFromPreview}
-          onForward={forwardFromPreview}
-          onClose={() => setImagePreview(null)}
-          onOpenInTab={() => openAttachmentTab(imagePreview)}
-        />
-        </Suspense>
-      )}
-
-      {docPreview && (
-        <Suspense fallback={<ModalLoader />}>
-        <DocumentPreviewModal
-          attachment={docPreview.attachment}
-          message={docPreview.message}
-          onReply={replyFromPreview}
-          onForward={forwardFromPreview}
-          onClose={() => setDocPreview(null)}
-          onOpenInTab={() => openAttachmentTab(docPreview)}
-        />
-        </Suspense>
-      )}
-
-      {forwardTarget && (
-        <ForwardModal
-          fromGroupId={group.id}
-          message={forwardTarget}
-          onClose={() => setForwardTarget(null)}
-          onForwarded={() => flashNotice('Message forwarded.')}
-        />
-      )}
+      <ChatModals
+        group={group}
+        members={members}
+        pendingFile={pendingFile}
+        pendingCaption={text}
+        onReplacePendingFile={setPendingFile}
+        onCancelPendingFile={() => setPendingFile(null)}
+        onSendPendingFile={sendPendingFile}
+        imagePreview={imagePreview}
+        onCloseImagePreview={() => setImagePreview(null)}
+        docPreview={docPreview}
+        onCloseDocPreview={() => setDocPreview(null)}
+        onReplyFromPreview={replyFromPreview}
+        onForwardFromPreview={forwardFromPreview}
+        onOpenAttachmentTab={openAttachmentTab}
+        forwardTarget={forwardTarget}
+        onCloseForward={() => setForwardTarget(null)}
+        onForwarded={() => flashNotice('Message forwarded.')}
+        inviteOpen={inviteOpen}
+        onCloseInvite={() => setInviteOpen(false)}
+        pendingDelete={pendingDelete}
+        onConfirmDelete={confirmPendingDelete}
+        onCancelDelete={() => setPendingDelete(null)}
+      />
 
       {/* Group info, Add trip and the user profile share the single right-hand
           column slot — Add trip takes precedence over Group info, and the user
@@ -1706,31 +1405,6 @@ export default function ChatView({
         />
       )}
 
-      {inviteOpen && (
-        <InviteMembersModal
-          groupId={group.id}
-          groupName={groupLabel(group)}
-          existingMemberIds={members.map((m) => m.id)}
-          onClose={() => setInviteOpen(false)}
-        />
-      )}
-
-      {pendingDelete && (
-        <ConfirmDialog
-          title={pendingDelete.scope === 'everyone' ? 'Delete for everyone?' : 'Delete for me?'}
-          message={
-            pendingDelete.scope === 'everyone'
-              ? "This message will be removed for everyone in the conversation. This can't be undone."
-              : 'This message will be hidden from your view only. Other members will still see it.'
-          }
-          confirmLabel={
-            pendingDelete.scope === 'everyone' ? 'Delete for everyone' : 'Delete for me'
-          }
-          tone="alert"
-          onConfirm={confirmPendingDelete}
-          onCancel={() => setPendingDelete(null)}
-        />
-      )}
     </div>
   )
 }

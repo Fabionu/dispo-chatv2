@@ -30,7 +30,7 @@ export default function ContactRow({
         paddingTop: 'var(--sidebar-row-pad-y)',
         paddingBottom: 'var(--sidebar-row-pad-y)',
       }}
-      className="w-full flex items-center rounded-btn text-left text-muted hover:bg-white/[0.03] hover:text-text transition-colors"
+      className="w-full flex items-center rounded-btn text-left text-muted hover:bg-white/[0.07] hover:text-text transition-colors"
     >
       <IdentitySlot>
         <Avatar userId={member.id} name={member.displayName} size={size} />

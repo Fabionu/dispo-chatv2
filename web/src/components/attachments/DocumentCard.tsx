@@ -34,7 +34,7 @@ export default function DocumentCard({ name, mimeType, byteSize }: Props) {
         <div className="h-20 w-20 rounded-card border border-white/[0.10] bg-white/[0.03] flex items-center justify-center">
           <DocIcon mime={mimeType} size={38} className="text-muted" />
         </div>
-        <span className="absolute top-2.5 left-2.5 rounded-chip border border-white/[0.10] bg-black/40 px-2 py-0.5 text-[0.625rem] font-semibold tracking-wide text-muted">
+        <span className="absolute top-2.5 left-2.5 rounded-chip border border-pure-white/10 bg-black/40 px-2 py-0.5 text-[0.625rem] font-semibold tracking-wide text-pure-white/80">
           {isPdf ? 'PDF' : label}
         </span>
       </div>

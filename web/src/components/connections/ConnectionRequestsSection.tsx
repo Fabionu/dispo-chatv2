@@ -54,7 +54,7 @@ export default function ConnectionRequestsSection({
       <button
         onClick={toggle}
         aria-expanded={open}
-        className="w-full flex items-center gap-1.5 px-2 mb-1.5 py-0.5 rounded-chip hover:bg-white/[0.02] transition-colors"
+        className="w-full flex items-center gap-1.5 px-2 mb-1.5 py-0.5 rounded-chip hover:bg-white/[0.05] transition-colors"
       >
         <ChevronDown
           size="0.6875rem"

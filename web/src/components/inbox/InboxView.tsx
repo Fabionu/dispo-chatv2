@@ -1,6 +1,11 @@
 import { lazy, Suspense, useState } from 'react'
-import { ChevronRight, Route } from 'lucide-react'
+import { ChevronRight, Plus, Route } from 'lucide-react'
+import type { Group } from '../../lib/types'
+import { groupLabel, tractorPlate } from '../../lib/types'
+import { getOps } from '../../lib/vehicleOps'
 import { PaneLoader } from '../LazyFallback'
+import GroupAvatar from '../GroupAvatar'
+import Modal from '../Modal'
 
 // The Route planner pulls in the whole HERE map stack (@here/flexpolyline, the
 // HERE SDK loader, truck presets). Code-split so none of it ships in the initial
@@ -9,14 +14,18 @@ const RoutePlanner = lazy(() => import('./RoutePlanner'))
 
 type Props = {
   workspaceName: string
+  vehicleRooms: Group[]
+  canAddTrip: boolean
+  onAddTrip: (groupId: string) => void
 }
 
 // The Inbox / workspace home — reached by clicking the sidebar company header.
 // It's an operational tools area: a grid of large tool cards. Selecting a tool
 // opens its dedicated workspace in place (replacing the chat area), with a back
 // action returning here. Today the only tool is the HERE "Route planner".
-export default function InboxView({ workspaceName }: Props) {
+export default function InboxView({ workspaceName, vehicleRooms, canAddTrip, onAddTrip }: Props) {
   const [tool, setTool] = useState<'route' | null>(null)
+  const [tripPickerOpen, setTripPickerOpen] = useState(false)
 
   if (tool === 'route') {
     return (
@@ -42,10 +51,94 @@ export default function InboxView({ workspaceName }: Props) {
               subtitle="Truck routing, distance and ETA"
               onClick={() => setTool('route')}
             />
+            {canAddTrip && (
+              <ToolCard
+                icon={<Plus size="1.625rem" strokeWidth={1.6} />}
+                title="Add trip"
+                subtitle="Choose a vehicle room and create a trip"
+                onClick={() => setTripPickerOpen(true)}
+              />
+            )}
           </div>
         </div>
       </div>
+      {tripPickerOpen && (
+        <VehicleRoomPicker
+          rooms={vehicleRooms}
+          onSelect={(groupId) => {
+            setTripPickerOpen(false)
+            onAddTrip(groupId)
+          }}
+          onClose={() => setTripPickerOpen(false)}
+        />
+      )}
     </>
+  )
+}
+
+function VehicleRoomPicker({
+  rooms,
+  onSelect,
+  onClose,
+}: {
+  rooms: Group[]
+  onSelect: (groupId: string) => void
+  onClose: () => void
+}) {
+  return (
+    <Modal
+      title="Add trip"
+      subtitle="Choose the vehicle room where the trip should be created."
+      onClose={onClose}
+    >
+      <div className="-mx-2 max-h-[22rem] overflow-y-auto">
+        {rooms.length === 0 ? (
+          <div className="px-4 py-8 text-center">
+            <div className="text-[0.78125rem] text-muted">No vehicle rooms available.</div>
+            <div className="mt-1 text-[0.6875rem] text-faint">
+              Create a vehicle room before adding a trip.
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1">
+            {rooms.map((room) => {
+              const hasTrip = Boolean(getOps(room).trip)
+              const plate = tractorPlate(room)
+              return (
+                <button
+                  key={room.id}
+                  type="button"
+                  onClick={() => onSelect(room.id)}
+                  className="group flex w-full items-center gap-3 rounded-card px-2.5 py-2.5 text-left transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                >
+                  <GroupAvatar
+                    groupId={room.id}
+                    hasAvatar={Boolean(room.hasAvatar)}
+                    shape="rounded"
+                    size={38}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[0.8125rem] font-medium text-text">
+                      {groupLabel(room)}
+                    </span>
+                    <span className="mt-0.5 block truncate text-[0.6875rem] text-muted">
+                      {[plate && `Truck ${plate}`, hasTrip ? 'Current trip will be replaced' : 'Ready for a new trip']
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
+                  </span>
+                  <ChevronRight
+                    size="1rem"
+                    strokeWidth={1.7}
+                    className="shrink-0 text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-muted"
+                  />
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </Modal>
   )
 }
 

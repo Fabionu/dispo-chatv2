@@ -160,6 +160,17 @@ export function useChatScroll(messages: LocalMessage[], loading: boolean) {
     setShowScrollDown(false)
   }, [])
 
+  // Called from ChatView's layout effect AFTER its measured composer height has
+  // been committed to the scroller's bottom padding. ResizeObserver callbacks
+  // can run before that React commit on some browsers (or only once when reduced
+  // motion disables the transition), so pinning only inside composerRef can use
+  // the old scrollHeight. This post-layout pass makes the final position
+  // deterministic while still respecting a reader who intentionally scrolled up.
+  const syncBottomAfterComposerLayout = useCallback(() => {
+    const el = scrollRef.current
+    if (el && nearBottomRef.current) el.scrollTop = el.scrollHeight
+  }, [])
+
   // Images change row height *after* their <img> finishes loading, so the
   // initial scroll-on-append isn't enough. If the user was at the bottom
   // when the message arrived, we re-pin them after every image load. If
@@ -195,6 +206,7 @@ export function useChatScroll(messages: LocalMessage[], loading: boolean) {
     composerRef,
     onScroll,
     scrollToBottom,
+    syncBottomAfterComposerLayout,
     showScrollDown,
     handleImageLoaded,
     anchorBeforePrepend,

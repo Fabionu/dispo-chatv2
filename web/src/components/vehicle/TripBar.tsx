@@ -117,7 +117,14 @@ function ProgressRing({ progress, tone }: { progress: TripProgress; tone: ChipTo
       aria-label={title}
     >
       <svg viewBox="0 0 28 28" className="w-7 h-7 -rotate-90">
-        <circle cx="14" cy="14" r={R} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="3" />
+        <circle
+          cx="14"
+          cy="14"
+          r={R}
+          fill="none"
+          stroke="rgb(var(--color-wash) / 0.12)"
+          strokeWidth="3"
+        />
         <circle
           cx="14"
           cy="14"

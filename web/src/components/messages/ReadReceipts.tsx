@@ -19,9 +19,6 @@ type Props = {
   onOpen: () => void
 }
 
-const MUTED = '#8F8A98'
-const ACCENT = '#D8A47F'
-
 // Compact delivery/read glyph. Receipt details intentionally live outside the
 // message row in ReadReceiptsPanel, so clicking never creates a cramped popover
 // over the timeline.
@@ -35,7 +32,7 @@ export default function ReadReceipts({
   if (pending) {
     return (
       <span className="inline-flex items-center" aria-label="Sending" title="Sending…">
-        <Clock size={glyphSize} strokeWidth={2} style={{ color: MUTED }} />
+        <Clock size={glyphSize} strokeWidth={2} className="text-faint" />
       </span>
     )
   }
@@ -49,7 +46,7 @@ export default function ReadReceipts({
   if (others.length === 0) {
     return (
       <span className="inline-flex items-center" aria-label="Sent" title="Sent">
-        <CheckCheck size={glyphSize} strokeWidth={2} style={{ color: MUTED }} />
+        <CheckCheck size={glyphSize} strokeWidth={2} className="text-faint" />
       </span>
     )
   }
@@ -63,9 +60,9 @@ export default function ReadReceipts({
       }}
       aria-label={fullyRead ? 'Read — see who' : 'Delivered — see who has read'}
       aria-haspopup="dialog"
-      className="inline-flex items-center"
+      className={`inline-flex items-center ${fullyRead ? 'text-muted' : 'text-faint'}`}
     >
-      <CheckCheck size={glyphSize} strokeWidth={2} style={{ color: fullyRead ? ACCENT : MUTED }} />
+      <CheckCheck size={glyphSize} strokeWidth={2} />
     </button>
   )
 }

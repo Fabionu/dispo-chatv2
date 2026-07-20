@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { requireAuth } from '../auth.js'
 import { asyncHandler, HttpError } from '../http.js'
 import { env } from '../env.js'
+import { TtlCache, cachedAsync } from '../util/ttlCache.js'
 
 export const hereRouter = Router()
 hereRouter.use(requireAuth)
@@ -115,6 +116,33 @@ const snapCandidatesSchema = z.object({
   prev: coordinateSchema.optional(),
   next: coordinateSchema.optional(),
 })
+
+// ── HERE result caches ───────────────────────────────────────────────────────
+// Roads don't move, so geocode/snap answers for (almost) the same coordinate are
+// stable — but every drag-release fans out dozens of billable HERE calls, and
+// users routinely re-drag over the same stretch of road. Cache each upstream
+// lookup keyed on the coordinate ROUNDED to ~1 metre (5 decimals — well inside
+// the tolerance of a screen-pixel sample), so repeated snaps in the same area
+// are served from memory. cachedAsync stores the in-flight PROMISE, which also
+// dedupes the parallel per-pixel lookups of a single /snap/candidates request
+// whose samples round to the same cell. Failures are never cached (see
+// cachedAsync), so a HERE hiccup can't pin a bad answer for the TTL.
+const GEO_TTL_MS = 6 * 60 * 60 * 1000 // street/snap geometry: very stable
+const ROUTE_TTL_MS = 60 * 60 * 1000 // leg lengths: traffic-independent (routingMode base geometry), still refreshed hourly
+const nearestStreetCache = new TtlCache<Promise<NearestStreetResult | null>>(10_000, GEO_TTL_MS)
+const streetSnapCache = new TtlCache<Promise<SnapResult | null>>(5_000, GEO_TTL_MS)
+const routeSnapCache = new TtlCache<Promise<HerePosition | null>>(10_000, GEO_TTL_MS)
+const routeLengthCache = new TtlCache<Promise<number | null>>(5_000, ROUTE_TTL_MS)
+
+// ~1.1 m grid — fine enough that snapping the rounded point is indistinguishable
+// from snapping the raw one, coarse enough that re-drags over a spot hit.
+const coordKey = (p: HerePosition) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`
+
+// Courses within the same 10° bucket share a cache entry: carriageway selection
+// only needs the broad direction of travel (opposite carriageways differ by
+// ~180°), so a few degrees of drift must not force a fresh billable call.
+const courseKey = (course: number | undefined) =>
+  course === undefined ? 'x' : String(Math.round(course / 10) * 10 % 360)
 
 function requireHereKey() {
   if (!env.HERE_API_KEY) throw new HttpError(503, 'here_not_configured')
@@ -251,8 +279,15 @@ const SNAP_PIXEL_TOLERANCE = 18
 // distance with a preference for major roads that STRENGTHENS as the map zooms
 // out — because when zoomed out the release is imprecise and the user can only
 // realistically be aiming at the big visible roads. Returns null when HERE has no
-// street result.
+// street result. Cached per (coordinate cell, integer zoom) — zoom is part of
+// the key because both the snap radius and the major-road preference scale with it.
 async function streetSnap(apiKey: string, at: HerePosition, zoom: number): Promise<SnapResult | null> {
+  return cachedAsync(streetSnapCache, `${coordKey(at)}:z${Math.round(zoom)}`, () =>
+    fetchStreetSnap(apiKey, at, zoom),
+  )
+}
+
+async function fetchStreetSnap(apiKey: string, at: HerePosition, zoom: number): Promise<SnapResult | null> {
   // "Zoomed-out-ness" in [0,1]: 0 at zoom ≥13 (precise), 1 at zoom ≤7 (only big
   // roads visible/aimable).
   const out = Math.max(0, Math.min(1, (13 - zoom) / 6))
@@ -353,53 +388,74 @@ function offsetAlong(at: HerePosition, bearingDeg: number, meters: number): Here
 // carriageway of a divided road, not the opposite/contraflow side.
 async function routeSnap(apiKey: string, at: HerePosition, course?: number): Promise<HerePosition | null> {
   try {
-    const url = new URL(routeBase)
-    url.searchParams.set('apiKey', apiKey)
-    url.searchParams.set('transportMode', 'car')
-    url.searchParams.set('routingMode', 'fast')
-    const origin =
-      course !== undefined ? `${at.lat},${at.lng};course=${Math.round(course)}` : `${at.lat},${at.lng}`
-    // Destination: ~150 m ahead ALONG the course when known (reinforces the
-    // direction), else the old fixed ~100 m NE offset. Only the snapped ORIGIN
-    // is used; the destination just makes the pair a valid trivial route.
-    const dest =
-      course !== undefined ? offsetAlong(at, course, 150) : { lat: at.lat + 0.0009, lng: at.lng + 0.0009 }
-    url.searchParams.set('origin', origin)
-    url.searchParams.set('destination', `${dest.lat},${dest.lng}`)
-    url.searchParams.set('return', 'summary')
-    const data = await hereJson<HereRouteResponse>(url)
-    const loc = data.routes?.[0]?.sections?.[0]?.departure?.place?.location
-    return loc ?? null
+    // The catch stays OUTSIDE the cache: a resolved null ("nothing routable
+    // here") is a real, cacheable answer, while a thrown HERE failure is
+    // evicted by cachedAsync so the next call retries upstream.
+    return await cachedAsync(routeSnapCache, `${coordKey(at)}:c${courseKey(course)}`, () =>
+      fetchRouteSnap(apiKey, at, course),
+    )
   } catch {
     // Unroutable spot, HERE error, malformed response → let the caller fall back.
     return null
   }
 }
 
+async function fetchRouteSnap(apiKey: string, at: HerePosition, course?: number): Promise<HerePosition | null> {
+  const url = new URL(routeBase)
+  url.searchParams.set('apiKey', apiKey)
+  url.searchParams.set('transportMode', 'car')
+  url.searchParams.set('routingMode', 'fast')
+  const origin =
+    course !== undefined ? `${at.lat},${at.lng};course=${Math.round(course)}` : `${at.lat},${at.lng}`
+  // Destination: ~150 m ahead ALONG the course when known (reinforces the
+  // direction), else the old fixed ~100 m NE offset. Only the snapped ORIGIN
+  // is used; the destination just makes the pair a valid trivial route.
+  const dest =
+    course !== undefined ? offsetAlong(at, course, 150) : { lat: at.lat + 0.0009, lng: at.lng + 0.0009 }
+  url.searchParams.set('origin', origin)
+  url.searchParams.set('destination', `${dest.lat},${dest.lng}`)
+  url.searchParams.set('return', 'summary')
+  const data = await hereJson<HereRouteResponse>(url)
+  const loc = data.routes?.[0]?.sections?.[0]?.departure?.place?.location
+  return loc ?? null
+}
+
 // The single NEAREST street to a point (reverse geocode, limit 1), with its name
 // (for grouping), label, snapped position, distance and major-road flag. This is
 // the per-pixel probe behind the screen-space candidate snap: one call per
 // sampled candidate, run in parallel. Returns null when HERE has no street there.
-async function nearestStreet(
-  apiKey: string,
-  at: HerePosition,
-): Promise<{ name: string; label: string; pos: HerePosition; dist: number; major: boolean } | null> {
-  const url = new URL(revgeocodeBase)
-  url.searchParams.set('apiKey', apiKey)
-  url.searchParams.set('at', `${at.lat},${at.lng}`)
-  url.searchParams.set('lang', 'en-US')
-  url.searchParams.set('limit', '1')
-  url.searchParams.set('types', 'street')
-  const data = await hereJson<HereRevgeocodeResponse>(url).catch(() => null)
-  const item = data?.items?.find((i) => i.position)
-  if (!item?.position) return null
-  return {
-    name: (item.address?.street ?? item.title ?? '').trim(),
-    label: item.address?.label ?? item.title ?? '',
-    pos: item.position,
-    dist: item.distance ?? metersBetween(at, item.position),
-    major: isMajorRoad(item),
-  }
+// THROWS on a HERE failure (unlike before, which swallowed it) so cachedAsync
+// never caches a transient error as "no street" — the /snap/candidates caller
+// catches per-candidate and degrades to null exactly as it used to. Caching the
+// promise also dedupes the parallel samples of one request that round to the
+// same ~1 m cell.
+type NearestStreetResult = {
+  name: string
+  label: string
+  pos: HerePosition
+  dist: number
+  major: boolean
+}
+
+async function nearestStreet(apiKey: string, at: HerePosition): Promise<NearestStreetResult | null> {
+  return cachedAsync(nearestStreetCache, coordKey(at), async () => {
+    const url = new URL(revgeocodeBase)
+    url.searchParams.set('apiKey', apiKey)
+    url.searchParams.set('at', `${at.lat},${at.lng}`)
+    url.searchParams.set('lang', 'en-US')
+    url.searchParams.set('limit', '1')
+    url.searchParams.set('types', 'street')
+    const data = await hereJson<HereRevgeocodeResponse>(url)
+    const item = data?.items?.find((i) => i.position)
+    if (!item?.position) return null
+    return {
+      name: (item.address?.street ?? item.title ?? '').trim(),
+      label: item.address?.label ?? item.title ?? '',
+      pos: item.position,
+      dist: item.distance ?? metersBetween(at, item.position),
+      major: isMajorRoad(item),
+    }
+  })
 }
 
 // Total length (metres) of a CAR route origin→(via)→destination, or null on
@@ -413,21 +469,35 @@ async function routeLength(
   destination: HerePosition,
 ): Promise<number | null> {
   try {
-    const url = new URL(routeBase)
-    url.searchParams.set('apiKey', apiKey)
-    url.searchParams.set('transportMode', 'car')
-    url.searchParams.set('routingMode', 'fast')
-    url.searchParams.set('origin', `${origin.lat},${origin.lng}`)
-    url.searchParams.set('destination', `${destination.lat},${destination.lng}`)
-    for (const v of via) url.searchParams.append('via', `${v.lat},${v.lng}`)
-    url.searchParams.set('return', 'summary')
-    const data = await hereJson<HereRouteResponse>(url)
-    const secs = data.routes?.[0]?.sections
-    if (!secs?.length) return null
-    return secs.reduce((acc, s) => acc + (s.summary?.length ?? 0), 0)
+    // Same pattern as routeSnap: cache resolved lengths (keyed on the full
+    // waypoint sequence), never cache a thrown HERE failure.
+    const key = [origin, ...via, destination].map(coordKey).join('|')
+    return await cachedAsync(routeLengthCache, key, () =>
+      fetchRouteLength(apiKey, origin, via, destination),
+    )
   } catch {
     return null
   }
+}
+
+async function fetchRouteLength(
+  apiKey: string,
+  origin: HerePosition,
+  via: HerePosition[],
+  destination: HerePosition,
+): Promise<number | null> {
+  const url = new URL(routeBase)
+  url.searchParams.set('apiKey', apiKey)
+  url.searchParams.set('transportMode', 'car')
+  url.searchParams.set('routingMode', 'fast')
+  url.searchParams.set('origin', `${origin.lat},${origin.lng}`)
+  url.searchParams.set('destination', `${destination.lat},${destination.lng}`)
+  for (const v of via) url.searchParams.append('via', `${v.lat},${v.lng}`)
+  url.searchParams.set('return', 'summary')
+  const data = await hereJson<HereRouteResponse>(url)
+  const secs = data.routes?.[0]?.sections
+  if (!secs?.length) return null
+  return secs.reduce((acc, s) => acc + (s.summary?.length ?? 0), 0)
 }
 
 // ── GET /api/here/revgeocode?at=lat,lng[&zoom=Z] ─────────────────────────
@@ -557,7 +627,10 @@ hereRouter.post(
     const snaps = (
       await Promise.all(
         body.candidates.map(async (c) => {
-          const s = await nearestStreet(apiKey, { lat: c.lat, lng: c.lng })
+          // A single failed probe degrades to "no road at this pixel" rather
+          // than failing the whole snap (nearestStreet throws on HERE errors
+          // so they're never cached — see its comment).
+          const s = await nearestStreet(apiKey, { lat: c.lat, lng: c.lng }).catch(() => null)
           return s ? { ...s, px: c.px } : null
         }),
       )

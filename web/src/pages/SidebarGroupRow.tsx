@@ -216,7 +216,7 @@ export default function GroupRow({
         className={`w-full flex items-center rounded-btn text-left transition-colors ${
           selected
             ? 'bg-white/[0.095] text-text'
-            : 'text-muted hover:bg-white/[0.03] hover:text-text'
+            : 'text-muted hover:bg-white/[0.07] hover:text-text'
         }`}
       >
         {/* Identity — shape encodes the conversation type: circle = person,

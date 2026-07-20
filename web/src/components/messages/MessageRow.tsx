@@ -184,19 +184,19 @@ function MessageRow({
   const shapeMine = `rounded-[0.5rem] rounded-br-[0.1875rem]${grouped ? ' rounded-tr-[0.25rem]' : ''}`
   const shapeOther = `rounded-[0.5rem] rounded-bl-[0.1875rem]${grouped ? ' rounded-tl-[0.25rem]' : ''}`
   const deletedSkin = `bg-white/[0.02] text-muted italic ${mine ? shapeMine : shapeOther}`
-  // Bubble skins sit on the raised chat card (`rail` #262626). Incoming uses
+  // Bubble skins sit on the raised chat card (`chat` #202020). Incoming uses
   // the next neutral surface step (`surface-2` #303030), which separates it
   // through colour alone — no border or shadow. My own messages use the darker
-  // workspace background (`bg` #181818), relying on right alignment and their
-  // tail shape for ownership. The bubble itself never changes on hover; only
-  // the actions affordance reveals.
+  // near-black bubble tone (`bubble-own` #101010), relying on right alignment
+  // and their tail shape for ownership. The bubble itself never changes on
+  // hover; only the actions affordance reveals.
   // (Failed sends keep an alert border as their error cue.)
   const bubbleSkin = deleted
     ? deletedSkin
     : mine
       ? failed
-        ? `bg-bg border border-alert/50 ${shapeMine}`
-        : `bg-bg ${shapeMine}`
+        ? `bg-bubble-own border border-alert/50 ${shapeMine}`
+        : `bg-bubble-own ${shapeMine}`
       : `bg-surface-2 ${shapeOther}`
   // Subtle, theme-warm pulse applied when this row is the target of a
   // jump-to-original. Clears after ~1.8s back in ChatView.
@@ -402,10 +402,12 @@ function MessageRow({
                 }`}
               >
                   {!deleted && message.replyTo && (
-                    <ReplyQuote replyTo={message.replyTo} onJump={onJumpToMessage} />
+                    <ReplyQuote replyTo={message.replyTo} onJump={onJumpToMessage} neutral={mine} />
                   )}
                   {pinned && (
-                    <span className="flex items-center gap-1 text-[0.65625rem] text-active mb-0.5 leading-none">
+                    <span
+                      className={`flex items-center gap-1 text-[0.65625rem] mb-0.5 leading-none ${mine ? 'text-muted' : 'text-active'}`}
+                    >
                       <Pin size="0.625rem" strokeWidth={2} className="fill-current" /> Pinned
                     </span>
                   )}
@@ -582,7 +584,9 @@ function MessageRow({
           >
             <div className={`min-w-0 ${bubbleBase} ${bubbleSkin} ${highlightSkin}`}>
               {pinned && (
-                <span className="flex items-center gap-1 text-[0.65625rem] text-active mb-1 leading-none">
+                <span
+                  className={`flex items-center gap-1 text-[0.65625rem] mb-1 leading-none ${mine ? 'text-muted' : 'text-active'}`}
+                >
                   <Pin size="0.625rem" strokeWidth={2} className="fill-current" />
                   Pinned
                 </span>
@@ -593,7 +597,7 @@ function MessageRow({
                 </span>
               )}
               {!deleted && message.replyTo && (
-                <ReplyQuote replyTo={message.replyTo} onJump={onJumpToMessage} />
+                <ReplyQuote replyTo={message.replyTo} onJump={onJumpToMessage} neutral={mine} />
               )}
               {!deleted && message.attachments && message.attachments.length > 0 && (
                 <div className="flex flex-col gap-1 mb-0.5">

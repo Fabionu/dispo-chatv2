@@ -98,7 +98,7 @@ export function PdfPagePreview({ file, url, fallback, className = '' }: PageProp
     >
       <canvas
         ref={canvasRef}
-        className={`rounded-card bg-white shadow-[0_8px_30px_rgba(0,0,0,0.5)] ${
+        className={`rounded-card bg-pure-white shadow-[0_8px_30px_rgba(0,0,0,0.5)] ${
           status === 'ready' ? '' : 'invisible'
         }`}
       />
@@ -169,7 +169,7 @@ export function PdfDocumentView({ file, url, fallback, className = '' }: DocProp
           canvas.style.width = `${Math.floor(viewport.width / ratio)}px`
           canvas.style.height = `${Math.floor(viewport.height / ratio)}px`
           canvas.className =
-            'block mx-auto mb-3 rounded-card bg-white shadow-[0_8px_30px_rgba(0,0,0,0.5)]'
+            'block mx-auto mb-3 rounded-card bg-pure-white shadow-[0_8px_30px_rgba(0,0,0,0.5)]'
 
           const ctx = canvas.getContext('2d')
           if (!ctx) throw new Error('no 2d context')

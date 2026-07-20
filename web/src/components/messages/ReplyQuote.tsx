@@ -7,9 +7,12 @@ import type { ReplyToPreview } from '../../lib/types'
 export default function ReplyQuote({
   replyTo,
   onJump,
+  neutral = false,
 }: {
   replyTo: ReplyToPreview
   onJump?: (messageId: string) => void
+  /** Remove the warm accent when the quote is rendered inside my own bubble. */
+  neutral?: boolean
 }) {
   const snippet = replyTo.deleted
     ? '(deleted message)'
@@ -21,7 +24,11 @@ export default function ReplyQuote({
 
   const inner = (
     <>
-      <div className="text-[0.6875rem] leading-tight text-active truncate">{replyTo.authorName}</div>
+      <div
+        className={`text-[0.6875rem] leading-tight truncate ${neutral ? 'text-text' : 'text-active'}`}
+      >
+        {replyTo.authorName}
+      </div>
       <div className="text-[0.6875rem] leading-tight text-muted truncate italic">{snippet || '…'}</div>
     </>
   )
@@ -30,7 +37,9 @@ export default function ReplyQuote({
   // author + one-line preview. No background or border box; the block hugs its
   // content (w-fit) and is capped so a long preview truncates instead of
   // stretching across the column.
-  const base = 'mb-1 w-fit max-w-[min(100%,27.5rem)] border-l-2 border-active/50 pl-2 pr-2 py-px'
+  const base = `mb-1 w-fit max-w-[min(100%,27.5rem)] border-l-2 pl-2 pr-2 py-px ${
+    neutral ? 'border-white/[0.22]' : 'border-active/50'
+  }`
 
   if (!onJump) {
     return <div className={base}>{inner}</div>

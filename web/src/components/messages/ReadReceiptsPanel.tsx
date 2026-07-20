@@ -13,8 +13,6 @@ type Props = {
   onClose: () => void
 }
 
-const ACCENT = '#D8A47F'
-
 function seenAt(iso: string): string {
   const day = formatDay(iso)
   const time = formatTime(iso)
@@ -78,7 +76,7 @@ export default function ReadReceiptsPanel({ message, others, onOpenProfile, onCl
 
           <ReceiptSection
             title={`Seen by ${seen.length}`}
-            icon={<CheckCheck size="0.875rem" strokeWidth={2} style={{ color: ACCENT }} />}
+            icon={<CheckCheck size="0.875rem" strokeWidth={2} className="text-active" />}
             readers={seen}
             seen
             onOpenProfile={onOpenProfile}

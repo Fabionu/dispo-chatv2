@@ -121,7 +121,7 @@ export default function AvatarPhotoEditor({
             onClick={() => setPreviewOpen(true)}
             aria-label="View photo"
             title="View photo"
-            className={`absolute inset-0 ${roundedClass} flex items-center justify-center bg-black/50 text-white opacity-0 hover:opacity-100 focus-visible:opacity-100 transition-opacity duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-active/60`}
+            className={`absolute inset-0 ${roundedClass} flex items-center justify-center bg-black/50 text-pure-white opacity-0 hover:opacity-100 focus-visible:opacity-100 transition-opacity duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-active/60`}
           >
             <Eye size={Math.max(16, Math.round(size * 0.22))} strokeWidth={1.6} />
           </button>
@@ -138,7 +138,7 @@ export default function AvatarPhotoEditor({
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               title="Options"
-              className={`h-7 w-7 flex items-center justify-center rounded-full bg-black/55 text-white/90 backdrop-blur-[2px] transition-all duration-150 hover:bg-black/75 focus:outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-active/60 ${
+              className={`h-7 w-7 flex items-center justify-center rounded-full bg-black/55 text-pure-white/90 backdrop-blur-[2px] transition-all duration-150 hover:bg-black/75 focus:outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-active/60 ${
                 menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
               }`}
             >

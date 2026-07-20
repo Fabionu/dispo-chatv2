@@ -27,7 +27,7 @@ export function FilterTab({
       aria-pressed={active}
       style={{ fontSize: 'var(--sidebar-meta-font-size)' }}
       className={`h-6 px-2.5 rounded-btn font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
-        active ? 'bg-white/[0.075] text-text' : 'text-faint hover:bg-white/[0.025] hover:text-muted'
+        active ? 'bg-white/[0.10] text-text' : 'text-faint hover:bg-white/[0.07] hover:text-text'
       }`}
     >
       {children}
@@ -56,7 +56,7 @@ export function ArchiveToggle({
       aria-label={label}
       title={label}
       className={`h-6 w-6 flex items-center justify-center rounded-btn transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
-        active ? 'bg-white/[0.06] text-text' : 'text-faint hover:text-muted hover:bg-white/[0.025]'
+        active ? 'bg-white/[0.10] text-text' : 'text-faint hover:text-text hover:bg-white/[0.07]'
       }`}
     >
       {children}

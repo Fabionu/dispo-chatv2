@@ -3,7 +3,7 @@ import { Router } from 'express'
 import { pool } from '../db/pool.js'
 import { requireAuth } from '../auth.js'
 import { asyncHandler } from '../http.js'
-import { createSignedUrl, FileNotFound } from '../storage.js'
+import { createSignedUrl, getCachedSignedUrl, FileNotFound } from '../storage.js'
 
 export const attachmentsRouter = Router()
 attachmentsRouter.use(requireAuth)
@@ -18,21 +18,23 @@ attachmentsRouter.use(requireAuth)
 //                       images uploaded before previews existed).
 //   (default)        → the full original, for the lightbox modal + downloads.
 //
-// We mint a short-lived signed URL to the private object and STREAM it through
-// instead of downloading the whole object into Node memory: the membership
-// check stays server-side and the bucket is never exposed, but a 25MB original
-// flows chunk-by-chunk rather than being buffered. The proxy URL is stable per
-// (id, variant), so the response stays immutably cacheable in the browser.
+// Two serving strategies, chosen by sensitivity vs. traffic:
 //
-// PRODUCTION TODO (CDN / direct serving): every byte currently transits the API
-// process. That's the right default — it keeps the membership gate server-side
-// and the bucket private — and we keep it for now. As preview traffic grows,
-// offload the HOT, low-sensitivity path (chat-bubble PREVIEWS, ?variant=preview)
-// to a CDN or to short-lived Supabase signed URLs handed to the client, so the
-// API stops proxying thumbnails on every render. The full ORIGINAL download
-// path must STAY behind this membership/security check (either keep proxying it,
-// or only ever hand out per-request short-TTL signed URLs after the same auth
-// check — never make originals publicly addressable).
+//   • PREVIEWS (?variant=preview — the hot path, requested for every image
+//     bubble on every render): after the same membership check, the browser is
+//     REDIRECTED to a short-lived signed URL and fetches the bytes straight
+//     from Supabase Storage — they never transit this process. The signed URL
+//     is minted once per object and reused for a window shorter than its
+//     validity (see getCachedSignedUrl), so repeat requests within the window
+//     redirect to the SAME URL and the browser serves the bytes from its own
+//     cache. The 302 itself carries a private max-age covering the remainder
+//     of that window, so most renders don't even hit the API.
+//
+//   • ORIGINALS (default — the lightbox + downloads): minted per request and
+//     STREAMED through chunk-by-chunk (never buffered). Originals are the
+//     sensitive full-resolution bytes; they stay behind this process so the
+//     membership gate is re-checked on every fetch and the bucket is never
+//     directly addressable from a long-lived URL held by the client.
 attachmentsRouter.get(
   '/:id',
   asyncHandler(async (req, res) => {
@@ -71,6 +73,21 @@ attachmentsRouter.get(
     // Whether this request is for the canonical original (vs. a preview-only
     // object). Only an original going missing flags the whole attachment.
     const isOriginal = objectPath === a.storage_path
+
+    // Preview: hand the browser a redirect to the (cached) signed URL and let
+    // it pull the bytes from storage directly. A vanished preview object is a
+    // plain 404 (never flags the attachment missing — the original may be fine)
+    // and is NOT cached negatively, matching the old proxy behaviour.
+    if (usePreview) {
+      try {
+        const { url, maxAgeSec } = await getCachedSignedUrl(objectPath)
+        res.setHeader('Cache-Control', `private, max-age=${maxAgeSec}`)
+        return res.redirect(url)
+      } catch (err) {
+        if (err instanceof FileNotFound) return res.status(404).json({ error: 'file_missing' })
+        throw err
+      }
+    }
 
     // Persist a discovered-missing object so future requests / message loads
     // short-circuit instead of slowly rediscovering the 404. Best-effort.

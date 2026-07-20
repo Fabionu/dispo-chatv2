@@ -26,6 +26,7 @@ import {
   type Density,
 } from '../../lib/density'
 import { useAuth } from '../../auth/AuthContext'
+import { setTheme, useTheme, type Theme } from '../../lib/theme'
 import { api, ApiError } from '../../lib/api'
 import type { Role, WorkspaceInvite, WorkspaceInviteCreated } from '../../lib/types'
 import { ROLE_LABEL } from './ProfileSidebarPanel'
@@ -77,6 +78,7 @@ export default function WorkspaceSettingsPanel({ onBack }: Props) {
   // Live values for the category-list subtitles (the hooks subscribe, so the
   // summaries refresh when the user returns from a detail view).
   const messageDisplay = useMessageDisplay()
+  const theme = useTheme()
   const densityOverride = getStoredDensity()
 
   // ── Detail views ────────────────────────────────────────────────────────────
@@ -103,9 +105,9 @@ export default function WorkspaceSettingsPanel({ onBack }: Props) {
   }
 
   // ── Category list ───────────────────────────────────────────────────────────
-  const appearanceValue = `${messageDisplay === 'bubble' ? 'Bubbles' : 'Plain stream'} · ${
-    densityOverride ? DENSITY_LABEL[densityOverride] : 'Auto'
-  } density`
+  const appearanceValue = `${theme === 'light' ? 'Light' : 'Dark'} · ${
+    messageDisplay === 'bubble' ? 'Bubbles' : 'Plain stream'
+  } · ${densityOverride ? DENSITY_LABEL[densityOverride] : 'Auto'} density`
 
   return (
     <div className="flex flex-col h-full">
@@ -175,12 +177,13 @@ function CategoryRow({
   )
 }
 
-// Appearance detail: both display preferences in ONE hairline-divided card,
+// Appearance detail: all display preferences in ONE hairline-divided card,
 // with the device-local note as a quiet footnote underneath.
 function AppearanceSettings() {
   return (
     <div>
       <div className="rounded-card border border-white/[0.06] bg-white/[0.015] px-4 divide-y divide-white/[0.05]">
+        <ThemeSetting />
         <MessageDisplaySetting />
         <DensitySetting />
       </div>
@@ -188,6 +191,27 @@ function AppearanceSettings() {
         Saved in this browser — applies to this device only.
       </p>
     </div>
+  )
+}
+
+// Device-local color palette. The root data attribute switches the shared CSS
+// variables immediately; persistence keeps the selection through reloads.
+function ThemeSetting() {
+  const theme = useTheme()
+  return (
+    <SettingBlock
+      label="Color theme"
+      description="Choose the palette used throughout the application."
+    >
+      <Segmented
+        value={theme}
+        options={[
+          { value: 'dark', label: 'Dark' },
+          { value: 'light', label: 'Light' },
+        ]}
+        onChange={(value) => setTheme(value as Theme)}
+      />
+    </SettingBlock>
   )
 }
 
@@ -527,7 +551,7 @@ function FreshInviteLink({ invite }: { invite: WorkspaceInviteCreated }) {
           readOnly
           value={invite.url}
           onFocus={(e) => e.currentTarget.select()}
-          className="flex-1 min-w-0 h-9 bg-black/20 border border-white/[0.06] rounded-btn px-2.5 text-[0.71875rem] text-text font-mono truncate outline-none transition-colors focus:border-white/[0.16]"
+          className="flex-1 min-w-0 h-9 bg-white/[0.03] border border-white/[0.06] rounded-btn px-2.5 text-[0.71875rem] text-text font-mono truncate outline-none transition-colors focus:border-white/[0.16]"
         />
         <button
           onClick={copy}
@@ -823,7 +847,7 @@ function Segmented({
   onChange: (value: string) => void
 }) {
   return (
-    <div className="inline-flex items-center gap-0.5 rounded-card bg-black/20 p-0.5">
+    <div className="inline-flex items-center gap-0.5 rounded-card bg-white/[0.04] p-0.5">
       {options.map((o) => {
         const active = o.value === value
         return (
