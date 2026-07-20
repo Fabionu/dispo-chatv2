@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MutableRefObject } from 'react'
 import { api } from '../lib/api'
 import type { Group, IncomingMessage } from '../lib/types'
-import { groupHasUnread } from '../lib/types'
+import { groupHasUnread, groupLabel } from '../lib/types'
 import { getSocket } from '../lib/socket'
 import { byRecent } from '../pages/workspaceUtils'
+import { playNotificationSound } from '../lib/notificationSound'
+import { showIncomingMessageNotification } from '../lib/browserNotifications'
 
 // The sidebar's conversation-list state, extracted from Workspace: the groups
 // array, its socket-driven live sync, and every per-conversation pref action
@@ -17,11 +19,19 @@ type Options = {
   userId: string
   openGroupIdRef: MutableRefObject<string | null>
   onOpenGroupGone: () => void
+  onNotificationOpen?: (groupId: string) => void
 }
 
-export function useWorkspaceGroups({ userId, openGroupIdRef, onOpenGroupGone }: Options) {
+export function useWorkspaceGroups({
+  userId,
+  openGroupIdRef,
+  onOpenGroupGone,
+  onNotificationOpen,
+}: Options) {
   const [groups, setGroups] = useState<Group[]>([])
   const [loadingGroups, setLoadingGroups] = useState(true)
+  const groupsRef = useRef(groups)
+  groupsRef.current = groups
 
   const refreshGroups = useCallback(async () => {
     try {
@@ -80,6 +90,21 @@ export function useWorkspaceGroups({ userId, openGroupIdRef, onOpenGroupGone }: 
     const socket = getSocket()
 
     function onMessageNew(msg: IncomingMessage) {
+      const targetGroup = groupsRef.current.find((group) => group.id === msg.groupId)
+      if (msg.authorId !== userId && !targetGroup?.muted) {
+        void playNotificationSound()
+        showIncomingMessageNotification({
+          title:
+            targetGroup?.type === 'vehicle'
+              ? `${msg.authorName} · ${groupLabel(targetGroup)}`
+              : msg.authorName || 'New message',
+          body:
+            msg.body.trim() ||
+            ((msg.attachments?.length ?? 0) > 0 ? 'Sent an attachment' : 'New message'),
+          groupId: msg.groupId,
+          onClick: () => onNotificationOpen?.(msg.groupId),
+        })
+      }
       setGroups((prev) => {
         const idx = prev.findIndex((g) => g.id === msg.groupId)
         if (idx === -1) {
@@ -178,7 +203,7 @@ export function useWorkspaceGroups({ userId, openGroupIdRef, onOpenGroupGone }: 
     }
     // openGroupIdRef is a stable ref; onOpenGroupGone comes from Workspace as a
     // stable useCallback.
-  }, [refreshGroups, userId, openGroupIdRef, onOpenGroupGone])
+  }, [refreshGroups, userId, openGroupIdRef, onOpenGroupGone, onNotificationOpen])
 
   // ── Per-conversation row actions (sidebar ⋮ menu) ─────────────────────────
   // Each applies the change OPTIMISTICALLY (patchGroup) for an instant response,

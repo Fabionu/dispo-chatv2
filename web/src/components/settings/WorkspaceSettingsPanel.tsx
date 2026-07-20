@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowLeft,
+  Bell,
   Check,
   ChevronDown,
   ChevronRight,
@@ -9,6 +10,7 @@ import {
   Link2,
   Loader2,
   Palette,
+  Play,
   Plus,
   Trash2,
   Users,
@@ -32,6 +34,18 @@ import type { Role, WorkspaceInvite, WorkspaceInviteCreated } from '../../lib/ty
 import { ROLE_LABEL } from './ProfileSidebarPanel'
 import { ICON_ACTION_BASE, ICON_ACTION_IDLE } from '../HeaderIconButton'
 import { MENU_CONTAINER, menuItemClass } from '../menuStyles'
+import {
+  NOTIFICATION_SOUNDS,
+  playNotificationSound,
+  setNotificationSound,
+  useNotificationSound,
+  type NotificationSound,
+} from '../../lib/notificationSound'
+import {
+  disableBrowserNotifications,
+  enableBrowserNotifications,
+  useBrowserNotifications,
+} from '../../lib/browserNotifications'
 
 // Roles an invite can grant, in menu order (the default first, admin last as the
 // most privileged). Labels come from the shared ROLE_LABEL map so every surface
@@ -51,7 +65,7 @@ type Props = { onBack: () => void }
 
 // The settings categories. New ones (Notifications, Integrations …) drop in as
 // another CategoryRow + detail view.
-type Category = 'appearance' | 'members' | 'about'
+type Category = 'appearance' | 'notifications' | 'members' | 'about'
 
 // The app version, shared by the About detail and the category list summary.
 const APP_VERSION: string = import.meta.env.VITE_APP_VERSION ?? '0.3.2'
@@ -79,11 +93,18 @@ export default function WorkspaceSettingsPanel({ onBack }: Props) {
   // summaries refresh when the user returns from a detail view).
   const messageDisplay = useMessageDisplay()
   const theme = useTheme()
+  const notificationSound = useNotificationSound()
+  const browserNotifications = useBrowserNotifications()
   const densityOverride = getStoredDensity()
 
   // ── Detail views ────────────────────────────────────────────────────────────
   if (category) {
-    const title = { appearance: 'Appearance', members: 'Company members', about: 'About' }[category]
+    const title = {
+      appearance: 'Appearance',
+      notifications: 'Notifications',
+      members: 'Company members',
+      about: 'About',
+    }[category]
     return (
       <div className="flex flex-col h-full">
         <PanelHeader
@@ -94,6 +115,8 @@ export default function WorkspaceSettingsPanel({ onBack }: Props) {
         <div className="flex-1 overflow-y-auto px-4 py-5">
           {category === 'appearance' ? (
             <AppearanceSettings />
+          ) : category === 'notifications' ? (
+            <NotificationSettings />
           ) : category === 'members' ? (
             <CompanyMembersSettings />
           ) : (
@@ -119,6 +142,17 @@ export default function WorkspaceSettingsPanel({ onBack }: Props) {
             title="Appearance"
             value={appearanceValue}
             onClick={() => setCategory('appearance')}
+          />
+          <CategoryRow
+            icon={<Bell size="1rem" strokeWidth={1.8} />}
+            title="Notifications"
+            value={
+              `${browserNotifications.enabled ? 'Allowed' : 'Off'} · ${
+                NOTIFICATION_SOUNDS.find((sound) => sound.value === notificationSound)?.label ??
+                'Soft Pop'
+              }`
+            }
+            onClick={() => setCategory('notifications')}
           />
           {isAdmin && (
             <CategoryRow
@@ -189,6 +223,126 @@ function AppearanceSettings() {
       </div>
       <p className="text-[0.6875rem] text-faint mt-2.5 px-1 leading-[1.5]">
         Saved in this browser — applies to this device only.
+      </p>
+    </div>
+  )
+}
+
+function NotificationSettings() {
+  const selected = useNotificationSound()
+  const browserNotifications = useBrowserNotifications()
+  const [requestingPermission, setRequestingPermission] = useState(false)
+
+  async function toggleBrowserNotifications() {
+    if (requestingPermission || !browserNotifications.supported) return
+    if (browserNotifications.enabled) {
+      disableBrowserNotifications()
+      return
+    }
+    setRequestingPermission(true)
+    try {
+      await enableBrowserNotifications()
+    } finally {
+      setRequestingPermission(false)
+    }
+  }
+
+  const permissionDescription = !browserNotifications.supported
+    ? 'This browser does not support system notifications.'
+    : browserNotifications.permission === 'denied'
+      ? 'Blocked by the browser. Re-enable notifications from the site permissions menu.'
+      : browserNotifications.enabled
+        ? 'Show a system notification when a message arrives while the app is in the background.'
+        : 'The browser will ask for permission when you turn this on.'
+
+  return (
+    <div>
+      <div className="rounded-card border border-white/[0.06] bg-white/[0.015] px-4 py-4 mb-3">
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="text-[0.8125rem] font-medium leading-tight text-text">
+              Allow notifications
+            </div>
+            <div className="mt-1 text-[0.71875rem] leading-[1.4] text-faint">
+              {permissionDescription}
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={browserNotifications.enabled}
+            aria-label="Allow notifications"
+            onClick={() => void toggleBrowserNotifications()}
+            disabled={
+              requestingPermission ||
+              !browserNotifications.supported ||
+              browserNotifications.permission === 'denied'
+            }
+            className={`relative h-6 w-10 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 disabled:opacity-40 disabled:cursor-not-allowed ${
+              browserNotifications.enabled ? 'bg-text' : 'bg-white/[0.10]'
+            }`}
+          >
+            <span
+              className={`absolute top-1 h-4 w-4 rounded-full transition-all ${
+                browserNotifications.enabled
+                  ? 'left-5 bg-bg'
+                  : 'left-1 bg-muted'
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+      <div className="mb-2 px-1 text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-faint">
+        Notification sound
+      </div>
+      <div className="rounded-card border border-white/[0.06] bg-white/[0.015] divide-y divide-white/[0.05] overflow-hidden">
+        {NOTIFICATION_SOUNDS.map((sound) => {
+          const active = sound.value === selected
+          return (
+            <div key={sound.value} className="flex items-center gap-2 px-2 py-2">
+              <button
+                type="button"
+                onClick={() => setNotificationSound(sound.value)}
+                aria-pressed={active}
+                className={`min-w-0 flex-1 flex items-center gap-3 rounded-btn px-2 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+                  active ? 'bg-white/[0.08]' : 'hover:bg-white/[0.05]'
+                }`}
+              >
+                <span
+                  className={`h-5 w-5 shrink-0 rounded-full border flex items-center justify-center transition-colors ${
+                    active
+                      ? 'border-text bg-text text-bg'
+                      : 'border-white/[0.16] text-transparent'
+                  }`}
+                >
+                  <Check size="0.75rem" strokeWidth={2.5} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[0.78125rem] font-medium text-text">
+                    {sound.label}
+                  </span>
+                  <span className="mt-0.5 block text-[0.6875rem] leading-[1.4] text-faint">
+                    {sound.description}
+                  </span>
+                </span>
+              </button>
+              {sound.value !== 'none' && (
+                <button
+                  type="button"
+                  onClick={() => void playNotificationSound(sound.value as NotificationSound)}
+                  aria-label={`Preview ${sound.label}`}
+                  title={`Preview ${sound.label}`}
+                  className="h-8 w-8 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.07] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                >
+                  <Play size="0.875rem" strokeWidth={1.9} fill="currentColor" />
+                </button>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      <p className="text-[0.6875rem] text-faint mt-2.5 px-1 leading-[1.5]">
+        Preview a sound before selecting it. Muted conversations always stay silent.
       </p>
     </div>
   )

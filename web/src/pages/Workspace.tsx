@@ -170,6 +170,10 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // Deselect handler the groups hook calls when the OPEN conversation is
   // removed or hidden (kicked, or delete-for-me on another device).
   const clearSelection = useCallback(() => setSelection(null), [])
+  const openNotificationGroup = useCallback(
+    (groupId: string) => setSelection({ kind: 'group', id: groupId }),
+    [],
+  )
 
   // Conversation list + live socket sync + per-row pref actions.
   const {
@@ -186,7 +190,12 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     handleMarkAllRead,
     handleMarkUnread,
     handleDeleteConversation,
-  } = useWorkspaceGroups({ userId: user.id, openGroupIdRef, onOpenGroupGone: clearSelection })
+  } = useWorkspaceGroups({
+    userId: user.id,
+    openGroupIdRef,
+    onOpenGroupGone: clearSelection,
+    onNotificationOpen: openNotificationGroup,
+  })
 
   // Cross-workspace connection requests + pending vehicle-group invitations.
   const { connections, connectionsError, refreshConnections } = useConnections()
