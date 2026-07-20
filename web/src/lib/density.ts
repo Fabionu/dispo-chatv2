@@ -56,6 +56,165 @@ const STORAGE_KEY = 'dispo:density'
 const COMFORTABLE_MQ = '(min-width: 2200px) and (min-height: 1200px)'
 const COMPACT_MQ = '(max-width: 1535px)'
 
+type AutoProfile = {
+  at: number
+  uiScale: number
+  tokens: Record<string, number>
+}
+
+// Calibrated anchor points for common physical display classes. Auto blends
+// continuously between them, so 1600p, ultrawide, scaled-QHD, and other in-
+// between displays no longer inherit the nearest preset wholesale.
+const AUTO_PROFILES: AutoProfile[] = [
+  {
+    at: 1366 / 1920,
+    uiScale: 0.875,
+    tokens: {
+      '--app-font-size': 13,
+      '--chat-msg-font-size': 13.5,
+      '--header-height': 52,
+      '--sidebar-width': 440,
+      '--composer-size': 30,
+      '--chat-max-width': 900,
+      '--chat-gutter': 14,
+      '--sidebar-title-font-size': 15.5,
+      '--sidebar-row-font-size': 13.5,
+      '--sidebar-meta-font-size': 11.5,
+      '--sidebar-section-font-size': 10,
+      '--sidebar-icon-size': 18,
+      '--sidebar-user-avatar-size': 28,
+      '--sidebar-search-height': 34,
+      '--sidebar-row-height': 38,
+      '--sidebar-badge-size': 18,
+      '--sidebar-row-gap': 9,
+      '--sidebar-row-pad-x': 10,
+      '--sidebar-row-pad-y': 7,
+      '--sidebar-section-gap': 22,
+    },
+  },
+  {
+    at: 1,
+    uiScale: 0.9375,
+    tokens: {
+      '--app-font-size': 14,
+      '--chat-msg-font-size': 14.5,
+      '--header-height': 56,
+      '--sidebar-width': 560,
+      '--composer-size': 32,
+      '--chat-max-width': 960,
+      '--chat-gutter': 16,
+      '--sidebar-title-font-size': 16,
+      '--sidebar-row-font-size': 14,
+      '--sidebar-meta-font-size': 12,
+      '--sidebar-section-font-size': 10.5,
+      '--sidebar-icon-size': 19,
+      '--sidebar-user-avatar-size': 32,
+      '--sidebar-search-height': 36,
+      '--sidebar-row-height': 40,
+      '--sidebar-badge-size': 19,
+      '--sidebar-row-gap': 10,
+      '--sidebar-row-pad-x': 11,
+      '--sidebar-row-pad-y': 8,
+      '--sidebar-section-gap': 24,
+    },
+  },
+  {
+    at: 2560 / 1920,
+    uiScale: 1.1875,
+    tokens: {
+      '--app-font-size': 17,
+      '--chat-msg-font-size': 18.5,
+      '--header-height': 72,
+      '--sidebar-width': 600,
+      '--composer-size': 40,
+      '--chat-max-width': 1040,
+      '--chat-gutter': 24,
+      '--sidebar-title-font-size': 19,
+      '--sidebar-row-font-size': 17,
+      '--sidebar-meta-font-size': 14.5,
+      '--sidebar-section-font-size': 12,
+      '--sidebar-icon-size': 24,
+      '--sidebar-user-avatar-size': 42,
+      '--sidebar-search-height': 46,
+      '--sidebar-row-height': 52,
+      '--sidebar-badge-size': 23,
+      '--sidebar-row-gap': 13,
+      '--sidebar-row-pad-x': 14,
+      '--sidebar-row-pad-y': 10,
+      '--sidebar-section-gap': 30,
+    },
+  },
+  {
+    at: 2,
+    uiScale: 1.25,
+    tokens: {
+      '--app-font-size': 18,
+      '--chat-msg-font-size': 19.5,
+      '--header-height': 76,
+      '--sidebar-width': 640,
+      '--composer-size': 42,
+      '--chat-max-width': 1120,
+      '--chat-gutter': 26,
+      '--sidebar-title-font-size': 20,
+      '--sidebar-row-font-size': 18,
+      '--sidebar-meta-font-size': 15.5,
+      '--sidebar-section-font-size': 12.5,
+      '--sidebar-icon-size': 25,
+      '--sidebar-user-avatar-size': 45,
+      '--sidebar-search-height': 49,
+      '--sidebar-row-height': 55,
+      '--sidebar-badge-size': 24,
+      '--sidebar-row-gap': 14,
+      '--sidebar-row-pad-x': 15,
+      '--sidebar-row-pad-y': 11,
+      '--sidebar-section-gap': 32,
+    },
+  },
+]
+
+const AUTO_PROPERTIES = ['--ui-scale', ...Object.keys(AUTO_PROFILES[0].tokens)]
+
+function effectiveViewport() {
+  const displayScale = Math.min(Math.max(window.devicePixelRatio || 1, 1), 1.5)
+  return {
+    width: window.innerWidth * displayScale,
+    height: window.innerHeight * displayScale,
+  }
+}
+
+function autoRatio() {
+  const viewport = effectiveViewport()
+  // The limiting axis wins: a wide-but-short ultrawide should not receive a
+  // 4K-sized UI just because it has many horizontal pixels.
+  return Math.min(viewport.width / 1920, viewport.height / 1080)
+}
+
+function applyAutoSizing() {
+  const ratio = autoRatio()
+  const last = AUTO_PROFILES[AUTO_PROFILES.length - 1]
+  const upperIndex = AUTO_PROFILES.findIndex((profile) => profile.at >= ratio)
+  const upper = upperIndex === -1 ? last : AUTO_PROFILES[upperIndex]
+  const lower =
+    upperIndex <= 0 ? AUTO_PROFILES[0] : AUTO_PROFILES[Math.min(upperIndex - 1, AUTO_PROFILES.length - 1)]
+  const span = upper.at - lower.at
+  const progress = span <= 0 ? 0 : Math.min(Math.max((ratio - lower.at) / span, 0), 1)
+  const interpolate = (from: number, to: number) => from + (to - from) * progress
+  const root = document.documentElement
+
+  root.style.setProperty('--ui-scale', String(interpolate(lower.uiScale, upper.uiScale)))
+  for (const property of Object.keys(lower.tokens)) {
+    root.style.setProperty(
+      property,
+      `${interpolate(lower.tokens[property], upper.tokens[property]).toFixed(3)}px`,
+    )
+  }
+}
+
+function clearAutoSizing() {
+  const style = document.documentElement.style
+  for (const property of AUTO_PROPERTIES) style.removeProperty(property)
+}
+
 function isDensity(v: unknown): v is Density {
   return v === 'compact' || v === 'default' || v === 'comfortable'
 }
@@ -63,8 +222,14 @@ function isDensity(v: unknown): v is Density {
 // The tier the current viewport implies, ignoring any manual override.
 export function autoDensity(): Density {
   if (typeof window === 'undefined') return 'default'
-  if (window.matchMedia(COMFORTABLE_MQ).matches) return 'comfortable'
-  if (window.matchMedia(COMPACT_MQ).matches) return 'compact'
+  // Windows display scaling changes the CSS viewport (for example, QHD at
+  // 125% reports roughly 2048x1152). Multiplying by DPR recovers the effective
+  // display resolution so Auto matches the dimensions chosen manually for that
+  // monitor. Cap the multiplier so Retina/high-DPI screens with deliberately
+  // small logical workspaces are not forced into an oversized layout.
+  const viewport = effectiveViewport()
+  if (viewport.width >= 2200 && viewport.height >= 1200) return 'comfortable'
+  if (viewport.width <= 1535) return 'compact'
   return 'default'
 }
 
@@ -85,6 +250,8 @@ function apply(d: Density, mode: DensityMode) {
   // control tier as a manual choice while still applying viewport-aware layout
   // refinements such as a wider desktop sidebar.
   document.documentElement.dataset.densityMode = mode
+  if (mode === 'auto') applyAutoSizing()
+  else clearAutoSizing()
 }
 
 // Manually pin a density (persisted). Wins over auto-selection.
@@ -144,4 +311,6 @@ export function initDensity() {
   }
   window.matchMedia(COMFORTABLE_MQ).addEventListener('change', reapply)
   window.matchMedia(COMPACT_MQ).addEventListener('change', reapply)
+  window.addEventListener('resize', reapply)
+  window.visualViewport?.addEventListener('resize', reapply)
 }

@@ -1099,7 +1099,7 @@ export default function ChatView({
               // while older messages scroll BEHIND its transparent body. No fade
               // is applied to the list itself — the only fade is at the window's
               // bottom edge, below the composer (see the chat surface).
-              className="flex-1 overflow-y-auto pt-4 [scrollbar-gutter:stable]"
+              className="flex-1 overflow-y-auto pt-4 [scrollbar-gutter:stable] flex flex-col"
               style={{ paddingBottom: composerHeight + 8 }}
             >
               {loading ? (
@@ -1109,7 +1109,11 @@ export default function ChatView({
                   <Spinner variant="lg" />
                 </div>
               ) : (
-                <div className="chat-column min-h-full flex flex-col">
+                <div
+                  className={`chat-column flex flex-col ${
+                    messages.length === 0 ? 'flex-1' : 'shrink-0 mt-auto'
+                  }`}
+                >
                 {messages.length === 0 ? (
                   <div className="flex-1 flex items-center justify-center">
                     <p className="text-[0.78125rem] text-faint">No messages yet. Say something.</p>
@@ -1130,7 +1134,7 @@ export default function ChatView({
                   // MessageRow) which removes the immediate re-render pressure,
                   // and virtualization here is a behavioral risk best taken on
                   // its own.
-                  <div className="mt-auto flex flex-col gap-0.5">
+                  <div className="flex flex-col gap-0.5">
                     {nextCursor && (
                       <div className="flex justify-center pb-3">
                         <button
