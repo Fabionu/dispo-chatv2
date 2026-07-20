@@ -87,6 +87,7 @@ export default function GroupAvatar({
       <img
         src={src}
         alt=""
+        draggable={false}
         onLoad={() => {
           markAvatarLoaded('group', groupId!, version)
           setLoaded(true)

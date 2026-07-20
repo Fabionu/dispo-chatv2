@@ -163,12 +163,12 @@ export default function AttachmentSendPreviewModal({
         {error && (
           <div className="text-[0.71875rem] text-alert mb-1.5 text-center">{error}</div>
         )}
-        {/* Caption bar — the SAME borderless input shell as the main chat
-            composer (ChatComposer): solid `surface` fill, rounded-panel, no
-            border, no focus tint, no shadow; identical textarea + circular send
-            button. Only the outer max-width/centering is preview-specific. */}
-        <div className="mx-auto w-full max-w-[51.25rem] rounded-panel bg-surface">
-          <div className="flex items-center gap-1 px-2 py-1.5">
+        {/* Caption bar — the same capsule, spacing, input sizing and circular
+            send control as the main ChatComposer. This shared preview handles
+            images, PDFs and other documents, so every attachment type keeps the
+            composer treatment consistent. */}
+        <div className="mx-auto w-full max-w-[51.25rem] rounded-full border border-white/[0.06] bg-composer shadow-[0_3px_12px_rgba(0,0,0,0.22)] transition-colors focus-within:border-white/[0.12]">
+          <div className="flex items-center gap-1.5 px-2.5 py-2">
             <textarea
               ref={textareaRef}
               value={caption}
@@ -176,14 +176,14 @@ export default function AttachmentSendPreviewModal({
               onKeyDown={onKeyDown}
               rows={1}
               placeholder="Add a caption…"
-              className="flex-1 bg-transparent text-[length:var(--chat-msg-font-size)] leading-[1.5] outline-none resize-none placeholder:text-faint overflow-y-auto max-h-[9em] px-1.5 py-1.5"
+              className="flex-1 min-w-0 bg-transparent text-[length:var(--chat-msg-font-size)] leading-[1.5] outline-none resize-none placeholder:text-faint overflow-y-auto max-h-[9em] px-2 py-1.5"
             />
             <button
               onClick={submit}
               aria-label="Send attachment"
-              className="h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 flex items-center justify-center rounded-full bg-text text-bg hover:bg-text/90 transition-colors disabled:opacity-30 disabled:cursor-default disabled:hover:bg-text"
+              className="h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 flex items-center justify-center rounded-full bg-text text-bg transition-colors hover:bg-white"
             >
-              <ArrowUp size="0.9375rem" strokeWidth={2.2} />
+              <ArrowUp size="1rem" strokeWidth={2.2} />
             </button>
           </div>
         </div>

@@ -270,7 +270,7 @@ export default function GroupRow({
             </span>
             {time && (
               <span
-                className="shrink-0 tabular-nums text-faint leading-tight"
+                className="shrink-0 tabular-nums text-muted leading-tight"
                 style={{ fontSize: 'var(--sidebar-conv-meta-font-size)' }}
               >
                 {time}
@@ -281,7 +281,7 @@ export default function GroupRow({
               the right and slide left on hover/open, exposing the arrow menu. */}
           <span className="flex items-center gap-2">
             <span
-              className={`flex-1 min-w-0 truncate leading-tight ${unread ? 'text-muted' : 'text-faint'}`}
+              className={`flex-1 min-w-0 truncate leading-tight ${unread ? 'text-text/80' : 'text-muted'}`}
               style={{ fontSize: 'var(--sidebar-conv-meta-font-size)' }}
             >
               {draft ? (
@@ -295,7 +295,7 @@ export default function GroupRow({
               ) : (
                 <>
                   {preview.prefix && (
-                    <span className={unread ? 'text-muted font-medium' : 'text-faint'}>
+                    <span className={unread ? 'text-text/80 font-medium' : 'text-muted'}>
                       {preview.prefix}{' '}
                     </span>
                   )}

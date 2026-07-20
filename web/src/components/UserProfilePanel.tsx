@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { X } from 'lucide-react'
+import { Clock3, Loader2, MessageCircle, UserCheck, UserPlus, X } from 'lucide-react'
 import type { PublicProfile } from '../lib/types'
-import { api } from '../lib/api'
+import { api, ApiError } from '../lib/api'
 import { avatarUrl } from '../lib/avatarCache'
 import { statusMeta, OFFLINE } from '../lib/availability'
 import { usePresence } from '../hooks/usePresence'
@@ -22,11 +22,21 @@ type Props = {
   /** The signed-in viewer. Presence snapshots cover *peers* only, so viewing
    *  your own profile treats you as online (you're using the app). */
   currentUserId: string
+  /** Current viewer's company name, used to distinguish trusted colleagues
+   *  (who can message directly) from cross-company connection flows. */
+  currentWorkspaceName: string
   /** The target's role IN THE CURRENT GROUP ('admin' | 'member'), when the
    *  panel was opened from a vehicle-room context. Omitted for DMs. */
   groupRole?: 'admin' | 'member'
+  /** Open or create a direct conversation, then navigate to it. */
+  onMessage: (userId: string, name: string) => Promise<void>
   onClose: () => void
 }
+
+type Relationship =
+  | { kind: 'loading' }
+  | { kind: 'self' | 'same_workspace' | 'accepted' | 'none' | 'pending_sent' }
+  | { kind: 'pending_received'; connectionId: string }
 
 // Read-only user details panel, opened by clicking a user's avatar (chat
 // messages, DM header, group members list). EXACTLY the Group info panel's
@@ -36,15 +46,26 @@ type Props = {
 // occupies the same single right-hand column slot as Group info / Add trip
 // (ChatView hides those while this is open, keeping their state mounted).
 //
-// Strictly read-only: label/value rows identical to "My profile", but with no
-// pencil affordances anywhere. Missing values render as the standard muted
-// "Not set". Editing your own profile stays where it always was — the
-// "My profile" sidebar drawer.
-export default function UserProfilePanel({ userId, name, currentUserId, groupRole, onClose }: Props) {
+// Profile fields stay read-only: label/value rows match "My profile" but have
+// no pencil affordances. The compact hero actions are relationship-aware and
+// only navigate/message or manage a connection; they never edit profile data.
+// Missing values render as the standard muted "Not set".
+export default function UserProfilePanel({
+  userId,
+  name,
+  currentUserId,
+  currentWorkspaceName,
+  groupRole,
+  onMessage,
+  onClose,
+}: Props) {
   const [profile, setProfile] = useState<PublicProfile | null>(null)
   const [failed, setFailed] = useState(false)
   // Bump to refetch after a failed load ("Try again").
   const [attempt, setAttempt] = useState(0)
+  const [relationship, setRelationship] = useState<Relationship>({ kind: 'loading' })
+  const [actionBusy, setActionBusy] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -61,6 +82,49 @@ export default function UserProfilePanel({ userId, name, currentUserId, groupRol
       cancelled = true
     }
   }, [userId, attempt])
+
+  // Resolve the cross-company relationship once the profile tells us which
+  // workspace the target belongs to. Same-company users bypass connections;
+  // external users map to the existing accepted/pending slices.
+  useEffect(() => {
+    if (userId === currentUserId) {
+      setRelationship({ kind: 'self' })
+      return
+    }
+    if (!profile) return
+    if (profile.company === currentWorkspaceName) {
+      setRelationship({ kind: 'same_workspace' })
+      return
+    }
+
+    let cancelled = false
+    setRelationship({ kind: 'loading' })
+    api.connections
+      .list()
+      .then((connections) => {
+        if (cancelled) return
+        if (connections.accepted.some((c) => c.otherUser.id === userId)) {
+          setRelationship({ kind: 'accepted' })
+          return
+        }
+        const received = connections.pendingReceived.find((c) => c.otherUser.id === userId)
+        if (received) {
+          setRelationship({ kind: 'pending_received', connectionId: received.id })
+          return
+        }
+        if (connections.pendingSent.some((c) => c.otherUser.id === userId)) {
+          setRelationship({ kind: 'pending_sent' })
+          return
+        }
+        setRelationship({ kind: 'none' })
+      })
+      .catch(() => {
+        if (!cancelled) setRelationship({ kind: 'none' })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [currentUserId, currentWorkspaceName, profile, userId])
 
   // Esc closes THIS panel only. Capture-phase + stopPropagation so an open
   // Group info panel underneath (which also listens for Escape on document)
@@ -102,6 +166,51 @@ export default function UserProfilePanel({ userId, name, currentUserId, groupRol
     : null
   const languagesValue =
     profile && profile.otherLanguages.length ? profile.otherLanguages.join(', ') : ''
+
+  async function openDirectMessage() {
+    if (!profile || actionBusy) return
+    setActionBusy(true)
+    setActionError(null)
+    try {
+      await onMessage(profile.id, displayName)
+    } catch {
+      setActionError('Could not open the direct conversation.')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  async function requestConnection() {
+    if (actionBusy) return
+    setActionBusy(true)
+    setActionError(null)
+    try {
+      await api.connections.request(userId)
+      setRelationship({ kind: 'pending_sent' })
+    } catch (error) {
+      setActionError(
+        error instanceof ApiError && error.code === 'previously_declined'
+          ? 'This connection request was previously declined.'
+          : 'Could not send the connection request.',
+      )
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  async function acceptConnection(connectionId: string) {
+    if (actionBusy) return
+    setActionBusy(true)
+    setActionError(null)
+    try {
+      await api.connections.accept(connectionId)
+      setRelationship({ kind: 'accepted' })
+    } catch {
+      setActionError('Could not accept the connection request.')
+    } finally {
+      setActionBusy(false)
+    }
+  }
 
   return (
     <>
@@ -192,6 +301,62 @@ export default function UserProfilePanel({ userId, name, currentUserId, groupRol
                   />
                   {status.label}
                 </span>
+              )}
+              {!profile.deleted && relationship.kind !== 'self' && (
+                <div className="mt-3 flex items-center justify-center gap-1">
+                  {actionBusy ? (
+                    <span className={`${ICON_ACTION_BASE} text-muted`} aria-label="Working">
+                      <Loader2 size="1rem" strokeWidth={1.8} className="animate-spin" />
+                    </span>
+                  ) : relationship.kind === 'same_workspace' || relationship.kind === 'accepted' ? (
+                    <button
+                      type="button"
+                      onClick={() => void openDirectMessage()}
+                      aria-label={`Message ${displayName}`}
+                      title={`Message ${displayName}`}
+                      className={`${ICON_ACTION_BASE} ${ICON_ACTION_IDLE}`}
+                    >
+                      <MessageCircle size="1.0625rem" strokeWidth={1.8} />
+                    </button>
+                  ) : relationship.kind === 'pending_received' ? (
+                    <button
+                      type="button"
+                      onClick={() => void acceptConnection(relationship.connectionId)}
+                      aria-label={`Accept connection from ${displayName}`}
+                      title="Accept connection"
+                      className={`${ICON_ACTION_BASE} ${ICON_ACTION_IDLE}`}
+                    >
+                      <UserCheck size="1.0625rem" strokeWidth={1.8} />
+                    </button>
+                  ) : relationship.kind === 'pending_sent' ? (
+                    <button
+                      type="button"
+                      disabled
+                      aria-label={`Connection request to ${displayName} is pending`}
+                      title="Connection request pending"
+                      className={`${ICON_ACTION_BASE} text-muted`}
+                    >
+                      <Clock3 size="1.0625rem" strokeWidth={1.8} />
+                    </button>
+                  ) : relationship.kind === 'none' ? (
+                    <button
+                      type="button"
+                      onClick={() => void requestConnection()}
+                      aria-label={`Connect with ${displayName}`}
+                      title={`Connect with ${displayName}`}
+                      className={`${ICON_ACTION_BASE} ${ICON_ACTION_IDLE}`}
+                    >
+                      <UserPlus size="1.0625rem" strokeWidth={1.8} />
+                    </button>
+                  ) : (
+                    <span className={`${ICON_ACTION_BASE} text-faint`} aria-label="Checking connection">
+                      <Loader2 size="1rem" strokeWidth={1.8} className="animate-spin" />
+                    </span>
+                  )}
+                </div>
+              )}
+              {actionError && (
+                <p className="mt-1.5 text-[0.6875rem] leading-[1.4] text-alert">{actionError}</p>
               )}
             </div>
 

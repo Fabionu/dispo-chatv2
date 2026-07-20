@@ -1,31 +1,93 @@
+import { useEffect, useState } from 'react'
+import Avatar from '../Avatar'
+
 export type TypingUser = { id: string; name: string }
 
-// Compact "… is typing" line with three pulsing dots. Handles one, two, or
-// many simultaneous typers (groups) without getting long.
+// Temporary incoming-style bubble in the measured composer lane, immediately
+// above the input. The outer grid animates its real height, so ChatView expands
+// the list's bottom reserve and the conversation lifts/settles with the state.
+// Multiple typers share one identity stack and one compact dots bubble.
 export default function TypingIndicator({ users }: { users: TypingUser[] }) {
-  if (users.length === 0) return null
+  // Keep the last active set mounted very briefly after the socket says typing
+  // stopped. That gives the capsule time to ease away instead of blinking out;
+  // a new typing event during the exit cancels it immediately.
+  const [displayedUsers, setDisplayedUsers] = useState(users)
+  const [leaving, setLeaving] = useState(false)
+
+  useEffect(() => {
+    if (users.length > 0) {
+      setDisplayedUsers(users)
+      setLeaving(false)
+      return
+    }
+    if (displayedUsers.length === 0) return
+
+    setLeaving(true)
+    const timer = window.setTimeout(() => {
+      setDisplayedUsers([])
+      setLeaving(false)
+    }, 160)
+    return () => window.clearTimeout(timer)
+  }, [users, displayedUsers.length])
 
   const first = (n: string) => n.split(' ')[0] || n
-  let text: string
-  if (users.length === 1) {
-    text = `${first(users[0].name)} is typing`
-  } else if (users.length === 2) {
-    text = `${first(users[0].name)} and ${first(users[1].name)} are typing`
-  } else {
-    text = `${first(users[0].name)}, ${first(users[1].name)} and ${users.length - 2} more are typing`
-  }
+  const text =
+    displayedUsers.length === 1
+      ? `${first(displayedUsers[0].name)} is typing`
+      : displayedUsers.length === 2
+        ? `${first(displayedUsers[0].name)} and ${first(displayedUsers[1].name)} are typing`
+        : displayedUsers.length > 2
+          ? `${first(displayedUsers[0].name)}, ${first(displayedUsers[1].name)} and ${displayedUsers.length - 2} more are typing`
+          : ''
+  const identityWidth =
+    displayedUsers.length > 2 ? 'w-[4.25rem]' : displayedUsers.length === 2 ? 'w-12' : 'w-8'
 
   return (
     <div
-      className="flex items-center gap-1.5 text-[0.6875rem] text-muted h-4"
-      aria-live="polite"
+      className={`typing-indicator-slot ${users.length > 0 ? 'typing-indicator-slot-visible' : ''}`}
     >
-      <span className="flex items-center gap-0.5" aria-hidden="true">
-        <Dot delay="0ms" />
-        <Dot delay="150ms" />
-        <Dot delay="300ms" />
-      </span>
-      <span className="truncate">{text}</span>
+      <div className="min-h-0 overflow-hidden">
+        {displayedUsers.length > 0 && (
+          <div
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            className={`${leaving ? 'typing-indicator-exit' : 'typing-indicator-enter'} flex max-w-[min(82%,48rem)] items-end gap-2.5 pt-1 pb-2`}
+          >
+            <span
+              className={`flex ${identityWidth} shrink-0 -space-x-2 pb-0.5`}
+              aria-hidden="true"
+            >
+              {displayedUsers.slice(0, 2).map((user, index) => (
+                <span
+                  key={user.id}
+                  className="typing-avatar-enter relative rounded-full ring-2 ring-rail"
+                  style={{ zIndex: 2 - index, animationDelay: `${index * 70}ms` }}
+                >
+                  <Avatar userId={user.id} name={user.name} size={28} />
+                </span>
+              ))}
+              {displayedUsers.length > 2 && (
+                <span className="relative z-0 flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-rail bg-surface-2 px-1 text-[0.53125rem] font-semibold text-muted">
+                  +{displayedUsers.length - 2}
+                </span>
+              )}
+            </span>
+            <span className="flex min-w-0 flex-col items-start gap-1">
+              <span className="max-w-full truncate px-1 text-[0.75rem] font-medium leading-none text-muted">
+                {text}
+              </span>
+              {/* Same neutral skin and sender-side tail as an incoming message
+                  bubble; the content is only the live composing rhythm. */}
+              <span className="flex h-8 items-center gap-1 rounded-[0.5rem] rounded-bl-[0.1875rem] bg-surface-2 px-3" aria-hidden="true">
+                <Dot delay="0ms" />
+                <Dot delay="160ms" />
+                <Dot delay="320ms" />
+              </span>
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -33,8 +95,8 @@ export default function TypingIndicator({ users }: { users: TypingUser[] }) {
 function Dot({ delay }: { delay: string }) {
   return (
     <span
-      className="h-1 w-1 rounded-full bg-active/80 animate-bounce"
-      style={{ animationDelay: delay, animationDuration: '1s' }}
+      className="typing-dot h-1 w-1 rounded-full bg-muted"
+      style={{ animationDelay: delay }}
     />
   )
 }

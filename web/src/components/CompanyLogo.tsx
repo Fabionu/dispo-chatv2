@@ -34,6 +34,7 @@ export default function CompanyLogo({ size = 28, version, className = '' }: Prop
     <img
       src={src}
       alt="Company logo"
+      draggable={false}
       onError={() => setFailed(true)}
       style={style}
       className={`rounded-chip object-cover border border-white/[0.1] bg-surface shrink-0 ${className}`}

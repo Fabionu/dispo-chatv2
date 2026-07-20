@@ -357,16 +357,15 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
     ? !text.trim() || text.trim() === editContext.originalBody
     : !text.trim()
 
-  // Floating input bar: a SOLID, rounded, BORDERLESS bar on the `surface` tone,
+  // Floating input bar: a wide capsule on the `composer` tone,
   // one step lighter than the grey chat area (`bg`) so it reads as a calm,
   // distinct input surface. It sits inside ChatView's transparent overlay (which
   // lets messages scroll behind); the solid fill + its rounded shape define it
-  // against the chat area. The fill stays CONSTANT across idle / focus / typing —
-  // no focus tint, ring, or border — so the field reads as visually stable; the
-  // textarea's own `outline-none` keeps the browser ring off too. `relative`
-  // anchors the mention picker.
+  // against the chat area. Its full radius follows the circular add/send controls
+  // while the hairline border brightens gently on focus. `relative` anchors the
+  // mention picker.
   return (
-    <div className="relative rounded-panel bg-composer">
+    <div className="relative rounded-full border border-white/[0.06] bg-composer shadow-[0_3px_12px_rgba(0,0,0,0.22)] transition-colors focus-within:border-white/[0.12]">
       {pickerOpen && (
         <MentionPicker
           members={matches}
@@ -423,7 +422,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           --composer-size and are vertically centred against the textarea, so
           they stay aligned with the middle of the input whether it's one line or
           grown to several (items-center tracks the textarea's height). */}
-      <div className="flex items-center gap-1 px-2 py-1.5">
+      <div className="flex items-center gap-1.5 px-2.5 py-2">
         <input
           ref={fileInputRef}
           type="file"
@@ -444,15 +443,19 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           onBlur={() => setHasSelection(false)}
           rows={1}
           placeholder={editContext ? 'Edit message…' : placeholder}
-          className="flex-1 bg-transparent text-[length:var(--chat-msg-font-size)] leading-[1.5] outline-none resize-none placeholder:text-faint overflow-y-auto max-h-[9em] px-1.5 py-1.5"
+          className="flex-1 min-w-0 bg-transparent text-[length:var(--chat-msg-font-size)] leading-[1.5] outline-none resize-none placeholder:text-faint overflow-y-auto max-h-[9em] px-2 py-1.5"
         />
         <button
           onClick={onSend}
           disabled={disabled}
           aria-label={editContext ? 'Save edit' : 'Send message'}
-          className="h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 flex items-center justify-center rounded-full bg-text text-bg hover:bg-text/90 transition-colors disabled:opacity-30 disabled:cursor-default disabled:hover:bg-text"
+          className={`h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 flex items-center justify-center rounded-full transition-colors ${
+            disabled
+              ? 'bg-white/[0.07] text-faint cursor-default'
+              : 'bg-text text-bg hover:bg-white'
+          }`}
         >
-          <ArrowUp size="0.9375rem" strokeWidth={2.2} />
+          <ArrowUp size="1rem" strokeWidth={2.2} />
         </button>
       </div>
     </div>

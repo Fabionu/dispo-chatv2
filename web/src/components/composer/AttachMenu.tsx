@@ -56,10 +56,10 @@ export default function AttachMenu({ disabled, onPickKind, onAddTrip }: Props) {
         aria-label="Add"
         aria-haspopup="menu"
         aria-expanded={open}
-        className={`h-[var(--composer-size)] w-[var(--composer-size)] flex items-center justify-center rounded-full transition-colors disabled:opacity-30 disabled:cursor-default ${
+        className={`h-[var(--composer-size)] w-[var(--composer-size)] flex items-center justify-center rounded-full border transition-colors disabled:opacity-30 disabled:cursor-default ${
           open
-            ? 'text-text bg-white/[0.06]'
-            : 'text-muted hover:text-text hover:bg-white/[0.04]'
+            ? 'text-text bg-white/[0.09] border-white/[0.10]'
+            : 'text-muted bg-white/[0.04] border-white/[0.05] hover:text-text hover:bg-white/[0.07] hover:border-white/[0.09]'
         }`}
       >
         <Plus size="1.125rem" strokeWidth={1.8} />

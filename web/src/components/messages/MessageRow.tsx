@@ -55,6 +55,8 @@ type Props = {
   onDeleteForMe: (m: LocalMessage) => void
   onDeleteForEveryone: (m: LocalMessage) => void
   onJumpToMessage: (messageId: string) => void
+  // Opens this message's delivery/read roster in the chat's right-side panel.
+  onOpenReadReceipts: (message: LocalMessage) => void
   // Open the read-only user-details panel for a message author (avatar click).
   onOpenProfile: (userId: string, name: string) => void
   // The room's active trip reference — `#<reference>` tokens in the body render
@@ -88,6 +90,7 @@ function MessageRow({
   onDeleteForMe,
   onDeleteForEveryone,
   onJumpToMessage,
+  onOpenReadReceipts,
   onOpenProfile,
   tripRef,
   onOpenTrip,
@@ -160,18 +163,18 @@ function MessageRow({
   const menuOpen = menu !== null
   const triggerRef = useRef<HTMLButtonElement>(null)
 
-  // 78% keeps bubbles narrower than the column on small screens; the absolute
-  // 640px cap keeps them comfortably readable when the column gets wider on
+  // 82% keeps bubbles comfortably inset on small screens; the wider absolute
+  // cap lets conversations occupy more of the enlarged desktop chat column on
   // 2K+ monitors. CSS min() picks whichever is smaller at the current width.
   // Font size comes from --chat-msg-font-size so it scales with the display.
   // max-w lives on the row so the trigger overlay can hug the bubble without
   // breaking the alignment math.
-  const rowMaxW = 'max-w-[min(78%,41.25rem)]'
-  // Media (image/doc) messages use a tight 4px frame so the attachment nearly
+  const rowMaxW = 'max-w-[min(82%,48rem)]'
+  // Media (image/doc) messages use a tight frame so the attachment nearly
   // fills the bubble instead of floating inside a thick coloured margin; text-
   // only messages keep a comfortable-but-compact padding. Caption text and the
   // meta footer re-add a small inset on media bubbles (see below).
-  const bubblePad = hasAttachment ? 'p-1' : 'px-3 pt-1.5 pb-1'
+  const bubblePad = hasAttachment ? 'p-1.5' : 'px-3.5 pt-2 pb-1.5'
   const bubbleBase = `${bubblePad} text-[length:var(--chat-msg-font-size)] leading-[1.45] flex flex-col text-text transition-[box-shadow,border-color] duration-500`
   // Corner shape: an 8px rounded rectangle (matching the app's small-radius
   // language — no pills) with a tighter 3px "tail" on the sender-side bottom
@@ -270,7 +273,7 @@ function MessageRow({
             others={readers ?? []}
             createdAt={message.createdAt}
             pending={pending}
-            align="right"
+            onOpen={() => onOpenReadReceipts(message)}
           />
         )}
         {/* Time is always visible (no hover-reveal) so the log is scannable
@@ -641,13 +644,14 @@ function MessageRow({
                   >
                     {meta}
                     {/* Read checkmarks — only on my own sent messages. Clicking
-                        opens the receipts popover (who's seen it + when). Hidden
-                        for failed sends (the "Failed" marker stands in). */}
+                        opens the chat's right-side receipts panel. Hidden for
+                        failed sends (the "Failed" marker stands in). */}
                     {mine && !failed && (
                       <ReadReceipts
                         others={readers ?? []}
                         createdAt={message.createdAt}
                         pending={pending}
+                        onOpen={() => onOpenReadReceipts(message)}
                         // Fit the tick to the timestamp's line box so my own
                         // bubble's meta row is the same height as an incoming
                         // one's (a full-size tick would make it a few px taller).

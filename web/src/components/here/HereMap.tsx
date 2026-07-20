@@ -140,6 +140,15 @@ export default function HereMap({
   // when the view settles. This keeps editing intact without paying their
   // per-frame rendering cost throughout ordinary map navigation.
   const draggableObjectsRef = useRef<any[]>([])
+  // Route drag targets are full-length, transparent copies of each route leg.
+  // They are useful only while the camera is idle, so hide them completely
+  // during pan/zoom instead of asking HARP to keep transforming invisible
+  // geometry on every frame.
+  const routeDragTargetsRef = useRef<any[]>([])
+  // HERE recommends reusing marker icons. Route recalculation redraws every
+  // marker, so retain the small set of icons across draw() calls rather than
+  // rebuilding and reparsing identical SVGs each time.
+  const markerIconCacheRef = useRef<Map<string, any>>(new Map())
   // A single group holding every marker + line, so a redraw is "clear group,
   // add fresh objects" rather than tracking individual handles.
   const groupRef = useRef<any>(null)
@@ -192,10 +201,14 @@ export default function HereMap({
         baseLayerRef.current = baseLayer
         logisticsLayerRef.current = logisticsLayer
 
-        // High-density desktop displays commonly report DPR 2. Rendering the
-        // WebGL basemap at full density multiplies the pixel workload during
-        // every pan/zoom with little practical gain under labels and overlays.
-        const maxPixelRatio = 1.25
+        // High-density desktop displays commonly report DPR 1.5â€“2. HERE uses
+        // pixelRatio for oversampling, so the previous 1.25 cap still rendered
+        // 56% more pixels than the CSS map area. A 1x backing buffer is the best
+        // trade-off for smooth mouse pan/zoom; touch devices retain the slightly
+        // sharper 1.25 cap because their map is physically smaller.
+        const desktopPointer =
+          window.matchMedia?.('(hover: hover) and (pointer: fine)').matches ?? true
+        const maxPixelRatio = desktopPointer ? 1 : 1.25
         const map = new H.Map(containerRef.current, baseLayer, {
           center: DEFAULT_CENTER,
           zoom: DEFAULT_ZOOM,
@@ -281,8 +294,12 @@ export default function HereMap({
           else hideHover()
         }
         const onPointerMove = (e: PointerEvent) => {
-          if (activeDragRef.current || viewChangingRef.current) {
+          // `dragstart` / `mapviewchangestart` can arrive just after the first
+          // pressed pointermove. The buttons guard closes that small window so
+          // the O(route vertices) hover hit-test never competes with a pan.
+          if (e.buttons !== 0 || activeDragRef.current || viewChangingRef.current) {
             hoverPx = null
+            hideHover()
             return
           }
           const rect = container.getBoundingClientRect()
@@ -332,6 +349,9 @@ export default function HereMap({
         const setDraggableVolatility = (volatile: boolean) => {
           for (const object of draggableObjectsRef.current) object.setVolatility?.(volatile)
         }
+        const setRouteDragTargetsVisible = (visible: boolean) => {
+          for (const target of routeDragTargetsRef.current) target.setVisibility?.(visible)
+        }
         const onViewChange = () => {
           viewChangingRef.current = true
           hoverPx = null
@@ -345,6 +365,7 @@ export default function HereMap({
               cancelAnimationFrame(resumeDraggableRaf)
               resumeDraggableRaf = 0
             }
+            setRouteDragTargetsVisible(false)
             setDraggableVolatility(false)
           }
           onViewChangeRef.current?.()
@@ -356,6 +377,7 @@ export default function HereMap({
           if (!interactiveDragRef.current) {
             resumeDraggableRaf = requestAnimationFrame(() => {
               resumeDraggableRaf = 0
+              setRouteDragTargetsVisible(true)
               setDraggableVolatility(true)
             })
           }
@@ -567,6 +589,8 @@ export default function HereMap({
         mapRef.current = null
         groupRef.current = null
         draggableObjectsRef.current = []
+        routeDragTargetsRef.current = []
+        markerIconCacheRef.current.clear()
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -735,6 +759,7 @@ export default function HereMap({
 
     group.removeAll()
     draggableObjectsRef.current = []
+    routeDragTargetsRef.current = []
 
     // Accumulate every drawn point so we can frame them all at the end.
     const allPoints: LatLng[] = []
@@ -783,9 +808,11 @@ export default function HereMap({
         })
         dragTarget.draggable = true
         dragTarget.setVolatility(!viewChangingRef.current)
+        dragTarget.setVisibility?.(!viewChangingRef.current)
         dragTarget.setData({ section: sectionIndex })
         group.addObject(dragTarget)
         draggableObjectsRef.current.push(dragTarget)
+        routeDragTargetsRef.current.push(dragTarget)
       }
     })
 
@@ -811,8 +838,14 @@ export default function HereMap({
       // `volatility: true` is REQUIRED for dragging — without it HERE keeps the
       // marker in its optimised render cache and never delivers drag gestures.
       // A read-only map (objectsDraggable=false) keeps markers static/cached.
+      const iconKey = `${marker.kind}:${marker.label ?? ''}`
+      let icon = markerIconCacheRef.current.get(iconKey)
+      if (!icon) {
+        icon = iconFor(H, marker)
+        markerIconCacheRef.current.set(iconKey, icon)
+      }
       const m = new H.map.Marker(marker.position, {
-        icon: iconFor(H, marker),
+        icon,
         volatility: objectsDraggable && !viewChangingRef.current,
       })
       m.draggable = objectsDraggable

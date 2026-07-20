@@ -44,6 +44,7 @@ import { canRouteStops, persistOpsWithRoute } from '../lib/tripRoute'
 import ConversationSearch from './ConversationSearch'
 import UserProfilePanel from './UserProfilePanel'
 import MessageRow from './messages/MessageRow'
+import ReadReceiptsPanel from './messages/ReadReceiptsPanel'
 import SystemMessageRow from './messages/SystemMessageRow'
 import PinnedBar from './messages/PinnedBar'
 import TypingIndicator from './messages/TypingIndicator'
@@ -86,6 +87,7 @@ const CHAT_BOTTOM_FADE_HEIGHT = 56
 type Props = {
   group: Group
   currentUserId: string
+  currentWorkspaceName: string
   onRead: (groupId: string) => void
   // Open (or reuse) a 1:1 DM with another user — used by the "Reply privately"
   // and "Send message in private" actions. The caller has already created the
@@ -113,6 +115,7 @@ type Props = {
 export default function ChatView({
   group,
   currentUserId,
+  currentWorkspaceName,
   onRead,
   onOpenDirectMessage,
   initialReplyContext = null,
@@ -179,9 +182,18 @@ export default function ChatView({
   // while the profile fetch runs. Purely an overlay — opening it never touches
   // the selection, composer, tabs, or the group-info panel's state.
   const [profileTarget, setProfileTarget] = useState<{ id: string; name: string } | null>(null)
+  // Sent message whose live read roster is open in the shared right-side panel
+  // slot. Unlike the old per-row popover, this is chat-level state so the panel
+  // can reflow the conversation and show comfortable member rows.
+  const [receiptTarget, setReceiptTarget] = useState<LocalMessage | null>(null)
   const openProfile = useCallback((userId: string, name: string) => {
     if (!userId || userId.startsWith('local-')) return
+    setReceiptTarget(null)
     setProfileTarget({ id: userId, name })
+  }, [])
+  const openReadReceipts = useCallback((message: LocalMessage) => {
+    setProfileTarget(null)
+    setReceiptTarget(message)
   }, [])
   // Whether the "Add trip" modal is open (vehicle groups only). Opened from the
   // composer's add (+) menu.
@@ -854,6 +866,15 @@ export default function ChatView({
     [onOpenDirectMessage],
   )
 
+  const messageProfileUser = useCallback(
+    async (userId: string, name: string) => {
+      const { group: dm } = await api.groups.createDirect(userId)
+      onOpenDirectMessage({ groupId: dm.id, peerId: userId, peerName: name })
+      setProfileTarget(null)
+    },
+    [onOpenDirectMessage],
+  )
+
   // Scroll to (and briefly pulse) the original message a reply points at, if
   // it's currently loaded. Otherwise show a subtle, transient hint.
   const jumpToMessage = useCallback(
@@ -1191,6 +1212,7 @@ export default function ChatView({
               label="Group info"
               onClick={() => {
                 setGroupInfoTab('info')
+                setReceiptTarget(null)
                 setGroupInfoOpen(true)
               }}
             >
@@ -1208,6 +1230,7 @@ export default function ChatView({
           trip={trip}
           onOpen={() => {
             setGroupInfoTab('trip')
+            setReceiptTarget(null)
             setGroupInfoOpen(true)
           }}
         />
@@ -1429,6 +1452,7 @@ export default function ChatView({
                             setPendingDelete({ message: m, scope: 'everyone' })
                           }
                           onJumpToMessage={jumpToMessage}
+                          onOpenReadReceipts={openReadReceipts}
                           onOpenProfile={openProfile}
                           // `#reference` trip mentions — clicking one deep-links
                           // to the Group info Trip tab (opening the panel if
@@ -1436,6 +1460,7 @@ export default function ChatView({
                           tripRef={tripMentionRef}
                           onOpenTrip={() => {
                             setGroupInfoTab('trip')
+                            setReceiptTarget(null)
                             setGroupInfoOpen(true)
                           }}
                         />
@@ -1495,11 +1520,11 @@ export default function ChatView({
               className="absolute inset-x-0 bottom-0 z-20 pointer-events-none pt-2 pb-3 pr-[var(--chat-scrollbar-gutter)]"
             >
               <div className="chat-column pointer-events-auto">
-                {typingUsers.length > 0 && (
-                  <div className="mb-1 px-1">
-                    <TypingIndicator users={typingUsers} />
-                  </div>
-                )}
+                {/* Temporary incoming-style bubble directly ABOVE the input.
+                    It is part of the measured composer wrapper, so its animated
+                    height increases/decreases the message-list bottom reserve;
+                    the conversation visibly lifts and settles with it. */}
+                <TypingIndicator users={typingUsers} />
                 {error && <div className="text-[0.71875rem] text-alert mb-1.5">{error}</div>}
                 <ChatComposer
                   ref={composerHandleRef}
@@ -1525,7 +1550,10 @@ export default function ChatView({
                   // (DMs, or members without manage rights).
                   onAddTrip={
                     group.type === 'vehicle' && canManageGroup
-                      ? () => setAddTripOpen(true)
+                      ? () => {
+                          setReceiptTarget(null)
+                          setAddTripOpen(true)
+                        }
                       : undefined
                   }
                   replyContext={replyContext}
@@ -1615,7 +1643,7 @@ export default function ChatView({
           profile is open, so their state (active tab, form drafts) survives and
           returns intact when the profile closes; `contents` unwraps them back
           into the flex row otherwise. */}
-      <div className={profileTarget ? 'hidden' : 'contents'}>
+      <div className={profileTarget || receiptTarget ? 'hidden' : 'contents'}>
       {group.type === 'vehicle' && groupInfoOpen && !addTripOpen && (
         <Suspense fallback={<PanelLoader />}>
         <GroupInfoPanel
@@ -1658,12 +1686,23 @@ export default function ChatView({
           userId={profileTarget.id}
           name={profileTarget.name}
           currentUserId={currentUserId}
+          currentWorkspaceName={currentWorkspaceName}
           groupRole={
             group.type === 'vehicle'
               ? members.find((m) => m.id === profileTarget.id)?.role
               : undefined
           }
+          onMessage={messageProfileUser}
           onClose={() => setProfileTarget(null)}
+        />
+      )}
+
+      {receiptTarget && !profileTarget && (
+        <ReadReceiptsPanel
+          message={receiptTarget}
+          others={readers}
+          onOpenProfile={openProfile}
+          onClose={() => setReceiptTarget(null)}
         />
       )}
 

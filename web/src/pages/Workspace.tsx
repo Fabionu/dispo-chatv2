@@ -1203,6 +1203,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             key={selectedGroup.id}
             group={selectedGroup}
             currentUserId={user.id}
+            currentWorkspaceName={workspace.name}
             onRead={markGroupRead}
             onOpenDirectMessage={openDirectMessage}
             initialReplyContext={

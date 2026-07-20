@@ -66,6 +66,7 @@ export default function Avatar({
       <img
         src={src}
         alt={name}
+        draggable={false}
         onLoad={() => {
           markAvatarLoaded('user', userId, version)
           setLoaded(true)
