@@ -1109,9 +1109,9 @@ export default function ChatView({
                   <Spinner variant="lg" />
                 </div>
               ) : (
-                <div className="chat-column">
+                <div className="chat-column min-h-full flex flex-col">
                 {messages.length === 0 ? (
-                  <div className="h-full flex items-center justify-center">
+                  <div className="flex-1 flex items-center justify-center">
                     <p className="text-[0.78125rem] text-faint">No messages yet. Say something.</p>
                   </div>
                 ) : (
@@ -1130,7 +1130,7 @@ export default function ChatView({
                   // MessageRow) which removes the immediate re-render pressure,
                   // and virtualization here is a behavioral risk best taken on
                   // its own.
-                  <div className="flex flex-col gap-0.5">
+                  <div className="mt-auto flex flex-col gap-0.5">
                     {nextCursor && (
                       <div className="flex justify-center pb-3">
                         <button

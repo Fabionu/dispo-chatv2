@@ -60,7 +60,9 @@ export default function ReadReceipts({
       }}
       aria-label={fullyRead ? 'Read — see who' : 'Delivered — see who has read'}
       aria-haspopup="dialog"
-      className={`inline-flex items-center ${fullyRead ? 'text-muted' : 'text-faint'}`}
+      className={`inline-flex items-center transition-colors ${
+        fullyRead ? 'text-active' : 'text-faint'
+      }`}
     >
       <CheckCheck size={glyphSize} strokeWidth={2} />
     </button>
