@@ -362,12 +362,12 @@ html[data-theme='light'] {
 html[data-density-mode='auto'] {
   --ui-scale: 1;
   --app-font-size: 15px;
-  --chat-msg-font-size: 16px;
-  --header-height: 60px;
-  --sidebar-width: clamp(420px, 27vw, 540px);
-  --composer-size: 36px;
-  --chat-max-width: 1180px;
-  --chat-gutter: 20px;
+  --chat-msg-font-size: 15px;
+  --header-height: 56px;
+  --sidebar-width: clamp(460px, 30vw, 600px);
+  --composer-size: 34px;
+  --chat-max-width: 1080px;
+  --chat-gutter: 18px;
 
   --sidebar-title-font-size: 17px;
   --sidebar-row-font-size: 15px;
@@ -385,19 +385,19 @@ html[data-density-mode='auto'] {
 }
 
 html[data-density-mode='auto'] .chat-column {
-  max-width: clamp(960px, 82cqw, 1180px);
+  max-width: clamp(900px, 80cqw, 1080px);
 }
 
 @media (max-width: 1280px) {
   html[data-density-mode='auto'] {
     --ui-scale: 0.9;
     --app-font-size: 13.5px;
-    --chat-msg-font-size: 14px;
-    --header-height: 52px;
-    --sidebar-width: clamp(320px, 31vw, 400px);
-    --composer-size: 32px;
-    --chat-max-width: 900px;
-    --chat-gutter: 14px;
+    --chat-msg-font-size: 13.5px;
+    --header-height: 50px;
+    --sidebar-width: clamp(350px, 33vw, 430px);
+    --composer-size: 30px;
+    --chat-max-width: 860px;
+    --chat-gutter: 13px;
 
     --sidebar-title-font-size: 15.5px;
     --sidebar-row-font-size: 13.5px;
@@ -419,12 +419,12 @@ html[data-density-mode='auto'] .chat-column {
   html[data-density-mode='auto'] {
     --ui-scale: 1.04;
     --app-font-size: 15.5px;
-    --chat-msg-font-size: 16.5px;
-    --header-height: 64px;
-    --sidebar-width: clamp(540px, 24vw, 620px);
-    --composer-size: 38px;
-    --chat-max-width: 1400px;
-    --chat-gutter: 24px;
+    --chat-msg-font-size: 15.5px;
+    --header-height: 60px;
+    --sidebar-width: clamp(600px, 26vw, 700px);
+    --composer-size: 35px;
+    --chat-max-width: 1280px;
+    --chat-gutter: 20px;
 
     --sidebar-title-font-size: 17.5px;
     --sidebar-row-font-size: 15.5px;
@@ -442,7 +442,7 @@ html[data-density-mode='auto'] .chat-column {
   }
 
   html[data-density-mode='auto'] .chat-column {
-    max-width: clamp(1160px, 76cqw, 1400px);
+    max-width: clamp(1060px, 72cqw, 1280px);
   }
 }
 
@@ -450,16 +450,16 @@ html[data-density-mode='auto'] .chat-column {
   html[data-density-mode='auto'] {
     --ui-scale: 1.08;
     --app-font-size: 16px;
-    --chat-msg-font-size: 17px;
-    --header-height: 68px;
-    --sidebar-width: clamp(620px, 22vw, 700px);
-    --composer-size: 40px;
-    --chat-max-width: 1600px;
-    --chat-gutter: 28px;
+    --chat-msg-font-size: 16px;
+    --header-height: 64px;
+    --sidebar-width: clamp(680px, 24vw, 760px);
+    --composer-size: 37px;
+    --chat-max-width: 1450px;
+    --chat-gutter: 24px;
   }
 
   html[data-density-mode='auto'] .chat-column {
-    max-width: clamp(1320px, 72cqw, 1600px);
+    max-width: clamp(1200px, 68cqw, 1450px);
   }
 }
 
