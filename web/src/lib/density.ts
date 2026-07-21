@@ -1,45 +1,26 @@
-// Display density: discrete UI-scale tiers applied via a `data-density`
-// attribute on <html>. The actual sizes live in CSS variables (see index.css);
-// this module only decides WHICH tier is active and writes the attribute.
+// Display density: manual choices use the exact token sets in index.css. Auto
+// only selects a broad tier for numeric React props (avatars, logos, etc.); its
+// layout and visual sizing are CSS-first and follow logical viewport/container
+// dimensions.
 //
-// Tiers are auto-selected from viewport width so a 2K/QHD monitor gets the
-// roomier `comfortable` scale while 1080p keeps the tuned `default`. A manual
-// choice (future settings UI) is persisted in localStorage and always wins; the
-// auto-follow listener stands down once an override exists.
+// Do not multiply the viewport by devicePixelRatio here. Browser CSS pixels
+// already account for Windows/macOS display scaling, and applying DPR again was
+// what made the UI change dramatically between 100% and 150% OS scaling.
 
 import { useEffect, useState } from 'react'
 
 export type Density = 'compact' | 'default' | 'comfortable'
 
-// Design-px → rem string. The whole app is sized in rem so the root font-size
-// (16px × --ui-scale; manual tiers live in index.css and Auto supplies a
-// continuously calibrated inline value) scales it uniformly. Size-prop components (Avatar,
-// GroupAvatar, CompanyLogo, AppMark, Spinner, DocIcon) keep their numeric px
-// API but render through this, so a `size={28}` is ~26.25px at 1080p and
-// ~29.75px on the comfortable tier.
+// Design-px to rem. Size-prop components keep a numeric API while following
+// the root scale selected in CSS.
 export const rem = (px: number): string => `${px / 16}rem`
 
-// Sidebar avatar / company-logo diameter per tier, in DESIGN px (pre-rem-scale
-// — Avatar/CompanyLogo render size/16 rem, so the comfortable root bump adds
-// its ×1.125 on top: 36 → ~40.5 actual, matching the tuned
-// --sidebar-user-avatar-size token in index.css). Components that take a
-// numeric `size` can't read the CSS density tokens, so they read this map via
-// useDensity() instead.
-//
-// These stay slightly larger than each tier's row text block so identity remains
-// readable at a glance; rail rows wrap the avatar in IdentitySlot (zero-height
-// flex slot) so the extra diameter centres into the row's existing padding
-// instead of growing the row.
 export const SIDEBAR_AVATAR_SIZE: Record<Density, number> = {
   compact: 32,
   default: 34,
   comfortable: 36,
 }
 
-// Conversation identities get more visual weight than utility/header avatars.
-// GroupRow renders both direct messages and vehicle groups through the same
-// zero-height IdentitySlot, so these larger sizes do not change row padding or
-// row height. Kept explicit per appearance tier so the progression is stable.
 export const SIDEBAR_CONVERSATION_AVATAR_SIZE: Record<Density, number> = {
   compact: 38,
   default: 40,
@@ -47,200 +28,61 @@ export const SIDEBAR_CONVERSATION_AVATAR_SIZE: Record<Density, number> = {
 }
 
 const STORAGE_KEY = 'dispo:density'
-// 2K/QHD (2560-wide) and up → comfortable. Below 1536 → compact (laptops).
-// In between → default (1080p desktops). The height gate keeps 2560×1080-class
-// ultrawides (1080p-height displays) on the default tier. Ultra-wide/4K
-// (≥3000px) is NOT a fourth tier — it's a pure-CSS refinement layered on
-// comfortable in index.css (--ui-scale 1.1875 + bumped px tokens); keep this
-// MQ in sync with index.css's fallbacks.
-const COMFORTABLE_MQ = '(min-width: 2200px) and (min-height: 1200px)'
-const COMPACT_MQ = '(max-width: 1535px)'
 
-type AutoProfile = {
-  at: number
-  uiScale: number
-  tokens: Record<string, number>
-}
+// Logical CSS-pixel breakpoints. A 2560px display at 150% scaling exposes
+// roughly 1707 CSS px and therefore receives the same standard Auto treatment
+// as a 1920px display at 100% scaling.
+const COMFORTABLE_MQ = '(min-width: 2200px) and (min-height: 1100px)'
+const COMPACT_MQ = '(max-width: 1280px)'
 
-// Calibrated anchor points for common physical display classes. Auto blends
-// continuously between them, so 1600p, ultrawide, scaled-QHD, and other in-
-// between displays no longer inherit the nearest preset wholesale.
-//
-// CSS pixels already include Windows/macOS display scaling. Large-screen Auto
-// profiles therefore widen the workspace substantially, but keep text and
-// controls near Standard so we do not stack our scale on top of OS 125%/150%.
-const AUTO_PROFILES: AutoProfile[] = [
-  {
-    at: 1366 / 1920,
-    uiScale: 0.875,
-    tokens: {
-      '--app-font-size': 13,
-      '--chat-msg-font-size': 13.5,
-      '--header-height': 52,
-      '--sidebar-width': 440,
-      '--composer-size': 30,
-      '--chat-max-width': 900,
-      '--chat-gutter': 14,
-      '--sidebar-title-font-size': 15.5,
-      '--sidebar-row-font-size': 13.5,
-      '--sidebar-meta-font-size': 11.5,
-      '--sidebar-section-font-size': 10,
-      '--sidebar-icon-size': 18,
-      '--sidebar-user-avatar-size': 28,
-      '--sidebar-search-height': 34,
-      '--sidebar-row-height': 38,
-      '--sidebar-badge-size': 18,
-      '--sidebar-row-gap': 9,
-      '--sidebar-row-pad-x': 10,
-      '--sidebar-row-pad-y': 7,
-      '--sidebar-section-gap': 22,
-    },
-  },
-  {
-    at: 1,
-    uiScale: 0.9375,
-    tokens: {
-      '--app-font-size': 14,
-      '--chat-msg-font-size': 14.5,
-      '--header-height': 56,
-      '--sidebar-width': 560,
-      '--composer-size': 32,
-      '--chat-max-width': 960,
-      '--chat-gutter': 16,
-      '--sidebar-title-font-size': 16,
-      '--sidebar-row-font-size': 14,
-      '--sidebar-meta-font-size': 12,
-      '--sidebar-section-font-size': 10.5,
-      '--sidebar-icon-size': 19,
-      '--sidebar-user-avatar-size': 32,
-      '--sidebar-search-height': 36,
-      '--sidebar-row-height': 40,
-      '--sidebar-badge-size': 19,
-      '--sidebar-row-gap': 10,
-      '--sidebar-row-pad-x': 11,
-      '--sidebar-row-pad-y': 8,
-      '--sidebar-section-gap': 24,
-    },
-  },
-  {
-    at: 2560 / 1920,
-    uiScale: 0.98,
-    tokens: {
-      '--app-font-size': 14.5,
-      '--chat-msg-font-size': 15,
-      '--header-height': 60,
-      '--sidebar-width': 600,
-      '--composer-size': 34,
-      '--chat-max-width': 1280,
-      '--chat-gutter': 20,
-      '--sidebar-title-font-size': 16.5,
-      '--sidebar-row-font-size': 14.5,
-      '--sidebar-meta-font-size': 12.25,
-      '--sidebar-section-font-size': 10.75,
-      '--sidebar-icon-size': 20,
-      '--sidebar-user-avatar-size': 36,
-      '--sidebar-search-height': 39,
-      '--sidebar-row-height': 44,
-      '--sidebar-badge-size': 20,
-      '--sidebar-row-gap': 11,
-      '--sidebar-row-pad-x': 12,
-      '--sidebar-row-pad-y': 8.5,
-      '--sidebar-section-gap': 25,
-    },
-  },
-  {
-    at: 2,
-    uiScale: 1,
-    tokens: {
-      '--app-font-size': 15,
-      '--chat-msg-font-size': 15.5,
-      '--header-height': 64,
-      '--sidebar-width': 680,
-      '--composer-size': 36,
-      '--chat-max-width': 1520,
-      '--chat-gutter': 24,
-      '--sidebar-title-font-size': 17,
-      '--sidebar-row-font-size': 15,
-      '--sidebar-meta-font-size': 12.75,
-      '--sidebar-section-font-size': 11,
-      '--sidebar-icon-size': 21,
-      '--sidebar-user-avatar-size': 38,
-      '--sidebar-search-height': 41,
-      '--sidebar-row-height': 46,
-      '--sidebar-badge-size': 21,
-      '--sidebar-row-gap': 11.5,
-      '--sidebar-row-pad-x': 12.5,
-      '--sidebar-row-pad-y': 9,
-      '--sidebar-section-gap': 26,
-    },
-  },
+// Clear inline variables written by the previous interpolated Auto system
+// during HMR or an in-place upgrade. New Auto sizing lives in index.css.
+const LEGACY_AUTO_PROPERTIES = [
+  '--ui-scale',
+  '--app-font-size',
+  '--chat-msg-font-size',
+  '--header-height',
+  '--sidebar-width',
+  '--composer-size',
+  '--chat-max-width',
+  '--chat-gutter',
+  '--sidebar-title-font-size',
+  '--sidebar-row-font-size',
+  '--sidebar-meta-font-size',
+  '--sidebar-section-font-size',
+  '--sidebar-icon-size',
+  '--sidebar-user-avatar-size',
+  '--sidebar-search-height',
+  '--sidebar-row-height',
+  '--sidebar-badge-size',
+  '--sidebar-row-gap',
+  '--sidebar-row-pad-x',
+  '--sidebar-row-pad-y',
+  '--sidebar-section-gap',
 ]
 
-const AUTO_PROPERTIES = ['--ui-scale', ...Object.keys(AUTO_PROFILES[0].tokens)]
-
-function effectiveViewport() {
-  const displayScale = Math.min(Math.max(window.devicePixelRatio || 1, 1), 1.5)
-  return {
-    width: window.innerWidth * displayScale,
-    height: window.innerHeight * displayScale,
-  }
-}
-
-function autoRatio() {
-  const viewport = effectiveViewport()
-  // The limiting axis wins: a wide-but-short ultrawide should not receive a
-  // 4K-sized UI just because it has many horizontal pixels.
-  return Math.min(viewport.width / 1920, viewport.height / 1080)
-}
-
-function applyAutoSizing() {
-  const ratio = autoRatio()
-  const last = AUTO_PROFILES[AUTO_PROFILES.length - 1]
-  const upperIndex = AUTO_PROFILES.findIndex((profile) => profile.at >= ratio)
-  const upper = upperIndex === -1 ? last : AUTO_PROFILES[upperIndex]
-  const lower =
-    upperIndex <= 0 ? AUTO_PROFILES[0] : AUTO_PROFILES[Math.min(upperIndex - 1, AUTO_PROFILES.length - 1)]
-  const span = upper.at - lower.at
-  const progress = span <= 0 ? 0 : Math.min(Math.max((ratio - lower.at) / span, 0), 1)
-  const interpolate = (from: number, to: number) => from + (to - from) * progress
-  const root = document.documentElement
-
-  root.style.setProperty('--ui-scale', String(interpolate(lower.uiScale, upper.uiScale)))
-  for (const property of Object.keys(lower.tokens)) {
-    root.style.setProperty(
-      property,
-      `${interpolate(lower.tokens[property], upper.tokens[property]).toFixed(3)}px`,
-    )
-  }
-}
-
-function clearAutoSizing() {
+function clearLegacyAutoSizing() {
   const style = document.documentElement.style
-  for (const property of AUTO_PROPERTIES) style.removeProperty(property)
+  for (const property of LEGACY_AUTO_PROPERTIES) style.removeProperty(property)
 }
 
-function isDensity(v: unknown): v is Density {
-  return v === 'compact' || v === 'default' || v === 'comfortable'
+function isDensity(value: unknown): value is Density {
+  return value === 'compact' || value === 'default' || value === 'comfortable'
 }
 
-// The tier the current viewport implies, ignoring any manual override.
+// Tier implied by the logical viewport, ignoring any manual override. CSS does
+// the finer responsive work; this tier keeps numeric React sizes in sync.
 export function autoDensity(): Density {
   if (typeof window === 'undefined') return 'default'
-  // Windows display scaling changes the CSS viewport (for example, QHD at
-  // 125% reports roughly 2048x1152). Multiplying by DPR recovers the effective
-  // display resolution so Auto matches the dimensions chosen manually for that
-  // monitor. Cap the multiplier so Retina/high-DPI screens with deliberately
-  // small logical workspaces are not forced into an oversized layout.
-  const viewport = effectiveViewport()
-  if (viewport.width >= 2200 && viewport.height >= 1200) return 'comfortable'
-  if (viewport.width <= 1535) return 'compact'
+  if (window.innerWidth >= 2200 && window.innerHeight >= 1100) return 'comfortable'
+  if (window.innerWidth <= 1280) return 'compact'
   return 'default'
 }
 
 export function getStoredDensity(): Density | null {
   try {
-    const v = localStorage.getItem(STORAGE_KEY)
-    return isDensity(v) ? v : null
+    const value = localStorage.getItem(STORAGE_KEY)
+    return isDensity(value) ? value : null
   } catch {
     return null
   }
@@ -248,71 +90,66 @@ export function getStoredDensity(): Density | null {
 
 type DensityMode = 'auto' | 'manual'
 
-function apply(d: Density, mode: DensityMode) {
-  document.documentElement.dataset.density = d
-  // Keep the source of the density visible to CSS. Auto may use the same text /
-  // control tier as a manual choice while still applying viewport-aware layout
-  // refinements such as a wider desktop sidebar.
-  document.documentElement.dataset.densityMode = mode
-  if (mode === 'auto') applyAutoSizing()
-  else clearAutoSizing()
+function apply(density: Density, mode: DensityMode) {
+  const root = document.documentElement
+  root.dataset.density = density
+  root.dataset.densityMode = mode
+  clearLegacyAutoSizing()
 }
 
-// Manually pin a density (persisted). Wins over auto-selection.
-export function setDensity(d: Density) {
+// Pin an exact manual appearance. Manual CSS tokens remain unchanged.
+export function setDensity(density: Density) {
   try {
-    localStorage.setItem(STORAGE_KEY, d)
+    localStorage.setItem(STORAGE_KEY, density)
   } catch {
-    /* ignore quota/availability issues — the attribute still applies */
+    // The current document can still apply the choice when storage is blocked.
   }
-  apply(d, 'manual')
+  apply(density, 'manual')
 }
 
-// Drop the manual override and return to width-based auto-selection.
+// Drop the manual override and return to logical-viewport Auto.
 export function clearDensityOverride() {
   try {
     localStorage.removeItem(STORAGE_KEY)
   } catch {
-    /* ignore */
+    // Ignore unavailable storage; the current document can still switch.
   }
   apply(autoDensity(), 'auto')
 }
 
-// React hook: the live density tier. Reads the attribute lib/density.ts writes
-// on <html> and re-renders when it changes (viewport crosses a tier boundary,
-// or a manual override is set), so size-prop components track density too.
+// React hook for components whose numeric size props depend on the active tier.
 export function useDensity(): Density {
-  const [d, setD] = useState<Density>(() => {
+  const [density, setCurrentDensity] = useState<Density>(() => {
     if (typeof document === 'undefined') return 'default'
-    const v = document.documentElement.dataset.density
-    return isDensity(v) ? v : autoDensity()
+    const value = document.documentElement.dataset.density
+    return isDensity(value) ? value : autoDensity()
   })
+
   useEffect(() => {
-    const el = document.documentElement
-    const obs = new MutationObserver(() => {
-      const v = el.dataset.density
-      if (isDensity(v)) setD(v)
+    const root = document.documentElement
+    const observer = new MutationObserver(() => {
+      const value = root.dataset.density
+      if (isDensity(value)) setCurrentDensity(value)
     })
-    obs.observe(el, { attributes: true, attributeFilter: ['data-density'] })
-    return () => obs.disconnect()
+    observer.observe(root, { attributes: true, attributeFilter: ['data-density'] })
+    return () => observer.disconnect()
   }, [])
-  return d
+
+  return density
 }
 
-// Call once at startup (before React renders) so the attribute is present on
-// the first paint — no flash. Applies the stored override if any, else the
-// auto tier, and keeps following the viewport while no override is set.
+// Call once before React renders. Stored manual choices win; otherwise Auto
+// follows logical viewport threshold changes and lets CSS handle fluid sizing.
 export function initDensity() {
   if (typeof window === 'undefined') return
+
   const stored = getStoredDensity()
   apply(stored ?? autoDensity(), stored ? 'manual' : 'auto')
-  // Always arm the auto-follow listeners: reapply() re-checks for an override
-  // on every fire, so they stand down while one exists — and take over again
-  // if the override is cleared later (Workspace settings → Appearance → Auto)
-  // without needing a reload.
+
   const reapply = () => {
     if (!getStoredDensity()) apply(autoDensity(), 'auto')
   }
+
   window.matchMedia(COMFORTABLE_MQ).addEventListener('change', reapply)
   window.matchMedia(COMPACT_MQ).addEventListener('change', reapply)
   window.addEventListener('resize', reapply)

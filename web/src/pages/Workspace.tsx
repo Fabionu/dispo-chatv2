@@ -570,7 +570,11 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // main pane owns the raised rail surface. The shared outer gap keeps the two
   // regions distinct without outlining either one.
   return (
-    <div className="h-screen w-full flex gap-3 p-2 2xl:p-3 bg-bg text-text overflow-hidden">
+    <div
+      className={`workspace-shell h-screen w-full gap-3 p-2 2xl:p-3 bg-bg text-text overflow-hidden ${
+        sidebarCollapsed ? 'workspace-shell--collapsed' : ''
+      }`}
+    >
       <ConnectionStatusBanner />
       {/* Collapsed left rail — a slim icon strip so the main area (wide
           chats) gets the freed width. Keeps the essentials reachable: expand,
@@ -578,7 +582,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           list state (search, groups, DMs, requests, panels) is preserved and
           returns intact on expand. */}
       {sidebarCollapsed ? (
-        <aside className="w-12 shrink-0 overflow-hidden flex flex-col items-center py-2.5 gap-1">
+        <aside className="w-full min-w-0 overflow-hidden flex flex-col items-center py-2.5 gap-1">
           <button
             onClick={toggleSidebar}
             title="Expand sidebar"
@@ -617,7 +621,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
       ) : (
       /* Left rail — intentionally flat on the workspace background. It keeps
           overflow clipping for its drawers and menus, but no outer card surface. */
-      <aside className="w-[var(--sidebar-width)] shrink-0 overflow-hidden flex flex-col">
+      <aside className="w-full min-w-0 overflow-hidden flex flex-col">
         {profilePanelOpen ? (
           <ProfileSidebarPanel
             initialProfile={cachedProfile}
@@ -961,7 +965,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
 
       {/* Main — the single raised workspace card. No white outline: the lighter
           rail tone, rounded clipping and shell gap provide separation. */}
-      <main className="flex-1 flex flex-col min-w-0 bg-rail rounded-panel overflow-hidden">
+      <main className="workspace-main flex flex-col min-w-0 bg-rail rounded-panel overflow-hidden">
         {selectedGroup ? (
           <ChatView
             key={selectedGroup.id}

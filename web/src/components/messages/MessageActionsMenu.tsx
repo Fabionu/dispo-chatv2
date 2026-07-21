@@ -44,10 +44,13 @@ export default function MessageActionsMenu({ anchorEl, anchorPoint, actions, onC
     if (!m) return
     const mRect = m.getBoundingClientRect()
 
-    // Never extend left of the chat pane (i.e. under the sidebar).
-    const sidebarW =
-      parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width')) || 0
-    const minLeft = Math.max(8, sidebarW + 8)
+    // Never extend left of the chat pane. Read the pane's actual Grid position
+    // instead of parsing --sidebar-width: Auto can now use a fluid clamp() track
+    // and the shell also has padding/gap that a raw width cannot account for.
+    const chatPaneLeft = document
+      .querySelector<HTMLElement>('.workspace-main')
+      ?.getBoundingClientRect().left
+    const minLeft = Math.max(8, (chatPaneLeft ?? 0) + 8)
 
     let left: number
     let top: number

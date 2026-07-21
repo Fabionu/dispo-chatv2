@@ -68,7 +68,6 @@ import type { WorkspacePlace, WorkspacePlaceInput } from '../../lib/types'
 
 type Props = {
   onBack: () => void
-  initialPlacesOpen?: boolean
 }
 
 type MenuState = { x: number; y: number; lat: number; lng: number; zoom: number; candidates: ScreenGeoCandidate[] }
@@ -90,7 +89,7 @@ type PlaceEditorState = {
 // removing a stop from a marker popover) recalculates immediately so the route
 // follows the user's gesture. The HERE Routing v8 truck route frames clear of
 // the panel.
-export default function RoutePlanner({ onBack, initialPlacesOpen = false }: Props) {
+export default function RoutePlanner({ onBack }: Props) {
   const [points, setPoints] = useState<RoutePoint[]>([])
   const [truck, setTruck] = useState<TruckProfileForm>(EMPTY_TRUCK)
   const [route, setRoute] = useState<TruckRoute | null>(null)
@@ -113,7 +112,7 @@ export default function RoutePlanner({ onBack, initialPlacesOpen = false }: Prop
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [markerMenu, setMarkerMenu] = useState<MarkerMenuState | null>(null)
   const [savedPlaceMenu, setSavedPlaceMenu] = useState<SavedPlaceMenuState | null>(null)
-  const [placesOpen, setPlacesOpen] = useState(initialPlacesOpen)
+  const [placesOpen, setPlacesOpen] = useState(false)
   const [mapCenter, setMapCenter] = useState<LatLng | null>(null)
   const [placeEditor, setPlaceEditor] = useState<PlaceEditorState | null>(null)
   const [placeSaving, setPlaceSaving] = useState(false)

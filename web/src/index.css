@@ -35,12 +35,12 @@ html[data-density='comfortable'] {
   }
 }
 /* No-JS / pre-hydration fallbacks, mirroring the token fallbacks below. */
-@media (max-width: 1535px) {
+@media (max-width: 1280px) {
   html:not([data-density]) {
     --ui-scale: 0.875;
   }
 }
-@media (min-width: 2200px) and (min-height: 1200px) {
+@media (min-width: 2200px) and (min-height: 1100px) {
   html:not([data-density]) {
     --ui-scale: 1.125;
   }
@@ -244,24 +244,11 @@ html[data-theme='light'] {
   --sidebar-section-gap: 30px;
 }
 
-/* Auto keeps density responsible for text/control scale, but gives the rail
-   more horizontal room on real desktop layouts. This prevents a 1080p-height
-   ultrawide (which correctly resolves to the default density) from falling back
-   to the narrower manually-tuned Default sidebar. Manual density selections
-   retain their exact widths above. */
-html[data-density-mode='auto'][data-density='compact'] {
-  --sidebar-width: 440px;
-}
-
-html[data-density-mode='auto'][data-density='default'] {
-  --sidebar-width: 560px;
-}
-
 /* No-JS / pre-hydration fallback: follow the display size when no explicit
    density is set on the root. lib/density.ts normally sets it before first
    paint; these keep things correct if that script is unavailable. The
-   1536–2199px range falls through to the :root (default) values. */
-@media (max-width: 1535px) {
+   1281–2199px range falls through to the :root (default) values. */
+@media (max-width: 1280px) {
   :root:not([data-density]) {
     --app-font-size: 13px;
     --chat-msg-font-size: 13.5px;
@@ -286,7 +273,7 @@ html[data-density-mode='auto'][data-density='default'] {
     --sidebar-section-gap: 22px;
   }
 }
-@media (min-width: 2200px) and (min-height: 1200px) {
+@media (min-width: 2200px) and (min-height: 1100px) {
   :root:not([data-density]) {
     --app-font-size: 16px;
     --chat-msg-font-size: 17px;
@@ -316,10 +303,8 @@ html[data-density-mode='auto'][data-density='default'] {
    `comfortable` (density.ts knows only three tiers) — this media layer bumps
    the chat/sidebar px tokens another step on top of the tuned QHD values, pairing
    with the --ui-scale step 1.125 → 1.1875 above so chat, rail and rem-sized
-   chrome grow together. Values are plain px literals (never calc()) because
-   MessageActionsMenu/ReadReceipts parseInt() --sidebar-width from JS. Covers
-   the no-JS root too, and sits AFTER the ≥2200 fallback so it wins the
-   cascade there. */
+   chrome grow together. Covers the no-JS root too, and sits AFTER the ≥2200
+   fallback so it wins the cascade there. */
 @media (min-width: 3000px) and (min-height: 1200px) {
   [data-density='comfortable'],
   :root:not([data-density]) {
@@ -344,6 +329,137 @@ html[data-density-mode='auto'][data-density='default'] {
     --sidebar-row-pad-x: 15px;
     --sidebar-row-pad-y: 11px;
     --sidebar-section-gap: 32px;
+  }
+}
+
+/* Workspace layout ---------------------------------------------------------
+   Grid owns the two structural tracks. It prevents the chat pane from being
+   squeezed by intrinsic content and lets Auto use a genuinely fluid sidebar;
+   manual appearance modes continue to use their exact --sidebar-width token. */
+.workspace-shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+}
+
+.workspace-shell--collapsed {
+  grid-template-columns: 3rem minmax(0, 1fr);
+}
+
+.workspace-main {
+  min-width: 0;
+  container-name: workspace-main;
+  container-type: inline-size;
+}
+
+/* Auto appearance ----------------------------------------------------------
+   Auto is intentionally CSS-first. These values respond to the browser's
+   logical CSS viewport, which already reflects OS scaling; devicePixelRatio is
+   reserved for canvas/map rendering. Between breakpoints, Grid and the chat
+   container do the fluid work while core text/control sizes remain stable.
+
+   The standard band deliberately covers both ~1707px (2560 at 150% scaling)
+   and 1920px (1920 at 100%), giving both the same readable component scale. */
+html[data-density-mode='auto'] {
+  --ui-scale: 1;
+  --app-font-size: 15px;
+  --chat-msg-font-size: 16px;
+  --header-height: 60px;
+  --sidebar-width: clamp(420px, 27vw, 540px);
+  --composer-size: 36px;
+  --chat-max-width: 1180px;
+  --chat-gutter: 20px;
+
+  --sidebar-title-font-size: 17px;
+  --sidebar-row-font-size: 15px;
+  --sidebar-meta-font-size: 13px;
+  --sidebar-section-font-size: 11px;
+  --sidebar-icon-size: 20px;
+  --sidebar-user-avatar-size: 36px;
+  --sidebar-search-height: 40px;
+  --sidebar-row-height: 44px;
+  --sidebar-badge-size: 20px;
+  --sidebar-row-gap: 11px;
+  --sidebar-row-pad-x: 12px;
+  --sidebar-row-pad-y: 8px;
+  --sidebar-section-gap: 26px;
+}
+
+html[data-density-mode='auto'] .chat-column {
+  max-width: clamp(960px, 82cqw, 1180px);
+}
+
+@media (max-width: 1280px) {
+  html[data-density-mode='auto'] {
+    --ui-scale: 0.9;
+    --app-font-size: 13.5px;
+    --chat-msg-font-size: 14px;
+    --header-height: 52px;
+    --sidebar-width: clamp(320px, 31vw, 400px);
+    --composer-size: 32px;
+    --chat-max-width: 900px;
+    --chat-gutter: 14px;
+
+    --sidebar-title-font-size: 15.5px;
+    --sidebar-row-font-size: 13.5px;
+    --sidebar-meta-font-size: 11.5px;
+    --sidebar-section-font-size: 10px;
+    --sidebar-icon-size: 18px;
+    --sidebar-user-avatar-size: 30px;
+    --sidebar-search-height: 34px;
+    --sidebar-row-height: 38px;
+    --sidebar-badge-size: 18px;
+    --sidebar-row-gap: 9px;
+    --sidebar-row-pad-x: 10px;
+    --sidebar-row-pad-y: 7px;
+    --sidebar-section-gap: 22px;
+  }
+}
+
+@media (min-width: 2200px) and (min-height: 1100px) {
+  html[data-density-mode='auto'] {
+    --ui-scale: 1.04;
+    --app-font-size: 15.5px;
+    --chat-msg-font-size: 16.5px;
+    --header-height: 64px;
+    --sidebar-width: clamp(540px, 24vw, 620px);
+    --composer-size: 38px;
+    --chat-max-width: 1400px;
+    --chat-gutter: 24px;
+
+    --sidebar-title-font-size: 17.5px;
+    --sidebar-row-font-size: 15.5px;
+    --sidebar-meta-font-size: 13px;
+    --sidebar-section-font-size: 11px;
+    --sidebar-icon-size: 21px;
+    --sidebar-user-avatar-size: 38px;
+    --sidebar-search-height: 42px;
+    --sidebar-row-height: 46px;
+    --sidebar-badge-size: 21px;
+    --sidebar-row-gap: 12px;
+    --sidebar-row-pad-x: 13px;
+    --sidebar-row-pad-y: 9px;
+    --sidebar-section-gap: 27px;
+  }
+
+  html[data-density-mode='auto'] .chat-column {
+    max-width: clamp(1160px, 76cqw, 1400px);
+  }
+}
+
+@media (min-width: 3000px) and (min-height: 1200px) {
+  html[data-density-mode='auto'] {
+    --ui-scale: 1.08;
+    --app-font-size: 16px;
+    --chat-msg-font-size: 17px;
+    --header-height: 68px;
+    --sidebar-width: clamp(620px, 22vw, 700px);
+    --composer-size: 40px;
+    --chat-max-width: 1600px;
+    --chat-gutter: 28px;
+  }
+
+  html[data-density-mode='auto'] .chat-column {
+    max-width: clamp(1320px, 72cqw, 1600px);
   }
 }
 
