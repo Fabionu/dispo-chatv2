@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 96" role="img" aria-label="Satellite map preview">
+  <defs>
+    <linearGradient id="land" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#405a35"/>
+      <stop offset=".52" stop-color="#6d7446"/>
+      <stop offset="1" stop-color="#2f4b32"/>
+    </linearGradient>
+    <filter id="grain">
+      <feTurbulence baseFrequency=".32" numOctaves="3" seed="8" type="fractalNoise"/>
+      <feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 .22 0"/>
+    </filter>
+  </defs>
+  <rect width="160" height="96" fill="url(#land)"/>
+  <path d="M-10 76C24 53 38 41 52 17S80-6 104-8l15 25c-27 15-38 34-45 51S42 105 9 105z" fill="#315b67"/>
+  <g opacity=".7">
+    <path d="M103 0h57v27l-19 8-38-12z" fill="#829268"/>
+    <path d="M89 31l49 8-7 30-50-5z" fill="#776c45"/>
+    <path d="M112 70l48-19v45h-55z" fill="#536a3f"/>
+    <path d="M5 4l40 9-8 25-37-8z" fill="#4f713d"/>
+  </g>
+  <rect width="160" height="96" filter="url(#grain)" opacity=".55"/>
+  <path d="M-7 85C28 71 48 58 67 38S110 11 169 4" fill="none" stroke="#d9d6c7" stroke-width="4.5" opacity=".9"/>
+  <path d="M-7 85C28 71 48 58 67 38S110 11 169 4" fill="none" stroke="#f5f1de" stroke-width="1.5"/>
+  <g fill="#d2c7b2" opacity=".85">
+    <path d="M91 43h9v7h-9zM103 38h8v6h-8zM114 34h11v8h-11zM126 28h8v6h-8zM139 24h12v8h-12z"/>
+  </g>
+</svg>

@@ -322,6 +322,35 @@ export type WorkspaceMember = {
   role: string
 }
 
+export type WorkspacePlaceCategory =
+  | 'parking'
+  | 'depot'
+  | 'fuel'
+  | 'customer'
+  | 'service'
+  | 'customs'
+  | 'other'
+
+// A shared operational location saved by the workspace and reusable as a route
+// start, intermediate stop, or destination.
+export type WorkspacePlace = {
+  id: string
+  name: string
+  category: WorkspacePlaceCategory
+  address: string | null
+  latitude: number
+  longitude: number
+  notes: string | null
+  createdBy: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type WorkspacePlaceInput = Pick<
+  WorkspacePlace,
+  'name' | 'category' | 'address' | 'latitude' | 'longitude' | 'notes'
+>
+
 // A company invite link as listed in Workspace settings (admin only). The raw
 // token is NOT part of this — it's shown only once, at creation, via
 // WorkspaceInviteCreated.

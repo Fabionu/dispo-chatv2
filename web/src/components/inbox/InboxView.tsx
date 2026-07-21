@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { ChevronRight, Plus, Route } from 'lucide-react'
+import { ChevronRight, MapPinned, Plus, Route } from 'lucide-react'
 import type { Group } from '../../lib/types'
 import { groupLabel, tractorPlate } from '../../lib/types'
 import { getOps } from '../../lib/vehicleOps'
@@ -25,7 +25,7 @@ type Props = {
 // opens its dedicated workspace in place (replacing the chat area), with a back
 // action returning here. Today the only tool is the HERE "Route planner".
 export default function InboxView({ workspaceName, vehicleRooms, canAddTrip, onAddTrip }: Props) {
-  const [tool, setTool] = useState<'route' | null>(null)
+  const [tool, setTool] = useState<'route' | 'places' | null>(null)
   const [tripPickerOpen, setTripPickerOpen] = useState(false)
 
   // Warm the HERE SDK while the workspace home sits idle, so the first map open
@@ -48,10 +48,10 @@ export default function InboxView({ workspaceName, vehicleRooms, canAddTrip, onA
     return () => window.clearTimeout(timer)
   }, [])
 
-  if (tool === 'route') {
+  if (tool === 'route' || tool === 'places') {
     return (
       <Suspense fallback={<PaneLoader className="h-full" />}>
-        <RoutePlanner onBack={() => setTool(null)} />
+        <RoutePlanner onBack={() => setTool(null)} initialPlacesOpen={tool === 'places'} />
       </Suspense>
     )
   }
@@ -71,6 +71,12 @@ export default function InboxView({ workspaceName, vehicleRooms, canAddTrip, onA
               title="Route planner"
               subtitle="Truck routing, distance and ETA"
               onClick={() => setTool('route')}
+            />
+            <ToolCard
+              icon={<MapPinned size="1.625rem" strokeWidth={1.5} />}
+              title="Saved places"
+              subtitle="Parking, depots, fuel and customers"
+              onClick={() => setTool('places')}
             />
             {canAddTrip && (
               <ToolCard

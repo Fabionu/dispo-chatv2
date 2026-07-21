@@ -19,6 +19,7 @@ import { attachmentsRouter } from './routes/attachments.js'
 import { profileRouter, usersRouter } from './routes/profile.js'
 import { companyProfileRouter } from './routes/companyProfile.js'
 import { hereRouter } from './routes/here.js'
+import { placesRouter } from './routes/places.js'
 import { initRealtime } from './realtime.js'
 import { initRedis } from './redis.js'
 import { initPreviewQueue } from './jobs/previewQueue.js'
@@ -64,6 +65,7 @@ app.use('/api/profile', profileRouter)
 app.use('/api/company-profile', companyProfileRouter)
 app.use('/api/users', usersRouter)
 app.use('/api/here', hereRouter)
+app.use('/api/places', placesRouter)
 
 // In production, serve the built frontend from web/dist.
 if (isProd) {

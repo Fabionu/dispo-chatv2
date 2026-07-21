@@ -11,7 +11,9 @@ import {
   Copy,
   Flag,
   MapPin,
+  MapPinned,
   Navigation,
+  Pencil,
   Plus,
   Route as RouteIcon,
   Trash2,
@@ -20,6 +22,7 @@ import {
   X,
 } from 'lucide-react'
 import { api, ApiError } from '../../lib/api'
+import { useWorkspacePlaces } from '../../hooks/useWorkspacePlaces'
 import { bestInsertionIndex, haversineMeters, nearestRouteSection, routeCourseNear } from '../../lib/here/geo'
 import { builtInPresets, deleteUserPreset, loadUserPresets, saveUserPreset } from '../../lib/here/truckPresets'
 import type { TruckPreset } from '../../lib/here/truckPresets'
@@ -57,14 +60,26 @@ import {
   uid,
 } from './routePlannerUtils'
 import { MENU_CONTAINER, MENU_GLYPH, menuIconClass, menuItemClass } from '../menuStyles'
+import ConfirmDialog from '../ConfirmDialog'
+import SavedPlacesPanel from './SavedPlacesPanel'
+import SavedPlaceModal from './SavedPlaceModal'
+import { PLACE_CATEGORY_LABEL } from '../../lib/savedPlaces'
+import type { WorkspacePlace, WorkspacePlaceInput } from '../../lib/types'
 
 type Props = {
   onBack: () => void
+  initialPlacesOpen?: boolean
 }
 
 type MenuState = { x: number; y: number; lat: number; lng: number; zoom: number; candidates: ScreenGeoCandidate[] }
 // Popover anchored to a clicked waypoint marker (remove / copy / clear).
 type MarkerMenuState = { id: string; role: RoutePointRole; x: number; y: number }
+type SavedPlaceMenuState = { id: string; x: number; y: number }
+type PlaceEditorState = {
+  place?: WorkspacePlace | null
+  coordinates: LatLng
+  address?: string | null
+}
 
 // "Route planner" workspace tool (HERE only). One shared RoutePoint[] models the
 // whole route (start → stops → destination); points come from HERE search, a
@@ -75,7 +90,7 @@ type MarkerMenuState = { id: string; role: RoutePointRole; x: number; y: number 
 // removing a stop from a marker popover) recalculates immediately so the route
 // follows the user's gesture. The HERE Routing v8 truck route frames clear of
 // the panel.
-export default function RoutePlanner({ onBack }: Props) {
+export default function RoutePlanner({ onBack, initialPlacesOpen = false }: Props) {
   const [points, setPoints] = useState<RoutePoint[]>([])
   const [truck, setTruck] = useState<TruckProfileForm>(EMPTY_TRUCK)
   const [route, setRoute] = useState<TruckRoute | null>(null)
@@ -97,6 +112,13 @@ export default function RoutePlanner({ onBack }: Props) {
   const [dragId, setDragId] = useState<string | null>(null)
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [markerMenu, setMarkerMenu] = useState<MarkerMenuState | null>(null)
+  const [savedPlaceMenu, setSavedPlaceMenu] = useState<SavedPlaceMenuState | null>(null)
+  const [placesOpen, setPlacesOpen] = useState(initialPlacesOpen)
+  const [mapCenter, setMapCenter] = useState<LatLng | null>(null)
+  const [placeEditor, setPlaceEditor] = useState<PlaceEditorState | null>(null)
+  const [placeSaving, setPlaceSaving] = useState(false)
+  const [placeError, setPlaceError] = useState<string | null>(null)
+  const [placeToDelete, setPlaceToDelete] = useState<WorkspacePlace | null>(null)
   const [truckOverlay, setTruckOverlay] = useState(false)
   const [overlayAvailable, setOverlayAvailable] = useState(false)
 
@@ -109,6 +131,14 @@ export default function RoutePlanner({ onBack }: Props) {
 
   const regionRef = useRef<HTMLDivElement>(null)
   const reqIdRef = useRef(0)
+  const {
+    places,
+    loading: placesLoading,
+    error: placesError,
+    createPlace,
+    updatePlace,
+    deletePlace,
+  } = useWorkspacePlaces()
 
   useEffect(() => setUserPresets(loadUserPresets()), [])
 
@@ -569,13 +599,26 @@ export default function RoutePlanner({ onBack }: Props) {
     return near && near.meters <= ON_ROUTE_METERS ? near.index : null
   }, [menu, sectionCoords])
 
-  type MenuAction = 'start' | 'destination' | 'add' | 'add-on-route'
+  type MenuAction = 'start' | 'destination' | 'add' | 'add-on-route' | 'save-place'
 
   async function applyMenuAction(action: MenuAction) {
     if (!menu) return
     const { lat, lng, zoom, candidates } = menu
     const insertIndex = nearOnRoute
     setMenu(null)
+    if (action === 'save-place') {
+      let address = fmtCoord({ lat, lng })
+      try {
+        const result = await api.here.revgeocode(lat, lng, zoom)
+        if (result.place?.label) address = result.place.label
+      } catch {
+        // The coordinates are enough to save a useful place when reverse
+        // geocoding is unavailable; keep the formatted coordinate as fallback.
+      }
+      setPlaceError(null)
+      setPlaceEditor({ coordinates: { lat, lng }, address })
+      return
+    }
     const isAdd = action === 'add' || action === 'add-on-route'
     // Direction-aware snap for intermediate stops added against an existing route
     // (use the route's travel heading near the click so it lands on the correct
@@ -607,19 +650,22 @@ export default function RoutePlanner({ onBack }: Props) {
   }
 
   useEffect(() => {
-    if (!menu && !markerMenu) return
+    if (!menu && !markerMenu && !savedPlaceMenu) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setMenu(null)
         setMarkerMenu(null)
+        setSavedPlaceMenu(null)
       }
     }
     const onDown = (e: MouseEvent) => {
       const ctx = document.getElementById('route-context-menu')
       const mk = document.getElementById('route-marker-menu')
+      const saved = document.getElementById('saved-place-menu')
       const target = e.target as Node
       if (ctx && !ctx.contains(target)) setMenu(null)
       if (mk && !mk.contains(target)) setMarkerMenu(null)
+      if (saved && !saved.contains(target)) setSavedPlaceMenu(null)
     }
     document.addEventListener('keydown', onKey)
     document.addEventListener('mousedown', onDown)
@@ -627,7 +673,7 @@ export default function RoutePlanner({ onBack }: Props) {
       document.removeEventListener('keydown', onKey)
       document.removeEventListener('mousedown', onDown)
     }
-  }, [menu, markerMenu])
+  }, [menu, markerMenu, savedPlaceMenu])
 
   function openMenu(info: { lat: number; lng: number; x: number; y: number; zoom: number; candidates: ScreenGeoCandidate[] }) {
     const region = regionRef.current
@@ -636,6 +682,7 @@ export default function RoutePlanner({ onBack }: Props) {
     const x = Math.min(info.x, Math.max(0, w - 200))
     const y = Math.min(info.y, Math.max(0, h - 210))
     setMarkerMenu(null)
+    setSavedPlaceMenu(null)
     setMenu({ x, y, lat: info.lat, lng: info.lng, zoom: info.zoom, candidates: info.candidates })
   }
 
@@ -648,7 +695,19 @@ export default function RoutePlanner({ onBack }: Props) {
     const x = Math.min(Math.max(0, info.x + 12), Math.max(0, w - 190))
     const y = Math.min(Math.max(0, info.y), Math.max(0, h - 130))
     setMenu(null)
+    setSavedPlaceMenu(null)
     setMarkerMenu({ id: info.id, role, x, y })
+  }
+
+  function openSavedPlaceMenu(info: { id: string; x: number; y: number }) {
+    const region = regionRef.current
+    const w = region?.clientWidth ?? 0
+    const h = region?.clientHeight ?? 0
+    const x = Math.min(Math.max(0, info.x + 12), Math.max(0, w - 220))
+    const y = Math.min(Math.max(0, info.y - 20), Math.max(0, h - 260))
+    setMenu(null)
+    setMarkerMenu(null)
+    setSavedPlaceMenu({ id: info.id, x, y })
   }
 
   // Copy a point's (displayed) coordinate to the clipboard.
@@ -678,16 +737,73 @@ export default function RoutePlanner({ onBack }: Props) {
   }
 
   const menuActions: { action: MenuAction; label: string; icon: React.ReactNode }[] = (() => {
-    if (!start) return [{ action: 'start', label: 'Set as start', icon: <Navigation {...MENU_GLYPH} /> }]
-    if (!destination) return [{ action: 'destination', label: 'Set as destination', icon: <Flag {...MENU_GLYPH} /> }]
     const list: { action: MenuAction; label: string; icon: React.ReactNode }[] = []
-    if (route && nearOnRoute !== null)
-      list.push({ action: 'add-on-route', label: 'Add stop on route', icon: <MapPin {...MENU_GLYPH} /> })
-    list.push({ action: 'add', label: 'Add stop', icon: <MapPin {...MENU_GLYPH} /> })
+    if (!start) list.push({ action: 'start', label: 'Set as start', icon: <Navigation {...MENU_GLYPH} /> })
+    else if (!destination) list.push({ action: 'destination', label: 'Set as destination', icon: <Flag {...MENU_GLYPH} /> })
+    else {
+      if (route && nearOnRoute !== null)
+        list.push({ action: 'add-on-route', label: 'Add stop on route', icon: <MapPin {...MENU_GLYPH} /> })
+      list.push({ action: 'add', label: 'Add stop', icon: <MapPin {...MENU_GLYPH} /> })
+    }
+    list.push({ action: 'save-place', label: 'Save place', icon: <MapPinned {...MENU_GLYPH} /> })
     return list
   })()
 
   // ── Truck profile / presets ────────────────────────────────────────────────
+  function pointFromSavedPlace(place: WorkspacePlace): Omit<RoutePoint, 'role'> {
+    return {
+      id: uid(),
+      label: place.address || place.name,
+      coordinates: { lat: place.latitude, lng: place.longitude },
+      source: 'map',
+      snapped: false,
+    }
+  }
+
+  function useSavedPlace(place: WorkspacePlace, role: RoutePointRole) {
+    const point = pointFromSavedPlace(place)
+    if (role === 'start') setStart(point)
+    else if (role === 'destination') setDestinationPoint(point)
+    else addStop(point, bestStopIndexFor(point.coordinates))
+    setSavedPlaceMenu(null)
+    if (panelCollapsed) setPanelCollapsed(false)
+  }
+
+  function focusSavedPlace(place: WorkspacePlace) {
+    setSavedPlaceMenu(null)
+    setMapCenter({ lat: place.latitude, lng: place.longitude })
+  }
+
+  async function saveWorkspacePlace(input: WorkspacePlaceInput) {
+    if (!placeEditor || placeSaving) return
+    setPlaceSaving(true)
+    setPlaceError(null)
+    try {
+      const saved = placeEditor.place
+        ? await updatePlace(placeEditor.place.id, input)
+        : await createPlace(input)
+      setPlaceEditor(null)
+      setPlacesOpen(true)
+      setMapCenter({ lat: saved.latitude, lng: saved.longitude })
+    } catch {
+      setPlaceError('The place could not be saved. Please try again.')
+    } finally {
+      setPlaceSaving(false)
+    }
+  }
+
+  async function confirmDeletePlace() {
+    if (!placeToDelete) return
+    const id = placeToDelete.id
+    setPlaceToDelete(null)
+    setSavedPlaceMenu(null)
+    try {
+      await deletePlace(id)
+    } catch {
+      setPlaceError('The place could not be deleted. Please try again.')
+    }
+  }
+
   function updateTruck(patch: Partial<TruckProfileForm>) {
     setTruck((t) => ({ ...t, ...patch }))
     setActivePresetId(null)
@@ -794,6 +910,7 @@ export default function RoutePlanner({ onBack }: Props) {
       <div ref={regionRef} className="relative flex-1 min-h-[22.5rem] rounded-card overflow-hidden border border-white/[0.08]">
         <HereMap
           markers={markers}
+          savedPlaces={placesOpen ? places : []}
           routePolylines={polylines}
           // Total route distance, mid-line badge — same value as the panel stat.
           routeDistanceLabel={route ? formatDistance(route.summary.length) : null}
@@ -803,30 +920,57 @@ export default function RoutePlanner({ onBack }: Props) {
           onMapViewChange={() => {
             setMenu(null)
             setMarkerMenu(null)
+            setSavedPlaceMenu(null)
           }}
           onMarkerDragEnd={handleMarkerDragEnd}
           onMarkerClick={openMarkerMenu}
+          onSavedPlaceClick={openSavedPlaceMenu}
           onRouteDragEnd={handleRouteDragEnd}
           panelInsetPx={panelCollapsed ? 0 : PANEL_INSET_PX}
+          center={mapCenter}
           className="absolute inset-0"
         />
 
-        {/* HGV / truck overlay toggle */}
-        <button
-          onClick={() => setTruckOverlay((v) => !v)}
-          disabled={!overlayAvailable}
-          title={
-            overlayAvailable
-              ? 'Toggle HERE truck/HGV restriction overlay'
-              : 'Truck overlay not available on this HERE plan'
-          }
-          className={`absolute z-20 top-3 right-3 flex items-center gap-1.5 h-8 px-3 rounded-full border text-[0.75rem] font-medium shadow-[0_4px_14px_rgba(0,0,0,0.3)] transition-colors ${
-            truckOverlay ? 'bg-active text-bg border-active' : 'bg-rail/90 text-text border-white/[0.08] hover:bg-rail'
-          } disabled:opacity-40 disabled:cursor-not-allowed`}
-        >
-          <Truck size="0.875rem" strokeWidth={2} />
-          HGV
-        </button>
+        {/* Compact map layers/actions. */}
+        <div className="absolute z-20 right-3 top-3 flex items-center gap-1.5">
+          <button
+            onClick={() => setPlacesOpen((value) => !value)}
+            className={`flex h-8 items-center gap-1.5 rounded-full border px-3 text-[0.75rem] font-medium shadow-[0_4px_14px_rgba(0,0,0,0.3)] transition-colors ${
+              placesOpen ? 'border-text bg-text text-bg' : 'border-white/[0.08] bg-rail/90 text-text hover:bg-rail'
+            }`}
+          >
+            <MapPinned size="0.875rem" strokeWidth={2} />
+            Places{places.length > 0 ? ` · ${places.length}` : ''}
+          </button>
+          <button
+            onClick={() => setTruckOverlay((v) => !v)}
+            disabled={!overlayAvailable}
+            title={
+              overlayAvailable
+                ? 'Toggle HERE truck/HGV restriction overlay'
+                : 'Truck overlay not available on this HERE plan'
+            }
+            className={`flex h-8 items-center gap-1.5 rounded-full border px-3 text-[0.75rem] font-medium shadow-[0_4px_14px_rgba(0,0,0,0.3)] transition-colors ${
+              truckOverlay ? 'bg-active text-bg border-active' : 'bg-rail/90 text-text border-white/[0.08] hover:bg-rail'
+            } disabled:cursor-not-allowed disabled:opacity-40`}
+          >
+            <Truck size="0.875rem" strokeWidth={2} />
+            HGV
+          </button>
+        </div>
+
+        {placesOpen && (
+          <SavedPlacesPanel
+            places={places}
+            loading={placesLoading}
+            error={placesError}
+            onClose={() => {
+              setPlacesOpen(false)
+              setSavedPlaceMenu(null)
+            }}
+            onSelect={focusSavedPlace}
+          />
+        )}
 
         {/* Reopen tab — visible only when the panel is collapsed. */}
         <button
@@ -1109,7 +1253,7 @@ export default function RoutePlanner({ onBack }: Props) {
                 onClick={calculate}
                 disabled={routeButtonDisabled}
                 title={!hasEndpoints ? 'Set a start and destination first' : undefined}
-                className={`w-full h-10 rounded-full font-semibold text-[0.8125rem] flex items-center justify-center gap-2 transition-colors ${
+                className={`w-full h-10 rounded-full border-2 border-rail font-semibold text-[0.8125rem] flex items-center justify-center gap-2 transition-colors ${
                   routeButtonDisabled
                     ? 'bg-rail text-muted cursor-default'
                     : 'bg-text text-bg hover:bg-white'
@@ -1238,7 +1382,92 @@ export default function RoutePlanner({ onBack }: Props) {
             </div>
           )
         })()}
+
+        {savedPlaceMenu && (() => {
+          const place = places.find((item) => item.id === savedPlaceMenu.id)
+          if (!place) return null
+          return (
+            <div
+              id="saved-place-menu"
+              className={`absolute z-30 w-[13rem] ${MENU_CONTAINER}`}
+              style={{ left: savedPlaceMenu.x, top: savedPlaceMenu.y }}
+            >
+              <div className="border-b border-white/[0.06] px-3 py-2 mb-1">
+                <div className="truncate text-[0.8125rem] font-semibold text-text" title={place.name}>{place.name}</div>
+                <div className="mt-0.5 text-[0.625rem] uppercase tracking-wide text-faint">
+                  {PLACE_CATEGORY_LABEL[place.category]}
+                </div>
+                {place.address && <div className="mt-1 line-clamp-2 text-[0.6875rem] leading-snug text-muted">{place.address}</div>}
+              </div>
+              <button onClick={() => useSavedPlace(place, 'start')} className={menuItemClass()}>
+                <span className={menuIconClass()}><Navigation {...MENU_GLYPH} /></span>
+                Use as start
+              </button>
+              <button
+                onClick={() => useSavedPlace(place, 'stop')}
+                disabled={stops.length >= MAX_STOPS}
+                className={`${menuItemClass()} disabled:cursor-not-allowed disabled:opacity-40`}
+              >
+                <span className={menuIconClass()}><MapPin {...MENU_GLYPH} /></span>
+                Add as stop
+              </button>
+              <button onClick={() => useSavedPlace(place, 'destination')} className={menuItemClass()}>
+                <span className={menuIconClass()}><Flag {...MENU_GLYPH} /></span>
+                Use as destination
+              </button>
+              <div className="my-1 border-t border-white/[0.06]" />
+              <button
+                onClick={() => {
+                  setPlaceError(null)
+                  setPlaceEditor({
+                    place,
+                    coordinates: { lat: place.latitude, lng: place.longitude },
+                    address: place.address,
+                  })
+                  setSavedPlaceMenu(null)
+                }}
+                className={menuItemClass()}
+              >
+                <span className={menuIconClass()}><Pencil {...MENU_GLYPH} /></span>
+                Edit place
+              </button>
+              <button
+                onClick={() => setPlaceToDelete(place)}
+                className={menuItemClass('danger')}
+              >
+                <span className={menuIconClass('danger')}><Trash2 {...MENU_GLYPH} /></span>
+                Delete place
+              </button>
+            </div>
+          )
+        })()}
       </div>
+
+      {placeEditor && (
+        <SavedPlaceModal
+          key={placeEditor.place?.id ?? `${placeEditor.coordinates.lat}:${placeEditor.coordinates.lng}`}
+          place={placeEditor.place}
+          coordinates={placeEditor.coordinates}
+          address={placeEditor.address}
+          saving={placeSaving}
+          error={placeError}
+          onClose={() => {
+            if (!placeSaving) setPlaceEditor(null)
+          }}
+          onSave={(input) => void saveWorkspacePlace(input)}
+        />
+      )}
+
+      {placeToDelete && (
+        <ConfirmDialog
+          title="Delete saved place?"
+          message={`“${placeToDelete.name}” will be removed for everyone in this workspace.`}
+          confirmLabel="Delete place"
+          tone="alert"
+          onCancel={() => setPlaceToDelete(null)}
+          onConfirm={() => void confirmDeletePlace()}
+        />
+      )}
     </div>
   )
 }

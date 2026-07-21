@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { decode } from '@here/flexpolyline'
 import { loadHere } from '../../lib/here/loadHere'
-import { pathMidpoint, haversineMeters, nearestPointOnPath } from '../../lib/here/geo'
+import {
+  pathMidpoint,
+  haversineMeters,
+  nearestPointOnPath,
+  simplifyPath,
+} from '../../lib/here/geo'
 import type {
   DriverMapMarker,
   LatLng,
@@ -9,6 +14,7 @@ import type {
   RouteMarkerKind,
   ScreenGeoCandidate,
 } from '../../lib/here/types'
+import type { WorkspacePlace } from '../../lib/types'
 import {
   DEFAULT_CENTER,
   DEFAULT_ZOOM,
@@ -17,9 +23,37 @@ import {
   sampleScreenCandidates,
   snapDebug,
 } from './hereMapUtils'
-import { ROUTE_COLOR, ghostSvg, iconFor } from './hereMapIcons'
+import { ROUTE_COLOR, ghostSvg, iconFor, savedPlaceIconFor } from './hereMapIcons'
+import {
+  createHereMapStyleControl,
+  type BaseMapMode,
+  type HereMapStyleControlHandle,
+} from './HereMapStyleControl'
+import { createHereMapZoomControl, type HereMapZoomControlHandle } from './HereMapZoomControl'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+// HERE route sections can contain tens of thousands of road-shape vertices.
+// Keep the route data intact, but cap the geometry sent to the renderer: first
+// preserve meaningful bends with Douglas-Peucker, then sample only in the rare
+// case where an exceptionally detailed section still exceeds the budget.
+function simplifyPathForMap(path: LatLng[], toleranceMeters: number, maxPoints: number): LatLng[] {
+  if (path.length <= maxPoints) return path
+
+  let tolerance = toleranceMeters
+  let simplified = simplifyPath(path, tolerance)
+  while (simplified.length > maxPoints && tolerance < 2048) {
+    tolerance *= 2
+    simplified = simplifyPath(path, tolerance)
+  }
+  if (simplified.length <= maxPoints) return simplified
+
+  const sampled: LatLng[] = [simplified[0]]
+  const step = (simplified.length - 1) / (maxPoints - 1)
+  for (let i = 1; i < maxPoints - 1; i++) sampled.push(simplified[Math.round(i * step)])
+  sampled.push(simplified[simplified.length - 1])
+  return sampled
+}
 
 type Props = {
   // Waypoint markers in route order (origin → stops → destination).
@@ -29,6 +63,9 @@ type Props = {
   // (and never replacing) the waypoint markers. Deliberately EXCLUDED from the
   // auto-fit, so a position update never re-centers the user's view.
   driverMarkers?: DriverMapMarker[]
+  // Shared workspace places. Static/cached and excluded from route auto-fit so
+  // showing a depot or parking layer never moves the user's map.
+  savedPlaces?: WorkspacePlace[]
   // Encoded HERE flexible polylines, one per route section. Empty = no route.
   routePolylines: string[]
   // Pre-formatted total route distance (e.g. "84 km"), shown as a small badge at
@@ -66,6 +103,7 @@ type Props = {
     x: number
     y: number
   }) => void
+  onSavedPlaceClick?: (info: { id: string; x: number; y: number }) => void
   // The route line was dragged (drag-to-add-stop) → the section index that was
   // grabbed + the screen-space snap candidates sampled around the release + zoom,
   // so the parent can insert a snapped stop into that segment and recalculate.
@@ -94,6 +132,7 @@ type Props = {
 export default function HereMap({
   markers,
   driverMarkers,
+  savedPlaces,
   routePolylines,
   routeDistanceLabel,
   truckOverlay,
@@ -102,6 +141,7 @@ export default function HereMap({
   onMapViewChange,
   onMarkerDragEnd,
   onMarkerClick,
+  onSavedPlaceClick,
   onRouteDragEnd,
   panelInsetPx = 0,
   center,
@@ -109,6 +149,7 @@ export default function HereMap({
   className,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const controlsHostRef = useRef<HTMLDivElement>(null)
   // Keep the latest event callbacks in refs so the once-only init effect's
   // listeners always call the current handlers without re-subscribing.
   const onContextMenuRef = useRef(onMapContextMenu)
@@ -119,6 +160,8 @@ export default function HereMap({
   onMarkerDragEndRef.current = onMarkerDragEnd
   const onMarkerClickRef = useRef(onMarkerClick)
   onMarkerClickRef.current = onMarkerClick
+  const onSavedPlaceClickRef = useRef(onSavedPlaceClick)
+  onSavedPlaceClickRef.current = onSavedPlaceClick
   const onRouteDragEndRef = useRef(onRouteDragEnd)
   onRouteDragEndRef.current = onRouteDragEnd
   // Set true on any real drag move so the trailing `tap` after a drag isn't
@@ -135,6 +178,8 @@ export default function HereMap({
   const HRef = useRef<any>(null)
   const mapRef = useRef<any>(null)
   const behaviorRef = useRef<any>(null)
+  const truckOverlayRef = useRef(truckOverlay)
+  truckOverlayRef.current = truckOverlay
   // Objects that must be volatile while idle so HERE can start drag gestures.
   // During a camera pan/zoom we temporarily cache them, then restore volatility
   // when the view settles. This keeps editing intact without paying their
@@ -145,6 +190,10 @@ export default function HereMap({
   // during pan/zoom instead of asking HARP to keep transforming invisible
   // geometry on every frame.
   const routeDragTargetsRef = useRef<any[]>([])
+  // The casing improves contrast while idle, but duplicates the visible route
+  // geometry. Hide only this decorative layer while the camera is moving; the
+  // coral route itself remains visible throughout navigation.
+  const routeDecorationsRef = useRef<any[]>([])
   // HERE recommends reusing marker icons. Route recalculation redraws every
   // marker, so retain the small set of icons across draw() calls rather than
   // rebuilding and reparsing identical SVGs each time.
@@ -155,6 +204,10 @@ export default function HereMap({
   // The standard basemap + the logistics (HGV) basemap, captured at init so the
   // overlay toggle can swap between them without rebuilding the map.
   const baseLayerRef = useRef<any>(null)
+  const baseMapLayersRef = useRef<Record<BaseMapMode, any>>({ map: null, satellite: null })
+  const trafficLayerRef = useRef<any>(null)
+  const mapStyleControlRef = useRef<HereMapStyleControlHandle | null>(null)
+  const mapZoomControlRef = useRef<HereMapZoomControlHandle | null>(null)
   const logisticsLayerRef = useRef<any>(null)
   // Guards so we enable the (expensive) vehicle-restrictions feature only once.
   const overlayFeatureEnabledRef = useRef(false)
@@ -184,40 +237,60 @@ export default function HereMap({
   useEffect(() => {
     let cancelled = false
     let resizeObserver: ResizeObserver | null = null
+    let resizeRaf = 0
     let detachListeners: (() => void) | null = null
+    let ui: any = null
 
     loadHere()
       .then(({ H, apiKey }) => {
-        if (cancelled || !containerRef.current || mapRef.current) return
+        if (cancelled || !containerRef.current || !controlsHostRef.current || mapRef.current) return
 
         const platform = new H.service.Platform({ apikey: apiKey })
-        const defaultLayers = platform.createDefaultLayers()
+        // Raster Tile API v3 uses `ppi` to select the label/icon density. Keep
+        // the lower-cost raster setup available for touch-first devices.
+        const defaultLayers = platform.createDefaultLayers({ tileSize: 512, ppi: 100 })
 
-        // v3.2 HARP: plain default layers, no engineType. `vector.normal.map`
-        // is the standard basemap; `vector.normal.logistics` carries the
-        // truck/HGV restriction overlay (present only on entitled plans).
-        const baseLayer = defaultLayers.vector.normal.map
+        // Raster labels soften at fractional zoom levels and on Windows-scaled
+        // desktop displays. Prefer vector for mouse/desktop layouts so labels
+        // and roads remain crisp; retain raster on touch devices for its lower
+        // rendering cost.
+        const desktopPointer = window.matchMedia?.('(hover: hover) and (pointer: fine)').matches ?? true
+        const baseLayer = desktopPointer
+          ? defaultLayers.vector.normal.map
+          : defaultLayers.raster?.normal?.map ?? defaultLayers.vector.normal.map
+        const satelliteLayer = defaultLayers.raster?.satellite?.map ?? null
+        const trafficLayer = defaultLayers.vector?.traffic?.map ?? null
         const logisticsLayer = defaultLayers.vector?.normal?.logistics ?? null
         baseLayerRef.current = baseLayer
+        baseMapLayersRef.current = { map: baseLayer, satellite: satelliteLayer }
+        trafficLayerRef.current = trafficLayer
         logisticsLayerRef.current = logisticsLayer
 
-        // High-density desktop displays commonly report DPR 1.5â€“2. HERE uses
-        // pixelRatio for oversampling, so the previous 1.25 cap still rendered
-        // 56% more pixels than the CSS map area. A 1x backing buffer is the best
-        // trade-off for smooth mouse pan/zoom; touch devices retain the slightly
-        // sharper 1.25 cap because their map is physically smaller.
-        const desktopPointer =
-          window.matchMedia?.('(hover: hover) and (pointer: fine)').matches ?? true
-        const maxPixelRatio = desktopPointer ? 1 : 1.25
+        // Allow the desktop vector canvas to reach the common Windows 150%
+        // scale instead of letting the compositor enlarge a smaller canvas.
+        // Touch layouts keep the lower cap because their raster layer benefits
+        // more from the reduced render cost.
+        const maxPixelRatio = desktopPointer ? 1.5 : 1.25
         const map = new H.Map(containerRef.current, baseLayer, {
           center: DEFAULT_CENTER,
           zoom: DEFAULT_ZOOM,
           pixelRatio: Math.min(window.devicePixelRatio || 1, maxPixelRatio),
+          // Reuse nearby cached zoom levels behind newly requested tiles. This
+          // avoids a blank/flash during wheel zoom without increasing the live
+          // WebGL resolution of the map surface.
+          renderBaseBackground: { lower: 2, higher: 1 },
         })
 
         const behavior = new H.mapevents.Behavior(new H.mapevents.MapEvents(map))
         behaviorRef.current = behavior
-        H.ui.UI.createDefault(map, defaultLayers)
+        ui = H.ui.UI.createDefault(map, defaultLayers)
+        // Replace HERE's text-only map settings list with the visual thumbnail
+        // selector below, while keeping its zoom and scale controls.
+        // removeControl() already detaches and disposes HERE's control internals.
+        // Calling dispose() again throws in Maps JS 3.2 and would abort before
+        // our replacement controls are mounted.
+        ui.removeControl('mapsettings')
+        ui.removeControl('zoom')
 
         const group = new H.map.Group()
         map.addObject(group)
@@ -226,10 +299,48 @@ export default function HereMap({
         mapRef.current = map
         groupRef.current = group
 
+        mapStyleControlRef.current = createHereMapStyleControl({
+          container: controlsHostRef.current,
+          satelliteAvailable: Boolean(satelliteLayer),
+          trafficAvailable: Boolean(trafficLayer),
+          onBaseModeChange: (mode) => {
+            const layer = baseMapLayersRef.current[mode]
+            if (!layer) return
+            baseLayerRef.current = layer
+            if (!truckOverlayRef.current) map.setBaseLayer(layer)
+          },
+          onTrafficChange: (enabled) => {
+            const layer = trafficLayerRef.current
+            if (!layer) return
+            if (enabled) map.addLayer(layer)
+            else map.removeLayer(layer)
+          },
+        })
+        mapStyleControlRef.current.setTruckMode(truckOverlayRef.current)
+        mapZoomControlRef.current = createHereMapZoomControl({
+          container: controlsHostRef.current,
+          onZoomIn: () => map.setZoom(map.getZoom() + 1, true),
+          onZoomOut: () => map.setZoom(map.getZoom() - 1, true),
+        })
+
         // Tell the parent whether the HGV overlay can be offered at all.
         onTruckOverlayAvailabilityChange?.(Boolean(logisticsLayer))
 
-        resizeObserver = new ResizeObserver(() => map.getViewPort().resize())
+        let lastWidth = containerRef.current.clientWidth
+        let lastHeight = containerRef.current.clientHeight
+        resizeObserver = new ResizeObserver(([entry]) => {
+          const width = Math.round(entry.contentRect.width)
+          const height = Math.round(entry.contentRect.height)
+          if (width === lastWidth && height === lastHeight) return
+          lastWidth = width
+          lastHeight = height
+          if (!resizeRaf) {
+            resizeRaf = requestAnimationFrame(() => {
+              resizeRaf = 0
+              map.getViewPort().resize()
+            })
+          }
+        })
         resizeObserver.observe(containerRef.current)
 
         const container = containerRef.current
@@ -267,11 +378,19 @@ export default function HereMap({
         }
 
         // rAF-coalesced: the move handler only stashes the latest cursor pixel;
-        // the nearest-point maths run at most once per frame.
+        // the nearest-point maths run at most 30 times/sec. A hover label does
+        // not benefit from 60Hz geometry scans, leaving more main-thread budget
+        // for HERE's own pointer and camera processing.
         let hoverRaf = 0
+        let lastHoverAt = 0
         let hoverPx: { x: number; y: number } | null = null
-        const processHover = () => {
+        const processHover = (now: number) => {
+          if (now - lastHoverAt < 32) {
+            hoverRaf = requestAnimationFrame(processHover)
+            return
+          }
           hoverRaf = 0
+          lastHoverAt = now
           const p = hoverPx
           const geom = hoverGeomRef.current
           if (!p || !geom || activeDragRef.current || viewChangingRef.current) {
@@ -352,7 +471,10 @@ export default function HereMap({
         const setRouteDragTargetsVisible = (visible: boolean) => {
           for (const target of routeDragTargetsRef.current) target.setVisibility?.(visible)
         }
-        const onViewChange = () => {
+        const setRouteDecorationsVisible = (visible: boolean) => {
+          for (const decoration of routeDecorationsRef.current) decoration.setVisibility?.(visible)
+        }
+        const suspendEditObjectsForNavigation = () => {
           viewChangingRef.current = true
           hoverPx = null
           if (hoverRaf) {
@@ -366,8 +488,13 @@ export default function HereMap({
               resumeDraggableRaf = 0
             }
             setRouteDragTargetsVisible(false)
+            setRouteDecorationsVisible(false)
             setDraggableVolatility(false)
           }
+        }
+        const onViewChange = () => {
+          suspendEditObjectsForNavigation()
+          mapStyleControlRef.current?.close()
           onViewChangeRef.current?.()
         }
         const onViewChangeEnd = () => {
@@ -378,12 +505,19 @@ export default function HereMap({
             resumeDraggableRaf = requestAnimationFrame(() => {
               resumeDraggableRaf = 0
               setRouteDragTargetsVisible(true)
+              setRouteDecorationsVisible(true)
               setDraggableVolatility(true)
             })
           }
         }
         map.addEventListener('mapviewchangestart', onViewChange)
         map.addEventListener('mapviewchangeend', onViewChangeEnd)
+
+        // Wheel events reach the DOM before HERE begins its camera transition.
+        // Suspend the large route hit targets immediately so they do not consume
+        // the first (and most noticeable) zoom frame.
+        const onWheel = () => suspendEditObjectsForNavigation()
+        container.addEventListener('wheel', onWheel, { passive: true, capture: true })
 
         // ── Marker dragging ───────────────────────────────────────────────
         // Markers are made draggable + volatile in draw() (volatility is what
@@ -418,7 +552,15 @@ export default function HereMap({
               })
               map.addObject(ghost)
               routeDragRef.current = { active: true, section: data.section, ghost }
+            } else {
+              // A pan beginning over a visible (non-draggable) route stroke is
+              // still ordinary camera navigation.
+              suspendEditObjectsForNavigation()
             }
+          } else {
+            // A plain map pan: cache/hide edit-only objects before the camera's
+            // first moving frame rather than waiting for mapviewchangestart.
+            suspendEditObjectsForNavigation()
           }
         }
         const onDrag = (ev: any) => {
@@ -538,9 +680,14 @@ export default function HereMap({
           if (!(t instanceof H.map.Marker)) return
           const data = t.getData?.()
           const g = t.getGeometry?.()
-          if (!data?.id || !data?.kind || !g) return
+          if (!g) return
           const screen = map.geoToScreen(g)
           if (!screen) return
+          if (data?.placeId) {
+            onSavedPlaceClickRef.current?.({ id: data.placeId, x: screen.x, y: screen.y })
+            return
+          }
+          if (!data?.id || !data?.kind) return
           onMarkerClickRef.current?.({ id: data.id, kind: data.kind, x: screen.x, y: screen.y })
         }
         map.addEventListener('tap', onTap)
@@ -560,6 +707,7 @@ export default function HereMap({
           container.removeEventListener('contextmenu', onContextMenu)
           container.removeEventListener('pointermove', onPointerMove)
           container.removeEventListener('pointerleave', onPointerLeave)
+          container.removeEventListener('wheel', onWheel, true)
           if (hoverRaf) cancelAnimationFrame(hoverRaf)
           hoverLabel.remove()
           map.removeEventListener('mapviewchangestart', onViewChange)
@@ -583,13 +731,22 @@ export default function HereMap({
     return () => {
       cancelled = true
       resizeObserver?.disconnect()
+      if (resizeRaf) cancelAnimationFrame(resizeRaf)
       detachListeners?.()
+      mapStyleControlRef.current?.dispose()
+      mapStyleControlRef.current = null
+      mapZoomControlRef.current?.dispose()
+      mapZoomControlRef.current = null
+      ui?.dispose?.()
       if (mapRef.current) {
         mapRef.current.dispose()
         mapRef.current = null
         groupRef.current = null
+        baseMapLayersRef.current = { map: null, satellite: null }
+        trafficLayerRef.current = null
         draggableObjectsRef.current = []
         routeDragTargetsRef.current = []
+        routeDecorationsRef.current = []
         markerIconCacheRef.current.clear()
       }
     }
@@ -600,7 +757,7 @@ export default function HereMap({
   useEffect(() => {
     draw()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, markers, routePolylines, routeDistanceLabel, objectsDraggable])
+  }, [ready, markers, savedPlaces, routePolylines, routeDistanceLabel, objectsDraggable])
 
   // ── Live-driver DOM overlay ────────────────────────────────────────────────
   // Driver markers are plain DOM elements appended to the map container and
@@ -700,6 +857,7 @@ export default function HereMap({
     } else if (base) {
       map.setBaseLayer(base)
     }
+    mapStyleControlRef.current?.setTruckMode(truckOverlay && Boolean(logistics))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, truckOverlay])
 
@@ -760,12 +918,18 @@ export default function HereMap({
     group.removeAll()
     draggableObjectsRef.current = []
     routeDragTargetsRef.current = []
+    routeDecorationsRef.current = []
 
     // Accumulate every drawn point so we can frame them all at the end.
     const allPoints: LatLng[] = []
     // The route path in travel order (all sections concatenated) — used to anchor
     // the distance badge at the line's distance-weighted midpoint.
     const routePath: LatLng[] = []
+    const sectionCount = Math.max(routePolylines.length, 1)
+    // Share bounded vertex budgets across route legs. Short legs remain at full
+    // fidelity; only long, dense legs are reduced.
+    const renderBudgetPerSection = Math.max(160, Math.floor(4000 / sectionCount))
+    const interactionBudgetPerSection = Math.max(80, Math.floor(1200 / sectionCount))
 
     // Route line: a thin coral stroke over a subtle dark casing so it stays
     // readable on the basemap without dominating it. The visible strokes remain
@@ -779,26 +943,37 @@ export default function HereMap({
         return
       }
       if (coords.length < 2) return
-      const line = new H.geo.LineString()
+      const sectionPath: LatLng[] = []
       for (const [lat, lng] of coords) {
-        line.pushPoint({ lat, lng })
-        allPoints.push({ lat, lng })
-        routePath.push({ lat, lng })
+        const point = { lat, lng }
+        sectionPath.push(point)
+        allPoints.push(point)
+        routePath.push(point)
       }
+      const renderPath = simplifyPathForMap(sectionPath, 3, renderBudgetPerSection)
+      const line = new H.geo.LineString()
+      for (const point of renderPath) line.pushPoint(point)
       const casing = new H.map.Polyline(line, {
         style: { lineWidth: 5, strokeColor: 'rgba(0,0,0,0.35)', lineJoin: 'round', lineCap: 'round' },
       })
       const main = new H.map.Polyline(line, {
         style: { lineWidth: 3.5, strokeColor: ROUTE_COLOR, lineJoin: 'round', lineCap: 'round' },
       })
-      for (const poly of [casing, main]) {
-        group.addObject(poly)
-      }
+      casing.setVisibility?.(!viewChangingRef.current)
+      group.addObject(casing)
+      group.addObject(main)
+      routeDecorationsRef.current.push(casing)
       if (objectsDraggable) {
         // HERE requires volatile objects for reliable drag delivery. Keeping that
         // cost on one interaction line leaves the two visible lines cached. The
         // tiny non-zero alpha keeps the wider stroke hit-testable but invisible.
-        const dragTarget = new H.map.Polyline(line, {
+        // This copy gets a tighter budget than the visible route; its wide
+        // stroke keeps drag-to-add-stop comfortable despite simplification.
+        const interactionLine = new H.geo.LineString()
+        for (const point of simplifyPathForMap(sectionPath, 12, interactionBudgetPerSection)) {
+          interactionLine.pushPoint(point)
+        }
+        const dragTarget = new H.map.Polyline(interactionLine, {
           style: {
             lineWidth: 14,
             strokeColor: 'rgba(255,255,255,0.001)',
@@ -821,12 +996,15 @@ export default function HereMap({
     // Rebuilt on every redraw so it always matches the drawn line; null when
     // there's no usable route, which keeps the readout hidden.
     if (routePath.length >= 2) {
-      const cum = new Array<number>(routePath.length)
+      // Hover is a proximity affordance, not route geometry storage. A reduced
+      // path keeps its cursor hit-test bounded on very long truck routes.
+      const hoverPath = simplifyPathForMap(routePath, 10, 1200)
+      const cum = new Array<number>(hoverPath.length)
       cum[0] = 0
-      for (let i = 1; i < routePath.length; i++) {
-        cum[i] = cum[i - 1] + haversineMeters(routePath[i - 1], routePath[i])
+      for (let i = 1; i < hoverPath.length; i++) {
+        cum[i] = cum[i - 1] + haversineMeters(hoverPath[i - 1], hoverPath[i])
       }
-      hoverGeomRef.current = { path: routePath, cum }
+      hoverGeomRef.current = { path: hoverPath, cum }
     } else {
       hoverGeomRef.current = null
     }
@@ -856,6 +1034,24 @@ export default function HereMap({
       group.addObject(m)
       if (objectsDraggable) draggableObjectsRef.current.push(m)
       allPoints.push(marker.position)
+    }
+
+    // Saved workspace places are static, cached markers. They do not enter
+    // allPoints: toggling this operational layer must never reframe the route.
+    for (const place of savedPlaces ?? []) {
+      const iconKey = `saved-place:${place.category}`
+      let icon = markerIconCacheRef.current.get(iconKey)
+      if (!icon) {
+        icon = savedPlaceIconFor(H, place.category)
+        markerIconCacheRef.current.set(iconKey, icon)
+      }
+      const marker = new H.map.Marker(
+        { lat: place.latitude, lng: place.longitude },
+        { icon, volatility: false },
+      )
+      marker.draggable = false
+      marker.setData({ placeId: place.id })
+      group.addObject(marker)
     }
 
     // Distance badge — a small Google-Maps-style pill near the route midpoint.
@@ -941,5 +1137,10 @@ export default function HereMap({
     if (typeof z === 'number' && z > 16) map.setZoom(16)
   }
 
-  return <div ref={containerRef} className={['here-map-surface', className].filter(Boolean).join(' ')} />
+  return (
+    <div className={['here-map-root', className].filter(Boolean).join(' ')}>
+      <div ref={containerRef} className="here-map-surface absolute inset-0" />
+      <div ref={controlsHostRef} className="here-map-controls-host" aria-label="Map controls" />
+    </div>
+  )
 }

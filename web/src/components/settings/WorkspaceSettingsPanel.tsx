@@ -442,7 +442,7 @@ function DensitySetting() {
       label="Interface density"
       description={
         choice === 'auto'
-          ? `Sizes text and controls. Auto follows your screen — currently ${DENSITY_LABEL[live]}.`
+          ? `Adapts continuously to your screen — currently based on the ${DENSITY_LABEL[live]} range.`
           : 'Sizes text and controls. Auto follows your screen size.'
       }
     >

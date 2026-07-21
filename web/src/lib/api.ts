@@ -15,6 +15,8 @@ import type {
   WorkspaceInvite,
   WorkspaceInviteCreated,
   WorkspaceMember,
+  WorkspacePlace,
+  WorkspacePlaceInput,
 } from './types'
 import type { HerePlace, LatLng, RouteWaypoint, ScreenGeoCandidate, TruckProfile, TruckRoute } from './here/types'
 import type { VehicleOps } from './vehicleOps'
@@ -294,6 +296,22 @@ export const api = {
 
   workspace: {
     members: () => request<{ members: WorkspaceMember[] }>('/workspace/members'),
+  },
+
+  places: {
+    list: () => request<{ places: WorkspacePlace[] }>('/places'),
+    create: (input: WorkspacePlaceInput) =>
+      request<{ place: WorkspacePlace }>('/places', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    update: (id: string, patch: Partial<WorkspacePlaceInput>) =>
+      request<{ place: WorkspacePlace }>(`/places/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      }),
+    delete: (id: string) =>
+      request<{ ok: true }>(`/places/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   },
 
   // Company invite links (admin only). Generating returns the raw link ONCE;

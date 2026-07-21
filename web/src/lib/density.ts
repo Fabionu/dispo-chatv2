@@ -12,8 +12,8 @@ import { useEffect, useState } from 'react'
 export type Density = 'compact' | 'default' | 'comfortable'
 
 // Design-px → rem string. The whole app is sized in rem so the root font-size
-// (16px × --ui-scale: 16px normally, 18px on `comfortable`, 19px on 4K — see
-// index.css) scales it uniformly on 2K+ displays. Size-prop components (Avatar,
+// (16px × --ui-scale; manual tiers live in index.css and Auto supplies a
+// continuously calibrated inline value) scales it uniformly. Size-prop components (Avatar,
 // GroupAvatar, CompanyLogo, AppMark, Spinner, DocIcon) keep their numeric px
 // API but render through this, so a `size={28}` is ~26.25px at 1080p and
 // ~29.75px on the comfortable tier.
@@ -65,6 +65,10 @@ type AutoProfile = {
 // Calibrated anchor points for common physical display classes. Auto blends
 // continuously between them, so 1600p, ultrawide, scaled-QHD, and other in-
 // between displays no longer inherit the nearest preset wholesale.
+//
+// CSS pixels already include Windows/macOS display scaling. Large-screen Auto
+// profiles therefore widen the workspace substantially, but keep text and
+// controls near Standard so we do not stack our scale on top of OS 125%/150%.
 const AUTO_PROFILES: AutoProfile[] = [
   {
     at: 1366 / 1920,
@@ -120,54 +124,54 @@ const AUTO_PROFILES: AutoProfile[] = [
   },
   {
     at: 2560 / 1920,
-    uiScale: 1.125,
+    uiScale: 0.98,
     tokens: {
-      '--app-font-size': 16,
-      '--chat-msg-font-size': 17,
-      '--header-height': 72,
-      '--sidebar-width': 800,
-      '--composer-size': 40,
-      '--chat-max-width': 1440,
-      '--chat-gutter': 28,
-      '--sidebar-title-font-size': 18,
-      '--sidebar-row-font-size': 16,
-      '--sidebar-meta-font-size': 13.5,
-      '--sidebar-section-font-size': 11.5,
-      '--sidebar-icon-size': 24,
-      '--sidebar-user-avatar-size': 42,
-      '--sidebar-search-height': 46,
-      '--sidebar-row-height': 52,
-      '--sidebar-badge-size': 23,
-      '--sidebar-row-gap': 13,
-      '--sidebar-row-pad-x': 14,
-      '--sidebar-row-pad-y': 10,
-      '--sidebar-section-gap': 30,
+      '--app-font-size': 14.5,
+      '--chat-msg-font-size': 15,
+      '--header-height': 60,
+      '--sidebar-width': 600,
+      '--composer-size': 34,
+      '--chat-max-width': 1280,
+      '--chat-gutter': 20,
+      '--sidebar-title-font-size': 16.5,
+      '--sidebar-row-font-size': 14.5,
+      '--sidebar-meta-font-size': 12.25,
+      '--sidebar-section-font-size': 10.75,
+      '--sidebar-icon-size': 20,
+      '--sidebar-user-avatar-size': 36,
+      '--sidebar-search-height': 39,
+      '--sidebar-row-height': 44,
+      '--sidebar-badge-size': 20,
+      '--sidebar-row-gap': 11,
+      '--sidebar-row-pad-x': 12,
+      '--sidebar-row-pad-y': 8.5,
+      '--sidebar-section-gap': 25,
     },
   },
   {
     at: 2,
-    uiScale: 1.1875,
+    uiScale: 1,
     tokens: {
-      '--app-font-size': 17,
-      '--chat-msg-font-size': 18,
-      '--header-height': 76,
-      '--sidebar-width': 900,
-      '--composer-size': 42,
-      '--chat-max-width': 1800,
-      '--chat-gutter': 32,
-      '--sidebar-title-font-size': 19,
-      '--sidebar-row-font-size': 17,
-      '--sidebar-meta-font-size': 14.5,
-      '--sidebar-section-font-size': 12,
-      '--sidebar-icon-size': 25,
-      '--sidebar-user-avatar-size': 45,
-      '--sidebar-search-height': 49,
-      '--sidebar-row-height': 55,
-      '--sidebar-badge-size': 24,
-      '--sidebar-row-gap': 14,
-      '--sidebar-row-pad-x': 15,
-      '--sidebar-row-pad-y': 11,
-      '--sidebar-section-gap': 32,
+      '--app-font-size': 15,
+      '--chat-msg-font-size': 15.5,
+      '--header-height': 64,
+      '--sidebar-width': 680,
+      '--composer-size': 36,
+      '--chat-max-width': 1520,
+      '--chat-gutter': 24,
+      '--sidebar-title-font-size': 17,
+      '--sidebar-row-font-size': 15,
+      '--sidebar-meta-font-size': 12.75,
+      '--sidebar-section-font-size': 11,
+      '--sidebar-icon-size': 21,
+      '--sidebar-user-avatar-size': 38,
+      '--sidebar-search-height': 41,
+      '--sidebar-row-height': 46,
+      '--sidebar-badge-size': 21,
+      '--sidebar-row-gap': 11.5,
+      '--sidebar-row-pad-x': 12.5,
+      '--sidebar-row-pad-y': 9,
+      '--sidebar-section-gap': 26,
     },
   },
 ]

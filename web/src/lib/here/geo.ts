@@ -59,6 +59,38 @@ export function distancePointToSegmentMeters(p: LatLng, a: LatLng, b: LatLng): n
   return Math.sqrt(ex * ex + ey * ey) * EARTH_RADIUS_M
 }
 
+// Douglas-Peucker simplification in metres. Route rendering keeps the original
+// geometry; this reduced copy is for invisible hit targets and hover lookup,
+// where sub-pixel detail only adds per-frame transform/scan work. Endpoints are
+// always preserved and short paths are returned unchanged.
+export function simplifyPath(path: LatLng[], toleranceMeters: number): LatLng[] {
+  if (path.length <= 2 || toleranceMeters <= 0) return path
+
+  const keep = new Uint8Array(path.length)
+  keep[0] = 1
+  keep[path.length - 1] = 1
+  const ranges: Array<[number, number]> = [[0, path.length - 1]]
+
+  while (ranges.length) {
+    const [from, to] = ranges.pop()!
+    let farthest = -1
+    let farthestMeters = toleranceMeters
+    for (let i = from + 1; i < to; i++) {
+      const meters = distancePointToSegmentMeters(path[i], path[from], path[to])
+      if (meters > farthestMeters) {
+        farthestMeters = meters
+        farthest = i
+      }
+    }
+    if (farthest !== -1) {
+      keep[farthest] = 1
+      ranges.push([from, farthest], [farthest, to])
+    }
+  }
+
+  return path.filter((_, i) => keep[i] === 1)
+}
+
 // Given the decoded coordinates of each route SECTION (one per leg between
 // consecutive waypoints), find the section nearest to `point`. The returned
 // `index` maps directly to a stop-insertion position: inserting a stop at

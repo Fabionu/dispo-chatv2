@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 96" role="img" aria-label="Traffic map preview">
+  <rect width="160" height="96" fill="#e3ebe6"/>
+  <path d="M14-5l25 106M90-8L63 103M-8 22l176 45M-9 80L164 7" fill="none" stroke="#faf8f3" stroke-width="10"/>
+  <path d="M14-5l25 106M90-8L63 103M-8 22l176 45M-9 80L164 7" fill="none" stroke="#bdc5c0" stroke-width="1.2"/>
+  <path d="M-8 80L37 61" fill="none" stroke="#39a95b" stroke-width="5" stroke-linecap="round"/>
+  <path d="M37 61l36-15" fill="none" stroke="#f0aa22" stroke-width="5" stroke-linecap="round"/>
+  <path d="M73 46l36-16" fill="none" stroke="#e84d42" stroke-width="5" stroke-linecap="round"/>
+  <path d="M109 30l58-25" fill="none" stroke="#9f2f36" stroke-width="5" stroke-linecap="round"/>
+  <path d="M-8 22l52 13" fill="none" stroke="#4cb767" stroke-width="4" stroke-linecap="round"/>
+  <path d="M44 35l54 14" fill="none" stroke="#e1a329" stroke-width="4" stroke-linecap="round"/>
+  <path d="M98 49l69 18" fill="none" stroke="#e95844" stroke-width="4" stroke-linecap="round"/>
+  <g fill="#fff" opacity=".8">
+    <path d="M102 64h22v17h-22zM45 4h25v17H45zM12 43h17v13H12z"/>
+  </g>
+</svg>

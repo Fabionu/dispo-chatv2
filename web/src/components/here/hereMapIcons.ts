@@ -1,4 +1,6 @@
 import type { RouteMarker } from '../../lib/here/types'
+import type { WorkspacePlaceCategory } from '../../lib/types'
+import { PLACE_CATEGORY_COLOR } from '../../lib/savedPlaces'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -41,4 +43,23 @@ export function iconFor(H: any, marker: RouteMarker): any {
     return new H.map.Icon(destSvg(), { anchor: new H.math.Point(10, 26) })
   }
   return new H.map.Icon(stopSvg(marker.label ?? ''), { anchor: new H.math.Point(8.5, 8.5) })
+}
+
+const PLACE_GLYPH: Record<WorkspacePlaceCategory, string> = {
+  parking: 'P',
+  depot: 'D',
+  fuel: 'F',
+  customer: 'C',
+  service: 'S',
+  customs: 'B',
+  other: '•',
+}
+
+// Saved places are deliberately a softer, smaller pin than route destinations:
+// category colour + a single glyph make a dense workspace map easy to scan.
+export function savedPlaceIconFor(H: any, category: WorkspacePlaceCategory): any {
+  const color = PLACE_CATEGORY_COLOR[category]
+  const glyph = PLACE_GLYPH[category]
+  const svg = `<svg width="24" height="30" viewBox="0 0 24 30" xmlns="http://www.w3.org/2000/svg"><path d="M12 1.5c-5.65 0-10 4.2-10 9.55C2 18.1 12 28.5 12 28.5S22 18.1 22 11.05C22 5.7 17.65 1.5 12 1.5Z" fill="#202020" stroke="${color}" stroke-width="2"/><circle cx="12" cy="11" r="6.1" fill="${color}" fill-opacity=".2"/><text x="12" y="11.2" text-anchor="middle" dominant-baseline="central" font-family="Inter,system-ui,sans-serif" font-size="9.5" font-weight="750" fill="${color}">${glyph}</text></svg>`
+  return new H.map.Icon(svg, { anchor: new H.math.Point(12, 30) })
 }

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 96" role="img" aria-label="Standard map preview">
+  <rect width="160" height="96" fill="#dfe9e1"/>
+  <path d="M-8 12C25 22 39 12 66 18s42 29 102 21v23c-48 6-68-10-98-13S19 56-8 45z" fill="#9ed7e9"/>
+  <path d="M9 0l34 96M111-8L72 104M-4 73l172-52M-7 35l174 43" fill="none" stroke="#f8f6f0" stroke-width="10"/>
+  <path d="M9 0l34 96M111-8L72 104M-4 73l172-52M-7 35l174 43" fill="none" stroke="#c8c8c1" stroke-width="1.3"/>
+  <path d="M-7 60C30 50 52 68 78 61s49-28 89-19" fill="none" stroke="#f7cd63" stroke-width="5"/>
+  <path d="M-7 60C30 50 52 68 78 61s49-28 89-19" fill="none" stroke="#fff3bc" stroke-width="2"/>
+  <g fill="#b5d5ae">
+    <path d="M17 10h24v18H17zM121 65h28v22h-28zM62 70h19v18H62z"/>
+  </g>
+  <g fill="#ffffff" opacity=".82">
+    <path d="M49 5h31v13H49zM114 6h31v16h-31zM11 70h20v16H11zM91 48h21v15H91z"/>
+  </g>
+  <rect x="74" y="55" width="22" height="12" rx="3" fill="#ffffff" stroke="#aeb8b2"/>
+  <text x="85" y="64" text-anchor="middle" font-family="Arial,sans-serif" font-size="8" font-weight="700" fill="#567064">A12</text>
+</svg>
