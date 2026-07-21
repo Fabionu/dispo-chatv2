@@ -21,7 +21,7 @@ export const rem = (px: number): string => `${px / 16}rem`
 
 // Sidebar avatar / company-logo diameter per tier, in DESIGN px (pre-rem-scale
 // — Avatar/CompanyLogo render size/16 rem, so the comfortable root bump adds
-// its ×1.0625 on top: 36 → ~38.25 actual, matching the tuned
+// its ×1.125 on top: 36 → ~40.5 actual, matching the tuned
 // --sidebar-user-avatar-size token in index.css). Components that take a
 // numeric `size` can't read the CSS density tokens, so they read this map via
 // useDensity() instead.
@@ -51,7 +51,7 @@ const STORAGE_KEY = 'dispo:density'
 // In between → default (1080p desktops). The height gate keeps 2560×1080-class
 // ultrawides (1080p-height displays) on the default tier. Ultra-wide/4K
 // (≥3000px) is NOT a fourth tier — it's a pure-CSS refinement layered on
-// comfortable in index.css (--ui-scale 1.125 + bumped px tokens); keep this
+// comfortable in index.css (--ui-scale 1.1875 + bumped px tokens); keep this
 // MQ in sync with index.css's fallbacks.
 const COMFORTABLE_MQ = '(min-width: 2200px) and (min-height: 1200px)'
 const COMPACT_MQ = '(max-width: 1535px)'
@@ -120,19 +120,19 @@ const AUTO_PROFILES: AutoProfile[] = [
   },
   {
     at: 2560 / 1920,
-    uiScale: 1.1875,
+    uiScale: 1.125,
     tokens: {
-      '--app-font-size': 17,
-      '--chat-msg-font-size': 18.5,
+      '--app-font-size': 16,
+      '--chat-msg-font-size': 17,
       '--header-height': 72,
-      '--sidebar-width': 680,
+      '--sidebar-width': 800,
       '--composer-size': 40,
-      '--chat-max-width': 1040,
-      '--chat-gutter': 24,
-      '--sidebar-title-font-size': 19,
-      '--sidebar-row-font-size': 17,
-      '--sidebar-meta-font-size': 14.5,
-      '--sidebar-section-font-size': 12,
+      '--chat-max-width': 1440,
+      '--chat-gutter': 28,
+      '--sidebar-title-font-size': 18,
+      '--sidebar-row-font-size': 16,
+      '--sidebar-meta-font-size': 13.5,
+      '--sidebar-section-font-size': 11.5,
       '--sidebar-icon-size': 24,
       '--sidebar-user-avatar-size': 42,
       '--sidebar-search-height': 46,
@@ -146,19 +146,19 @@ const AUTO_PROFILES: AutoProfile[] = [
   },
   {
     at: 2,
-    uiScale: 1.25,
+    uiScale: 1.1875,
     tokens: {
-      '--app-font-size': 18,
-      '--chat-msg-font-size': 19.5,
+      '--app-font-size': 17,
+      '--chat-msg-font-size': 18,
       '--header-height': 76,
-      '--sidebar-width': 720,
+      '--sidebar-width': 900,
       '--composer-size': 42,
-      '--chat-max-width': 1120,
-      '--chat-gutter': 26,
-      '--sidebar-title-font-size': 20,
-      '--sidebar-row-font-size': 18,
-      '--sidebar-meta-font-size': 15.5,
-      '--sidebar-section-font-size': 12.5,
+      '--chat-max-width': 1800,
+      '--chat-gutter': 32,
+      '--sidebar-title-font-size': 19,
+      '--sidebar-row-font-size': 17,
+      '--sidebar-meta-font-size': 14.5,
+      '--sidebar-section-font-size': 12,
       '--sidebar-icon-size': 25,
       '--sidebar-user-avatar-size': 45,
       '--sidebar-search-height': 49,

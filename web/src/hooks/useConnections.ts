@@ -37,10 +37,12 @@ export function useConnections() {
     socket.on('connection:requested', onChange)
     socket.on('connection:accepted', onChange)
     socket.on('connection:declined', onChange)
+    socket.io.on('reconnect', onChange)
     return () => {
       socket.off('connection:requested', onChange)
       socket.off('connection:accepted', onChange)
       socket.off('connection:declined', onChange)
+      socket.io.off('reconnect', onChange)
     }
   }, [refreshConnections])
 

@@ -28,7 +28,7 @@ import type {
 import { groupLabel, tractorPlate } from '../lib/types'
 import { api } from '../lib/api'
 import { getSocket } from '../lib/socket'
-import { useMessageCache } from '../hooks/useMessageCache'
+import { useMessageCacheActions } from '../hooks/useMessageCache'
 import ChatView from '../components/ChatView'
 import type { AttachmentWorkspaceTab } from '../components/messages/types'
 import ConnectionRequestView from '../components/connections/ConnectionRequestView'
@@ -63,6 +63,7 @@ import GroupRow from './SidebarGroupRow'
 import ContactRow from './SidebarContactRow'
 import { FilterTab, ArchiveToggle, EmptyHint, MenuItem } from './sidebarBits'
 import { optimisticDirectGroup } from './workspaceUtils'
+import ConnectionStatusBanner from '../components/ConnectionStatusBanner'
 
 type Props = {
   user: User
@@ -201,7 +202,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   const { connections, connectionsError, refreshConnections } = useConnections()
   const { groupInvites, refreshGroupInvites } = useGroupInvites()
 
-  const { prefetch } = useMessageCache()
+  // Workspace only issues prefetch commands; it must not subscribe the entire
+  // shell/sidebar to every cached message or read-receipt change.
+  const { prefetch } = useMessageCacheActions()
 
   // Warm the profile cache in the background so the "My profile" drawer opens
   // instantly the first time. Cheap, fire-and-forget.
@@ -277,8 +280,10 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     const socket = getSocket()
     const onMembersChanged = () => void refreshMembers()
     socket.on('workspace:members_changed', onMembersChanged)
+    socket.io.on('reconnect', onMembersChanged)
     return () => {
       socket.off('workspace:members_changed', onMembersChanged)
+      socket.io.off('reconnect', onMembersChanged)
     }
   }, [refreshMembers])
 
@@ -566,6 +571,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // regions distinct without outlining either one.
   return (
     <div className="h-screen w-full flex gap-3 p-2 2xl:p-3 bg-bg text-text overflow-hidden">
+      <ConnectionStatusBanner />
       {/* Collapsed left rail — a slim icon strip so the main area (wide
           chats) gets the freed width. Keeps the essentials reachable: expand,
           workspace home, and the account menu (clicking it expands first). All

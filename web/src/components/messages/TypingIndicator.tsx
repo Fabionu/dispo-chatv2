@@ -52,7 +52,7 @@ export default function TypingIndicator({ users }: { users: TypingUser[] }) {
             role="status"
             aria-live="polite"
             aria-atomic="true"
-            className={`${leaving ? 'typing-indicator-exit' : 'typing-indicator-enter'} flex max-w-[min(82%,48rem)] items-end gap-2.5 pt-1 pb-2`}
+            className={`${leaving ? 'typing-indicator-exit' : 'typing-indicator-enter'} flex max-w-[min(82%,64rem)] items-end gap-2.5 pt-1 pb-2`}
           >
             <span
               className={`flex ${identityWidth} shrink-0 -space-x-2 pb-0.5`}

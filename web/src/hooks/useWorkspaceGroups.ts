@@ -194,12 +194,17 @@ export function useWorkspaceGroups({
     socket.on('group:added', onGroupAdded)
     socket.on('group:removed', onGroupRemoved)
     socket.on('group:prefs', onGroupPrefs)
+    // Socket events that occurred during an outage cannot be replayed. Once
+    // transport recovers, replace the rail with the authoritative snapshot so
+    // unread counts, previews, ordering, and membership cannot silently drift.
+    socket.io.on('reconnect', refreshGroups)
     return () => {
       socket.off('message:new', onMessageNew)
       socket.off('group:unread', onGroupUnread)
       socket.off('group:added', onGroupAdded)
       socket.off('group:removed', onGroupRemoved)
       socket.off('group:prefs', onGroupPrefs)
+      socket.io.off('reconnect', refreshGroups)
     }
     // openGroupIdRef is a stable ref; onOpenGroupGone comes from Workspace as a
     // stable useCallback.

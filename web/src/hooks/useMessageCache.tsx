@@ -63,6 +63,11 @@ export type MessageCache = {
   setGroupMembers: (groupId: string, members: GroupMember[]) => void
 }
 
+// Mutation/prefetch commands are stable for the lifetime of the provider. Keep
+// them in a separate context so a component that only issues commands does not
+// subscribe to every thread/member update in the stateful cache context.
+export type MessageCacheActions = Omit<MessageCache, 'threads' | 'membersFor'>
+
 const EMPTY_THREAD: Thread = {
   messages: [],
   nextCursor: null,
@@ -174,6 +179,7 @@ function revokeMessageBlobs(m: LocalMessage) {
 }
 
 const Ctx = createContext<MessageCache | null>(null)
+const ActionsCtx = createContext<MessageCacheActions | null>(null)
 
 export function MessageCacheProvider({
   userId,
@@ -519,11 +525,52 @@ export function MessageCacheProvider({
     ],
   )
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>
+  const actions = useMemo<MessageCacheActions>(
+    () => ({
+      hasThread,
+      setThreadMessages,
+      mergeThreadMessages,
+      prependOlderMessages,
+      upsertMessage,
+      patchMessage,
+      replaceMessage,
+      removeMessage,
+      setRevalidating,
+      clearThreadPreviews,
+      prefetch,
+      setGroupMembers,
+    }),
+    [
+      hasThread,
+      setThreadMessages,
+      mergeThreadMessages,
+      prependOlderMessages,
+      upsertMessage,
+      patchMessage,
+      replaceMessage,
+      removeMessage,
+      setRevalidating,
+      clearThreadPreviews,
+      prefetch,
+      setGroupMembers,
+    ],
+  )
+
+  return (
+    <ActionsCtx.Provider value={actions}>
+      <Ctx.Provider value={value}>{children}</Ctx.Provider>
+    </ActionsCtx.Provider>
+  )
 }
 
 export function useMessageCache(): MessageCache {
   const ctx = useContext(Ctx)
   if (!ctx) throw new Error('useMessageCache must be used within MessageCacheProvider')
+  return ctx
+}
+
+export function useMessageCacheActions(): MessageCacheActions {
+  const ctx = useContext(ActionsCtx)
+  if (!ctx) throw new Error('useMessageCacheActions must be used within MessageCacheProvider')
   return ctx
 }

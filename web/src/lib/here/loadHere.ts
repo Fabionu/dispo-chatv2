@@ -56,9 +56,15 @@ function injectCss(href: string): void {
 }
 
 async function doLoad(): Promise<{ H: any; apiKey: string }> {
-  // Key first — if HERE isn't configured the proxy 503s here and we surface a
-  // clean error before touching the CDN.
-  const { apiKey } = await api.here.config()
+  // The key is only needed when the caller constructs H.service.Platform — not
+  // to load the CDN scripts — so the key fetch and the script downloads run in
+  // PARALLEL instead of the key round-trip gating the whole load. The no-op
+  // catch stops a key failure from surfacing as an unhandled rejection while
+  // the scripts are still awaiting; the real error still throws at the awaited
+  // read below (an unconfigured proxy 503s there, same clean failure as before
+  // — the scripts having loaded meanwhile is harmless and cached).
+  const keyPromise = api.here.config()
+  keyPromise.catch(() => {})
 
   injectCss(`${CDN}/mapsjs-ui.css`)
   // core defines H; the rest extend it, so load core, then the others together.
@@ -69,6 +75,7 @@ async function doLoad(): Promise<{ H: any; apiKey: string }> {
     injectScript(`${CDN}/mapsjs-ui.js`),
   ])
 
+  const { apiKey } = await keyPromise
   if (!window.H) throw new Error('HERE Maps JS loaded but window.H is undefined')
   return { H: window.H, apiKey }
 }

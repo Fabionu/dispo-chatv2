@@ -169,7 +169,7 @@ function MessageRow({
   // Font size comes from --chat-msg-font-size so it scales with the display.
   // max-w lives on the row so the trigger overlay can hug the bubble without
   // breaking the alignment math.
-  const rowMaxW = 'max-w-[min(82%,48rem)]'
+  const rowMaxW = 'max-w-[min(82%,64rem)]'
   // Media (image/doc) messages use a tight frame so the attachment nearly
   // fills the bubble instead of floating inside a thick coloured margin; text-
   // only messages keep a comfortable-but-compact padding. Caption text and the
@@ -362,7 +362,7 @@ function MessageRow({
             <div
               className={`group/msg min-w-0 flex flex-col ${
                 mine ? 'items-end' : 'items-start'
-              } max-w-[42.5rem] ${
+              } max-w-[56rem] ${
                 // Own-bubble rows carry no hover pill and no highlight wash on
                 // the wrapper — the bubble itself never changes on hover (same
                 // rule as bubble view) and the jump-highlight rides the bubble

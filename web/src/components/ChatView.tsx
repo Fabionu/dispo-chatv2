@@ -540,6 +540,47 @@ export default function ChatView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [group.id, markRead])
 
+  // Socket.IO restores the transport after an outage, but events emitted while
+  // this client was disconnected are not replayed. Catch the open conversation
+  // up from the authoritative latest page and refresh its roster/read markers.
+  // normalize() deduplicates anything the socket delivered concurrently.
+  useEffect(() => {
+    const socket = getSocket()
+    let active = true
+
+    async function catchUpAfterReconnect() {
+      cache.setRevalidating(group.id, true)
+      const [messageResult, memberResult] = await Promise.allSettled([
+        api.groups.messages(group.id),
+        api.groups.members(group.id),
+      ])
+      if (!active) {
+        cache.setRevalidating(group.id, false)
+        return
+      }
+
+      if (messageResult.status === 'fulfilled') {
+        const res = messageResult.value
+        if (cache.hasThread(group.id)) cache.mergeThreadMessages(group.id, res.messages)
+        else cache.setThreadMessages(group.id, res.messages, res.nextCursor)
+      }
+      if (memberResult.status === 'fulfilled') {
+        cache.setGroupMembers(group.id, memberResult.value.members)
+      }
+      cache.setRevalidating(group.id, false)
+      markRead()
+    }
+
+    socket.io.on('reconnect', catchUpAfterReconnect)
+    return () => {
+      active = false
+      socket.io.off('reconnect', catchUpAfterReconnect)
+    }
+    // Cache methods are stable and read current data through refs. Re-subscribe
+    // only when the conversation itself changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [group.id, markRead])
+
   // ── Preload recent image attachments ───────────────────────────────────
   // When the thread changes (open, revalidate, new arrival), warm the browser
   // cache for images in the newest messages so they're painted by the time

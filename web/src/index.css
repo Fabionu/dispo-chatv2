@@ -13,8 +13,8 @@
    --ui-scale is THE single scale knob for all rem-sized chrome:
      0.875  — compact laptops
      0.9375 — default / 1080p desktops
-     1.0625 — comfortable QHD displays
-     1.125  — ultra-wide / 4K displays
+     1.125  — comfortable QHD displays
+     1.1875 — ultra-wide / 4K displays
    The px density tokens below add their own tuned bump for chat/sidebar. */
 html {
   --ui-scale: 0.9375;
@@ -27,11 +27,11 @@ html[data-density='default'] {
   --ui-scale: 0.9375;
 }
 html[data-density='comfortable'] {
-  --ui-scale: 1.1875;
+  --ui-scale: 1.125;
 }
 @media (min-width: 3000px) and (min-height: 1200px) {
   html[data-density='comfortable'] {
-    --ui-scale: 1.25;
+    --ui-scale: 1.1875;
   }
 }
 /* No-JS / pre-hydration fallbacks, mirroring the token fallbacks below. */
@@ -42,12 +42,12 @@ html[data-density='comfortable'] {
 }
 @media (min-width: 2200px) and (min-height: 1200px) {
   html:not([data-density]) {
-    --ui-scale: 1.1875;
+    --ui-scale: 1.125;
   }
 }
 @media (min-width: 3000px) and (min-height: 1200px) {
   html:not([data-density]) {
-    --ui-scale: 1.25;
+    --ui-scale: 1.1875;
   }
 }
 
@@ -215,24 +215,24 @@ html[data-theme='light'] {
 /* comfortable — 2K/QHD and larger: noticeably more scale so a 2560×1440 (and up)
    display reads clearly instead of as a miniature, while staying dense enough for
    dispatch work. Tuned against a 2560-wide @100% monitor (the common QHD case).
-   Works together with --ui-scale: 1.0625 above, which scales all the rem-sized
+   Works together with --ui-scale: 1.125 above, which scales all the rem-sized
    chrome (modals, buttons, icons, menus, panels); these px tokens carry the
    chat/sidebar's own tuned bump. Keep in sync with the no-JS
    @media(min-width:2200px) fallback below AND SIDEBAR_AVATAR_SIZE.comfortable
-   in lib/density.ts (design px: 36 × 1.0625 ≈ the 38px avatar below). */
+   in lib/density.ts (design px: 36 × 1.125 ≈ the 41px avatar below). */
 [data-density='comfortable'] {
-  --app-font-size: 17px;
-  --chat-msg-font-size: 18.5px;
+  --app-font-size: 16px;
+  --chat-msg-font-size: 17px;
   --header-height: 72px;
-  --sidebar-width: 680px;
+  --sidebar-width: 800px;
   --composer-size: 40px;
-  --chat-max-width: 1040px;
-  --chat-gutter: 24px;
+  --chat-max-width: 1440px;
+  --chat-gutter: 28px;
 
-  --sidebar-title-font-size: 19px;
-  --sidebar-row-font-size: 17px;
-  --sidebar-meta-font-size: 14.5px;
-  --sidebar-section-font-size: 12px;
+  --sidebar-title-font-size: 18px;
+  --sidebar-row-font-size: 16px;
+  --sidebar-meta-font-size: 13.5px;
+  --sidebar-section-font-size: 11.5px;
   --sidebar-icon-size: 24px;
   --sidebar-user-avatar-size: 42px;
   --sidebar-search-height: 46px;
@@ -288,18 +288,18 @@ html[data-density-mode='auto'][data-density='default'] {
 }
 @media (min-width: 2200px) and (min-height: 1200px) {
   :root:not([data-density]) {
-    --app-font-size: 17px;
-    --chat-msg-font-size: 18.5px;
+    --app-font-size: 16px;
+    --chat-msg-font-size: 17px;
     --header-height: 72px;
-    --sidebar-width: 680px;
+    --sidebar-width: 800px;
     --composer-size: 40px;
-    --chat-max-width: 1040px;
-    --chat-gutter: 24px;
+    --chat-max-width: 1440px;
+    --chat-gutter: 28px;
 
-    --sidebar-title-font-size: 19px;
-    --sidebar-row-font-size: 17px;
-    --sidebar-meta-font-size: 14.5px;
-    --sidebar-section-font-size: 12px;
+    --sidebar-title-font-size: 18px;
+    --sidebar-row-font-size: 16px;
+    --sidebar-meta-font-size: 13.5px;
+    --sidebar-section-font-size: 11.5px;
     --sidebar-icon-size: 24px;
     --sidebar-user-avatar-size: 42px;
     --sidebar-search-height: 46px;
@@ -314,8 +314,8 @@ html[data-density-mode='auto'][data-density='default'] {
 
 /* comfortable, ultra-wide/4K refinement (≥3000px wide): the density tier stays
    `comfortable` (density.ts knows only three tiers) — this media layer bumps
-   the chat/sidebar px tokens ~1.055× on top of the tuned QHD values, pairing
-   with the --ui-scale step 1.0625 → 1.125 above so chat, rail and rem-sized
+   the chat/sidebar px tokens another step on top of the tuned QHD values, pairing
+   with the --ui-scale step 1.125 → 1.1875 above so chat, rail and rem-sized
    chrome grow together. Values are plain px literals (never calc()) because
    MessageActionsMenu/ReadReceipts parseInt() --sidebar-width from JS. Covers
    the no-JS root too, and sits AFTER the ≥2200 fallback so it wins the
@@ -323,18 +323,18 @@ html[data-density-mode='auto'][data-density='default'] {
 @media (min-width: 3000px) and (min-height: 1200px) {
   [data-density='comfortable'],
   :root:not([data-density]) {
-    --app-font-size: 18px;
-    --chat-msg-font-size: 19.5px;
+    --app-font-size: 17px;
+    --chat-msg-font-size: 18px;
     --header-height: 76px;
-    --sidebar-width: 720px;
+    --sidebar-width: 900px;
     --composer-size: 42px;
-    --chat-max-width: 1120px;
-    --chat-gutter: 26px;
+    --chat-max-width: 1800px;
+    --chat-gutter: 32px;
 
-    --sidebar-title-font-size: 20px;
-    --sidebar-row-font-size: 18px;
-    --sidebar-meta-font-size: 15.5px;
-    --sidebar-section-font-size: 12.5px;
+    --sidebar-title-font-size: 19px;
+    --sidebar-row-font-size: 17px;
+    --sidebar-meta-font-size: 14.5px;
+    --sidebar-section-font-size: 12px;
     --sidebar-icon-size: 25px;
     --sidebar-user-avatar-size: 45px;
     --sidebar-search-height: 49px;

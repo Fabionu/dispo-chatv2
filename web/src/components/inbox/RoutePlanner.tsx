@@ -193,13 +193,19 @@ export default function RoutePlanner({ onBack }: Props) {
   // unlike normal edits which wait for the button. This ref flags that intent so
   // the effect below fires calculate() once, after the new stop is in state.
   const recalcAfterDragRef = useRef(false)
+  // Bumped to force the recalc effect when the flag is set but routeSig may not
+  // have changed — the optimistic drag-stop path patches a stop's coordinates
+  // AFTER inserting it, and when the snap falls back to the raw release point
+  // that patch leaves the signature identical, so [routeSig] alone would never
+  // fire and the route would silently stay uncalculated through the new stop.
+  const [recalcNonce, setRecalcNonce] = useState(0)
   useEffect(() => {
     if (recalcAfterDragRef.current && start && destination) {
       recalcAfterDragRef.current = false
       calculate()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeSig])
+  }, [routeSig, recalcNonce])
 
   // Route-line drag released → insert a snapped stop into the grabbed segment,
   // then recalc. `section` maps to the stops-array insertion index (section i
@@ -216,9 +222,37 @@ export default function RoutePlanner({ onBack }: Props) {
     const course = seg ? routeCourseNear(release, [seg]) ?? undefined : undefined
     // The grabbed leg's endpoints bracket the new stop → detour-aware ranking.
     const { prev, next } = neighborsForStopIndex(section)
-    const resolved = await resolveClickedFromCandidates(candidates, zoom, course, prev, next)
-    addStop({ ...resolved, source: 'drag' }, section)
+    // OPTIMISTIC: the stop appears at the raw release point the instant the
+    // ghost is dropped — the snap round-trip must never leave dead air between
+    // release and feedback. The road-snap then patches the SAME stop (by id)
+    // in place, and only that single post-snap recalc talks to routing, so the
+    // total HERE cost is identical to the old await-then-insert flow.
+    const id = uid()
+    addStop(
+      {
+        id,
+        label: fmtCoord(release),
+        coordinates: { lat: release.lat, lng: release.lng },
+        source: 'drag',
+        snapped: false,
+        course,
+      },
+      section,
+    )
+    const s = await snapCandidatesToRoad(candidates, zoom, course, prev, next)
+    // No-op if the user already removed the stop while the snap was in flight.
+    setPoints((cur) =>
+      cur.map((p) =>
+        p.id === id
+          ? { ...p, coordinates: s.coordinates, label: s.label, snapped: s.snapped }
+          : p,
+      ),
+    )
+    // The nonce (not just routeSig) triggers the recalc: a snap that fell back
+    // to the raw release point leaves the signature unchanged from the
+    // optimistic insert, and the recalc must still run through the new stop.
     recalcAfterDragRef.current = true
+    setRecalcNonce((n) => n + 1)
   }
 
   // Whether the inputs have changed since the drawn route was calculated.

@@ -1,8 +1,9 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { ChevronRight, Plus, Route } from 'lucide-react'
 import type { Group } from '../../lib/types'
 import { groupLabel, tractorPlate } from '../../lib/types'
 import { getOps } from '../../lib/vehicleOps'
+import { loadHere } from '../../lib/here/loadHere'
 import { PaneLoader } from '../LazyFallback'
 import GroupAvatar from '../GroupAvatar'
 import Modal from '../Modal'
@@ -26,6 +27,26 @@ type Props = {
 export default function InboxView({ workspaceName, vehicleRooms, canAddTrip, onAddTrip }: Props) {
   const [tool, setTool] = useState<'route' | null>(null)
   const [tripPickerOpen, setTripPickerOpen] = useState(false)
+
+  // Warm the HERE SDK while the workspace home sits idle, so the first map open
+  // (Route planner here, or a vehicle room's Trip route) skips the script
+  // download + parse it would otherwise pay after the click. This is the app's
+  // default landing view, so nearly every session warms early. loadHere() is
+  // cached and idempotent — repeat mounts and the later real open reuse the
+  // same promise — and it resets itself on failure, so an unconfigured/offline
+  // HERE just stays cold (the swallow keeps the warm-up silent; the real open
+  // still surfaces its own error).
+  useEffect(() => {
+    const warm = () => void loadHere().catch(() => {})
+    // requestIdleCallback is still missing on some Safari versions at runtime
+    // (the DOM types always declare it) — fall back to a short timeout there.
+    if (typeof window.requestIdleCallback === 'function') {
+      const idle = window.requestIdleCallback(warm, { timeout: 3000 })
+      return () => window.cancelIdleCallback(idle)
+    }
+    const timer = window.setTimeout(warm, 1500)
+    return () => window.clearTimeout(timer)
+  }, [])
 
   if (tool === 'route') {
     return (

@@ -105,12 +105,22 @@ export function useSendMessage({
       cache.replaceMessage(groupId, localId, res.message)
     } catch (err) {
       cache.patchMessage(groupId, localId, { pending: false, failed: true })
+      let explained = false
       if (err instanceof ApiError) {
         if (err.code === 'too_many_requests') {
           onError('Slow down — too many messages.')
+          explained = true
         } else if (err.code === 'image_too_large' || err.code === 'file_too_large') {
           onError('That file is too large.')
+          explained = true
         }
+      }
+      if (!explained) {
+        onError(
+          typeof navigator !== 'undefined' && !navigator.onLine
+            ? 'You are offline. Reconnect, then tap the message to retry.'
+            : 'Message not sent. Tap the message to retry.',
+        )
       }
     }
   }

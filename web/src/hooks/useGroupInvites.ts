@@ -26,11 +26,13 @@ export function useGroupInvites() {
     socket.on('group_invite:accepted', onChange)
     socket.on('group_invite:declined', onChange)
     socket.on('group_invite:cancelled', onChange)
+    socket.io.on('reconnect', onChange)
     return () => {
       socket.off('group_invite:created', onChange)
       socket.off('group_invite:accepted', onChange)
       socket.off('group_invite:declined', onChange)
       socket.off('group_invite:cancelled', onChange)
+      socket.io.off('reconnect', onChange)
     }
   }, [refreshGroupInvites])
 
