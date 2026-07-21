@@ -224,7 +224,7 @@ html[data-theme='light'] {
   --app-font-size: 17px;
   --chat-msg-font-size: 18.5px;
   --header-height: 72px;
-  --sidebar-width: 600px;
+  --sidebar-width: 680px;
   --composer-size: 40px;
   --chat-max-width: 1040px;
   --chat-gutter: 24px;
@@ -291,7 +291,7 @@ html[data-density-mode='auto'][data-density='default'] {
     --app-font-size: 17px;
     --chat-msg-font-size: 18.5px;
     --header-height: 72px;
-    --sidebar-width: 600px;
+    --sidebar-width: 680px;
     --composer-size: 40px;
     --chat-max-width: 1040px;
     --chat-gutter: 24px;
@@ -326,7 +326,7 @@ html[data-density-mode='auto'][data-density='default'] {
     --app-font-size: 18px;
     --chat-msg-font-size: 19.5px;
     --header-height: 76px;
-    --sidebar-width: 640px;
+    --sidebar-width: 720px;
     --composer-size: 42px;
     --chat-max-width: 1120px;
     --chat-gutter: 26px;

@@ -448,7 +448,10 @@
       "Bash(curl -s -b cookies.txt -D - -o /dev/null \"http://localhost:3001/api/attachments/f2c47e72-9604-40bd-924c-c1557a283645\")",
       "Bash(curl -s -D - -o /dev/null \"http://localhost:3001/api/attachments/f2c47e72-9604-40bd-924c-c1557a283645?variant=preview\")",
       "Bash(curl -s -b cookies.txt -w \"time: %{time_total}s\\\\n\" \"http://localhost:3001/api/here/snap?at=50.0755,14.4378&zoom=14\")",
-      "Bash(curl -s -b cookies.txt -w \"time: %{time_total}s\\\\n\" \"http://localhost:3001/api/here/snap?at=50.075501,14.437801&zoom=14\")"
+      "Bash(curl -s -b cookies.txt -w \"time: %{time_total}s\\\\n\" \"http://localhost:3001/api/here/snap?at=50.075501,14.437801&zoom=14\")",
+      "Bash(echo \"check-ignore exit: $?\")",
+      "Bash(git ls-tree *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://api.github.com/repos/Fabionu/dispo-chatv2)"
     ]
   }
 }

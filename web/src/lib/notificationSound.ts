@@ -10,6 +10,12 @@ export type NotificationSound =
   | 'crystal-duo'
   | 'orbit'
   | 'mono-click'
+  | 'ripple'
+  | 'bubble'
+  | 'halo'
+  | 'spark'
+  | 'beacon'
+  | 'twinkle'
 
 export const NOTIFICATION_SOUNDS: ReadonlyArray<{
   value: NotificationSound
@@ -25,6 +31,12 @@ export const NOTIFICATION_SOUNDS: ReadonlyArray<{
   { value: 'crystal-duo', label: 'Crystal Duo', description: 'Two bright notes with a polished finish.' },
   { value: 'orbit', label: 'Orbit', description: 'A fluid rising signal with a playful turn.' },
   { value: 'mono-click', label: 'Mono Click', description: 'An ultra-short, focused digital tick.' },
+  { value: 'ripple', label: 'Ripple', description: 'Three quick ascending taps with a bright, playful lift.' },
+  { value: 'bubble', label: 'Bubble', description: 'A rounded pop that bends upward, like a fresh message.' },
+  { value: 'halo', label: 'Halo', description: 'An airy, sustained shimmer that lingers softly.' },
+  { value: 'spark', label: 'Spark', description: 'A snappy octave jump with a clean digital edge.' },
+  { value: 'beacon', label: 'Beacon', description: 'A calm low knock that resolves gently upward.' },
+  { value: 'twinkle', label: 'Twinkle', description: 'A light, descending sparkle with a delicate tail.' },
 ]
 
 const STORAGE_KEY = 'dispo:notification-sound'
@@ -150,6 +162,44 @@ function schedule(ctx: AudioContext, sound: Exclude<NotificationSound, 'none'>) 
     'mono-click': [
       { at: 0, frequency: 880, endFrequency: 760, duration: 0.075, volume: 0.03, type: 'triangle' },
       { at: 0.006, frequency: 440, duration: 0.09, volume: 0.016 },
+    ],
+    // Three staccato sine taps up E6–G6–C7 — a tiny ascending arpeggio that
+    // reads as bright and upbeat without any tail.
+    ripple: [
+      { at: 0, frequency: 1318.51, duration: 0.09, volume: 0.03 },
+      { at: 0.052, frequency: 1567.98, duration: 0.09, volume: 0.028 },
+      { at: 0.104, frequency: 2093.0, duration: 0.13, volume: 0.024 },
+    ],
+    // A rounded low→high pitch bend (the "pop"), capped by a faint high tap so
+    // it lands like a modern messenger bubble.
+    bubble: [
+      { at: 0, frequency: 620, endFrequency: 990, duration: 0.11, volume: 0.042 },
+      { at: 0.075, frequency: 1480, duration: 0.08, volume: 0.016 },
+    ],
+    // A sustained A6 with a stacked D6 (a fifth below) and a whisper-quiet
+    // harmonic — ambient, calm, lingers a touch longer than the rest.
+    halo: [
+      { at: 0, frequency: 1760, duration: 0.28, volume: 0.026 },
+      { at: 0, frequency: 1174.66, duration: 0.24, volume: 0.014, type: 'triangle' },
+      { at: 0, frequency: 3520, duration: 0.16, volume: 0.006 },
+    ],
+    // A crisp two-note octave jump C6→C7 — the snappiest of the melodic set.
+    spark: [
+      { at: 0, frequency: 1046.5, duration: 0.07, volume: 0.03 },
+      { at: 0.042, frequency: 2093.0, duration: 0.12, volume: 0.026 },
+    ],
+    // A low, soft D4→E4 knock resolving up to A4 — deliberately subdued for
+    // people who keep a busy thread open all day.
+    beacon: [
+      { at: 0, frequency: 293.66, endFrequency: 329.63, duration: 0.1, volume: 0.04, type: 'triangle' },
+      { at: 0.058, frequency: 440, duration: 0.13, volume: 0.024, type: 'triangle' },
+    ],
+    // A descending high sparkle C7→G6 with a fleeting overtone — the mirror of
+    // Ripple, bright but settling rather than lifting.
+    twinkle: [
+      { at: 0, frequency: 2093.0, duration: 0.1, volume: 0.02 },
+      { at: 0.062, frequency: 1567.98, duration: 0.17, volume: 0.026 },
+      { at: 0, frequency: 4186.01, duration: 0.06, volume: 0.004 },
     ],
   }
   for (const spec of tones[sound]) tone(ctx, now, spec)
