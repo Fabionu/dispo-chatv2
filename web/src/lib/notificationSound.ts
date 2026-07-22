@@ -44,12 +44,13 @@ const CHANGE_EVENT = 'dispo:notification-sound-change'
 const DEFAULT_SOUND: NotificationSound = 'soft-pop'
 
 let audioContext: AudioContext | null = null
+let notificationOutput: AudioNode | null = null
 
 // The synthesized tones were originally mixed at very conservative peaks
 // (~0.03–0.045), which made them disappear under normal desktop audio. A
-// shared boost keeps every preset's relative character while bringing the
-// loudest overlapping combinations to only ~0.25, safely below clipping.
-const NOTIFICATION_VOLUME_BOOST = 2.75
+// stronger envelope keeps every preset's character; the shared output limiter
+// below controls overlapping peaks instead of forcing every tone to stay quiet.
+const NOTIFICATION_VOLUME_BOOST = 5.5
 
 function isNotificationSound(value: unknown): value is NotificationSound {
   return NOTIFICATION_SOUNDS.some((sound) => sound.value === value)
@@ -103,6 +104,25 @@ function context(): AudioContext | null {
   return audioContext
 }
 
+// A shared loudness stage makes the tiny synthesized envelopes audible on
+// laptop speakers. The fast compressor catches combined harmonics before they
+// become brittle, so this can be much louder without hard clipping.
+function output(ctx: AudioContext): AudioNode {
+  if (notificationOutput) return notificationOutput
+  const preGain = ctx.createGain()
+  preGain.gain.value = 1.65
+  const limiter = ctx.createDynamicsCompressor()
+  limiter.threshold.value = -5
+  limiter.knee.value = 6
+  limiter.ratio.value = 12
+  limiter.attack.value = 0.002
+  limiter.release.value = 0.12
+  preGain.connect(limiter)
+  limiter.connect(ctx.destination)
+  notificationOutput = preGain
+  return preGain
+}
+
 type Tone = {
   at: number
   frequency: number
@@ -126,12 +146,12 @@ function tone(ctx: AudioContext, base: number, spec: Tone) {
 
   gain.gain.setValueAtTime(0.0001, start)
   gain.gain.exponentialRampToValueAtTime(
-    Math.min(spec.volume * NOTIFICATION_VOLUME_BOOST, 0.25),
+    Math.min(spec.volume * NOTIFICATION_VOLUME_BOOST, 0.32),
     start + 0.008,
   )
   gain.gain.exponentialRampToValueAtTime(0.0001, end)
   oscillator.connect(gain)
-  gain.connect(ctx.destination)
+  gain.connect(output(ctx))
   oscillator.start(start)
   oscillator.stop(end + 0.01)
 }

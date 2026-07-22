@@ -179,6 +179,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // Conversation list + live socket sync + per-row pref actions.
   const {
     groups,
+    typingByGroup,
     loadingGroups,
     refreshGroups,
     insertGroup,
@@ -693,9 +694,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         <div className="px-2.5 pt-2.5 pb-1.5 flex items-center gap-1.5">
           <label
             htmlFor="rail-search"
-            className="flex-1 h-[var(--sidebar-search-height)] flex items-center gap-1.5 px-3 rounded-full border border-transparent bg-white/[0.05] hover:bg-white/[0.08] focus-within:bg-white/[0.08] focus-within:border-white/[0.12] transition-colors cursor-text"
+            className="flex-1 h-[var(--sidebar-search-height)] flex items-center gap-2 px-3 rounded-full border border-white/[0.12] bg-surface-2/60 hover:bg-surface-2/80 hover:border-white/[0.18] focus-within:bg-surface-2 focus-within:border-white/[0.24] transition-colors cursor-text"
           >
-            <Search size="0.8125rem" strokeWidth={1.6} className="text-faint shrink-0" />
+            <Search size="0.875rem" strokeWidth={1.7} className="text-muted shrink-0" />
             <input
               id="rail-search"
               value={query}
@@ -705,7 +706,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               }}
               placeholder="Search…"
               style={{ fontSize: 'var(--sidebar-row-font-size)' }}
-              className="bg-transparent flex-1 outline-none placeholder:text-faint min-w-0"
+              className="bg-transparent flex-1 outline-none placeholder:text-muted min-w-0"
             />
             {query && (
               <button
@@ -843,6 +844,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                       <GroupRow
                         key={item.key}
                         group={item.group}
+                        typingUsers={typingByGroup[item.group.id] ?? []}
                         online={onlineIds}
                         currentUserId={user.id}
                         size={conversationAvatar}
@@ -1027,6 +1029,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 vehicleRooms={availableVehicleRooms}
                 canAddTrip={canInviteMembers}
                 onAddTrip={addTripFromWorkspace}
+                onCreateVehicleRoom={() => setModal('vehicle')}
+                onAddConnection={() => setModal('direct')}
+                onOpenVehicleRoom={(groupId) => setSelection({ kind: 'group', id: groupId })}
               />
             )}
           </div>

@@ -23,6 +23,7 @@ import ConversationRowMenu, {
 } from '../components/ConversationRowMenu'
 import { MENU_GLYPH } from '../components/menuStyles'
 import { statusMeta, OFFLINE } from '../lib/availability'
+import { typingStatusText, type TypingUser } from '../lib/typing'
 
 // Compact last-activity stamp: today → HH:MM, yesterday → "Yesterday", otherwise
 // DD/MM. Empty string when there's no timestamp.
@@ -53,6 +54,7 @@ function relTime(iso: string | null): string {
 // hover to expose the downward actions arrow without covering the preview.
 export default function GroupRow({
   group,
+  typingUsers,
   selected,
   online,
   currentUserId,
@@ -66,6 +68,7 @@ export default function GroupRow({
   onDelete,
 }: {
   group: Group
+  typingUsers: TypingUser[]
   selected: boolean
   // Live online user-id set (presence). Drives the DM status dot.
   online: Set<string>
@@ -115,6 +118,7 @@ export default function GroupRow({
   // synced). When present it replaces the last-message preview with a subtle
   // "Draft: …" line; the timestamp keeps showing the real last message's time.
   const draft = useDraft(currentUserId, group.id).replace(/\s+/g, ' ').trim()
+  const typingText = typingStatusText(typingUsers, group.type === 'direct')
 
   // ── Per-conversation row actions (hover arrow menu) ────────────────────────
   // While the menu is open the row stays in its "actions active" state — the
@@ -281,10 +285,12 @@ export default function GroupRow({
               the right and slide left on hover/open, exposing the arrow menu. */}
           <span className="flex items-center gap-2">
             <span
-              className={`flex-1 min-w-0 truncate leading-tight ${unread ? 'text-text/80' : 'text-muted'}`}
+              className={`flex-1 min-w-0 truncate leading-tight ${typingText ? 'text-active font-medium' : unread ? 'text-text/80' : 'text-muted'}`}
               style={{ fontSize: 'var(--sidebar-conv-meta-font-size)' }}
             >
-              {draft ? (
+              {typingText ? (
+                <span role="status" aria-live="polite">{typingText}</span>
+              ) : draft ? (
                 // A local unsent draft takes over the preview line, its "Draft:"
                 // tag in the app's accent so it reads as a distinct, personal
                 // state. The line truncates, so a long draft ellipsizes.

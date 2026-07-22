@@ -7,6 +7,7 @@ import { getSocket } from '../lib/socket'
 import { byRecent } from '../pages/workspaceUtils'
 import { playNotificationSound } from '../lib/notificationSound'
 import { showIncomingMessageNotification } from '../lib/browserNotifications'
+import type { TypingUser } from '../lib/typing'
 
 // The sidebar's conversation-list state, extracted from Workspace: the groups
 // array, its socket-driven live sync, and every per-conversation pref action
@@ -29,6 +30,7 @@ export function useWorkspaceGroups({
   onNotificationOpen,
 }: Options) {
   const [groups, setGroups] = useState<Group[]>([])
+  const [typingByGroup, setTypingByGroup] = useState<Record<string, TypingUser[]>>({})
   const [loadingGroups, setLoadingGroups] = useState(true)
   const groupsRef = useRef(groups)
   groupsRef.current = groups
@@ -89,7 +91,48 @@ export function useWorkspaceGroups({
   useEffect(() => {
     const socket = getSocket()
 
+    // Typing is ephemeral: every start refreshes a receiver-side timeout and a
+    // stop (or a sent message) removes the user immediately. This keeps the
+    // sidebar live even when that conversation is not currently open.
+    const typingExpiry: Record<string, number> = {}
+    const removeTyping = (groupId: string, typingUserId: string) => {
+      const key = `${groupId}:${typingUserId}`
+      window.clearTimeout(typingExpiry[key])
+      delete typingExpiry[key]
+      setTypingByGroup((prev) => {
+        const current = prev[groupId]
+        if (!current?.some((typer) => typer.id === typingUserId)) return prev
+        const remaining = current.filter((typer) => typer.id !== typingUserId)
+        const next = { ...prev }
+        if (remaining.length) next[groupId] = remaining
+        else delete next[groupId]
+        return next
+      })
+    }
+    function onTyping(p: {
+      groupId: string
+      userId: string
+      name?: string
+      typing: boolean
+    }) {
+      if (!p.groupId || !p.userId || p.userId === userId) return
+      const key = `${p.groupId}:${p.userId}`
+      if (!p.typing) return removeTyping(p.groupId, p.userId)
+      window.clearTimeout(typingExpiry[key])
+      typingExpiry[key] = window.setTimeout(() => removeTyping(p.groupId, p.userId), 6000)
+      setTypingByGroup((prev) => {
+        const current = prev[p.groupId] ?? []
+        const name = p.name || 'Someone'
+        const existing = current.find((typer) => typer.id === p.userId)
+        const users = existing
+          ? current.map((typer) => (typer.id === p.userId ? { ...typer, name } : typer))
+          : [...current, { id: p.userId, name }]
+        return { ...prev, [p.groupId]: users }
+      })
+    }
+
     function onMessageNew(msg: IncomingMessage) {
+      removeTyping(msg.groupId, msg.authorId)
       const targetGroup = groupsRef.current.find((group) => group.id === msg.groupId)
       if (msg.authorId !== userId && !targetGroup?.muted) {
         void playNotificationSound()
@@ -190,6 +233,7 @@ export function useWorkspaceGroups({
     }
 
     socket.on('message:new', onMessageNew)
+    socket.on('typing', onTyping)
     socket.on('group:unread', onGroupUnread)
     socket.on('group:added', onGroupAdded)
     socket.on('group:removed', onGroupRemoved)
@@ -200,11 +244,13 @@ export function useWorkspaceGroups({
     socket.io.on('reconnect', refreshGroups)
     return () => {
       socket.off('message:new', onMessageNew)
+      socket.off('typing', onTyping)
       socket.off('group:unread', onGroupUnread)
       socket.off('group:added', onGroupAdded)
       socket.off('group:removed', onGroupRemoved)
       socket.off('group:prefs', onGroupPrefs)
       socket.io.off('reconnect', refreshGroups)
+      for (const timer of Object.values(typingExpiry)) window.clearTimeout(timer)
     }
     // openGroupIdRef is a stable ref; onOpenGroupGone comes from Workspace as a
     // stable useCallback.
@@ -307,6 +353,7 @@ export function useWorkspaceGroups({
 
   return {
     groups,
+    typingByGroup,
     loadingGroups,
     refreshGroups,
     insertGroup,

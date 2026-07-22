@@ -40,6 +40,7 @@ import type {
   TruckProfileForm,
   TruckRoute,
 } from '../../lib/here/types'
+import type { RouteMoney, RouteTollSummary } from '../../lib/here/types'
 import PointRow from './RoutePointRow'
 import { CopyCoordButton, NumberField, PresetSelect, Stat } from './RoutePlannerFields'
 import {
@@ -78,6 +79,34 @@ type PlaceEditorState = {
   place?: WorkspacePlace | null
   coordinates: LatLng
   address?: string | null
+}
+
+function formatMoney(money: RouteMoney): string {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: money.currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(money.value)
+  } catch {
+    return `${money.value.toFixed(2)} ${money.currency}`
+  }
+}
+
+function tollSummaryValue(tolls: RouteTollSummary | undefined, outdated: boolean): string {
+  if (outdated) return 'Outdated'
+  if (!tolls) return 'Not calculated'
+  if (tolls.status === 'unavailable') return 'Unavailable'
+  if (!tolls.total) return 'See details'
+  return formatMoney(tolls.total)
+}
+
+function readablePaymentMethod(value: string): string {
+  return value
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .toLowerCase()
 }
 
 // "Route planner" workspace tool (HERE only). One shared RoutePoint[] models the
@@ -174,7 +203,7 @@ export default function RoutePlanner({ onBack }: Props) {
 
   // Explicit route creation/update. No auto-recalc: the user drives it via the
   // Create/Update route button, so the drawn route never vanishes on an edit.
-  async function calculate() {
+  async function calculate(includeTolls = true) {
     if (!start || !destination || loading) return
     const id = ++reqIdRef.current
     const sig = routeSig
@@ -192,6 +221,8 @@ export default function RoutePlanner({ onBack }: Props) {
           .filter((s) => isValidCoord(s.coordinates))
           .map((s) => ({ ...s.coordinates, course: s.course })),
         truck: toTruckProfile(truck),
+        includeTolls,
+        ...(includeTolls ? { currency: 'EUR', departureTime: 'any' as const } : {}),
       })
       if (id === reqIdRef.current) {
         setRoute(res.route)
@@ -231,7 +262,7 @@ export default function RoutePlanner({ onBack }: Props) {
   useEffect(() => {
     if (recalcAfterDragRef.current && start && destination) {
       recalcAfterDragRef.current = false
-      calculate()
+      calculate(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeSig, recalcNonce])
@@ -832,14 +863,17 @@ export default function RoutePlanner({ onBack }: Props) {
 
   // Create/Update route button state.
   const hasEndpoints = Boolean(start && destination)
-  const routeUpToDate = Boolean(route) && !dirty
+  const tollsPending = Boolean(route) && !dirty && route?.tolls === undefined
+  const routeUpToDate = Boolean(route) && !dirty && !tollsPending
   const routeButtonLabel = loading
     ? 'Calculating…'
     : !route
       ? 'Create route'
       : dirty
         ? 'Update route'
-        : 'Route up to date'
+        : tollsPending
+          ? 'Calculate tolls'
+          : 'Route up to date'
   const routeButtonDisabled = !hasEndpoints || loading || routeUpToDate
 
   // Inline address editor shown in place of a committed row while editing. Seeds
@@ -1249,7 +1283,7 @@ export default function RoutePlanner({ onBack }: Props) {
                 up to date, so it always reads on its own over the map. */}
             <div className="flex flex-col gap-1">
               <button
-                onClick={calculate}
+                onClick={() => void calculate(true)}
                 disabled={routeButtonDisabled}
                 title={!hasEndpoints ? 'Set a start and destination first' : undefined}
                 className={`w-full h-10 rounded-full border-2 border-rail font-semibold text-[0.8125rem] flex items-center justify-center gap-2 transition-colors ${
@@ -1283,11 +1317,65 @@ export default function RoutePlanner({ onBack }: Props) {
             {/* Summary + notices */}
             {route && !loading && (
               <div className="flex flex-col gap-2 rounded-[1.25rem] border border-white/[0.08] bg-rail p-2">
-                <div className="grid grid-cols-3 divide-x divide-white/[0.06]">
+                <div className="grid grid-cols-4 divide-x divide-white/[0.06]">
                   <Stat label="Distance" value={formatDistance(route.summary.length)} />
                   <Stat label="Duration" value={formatDuration(route.summary.duration)} />
                   <Stat label="ETA" value={formatEta(route.summary.duration)} />
+                  <Stat label="Tolls" value={tollSummaryValue(route.tolls, dirty)} />
                 </div>
+                {!dirty && route.tolls && (
+                  <div className="border-t border-white/[0.06] pt-2">
+                    {route.tolls.details.length > 0 ? (
+                      <details className="group">
+                        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-full px-2 py-1 text-[0.71875rem] text-muted transition-colors hover:bg-white/[0.04] hover:text-text">
+                          <span>Toll details · {route.tolls.details.reduce((count, detail) => count + detail.fares.length, 0)} charges</span>
+                          <ChevronDown size="0.8125rem" className="transition-transform group-open:rotate-180" />
+                        </summary>
+                        <div className="mt-1.5 flex max-h-40 flex-col gap-1 overflow-y-auto px-2">
+                          {route.tolls.details.flatMap((detail, detailIndex) =>
+                            detail.fares.map((fare, fareIndex) => {
+                              const amount = fare.convertedPrice ?? fare.price
+                              const context = [
+                                detail.countryCode,
+                                detail.tollSystem,
+                                fare.paymentMethods.length > 0
+                                  ? fare.paymentMethods.map(readablePaymentMethod).join(', ')
+                                  : null,
+                              ].filter(Boolean).join(' · ')
+                              return (
+                                <div
+                                  key={fare.id ?? `${detailIndex}-${fareIndex}`}
+                                  className="flex min-w-0 items-start justify-between gap-3 py-1"
+                                >
+                                  <span className="min-w-0">
+                                    <span className="block truncate text-[0.71875rem] text-text">
+                                      {fare.name || detail.tollSystem || 'Road toll'}
+                                    </span>
+                                    {context && (
+                                      <span className="block truncate text-[0.625rem] text-faint">{context}</span>
+                                    )}
+                                  </span>
+                                  <span className="shrink-0 text-[0.71875rem] tabular-nums text-muted">
+                                    {amount ? formatMoney(amount) : 'Included'}
+                                  </span>
+                                </div>
+                              )
+                            }),
+                          )}
+                        </div>
+                      </details>
+                    ) : (
+                      <div className="px-2 text-[0.6875rem] text-muted">
+                        {route.tolls.status === 'unavailable'
+                          ? 'Toll data is unavailable for part of this route.'
+                          : 'No toll charges were found for this route.'}
+                      </div>
+                    )}
+                    <div className="px-2 pt-1.5 text-[0.59375rem] leading-snug text-faint">
+                      Estimated by HERE · final operator charges may differ.
+                    </div>
+                  </div>
+                )}
                 {notices.length > 0 && (
                   <div className="flex flex-col gap-1.5">
                     <div className="text-[0.625rem] font-semibold text-faint uppercase tracking-badge">Notices</div>

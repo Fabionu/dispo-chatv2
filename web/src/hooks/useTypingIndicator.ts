@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { getSocket } from '../lib/socket'
-import type { TypingUser } from '../components/messages/TypingIndicator'
+import type { TypingUser } from '../lib/typing'
 
 // Typing indicator cadence. We re-announce "still typing" at most once per
 // THROTTLE while keys are flowing, send a stop after STOP_IDLE of silence, and

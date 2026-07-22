@@ -490,6 +490,9 @@ export const api = {
       destination: RouteWaypoint
       via?: RouteWaypoint[]
       truck?: TruckProfile
+      includeTolls?: boolean
+      currency?: string
+      departureTime?: 'any'
     }) =>
       request<{ route: TruckRoute }>('/here/routes/truck', {
         method: 'POST',

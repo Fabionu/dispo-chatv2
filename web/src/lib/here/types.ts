@@ -57,12 +57,41 @@ export type RouteSection = {
   arrival?: LatLng | null
 }
 
+export type RouteMoney = {
+  currency: string
+  value: number
+}
+
+export type RouteTollFare = {
+  id?: string
+  name?: string
+  price?: RouteMoney
+  convertedPrice?: RouteMoney
+  reason?: string
+  paymentMethods: string[]
+}
+
+export type RouteTollDetail = {
+  countryCode?: string
+  tollSystem?: string
+  fares: RouteTollFare[]
+}
+
+export type RouteTollSummary = {
+  status: 'available' | 'none' | 'unavailable'
+  total: RouteMoney | null
+  details: RouteTollDetail[]
+}
+
 // A calculated truck route: its sections plus a rolled-up summary (total seconds
 // and metres across all sections).
 export type TruckRoute = {
   id?: string
   sections: RouteSection[]
   summary: { duration: number; length: number }
+  // Undefined means the lightweight route request intentionally skipped tolls
+  // (for example an automatic recalc after dragging the line on the map).
+  tolls?: RouteTollSummary
 }
 
 // A waypoint marker to render on the map, in route order. `position` is the

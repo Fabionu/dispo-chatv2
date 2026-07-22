@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { ChevronRight, Plus, Route } from 'lucide-react'
+import { Activity, ChevronRight, Plus, Route, Truck, UserPlus } from 'lucide-react'
 import type { Group } from '../../lib/types'
 import { groupLabel, tractorPlate } from '../../lib/types'
 import { getOps } from '../../lib/vehicleOps'
@@ -7,6 +7,7 @@ import { loadHere } from '../../lib/here/loadHere'
 import { PaneLoader } from '../LazyFallback'
 import GroupAvatar from '../GroupAvatar'
 import Modal from '../Modal'
+import FleetStatus from './FleetStatus'
 
 // The Route planner pulls in the whole HERE map stack (@here/flexpolyline, the
 // HERE SDK loader, truck presets). Code-split so none of it ships in the initial
@@ -18,14 +19,25 @@ type Props = {
   vehicleRooms: Group[]
   canAddTrip: boolean
   onAddTrip: (groupId: string) => void
+  onCreateVehicleRoom: () => void
+  onAddConnection: () => void
+  onOpenVehicleRoom: (groupId: string) => void
 }
 
 // The Inbox / workspace home — reached by clicking the sidebar company header.
 // It's an operational tools area: a grid of large tool cards. Selecting a tool
 // opens its dedicated workspace in place (replacing the chat area), with a back
 // action returning here. Today the only tool is the HERE "Route planner".
-export default function InboxView({ workspaceName, vehicleRooms, canAddTrip, onAddTrip }: Props) {
-  const [tool, setTool] = useState<'route' | null>(null)
+export default function InboxView({
+  workspaceName,
+  vehicleRooms,
+  canAddTrip,
+  onAddTrip,
+  onCreateVehicleRoom,
+  onAddConnection,
+  onOpenVehicleRoom,
+}: Props) {
+  const [tool, setTool] = useState<'route' | 'fleet' | null>(null)
   const [tripPickerOpen, setTripPickerOpen] = useState(false)
 
   // Warm the HERE SDK while the workspace home sits idle, so the first map open
@@ -56,6 +68,16 @@ export default function InboxView({ workspaceName, vehicleRooms, canAddTrip, onA
     )
   }
 
+  if (tool === 'fleet') {
+    return (
+      <FleetStatus
+        rooms={vehicleRooms}
+        onOpenRoom={onOpenVehicleRoom}
+        onBack={() => setTool(null)}
+      />
+    )
+  }
+
   return (
     <>
       <header className="h-[var(--header-height)] flex flex-col justify-center px-5 shrink-0">
@@ -72,6 +94,18 @@ export default function InboxView({ workspaceName, vehicleRooms, canAddTrip, onA
               subtitle="Truck routing, distance and ETA"
               onClick={() => setTool('route')}
             />
+            <ToolCard
+              icon={<Activity size="1.625rem" strokeWidth={1.5} />}
+              title="Fleet status"
+              subtitle="View vehicles, trips and availability"
+              onClick={() => setTool('fleet')}
+            />
+            <ToolCard
+              icon={<Truck size="1.625rem" strokeWidth={1.5} />}
+              title="Create vehicle room"
+              subtitle="Set up a permanent room for a truck"
+              onClick={onCreateVehicleRoom}
+            />
             {canAddTrip && (
               <ToolCard
                 icon={<Plus size="1.625rem" strokeWidth={1.6} />}
@@ -80,6 +114,12 @@ export default function InboxView({ workspaceName, vehicleRooms, canAddTrip, onA
                 onClick={() => setTripPickerOpen(true)}
               />
             )}
+            <ToolCard
+              icon={<UserPlus size="1.625rem" strokeWidth={1.5} />}
+              title="Add connection"
+              subtitle="Find people and connect across companies"
+              onClick={onAddConnection}
+            />
           </div>
         </div>
       </div>

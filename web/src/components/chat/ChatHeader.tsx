@@ -14,6 +14,7 @@ type Props = {
   // Precomputed one-line subtitle (trailer/member count for vehicles, the
   // peer's workspace for DMs) — derived in ChatView where the data lives.
   subtitle: string
+  typingText?: string
   onOpenProfile: (userId: string, name: string) => void
   // Inline search field. The input ref is owned by ChatView so openSearch can
   // focus it after mount.
@@ -35,6 +36,7 @@ type Props = {
 export default function ChatHeader({
   group,
   subtitle,
+  typingText,
   onOpenProfile,
   searchOpen,
   searchQuery,
@@ -96,7 +98,13 @@ export default function ChatHeader({
         )}
         <div className="min-w-0">
           <div className="text-[1rem] font-semibold truncate leading-tight">{groupLabel(group)}</div>
-          <div className="text-[0.8125rem] text-muted truncate leading-tight mt-0.5">{subtitle}</div>
+          <div
+            role={typingText ? 'status' : undefined}
+            aria-live={typingText ? 'polite' : undefined}
+            className={`text-[0.8125rem] truncate leading-tight mt-0.5 ${typingText ? 'text-active font-medium' : 'text-muted'}`}
+          >
+            {typingText || subtitle}
+          </div>
         </div>
       </div>
 
@@ -116,7 +124,7 @@ export default function ChatHeader({
         {searchOpen && (
           <div
             data-search-region
-            className="flex items-center gap-1 h-9 pl-3 pr-1 mr-0.5 rounded-full bg-white/[0.06]"
+            className="flex items-center gap-1 h-9 pl-3 pr-1 mr-0.5 rounded-full border border-white/[0.14] bg-surface-2/80 focus-within:border-white/[0.24]"
           >
             <input
               ref={searchInputRef}
@@ -127,7 +135,7 @@ export default function ChatHeader({
               }}
               placeholder="Search messages…"
               aria-label="Search this conversation"
-              className="w-40 sm:w-52 bg-transparent text-[0.8125rem] outline-none placeholder:text-faint"
+              className="w-40 sm:w-52 bg-transparent text-[0.8125rem] outline-none placeholder:text-muted"
             />
             {searchQuery && (
               <button

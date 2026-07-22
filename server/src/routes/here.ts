@@ -42,6 +42,27 @@ type HereRevgeocodeResponse = {
 
 type HereRoutePlace = { place?: { location?: HerePosition } }
 
+type HereMoney = {
+  type?: string
+  currency?: string
+  value?: number
+}
+
+type HereTollFare = {
+  id?: string
+  name?: string
+  price?: HereMoney
+  convertedPrice?: HereMoney
+  reason?: string
+  paymentMethods?: Array<string | { type?: string }>
+}
+
+type HereToll = {
+  countryCode?: string
+  tollSystem?: string
+  fares?: HereTollFare[]
+}
+
 type HereRouteResponse = {
   routes?: Array<{
     id?: string
@@ -52,7 +73,9 @@ type HereRouteResponse = {
         duration?: number
         length?: number
         baseDuration?: number
+        tolls?: { total?: HereMoney }
       }
+      tolls?: HereToll[]
       notices?: Array<{ code?: string; title?: string; severity?: string }>
       // HERE returns the road-snapped coordinate of each section boundary in
       // `place.location` (vs the raw input in `place.originalLocation`). We
@@ -92,7 +115,108 @@ const truckRouteSchema = z.object({
       trailerCount: z.number().int().min(0).max(4).optional(),
     })
     .optional(),
+  // Toll data is deliberately opt-in: HERE counts a route request containing
+  // `tolls` as an additional transaction, so map-drag recalculations stay on
+  // the lighter geometry-only request and the explicit button enables it.
+  includeTolls: z.boolean().optional(),
+  currency: z.string().regex(/^[A-Za-z]{3}$/).transform((value) => value.toUpperCase()).optional(),
+  departureTime: z.literal('any').optional(),
 })
+
+type NormalizedMoney = { currency: string; value: number }
+
+function normalizeMoney(value: HereMoney | undefined): NormalizedMoney | null {
+  if (!value?.currency || typeof value.value !== 'number' || !Number.isFinite(value.value)) return null
+  return { currency: value.currency.toUpperCase(), value: value.value }
+}
+
+function normalizeTolls(
+  sections: NonNullable<NonNullable<HereRouteResponse['routes']>[number]['sections']>,
+  requestedCurrency: string,
+) {
+  // HERE may repeat a fare when a multi-leg route crosses a section boundary.
+  // Fare ids are the stable dedupe key recommended by HERE for that case.
+  const seenFareIds = new Set<string>()
+  const seenSectionFareSets = new Set<string>()
+  const details: Array<{
+    countryCode?: string
+    tollSystem?: string
+    fares: Array<{
+      id?: string
+      name?: string
+      price?: NormalizedMoney
+      convertedPrice?: NormalizedMoney
+      reason?: string
+      paymentMethods: string[]
+    }>
+  }> = []
+
+  let totalValue = 0
+  let hasTotal = false
+
+  for (const section of sections) {
+    const sectionFareIds = (section.tolls ?? [])
+      .flatMap((toll) => toll.fares ?? [])
+      .map((fare) => fare.id)
+      .filter((id): id is string => Boolean(id))
+    const sectionSignature = [...new Set(sectionFareIds)].sort().join('|')
+    const sectionTotal = normalizeMoney(section.summary?.tolls?.total)
+
+    // If the exact same non-empty fare set is repeated on a later section, its
+    // section total is repeated as well and must not be counted twice.
+    const repeatedSection = Boolean(sectionSignature && seenSectionFareSets.has(sectionSignature))
+    if (sectionSignature) seenSectionFareSets.add(sectionSignature)
+    if (sectionTotal && !repeatedSection) {
+      totalValue += sectionTotal.value
+      hasTotal = true
+    }
+
+    for (const toll of section.tolls ?? []) {
+      const fares = (toll.fares ?? []).flatMap((fare) => {
+        if (fare.id && seenFareIds.has(fare.id)) return []
+        if (fare.id) seenFareIds.add(fare.id)
+
+        const price = normalizeMoney(fare.price)
+        const convertedPrice = normalizeMoney(fare.convertedPrice)
+        const paymentMethods = (fare.paymentMethods ?? [])
+          .map((method) => (typeof method === 'string' ? method : method.type))
+          .filter((method): method is string => Boolean(method))
+
+        return [{
+          id: fare.id,
+          name: fare.name,
+          ...(price ? { price } : {}),
+          ...(convertedPrice ? { convertedPrice } : {}),
+          reason: fare.reason,
+          paymentMethods,
+        }]
+      })
+      if (fares.length > 0) {
+        details.push({ countryCode: toll.countryCode, tollSystem: toll.tollSystem, fares })
+      }
+    }
+  }
+
+  const unavailable = sections.some((section) =>
+    (section.notices ?? []).some((notice) => {
+      const code = notice.code?.toLowerCase() ?? ''
+      return code.includes('tollsdataunavailable') || code.includes('currencyunsupported')
+    }),
+  )
+
+  if (unavailable) return { status: 'unavailable' as const, total: null, details }
+  if (!hasTotal && details.length > 0) return { status: 'available' as const, total: null, details }
+
+  const total = {
+    currency: requestedCurrency,
+    value: Number(totalValue.toFixed(2)),
+  }
+  return {
+    status: total.value > 0 ? 'available' as const : 'none' as const,
+    total,
+    details,
+  }
+}
 
 // One screen-sampled snap candidate: a geo coordinate obtained by converting a
 // pixel near the cursor back to lat/lng, tagged with `px` = its screen-pixel
@@ -754,7 +878,13 @@ hereRouter.post(
     for (const stop of body.via ?? []) {
       url.searchParams.append('via', fmtWaypoint(stop))
     }
-    url.searchParams.set('return', 'polyline,summary')
+    const tollCurrency = body.currency ?? 'EUR'
+    url.searchParams.set('return', body.includeTolls ? 'polyline,summary,tolls' : 'polyline,summary')
+    if (body.includeTolls) {
+      url.searchParams.set('currency', tollCurrency)
+      url.searchParams.set('tolls[summaries]', 'total')
+      url.searchParams.set('departureTime', body.departureTime ?? 'any')
+    }
 
     // HERE Routing v8 describes the truck via `vehicle[...]` params (the old
     // `truck[...]` dimensional form is deprecated/removed). Dimensions are in
@@ -795,6 +925,7 @@ hereRouter.post(
           }),
           { duration: 0, length: 0 },
         ),
+        ...(body.includeTolls ? { tolls: normalizeTolls(route.sections, tollCurrency) } : {}),
       },
     })
   }),

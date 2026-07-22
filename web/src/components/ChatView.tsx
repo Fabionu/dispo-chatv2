@@ -51,6 +51,7 @@ import ReadReceiptsPanel from './messages/ReadReceiptsPanel'
 import SystemMessageRow from './messages/SystemMessageRow'
 import PinnedBar from './messages/PinnedBar'
 import TypingIndicator from './messages/TypingIndicator'
+import { typingStatusText } from '../lib/typing'
 import Spinner from './Spinner'
 import type { AttachmentWorkspaceTab, LocalMessage } from './messages/types'
 import { useChatScroll } from '../hooks/useChatScroll'
@@ -975,6 +976,7 @@ export default function ChatView({
       <ChatHeader
         group={group}
         subtitle={subtitle}
+        typingText={typingStatusText(typingUsers, group.type === 'direct')}
         onOpenProfile={openProfile}
         searchOpen={searchOpen}
         searchQuery={searchQuery}

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import Avatar from '../Avatar'
-
-export type TypingUser = { id: string; name: string }
+import { typingStatusText, type TypingUser } from '../../lib/typing'
 
 // Temporary incoming-style bubble in the measured composer lane, immediately
 // above the input. The outer grid animates its real height, so ChatView expands
@@ -30,15 +29,7 @@ export default function TypingIndicator({ users }: { users: TypingUser[] }) {
     return () => window.clearTimeout(timer)
   }, [users, displayedUsers.length])
 
-  const first = (n: string) => n.split(' ')[0] || n
-  const text =
-    displayedUsers.length === 1
-      ? `${first(displayedUsers[0].name)} is typing`
-      : displayedUsers.length === 2
-        ? `${first(displayedUsers[0].name)} and ${first(displayedUsers[1].name)} are typing`
-        : displayedUsers.length > 2
-          ? `${first(displayedUsers[0].name)}, ${first(displayedUsers[1].name)} and ${displayedUsers.length - 2} more are typing`
-          : ''
+  const text = typingStatusText(displayedUsers)
   const identityWidth =
     displayedUsers.length > 2 ? 'w-[4.25rem]' : displayedUsers.length === 2 ? 'w-12' : 'w-8'
 
