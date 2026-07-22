@@ -525,6 +525,8 @@ export type TripSummary = {
    *  the room header. Empty arrays when there are no such stops. */
   loadingPlaces: TripPlace[]
   unloadingPlaces: TripPlace[]
+  /** Every active stop in dispatcher-entered route order. */
+  routePlaces: TripPlace[]
   /** Total non-cancelled stops — lets the header bar show intermediate stops
    *  between the origin and destination. */
   stopCount: number
@@ -550,6 +552,7 @@ export function tripSummary(ops: VehicleOps): TripSummary | null {
     nextLabel,
     loadingPlaces: loadingStops(ops.stops).map(stopPlace),
     unloadingPlaces: unloadingStops(ops.stops).map(stopPlace),
+    routePlaces: ops.stops.filter((s) => s.status !== 'cancelled').map(stopPlace),
     stopCount: ops.stops.filter((s) => s.status !== 'cancelled').length,
     progress: tripProgress(ops),
     route: t.route,

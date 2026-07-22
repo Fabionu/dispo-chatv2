@@ -3,24 +3,15 @@ import CountryFlag from '../CountryFlag'
 import { TONE_TEXT } from './opsControls'
 import type { ChipTone, TripPlace, TripProgress, TripSummary } from '../../lib/vehicleOps'
 
-// The active-trip strip under a vehicle room's header — a slim, glanceable
-// "where is this load" bar. Left: a completion ring + the status. Middle: the
-// route as origin → destination (with a "+N" when there are stops in between).
-// Right: the order / client, when set. The whole bar opens the Trip tab.
-//
-// Rendered as an inset, card-rounded strip (the shared `card` radius token, no
-// border/shadow — the faint fill alone defines it) so it reads like the rest of
-// the rounded surfaces instead of a hard edge-to-edge band.
-//
-// Only rendered for vehicle rooms with an active trip (the caller gates on
-// `trip`), so there's always something to show; empty pieces simply drop out and
-// the bar collapses to what's known.
+// Slim operational strip under a vehicle-room header. Equal outer Grid tracks
+// keep the complete route geometrically centered even when the status or order
+// text on either side has a different width.
 export default function TripBar({ trip, onOpen }: { trip: TripSummary; onOpen: () => void }) {
-  const origin = trip.loadingPlaces[0]
-  const dest = trip.unloadingPlaces[trip.unloadingPlaces.length - 1]
-  // Stops sitting between the shown origin and destination (extra loadings,
-  // customs, fuel, etc.). Only meaningful when both endpoints are shown.
-  const between = origin && dest ? Math.max(0, trip.stopCount - 2) : 0
+  // Prefer the complete dispatcher-entered sequence. The fallback keeps older
+  // summary objects safe during hot reloads while still showing their endpoints.
+  const routePlaces = trip.routePlaces?.length
+    ? trip.routePlaces
+    : [...trip.loadingPlaces, ...trip.unloadingPlaces]
   const orderClient = [trip.reference && `#${trip.reference}`, trip.client]
     .filter(Boolean)
     .join(' · ')
@@ -30,45 +21,41 @@ export default function TripBar({ trip, onOpen }: { trip: TripSummary; onOpen: (
       type="button"
       onClick={onOpen}
       title="View trip details"
-      className="group/tripbar shrink-0 mx-3 mb-1.5 h-11 px-3.5 flex items-center gap-3 text-left rounded-card bg-white/[0.03] hover:bg-white/[0.05] active:bg-white/[0.06] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+      style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 2.4fr) minmax(0, 1fr)' }}
+      className="group/tripbar shrink-0 mx-3 mb-1.5 h-11 px-3.5 grid items-center gap-3 text-left rounded-card bg-white/[0.03] hover:bg-white/[0.05] active:bg-white/[0.06] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
     >
-      {/* Status + completion. */}
-      <span className="flex items-center gap-2.5 shrink-0">
+      {/* Status + completion stay in the left track. */}
+      <span className="flex items-center gap-2.5 min-w-0 justify-self-start">
         {trip.progress && <ProgressRing progress={trip.progress} tone={trip.statusTone} />}
-        <span className={`text-[0.78125rem] font-medium whitespace-nowrap ${TONE_TEXT[trip.statusTone]}`}>
+        <span
+          className={`truncate text-[0.78125rem] font-medium ${TONE_TEXT[trip.statusTone]}`}
+        >
           {trip.statusLabel}
         </span>
       </span>
 
-      {/* Route — origin → (+N) → destination. */}
-      {(origin || dest) && (
-        <>
-          <Divider />
-          <span className="flex items-center gap-2 min-w-0 flex-1 text-[0.78125rem]">
-            {origin && <Place place={origin} />}
-            {origin && dest && (
-              <span className="flex items-center gap-1.5 shrink-0 text-faint">
-                <ArrowRight size="0.875rem" strokeWidth={2} />
-                {between > 0 && (
-                  <>
-                    <span
-                      title={`${between} stop${between === 1 ? '' : 's'} in between`}
-                      className="rounded-full bg-white/[0.06] text-faint text-[0.625rem] font-medium leading-none px-1.5 py-0.5"
-                    >
-                      +{between}
-                    </span>
-                    <ArrowRight size="0.875rem" strokeWidth={2} />
-                  </>
+      {/* Loading, intermediate, and unloading stops remain one centered route. */}
+      <span className="min-w-0 w-full flex items-center justify-center text-[0.78125rem]">
+        {routePlaces.length > 0 && (
+          <span className="inline-flex max-w-full min-w-0 items-center justify-center gap-2 overflow-hidden">
+            {routePlaces.map((place, index) => (
+              <span key={`${place.code ?? ''}-${place.text}-${index}`} className="contents">
+                {index > 0 && (
+                  <ArrowRight
+                    size="0.875rem"
+                    strokeWidth={2}
+                    className="shrink-0 text-faint"
+                  />
                 )}
+                <Place place={place} />
               </span>
-            )}
-            {dest && <Place place={dest} />}
+            ))}
           </span>
-        </>
-      )}
+        )}
+      </span>
 
-      {/* Order / client + open affordance. */}
-      <span className="flex items-center gap-2 shrink-0 ml-auto pl-1 text-faint">
+      {/* Order / client + open affordance stay in the right track. */}
+      <span className="flex items-center gap-2 min-w-0 justify-self-end text-faint">
         {orderClient && (
           <span className="hidden lg:block max-w-[14rem] truncate text-[0.75rem] text-muted">
             {orderClient}
@@ -77,39 +64,38 @@ export default function TripBar({ trip, onOpen }: { trip: TripSummary; onOpen: (
         <ChevronRight
           size="1rem"
           strokeWidth={1.8}
-          className="text-faint transition-colors group-hover/tripbar:text-muted"
+          className="shrink-0 text-faint transition-colors group-hover/tripbar:text-muted"
         />
       </span>
     </button>
   )
 }
 
-// One place in the route — country flag + the "NL 9001 Grou" text. Truncates as a
-// flex item; the two places share the middle space.
+// One route place: country flag + compact postal/city text. Every place may
+// shrink and truncate, allowing multiple stops to remain visible in the center.
 function Place({ place }: { place: TripPlace }) {
+  const label = place.text || place.code || '—'
   return (
-    <span className="inline-flex items-center gap-1.5 min-w-0 flex-1">
+    <span className="inline-flex items-center gap-1.5 min-w-0 max-w-[11rem] shrink">
       <CountryFlag code={place.code} />
-      <span className="truncate text-muted">{place.text || place.code || '—'}</span>
+      <span className="truncate text-muted" title={label}>
+        {label}
+      </span>
     </span>
   )
 }
 
-function Divider() {
-  return <span className="shrink-0 h-4 w-px bg-white/[0.1]" />
-}
-
 // A small completion donut: a faint full track with a tone-coloured arc for the
-// done fraction and the percentage in the centre. Tone comes from the trip status
-// (via TONE_TEXT → currentColor), so the ring matches the status label's colour.
+// done fraction and percentage in the centre.
 function ProgressRing({ progress, tone }: { progress: TripProgress; tone: ChipTone }) {
   const pct = Math.max(0, Math.min(1, progress.pct))
-  // viewBox units; width/height in rem so the ring tracks the global UI scale.
   const R = 12.5
   const C = 2 * Math.PI * R
   const label = Math.round(pct * 100)
   const title =
-    progress.total > 0 ? `${progress.done}/${progress.total} stops done · ${label}%` : `${label}% complete`
+    progress.total > 0
+      ? `${progress.done}/${progress.total} stops done · ${label}%`
+      : `${label}% complete`
   return (
     <span
       className={`relative inline-flex items-center justify-center shrink-0 w-7 h-7 ${TONE_TEXT[tone]}`}
@@ -137,7 +123,9 @@ function ProgressRing({ progress, tone }: { progress: TripProgress; tone: ChipTo
           strokeDashoffset={C * (1 - pct)}
         />
       </svg>
-      <span className="absolute text-[0.5625rem] font-semibold tabular-nums text-text">{label}</span>
+      <span className="absolute text-[0.5625rem] font-semibold tabular-nums text-text">
+        {label}
+      </span>
     </span>
   )
 }

@@ -79,7 +79,7 @@ export default function TypingIndicator({ users }: { users: TypingUser[] }) {
               </span>
               {/* Same neutral skin and sender-side tail as an incoming message
                   bubble; the content is only the live composing rhythm. */}
-              <span className="flex h-8 items-center gap-1 rounded-[0.5rem] rounded-bl-[0.1875rem] bg-surface-2 px-3" aria-hidden="true">
+              <span className="flex h-8 items-center gap-1 rounded-[1rem] rounded-bl-[0.375rem] bg-surface-2 px-3" aria-hidden="true">
                 <Dot delay="0ms" />
                 <Dot delay="160ms" />
                 <Dot delay="320ms" />

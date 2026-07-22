@@ -181,8 +181,8 @@ function MessageRow({
   // corner as the directional cue. Inside a same-author run the top corner on
   // that side also tightens, so consecutive bubbles read as one stacked group.
   const grouped = !startNewGroup
-  const shapeMine = `rounded-[0.5rem] rounded-br-[0.1875rem]${grouped ? ' rounded-tr-[0.25rem]' : ''}`
-  const shapeOther = `rounded-[0.5rem] rounded-bl-[0.1875rem]${grouped ? ' rounded-tl-[0.25rem]' : ''}`
+  const shapeMine = `rounded-[1rem] rounded-br-[0.375rem]${grouped ? ' rounded-tr-[0.5rem]' : ''}`
+  const shapeOther = `rounded-[1rem] rounded-bl-[0.375rem]${grouped ? ' rounded-tl-[0.5rem]' : ''}`
   const deletedSkin = `bg-white/[0.02] text-muted italic ${mine ? shapeMine : shapeOther}`
   // Bubble skins sit on the raised chat card (`chat` #202020). Incoming uses
   // the next neutral surface step (`surface-2` #303030), which separates it
