@@ -45,6 +45,12 @@ const DEFAULT_SOUND: NotificationSound = 'soft-pop'
 
 let audioContext: AudioContext | null = null
 
+// The synthesized tones were originally mixed at very conservative peaks
+// (~0.03–0.045), which made them disappear under normal desktop audio. A
+// shared boost keeps every preset's relative character while bringing the
+// loudest overlapping combinations to only ~0.25, safely below clipping.
+const NOTIFICATION_VOLUME_BOOST = 2.75
+
 function isNotificationSound(value: unknown): value is NotificationSound {
   return NOTIFICATION_SOUNDS.some((sound) => sound.value === value)
 }
@@ -119,7 +125,10 @@ function tone(ctx: AudioContext, base: number, spec: Tone) {
   }
 
   gain.gain.setValueAtTime(0.0001, start)
-  gain.gain.exponentialRampToValueAtTime(spec.volume, start + 0.008)
+  gain.gain.exponentialRampToValueAtTime(
+    Math.min(spec.volume * NOTIFICATION_VOLUME_BOOST, 0.25),
+    start + 0.008,
+  )
   gain.gain.exponentialRampToValueAtTime(0.0001, end)
   oscillator.connect(gain)
   gain.connect(ctx.destination)
