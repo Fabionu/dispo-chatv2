@@ -381,7 +381,13 @@ function MessageRow({
                   edge, sharing its x with the chevron gutter below it. */}
               {startNewGroup && !mine && (
                 <div className="flex items-center gap-1.5 mb-0.5 leading-none">
-                  <span className="text-[0.84375rem] font-semibold text-text">{authorLabel}</span>
+                  <button
+                    type="button"
+                    onClick={() => onOpenProfile(message.authorId, authorLabel)}
+                    className="text-[0.84375rem] font-semibold text-text hover:underline underline-offset-2 focus-visible:outline-none focus-visible:underline"
+                  >
+                    {authorLabel}
+                  </button>
                 </div>
               )}
 
@@ -565,7 +571,13 @@ function MessageRow({
         )}
         <div className={`flex-1 min-w-0 flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
           {showAuthorChrome && startNewGroup && (
-            <div className="text-[0.6875rem] text-muted mb-1 px-1 leading-none">{message.authorName}</div>
+            <button
+              type="button"
+              onClick={() => onOpenProfile(message.authorId, message.authorName)}
+              className="text-[0.6875rem] text-muted hover:text-text hover:underline underline-offset-2 mb-1 px-1 leading-none focus-visible:outline-none focus-visible:underline"
+            >
+              {message.authorName}
+            </button>
           )}
           {/* Group wrapper for hover-reveal of the actions chevron. Width is
               capped here so the trigger hugs the bubble's edge. The chevron is

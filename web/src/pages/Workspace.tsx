@@ -64,6 +64,8 @@ import ContactRow from './SidebarContactRow'
 import { FilterTab, ArchiveToggle, EmptyHint, MenuItem } from './sidebarBits'
 import { optimisticDirectGroup } from './workspaceUtils'
 import ConnectionStatusBanner from '../components/ConnectionStatusBanner'
+import { NOTIFICATION_OPEN_EVENT } from '../lib/browserNotifications'
+import UserProfilePanel from '../components/UserProfilePanel'
 
 type Props = {
   user: User
@@ -97,6 +99,16 @@ type Selection =
   | { kind: 'inbox' }
   | null
 
+function initialSelection(): Selection {
+  const params = new URLSearchParams(window.location.search)
+  const groupId = params.get('notificationGroup')
+  if (!groupId) return null
+  params.delete('notificationGroup')
+  const query = params.toString()
+  window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`)
+  return { kind: 'group', id: groupId }
+}
+
 export default function Workspace({ user, workspace, onSignOut }: Props) {
   const { refresh } = useAuth()
   // Sidebar avatar/logo diameter tracks the display density (these components
@@ -128,6 +140,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   const [profilePanelOpen, setProfilePanelOpen] = useState(false)
   const [companyPanelOpen, setCompanyPanelOpen] = useState(false)
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(false)
+  const [profileTarget, setProfileTarget] = useState<{ id: string; name: string } | null>(null)
   // Prefetched once at mount so opening "My profile" is instant (the panel
   // remounts each open, so without this it would refetch every time and flash
   // a "Loading…" state). Kept fresh by the panel's onSaved.
@@ -138,7 +151,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   const [logoVersion, setLogoVersion] = useState(0)
   // Active members of the caller's own company (internal/trusted contacts).
   const [members, setMembers] = useState<WorkspaceMember[]>([])
-  const [selection, setSelection] = useState<Selection>(null)
+  const [selection, setSelection] = useState<Selection>(initialSelection)
   // Sidebar quick-filter text. Filters the conversation lists by name (and a
   // vehicle's tractor plate) so "Jump to…" actually narrows the rail.
   const [query, setQuery] = useState('')
@@ -175,6 +188,15 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     (groupId: string) => setSelection({ kind: 'group', id: groupId }),
     [],
   )
+
+  useEffect(() => {
+    const open = (event: Event) => {
+      const groupId = (event as CustomEvent<{ groupId?: string }>).detail?.groupId
+      if (groupId) openNotificationGroup(groupId)
+    }
+    window.addEventListener(NOTIFICATION_OPEN_EVENT, open)
+    return () => window.removeEventListener(NOTIFICATION_OPEN_EVENT, open)
+  }, [openNotificationGroup])
 
   // Conversation list + live socket sync + per-row pref actions.
   const {
@@ -373,6 +395,27 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
       )
     },
     [openGroupOptimistically, workspace.id, workspace.name],
+  )
+
+  const messageProfileUser = useCallback(
+    async (userId: string, name: string) => {
+      const member = members.find((candidate) => candidate.id === userId)
+      if (member) {
+        await openDirectWithMember(member)
+      } else {
+        const { group } = await api.groups.createDirect(userId)
+        openGroupOptimistically(
+          optimisticDirectGroup(group.id, {
+            id: userId,
+            displayName: name,
+            email: '',
+            workspace: { id: workspace.id, name: workspace.name },
+          }),
+        )
+      }
+      setProfileTarget(null)
+    },
+    [members, openDirectWithMember, openGroupOptimistically, workspace.id, workspace.name],
   )
 
   // Navigate to a private DM opened from a message action ("Reply privately"
@@ -862,7 +905,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                         key={item.key}
                         member={item.member}
                         size={sidebarAvatar}
-                        onClick={() => void openDirectWithMember(item.member)}
+                        onClick={() =>
+                          setProfileTarget({ id: item.member.id, name: item.member.displayName })
+                        }
                       />
                     ),
                   )
@@ -1044,6 +1089,17 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
       )}
       {modal === 'direct' && (
         <NewMessageModal onClose={() => setModal(null)} onOpenGroup={handleCreated} />
+      )}
+      {profileTarget && (
+        <UserProfilePanel
+          key={profileTarget.id}
+          userId={profileTarget.id}
+          name={profileTarget.name}
+          currentUserId={user.id}
+          currentWorkspaceName={workspace.name}
+          onMessage={messageProfileUser}
+          onClose={() => setProfileTarget(null)}
+        />
       )}
     </div>
   )

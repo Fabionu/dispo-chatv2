@@ -147,14 +147,18 @@ export default function MemberRow({
           />
         )}
       </div>
-      <div className="min-w-0 flex-1 flex flex-col gap-px">
-        <div className="text-[0.875rem] leading-tight truncate">
+      <button
+        type="button"
+        onClick={() => onOpenProfile(member)}
+        className="min-w-0 flex-1 flex flex-col gap-px text-left rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+      >
+        <span className="text-[0.875rem] leading-tight truncate hover:underline underline-offset-2">
           {member.displayName}
           {isSelf && <span className="text-faint"> (you)</span>}
-        </div>
+        </span>
         {/* Group role (admin / member) as plain text — never the workspace role. */}
-        <div className="text-[0.75rem] leading-tight text-faint truncate">{groupRoleLabel}</div>
-      </div>
+        <span className="text-[0.75rem] leading-tight text-faint truncate">{groupRoleLabel}</span>
+      </button>
 
       {/* Compact text-based actions menu. The small ⋮ trigger keeps the row
           clean (no always-visible buttons); a row spinner replaces it while a

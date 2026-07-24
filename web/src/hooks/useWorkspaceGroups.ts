@@ -6,7 +6,10 @@ import { groupHasUnread, groupLabel } from '../lib/types'
 import { getSocket } from '../lib/socket'
 import { byRecent } from '../pages/workspaceUtils'
 import { playNotificationSound } from '../lib/notificationSound'
-import { showIncomingMessageNotification } from '../lib/browserNotifications'
+import {
+  backgroundPushIsActive,
+  showIncomingMessageNotification,
+} from '../lib/browserNotifications'
 import type { TypingUser } from '../lib/typing'
 
 // The sidebar's conversation-list state, extracted from Workspace: the groups
@@ -135,7 +138,11 @@ export function useWorkspaceGroups({
       removeTyping(msg.groupId, msg.authorId)
       const targetGroup = groupsRef.current.find((group) => group.id === msg.groupId)
       if (msg.authorId !== userId && !targetGroup?.muted) {
-        void playNotificationSound()
+        // The service worker owns hidden/closed-page alerts once Web Push is
+        // active. Avoid layering the custom Web Audio tone over the OS sound.
+        if (document.visibilityState === 'visible' || !backgroundPushIsActive()) {
+          void playNotificationSound()
+        }
         showIncomingMessageNotification({
           title:
             targetGroup?.type === 'vehicle'

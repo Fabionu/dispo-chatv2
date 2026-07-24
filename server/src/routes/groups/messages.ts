@@ -16,8 +16,114 @@ import {
   type MessageRow,
   mapMessageRow,
 } from '../../util/messages.js'
+import { sendMessagePush } from '../../push.js'
+import { log } from '../../util/log.js'
 
 export const messagesRouter = Router()
+
+// Search the complete conversation, not only the page loaded in the browser.
+// The trigram index from migration 0027 serves the leading-wildcard match.
+messagesRouter.get(
+  '/:id/messages/search',
+  asyncHandler(async (req, res) => {
+    const { userId } = req.session!
+    const groupId = req.params.id
+    const query = typeof req.query.q === 'string' ? req.query.q.trim() : ''
+    if (query.length < 2 || query.length > 200) {
+      return res.status(400).json({ error: 'invalid_search_query' })
+    }
+
+    const { rows: membership } = await pool.query(
+      'select 1 from group_members where group_id = $1 and user_id = $2 limit 1',
+      [groupId, userId],
+    )
+    if (membership.length === 0) return res.status(403).json({ error: 'not_a_member' })
+
+    const pattern = `%${query.replace(/[\\%_]/g, '\\$&')}%`
+    const { rows } = await pool.query<{
+      id: string
+      author_id: string
+      author_name: string
+      body: string
+      created_at: string
+    }>(
+      `select m.id, m.author_id, u.display_name as author_name, m.body, m.created_at
+         from messages m
+         join users u on u.id = m.author_id
+        where m.group_id = $1
+          and m.kind = 'user'
+          and m.deleted_at is null
+          and m.body ilike $3 escape '\\'
+          and not exists (
+            select 1 from message_deletions md
+             where md.message_id = m.id and md.user_id = $2
+          )
+        order by m.created_at desc
+        limit 50`,
+      [groupId, userId, pattern],
+    )
+
+    res.json({
+      results: rows.map((row) => ({
+        id: row.id,
+        authorId: row.author_id,
+        authorName: row.author_name,
+        body: row.body,
+        createdAt: row.created_at,
+      })),
+    })
+  }),
+)
+
+// Load a bounded historical window ending at a search result. This lets the
+// client highlight an older match without downloading every intervening page.
+messagesRouter.get(
+  '/:id/messages/:messageId/context',
+  asyncHandler(async (req, res) => {
+    const { userId } = req.session!
+    const groupId = req.params.id
+    const messageId = req.params.messageId
+
+    const { rows: targetRows } = await pool.query<{ created_at: string }>(
+      `select m.created_at
+         from messages m
+         join group_members gm
+           on gm.group_id = m.group_id and gm.user_id = $2
+        where m.id = $3
+          and m.group_id = $1
+          and m.kind = 'user'
+          and m.deleted_at is null
+          and not exists (
+            select 1 from message_deletions md
+             where md.message_id = m.id and md.user_id = $2
+          )
+        limit 1`,
+      [groupId, userId, messageId],
+    )
+    if (targetRows.length === 0) throw new HttpError(404, 'message_not_found')
+
+    const limit = 50
+    const { rows } = await pool.query<MessageRow>(
+      `select ${MESSAGE_COLUMNS}
+         ${MESSAGE_FROM}
+        where m.group_id = $1
+          and m.created_at <= $3
+          and not exists (
+            select 1 from message_deletions md
+             where md.message_id = m.id and md.user_id = $2
+          )
+        order by m.created_at desc
+        limit $4`,
+      [groupId, userId, targetRows[0].created_at, limit + 1],
+    )
+    const hasMore = rows.length > limit
+    const page = hasMore ? rows.slice(0, limit) : rows
+    res.json({
+      messages: page.map(mapMessageRow).reverse(),
+      nextCursor: hasMore ? page[page.length - 1].created_at : null,
+    })
+  }),
+)
 
 // ── GET /api/groups/:id/messages ─────────────────────────────────────────
 // Cursor-based pagination. Default: latest 50. Pass ?before=<iso-timestamp>
@@ -388,6 +494,18 @@ messagesRouter.post(
 
       getIO().to(roomForGroup(groupId)).emit('message:new', payload)
       res.status(201).json({ message: payload })
+      // Socket.IO only reaches open pages. Web Push reaches subscribed browser
+      // profiles after every tab has closed; failures never delay message send.
+      void sendMessagePush({
+        id: payload.id,
+        groupId,
+        authorId: userId,
+        authorName: payload.authorName,
+        body: payload.body,
+        hasAttachment: payload.attachments.length > 0,
+      }).catch(() => {
+        log.warn('push_dispatch_failed', { groupId, messageId: payload.id })
+      })
 
       // Out of the request path: generate the image preview in the background,
       // then patch the attachment + notify the room. Non-blocking (enqueue

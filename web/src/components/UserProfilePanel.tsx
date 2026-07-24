@@ -217,18 +217,23 @@ export default function UserProfilePanel({
       {/* Click-away — only as an overlay drawer on narrow screens (< xl). On
           desktop the panel is a real in-flow column, so there's no backdrop and
           the chat beside it stays fully clickable. Same as Group info. */}
-      <div className="fixed inset-0 z-40 xl:hidden" onClick={onClose} aria-hidden />
+      <div
+        className="fixed inset-0 z-40 bg-black/65 backdrop-blur-[1px]"
+        onClick={onClose}
+        aria-hidden
+      />
 
       <aside
         role="dialog"
+        aria-modal="true"
         aria-label="User profile"
         // Narrow screens: a fixed right-edge drawer (overlay). xl+: a static,
         // in-flow right column beside the chat — same rail background, width,
         // and panel radius as the Group info column, so it reads as the same
         // card surface with the standard gap from the chat (the row's xl:gap-3).
-        className="fixed top-0 right-0 bottom-0 z-40 w-full max-w-[25rem] shadow-[-16px_0_48px_rgba(0,0,0,0.4)] bg-rail flex flex-col
-                   xl:static xl:z-auto xl:w-[clamp(22.5rem,26vw,26.25rem)] xl:max-w-none xl:shrink-0 xl:shadow-none
-                   xl:rounded-panel xl:overflow-hidden"
+        className="fixed left-1/2 top-1/2 z-50 h-[calc(100dvh-1.5rem)] max-h-[44rem] w-[calc(100%-1.5rem)] max-w-[30rem]
+                   -translate-x-1/2 -translate-y-1/2 rounded-modal border border-white/[0.08]
+                   bg-rail shadow-[0_32px_80px_rgba(0,0,0,0.65)] flex flex-col overflow-hidden"
       >
         {/* Header — same seam as the other right/side panels. */}
         <div className="h-[var(--header-height)] flex items-center justify-between px-4 shrink-0">

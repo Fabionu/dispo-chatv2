@@ -59,6 +59,14 @@ export class ApiError extends Error {
   }
 }
 
+export type MessageSearchResult = {
+  id: string
+  authorId: string
+  authorName: string
+  body: string
+  createdAt: string
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // FormData manages its own multipart boundary — we must NOT send a manual
   // content-type for those requests or the boundary gets lost.
@@ -107,6 +115,16 @@ export const api = {
     messages: (groupId: string, before?: string) =>
       request<{ messages: Message[]; nextCursor: string | null }>(
         `/groups/${groupId}/messages${before ? `?before=${encodeURIComponent(before)}` : ''}`,
+      ),
+
+    searchMessages: (groupId: string, query: string) =>
+      request<{ results: MessageSearchResult[] }>(
+        `/groups/${groupId}/messages/search?q=${encodeURIComponent(query)}`,
+      ),
+
+    messageContext: (groupId: string, messageId: string) =>
+      request<{ messages: Message[]; nextCursor: string | null }>(
+        `/groups/${groupId}/messages/${messageId}/context`,
       ),
 
     postMessage: (

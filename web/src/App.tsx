@@ -1,9 +1,36 @@
-import { AuthProvider, useAuth } from './auth/AuthContext'
+import {
+  AuthProvider,
+  useAuth,
+  type User,
+  type Workspace as WorkspaceT,
+} from './auth/AuthContext'
 import SignIn from './pages/SignIn'
 import Workspace from './pages/Workspace'
 import InviteRegister from './pages/InviteRegister'
 import Spinner from './components/Spinner'
 import { MessageCacheProvider } from './hooks/useMessageCache'
+import { useEffect } from 'react'
+import { syncBrowserNotificationSubscription } from './lib/browserNotifications'
+
+function SignedInWorkspace({
+  user,
+  workspace,
+  onSignOut,
+}: {
+  user: User
+  workspace: WorkspaceT
+  onSignOut: () => Promise<void>
+}) {
+  useEffect(() => {
+    void syncBrowserNotificationSubscription()
+  }, [user.id])
+
+  return (
+    <MessageCacheProvider userId={user.id}>
+      <Workspace user={user} workspace={workspace} onSignOut={onSignOut} />
+    </MessageCacheProvider>
+  )
+}
 
 // No router in this app — match the public invite path off the URL. `/invite/<token>`
 // renders the registration page regardless of auth state; on success the page
@@ -31,11 +58,7 @@ function Gate() {
     return <SignIn />
   }
 
-  return (
-    <MessageCacheProvider userId={auth.user.id}>
-      <Workspace user={auth.user} workspace={auth.workspace} onSignOut={auth.signOut} />
-    </MessageCacheProvider>
-  )
+  return <SignedInWorkspace user={auth.user} workspace={auth.workspace} onSignOut={auth.signOut} />
 }
 
 export default function App() {

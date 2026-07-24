@@ -4,7 +4,8 @@ import IdentitySlot from '../components/IdentitySlot'
 
 // One company colleague who has no open DM yet, shown inline in the unified rail
 // list (All + Direct filters). A quiet people-row (circular avatar + name)
-// matching the conversation-row metrics; clicking it opens or creates a DM. No
+// matching the conversation-row metrics; clicking it opens the user's profile
+// modal, whose Message action opens or creates a DM. No
 // unread/presence affordances — it's a directory entry. Once a DM exists the
 // colleague renders as a full conversation row (GroupRow) instead, so they never
 // appear twice.
@@ -21,7 +22,8 @@ export default function ContactRow({
   return (
     <button
       onClick={onClick}
-      title={`Message ${member.displayName}`}
+      title={`View ${member.displayName}'s profile`}
+      aria-label={`View ${member.displayName}'s profile`}
       style={{
         minHeight: 'var(--sidebar-row-height)',
         gap: 'var(--sidebar-row-gap)',

@@ -50,6 +50,12 @@ export const env = {
   PORT: Number(process.env.PORT ?? 3001),
   NODE_ENV: process.env.NODE_ENV ?? 'development',
   PUBLIC_ORIGIN: process.env.PUBLIC_ORIGIN ?? '',
+  // Web Push (VAPID). Both keys must be present for closed-tab notifications.
+  // Generate once with `npx web-push generate-vapid-keys` and keep the same
+  // pair across deploys so existing browser subscriptions remain valid.
+  VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY ?? '',
+  VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY ?? '',
+  VAPID_SUBJECT: process.env.VAPID_SUBJECT ?? 'mailto:notifications@dispo.chat',
   // HERE Location Services. Used by the server-side proxy for search/routing
   // and exposed to authenticated clients only for HERE Maps JS rendering.
   HERE_API_KEY: process.env.HERE_API_KEY ?? '',

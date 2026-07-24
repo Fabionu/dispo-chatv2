@@ -21,7 +21,7 @@ import type { Attachment, Group, GroupMember, IncomingMessage, ReplyToPreview } 
 import { groupLabel, trailerPlate } from '../lib/types'
 import { fileError } from './attachments/attachmentUtils'
 import { resolveMentionIds } from '../lib/mentions'
-import { api } from '../lib/api'
+import { api, type MessageSearchResult } from '../lib/api'
 import { getSocket } from '../lib/socket'
 import ChatComposer, { type ChatComposerHandle, type EditContext } from './composer/ChatComposer'
 import ChatHeader from './chat/ChatHeader'
@@ -288,6 +288,11 @@ export default function ChatView({
   // the message list down.
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchContext, setSearchContext] = useState<{
+    messages: LocalMessage[]
+    targetId: string
+  } | null>(null)
+  const visibleMessages = searchContext?.messages ?? messages
   const searchInputRef = useRef<HTMLInputElement>(null)
   const closeSearch = useCallback(() => {
     setSearchOpen(false)
@@ -301,6 +306,7 @@ export default function ChatView({
   // Close search when switching conversations so it never carries a stale query.
   useEffect(() => {
     closeSearch()
+    setSearchContext(null)
   }, [group.id, closeSearch])
   // The map tool writes back into the Add-trip panel's draft, so it can't outlive
   // that panel or the conversation — close it when either goes away.
@@ -390,7 +396,7 @@ export default function ChatView({
     handleImageLoaded,
     anchorBeforePrepend,
     pinToBottomNext,
-  } = useChatScroll(messages, loading)
+  } = useChatScroll(visibleMessages, searchContext ? false : loading)
 
   // Floating composer: it OVERLAYS the bottom of the message list (transparent,
   // so bubbles scroll behind it). We measure its live height to (a) pad the
@@ -829,6 +835,44 @@ export default function ChatView({
     [scrollRef],
   )
 
+  const openSearchResult = useCallback(
+    async (result: MessageSearchResult) => {
+      closeSearch()
+      if (messages.some((message) => message.id === result.id)) {
+        setSearchContext(null)
+        requestAnimationFrame(() => jumpToMessage(result.id))
+        return
+      }
+
+      try {
+        const context = await api.groups.messageContext(group.id, result.id)
+        setSearchContext({
+          messages: context.messages as LocalMessage[],
+          targetId: result.id,
+        })
+        // Wait for the historical window to paint, then centre and pulse the
+        // selected result exactly like an in-page reply/pin jump.
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            const element = scrollRef.current?.querySelector<HTMLElement>(
+              `[data-message-id="${CSS.escape(result.id)}"]`,
+            )
+            element?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+            setHighlightedMessageId(result.id)
+            window.clearTimeout(highlightTimer.current)
+            highlightTimer.current = window.setTimeout(
+              () => setHighlightedMessageId(null),
+              1800,
+            )
+          })
+        })
+      } catch {
+        flashNotice('Could not open that message.')
+      }
+    },
+    [closeSearch, group.id, jumpToMessage, messages, scrollRef],
+  )
+
   // ── Copy / pin / unpin / delete / private-DM actions ───────────────────
   // Optimistic cache patches + reverts live in the hook; error/notice chips
   // stay owned here via the callbacks.
@@ -995,6 +1039,22 @@ export default function ChatView({
         }}
       />
 
+      {searchContext && (
+        <div className="shrink-0 h-9 px-4 flex items-center justify-between gap-3 border-y border-white/[0.05] bg-white/[0.025]">
+          <span className="text-[0.71875rem] text-muted">Viewing an older search result</span>
+          <button
+            type="button"
+            onClick={() => {
+              setSearchContext(null)
+              requestAnimationFrame(scrollToBottom)
+            }}
+            className="text-[0.71875rem] font-medium text-text hover:text-white transition-colors"
+          >
+            Back to latest
+          </button>
+        </div>
+      )}
+
       {/* Active-trip bar — a slim, glanceable strip under the header for vehicle
           rooms with a trip: completion ring + status, the origin → destination
           route, and the order/client. Opens the Group info Trip tab on click. */}
@@ -1154,10 +1214,10 @@ export default function ChatView({
               ) : (
                 <div
                   className={`chat-column flex flex-col ${
-                    messages.length === 0 ? 'flex-1' : 'shrink-0 mt-auto'
+                    visibleMessages.length === 0 ? 'flex-1' : 'shrink-0 mt-auto'
                   }`}
                 >
-                {messages.length === 0 ? (
+                {visibleMessages.length === 0 ? (
                   <div className="flex-1 flex items-center justify-center">
                     <p className="text-[0.78125rem] text-faint">No messages yet. Say something.</p>
                   </div>
@@ -1178,7 +1238,7 @@ export default function ChatView({
                   // and virtualization here is a behavioral risk best taken on
                   // its own.
                   <div className="flex flex-col gap-0.5">
-                    {nextCursor && (
+                    {!searchContext && nextCursor && (
                       <div className="flex justify-center pb-3">
                         <button
                           onClick={loadOlder}
@@ -1189,7 +1249,7 @@ export default function ChatView({
                         </button>
                       </div>
                     )}
-                    {messages.map((m, i) => {
+                    {visibleMessages.map((m, i) => {
                       // Persisted activity rows (pin/unpin) render as compact
                       // centered lines, never as bubbles or with an actions menu.
                       if (m.kind === 'system') {
@@ -1197,7 +1257,7 @@ export default function ChatView({
                           <SystemMessageRow
                             key={m.id}
                             message={m}
-                            prev={messages[i - 1]}
+                            prev={visibleMessages[i - 1]}
                             // First message of the whole thread (nothing older to
                             // load) → its day pill reads "Conversation started".
                             conversationStart={i === 0 && !nextCursor}
@@ -1217,12 +1277,12 @@ export default function ChatView({
                           // Receipts only for my own rows; incoming rows get
                           // undefined so they don't re-render on read updates.
                           readers={m.authorId === currentUserId ? readers : undefined}
-                          prev={messages[i - 1]}
+                          prev={visibleMessages[i - 1]}
                           conversationStart={i === 0 && !nextCursor}
                           groupType={group.type}
                           highlighted={highlightedMessageId === m.id}
                           onRetry={retry}
-                          imagePriority={i >= messages.length - RECENT_IMAGE_WINDOW}
+                          imagePriority={i >= visibleMessages.length - RECENT_IMAGE_WINDOW}
                           onActivateAttachment={activateAttachment}
                           onImageLoad={handleImageLoaded}
                           onCopy={copyMessage}
@@ -1359,9 +1419,9 @@ export default function ChatView({
       {searchOpen && (
         <ConversationSearch
           query={searchQuery}
-          messages={messages}
+          groupId={group.id}
           currentUserId={currentUserId}
-          onJump={jumpToMessage}
+          onJump={openSearchResult}
         />
       )}
       </div>

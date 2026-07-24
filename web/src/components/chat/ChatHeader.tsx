@@ -97,7 +97,19 @@ export default function ChatHeader({
           <GroupAvatar groupId={group.id} hasAvatar={Boolean(group.hasAvatar)} shape="rounded" size={56} />
         )}
         <div className="min-w-0">
-          <div className="text-[1rem] font-semibold truncate leading-tight">{groupLabel(group)}</div>
+          {group.type === 'direct' ? (
+            <button
+              type="button"
+              onClick={() =>
+                onOpenProfile(group.directPeer?.id ?? '', group.directPeer?.name ?? groupLabel(group))
+              }
+              className="block max-w-full text-left text-[1rem] font-semibold truncate leading-tight hover:underline underline-offset-2 focus-visible:outline-none focus-visible:underline"
+            >
+              {groupLabel(group)}
+            </button>
+          ) : (
+            <div className="text-[1rem] font-semibold truncate leading-tight">{groupLabel(group)}</div>
+          )}
           <div
             role={typingText ? 'status' : undefined}
             aria-live={typingText ? 'polite' : undefined}
@@ -151,14 +163,24 @@ export default function ChatHeader({
             )}
           </div>
         )}
-        <HeaderIconButton
-          searchRegion
-          active={searchOpen}
+        <button
+          type="button"
+          data-search-region
+          aria-label={searchOpen ? 'Close search' : 'Search conversation'}
+          aria-pressed={searchOpen}
+          title={searchOpen ? 'Close search' : 'Search conversation'}
           onClick={() => (searchOpen ? onCloseSearch() : onOpenSearch())}
-          label={searchOpen ? 'Close search' : 'Search conversation'}
+          className={`h-9 px-2.5 flex items-center justify-center gap-1.5 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+            searchOpen
+              ? 'text-text bg-white/[0.06]'
+              : 'text-muted hover:text-text hover:bg-white/[0.05]'
+          }`}
         >
           <Search size="1.1875rem" strokeWidth={1.8} />
-        </HeaderIconButton>
+          <span className={`${searchOpen ? 'hidden' : 'hidden sm:inline'} text-[0.75rem] font-medium`}>
+            Search
+          </span>
+        </button>
         {routeMapAvailable && (
           <HeaderIconButton
             label="Trip route"

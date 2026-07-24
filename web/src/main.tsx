@@ -6,6 +6,7 @@ import { initDensity } from './lib/density'
 import { initMessageDisplay } from './lib/messageDisplay'
 import { initTheme } from './lib/theme'
 import { initNotificationSound } from './lib/notificationSound'
+import { initBrowserNotifications } from './lib/browserNotifications'
 
 // Apply the saved palette before React paints so neither signed-out nor
 // workspace screens flash the opposite theme.
@@ -18,6 +19,8 @@ initMessageDisplay()
 // Unlock Web Audio on the first user gesture so later socket notifications can
 // play even when they arrive while the app is in the background.
 initNotificationSound()
+// Listen for notification clicks forwarded by the service worker.
+initBrowserNotifications()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

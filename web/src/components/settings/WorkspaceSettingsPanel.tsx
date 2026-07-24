@@ -236,7 +236,12 @@ function NotificationSettings() {
   async function toggleBrowserNotifications() {
     if (requestingPermission || !browserNotifications.supported) return
     if (browserNotifications.enabled) {
-      disableBrowserNotifications()
+      setRequestingPermission(true)
+      try {
+        await disableBrowserNotifications()
+      } finally {
+        setRequestingPermission(false)
+      }
       return
     }
     setRequestingPermission(true)
@@ -252,7 +257,7 @@ function NotificationSettings() {
     : browserNotifications.permission === 'denied'
       ? 'Blocked by the browser. Re-enable notifications from the site permissions menu.'
       : browserNotifications.enabled
-        ? 'Show a system notification when a message arrives while the app is in the background.'
+        ? 'Show notifications while the app is open or closed. Closed-app alerts use your system sound.'
         : 'The browser will ask for permission when you turn this on.'
 
   return (

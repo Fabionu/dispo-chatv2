@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import { clearUserDrafts } from '../lib/draftStorage'
+import { unregisterBrowserPushSubscription } from '../lib/browserNotifications'
 
 export type User = {
   id: string
@@ -52,6 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signOut = useCallback(async () => {
+    await unregisterBrowserPushSubscription()
     await fetch('/api/auth/signout', { method: 'POST', credentials: 'include' })
     // Drop this user's local drafts so nothing lingers on a shared device after
     // the account signs out (drafts are namespaced by user id regardless).
