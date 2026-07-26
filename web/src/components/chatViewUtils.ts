@@ -8,6 +8,16 @@ export function toReplyPreview(m: LocalMessage): ReplyToPreview {
     authorName: m.authorName,
     body: m.body,
     hasAttachments: (m.attachments?.length ?? 0) > 0,
+    attachment: m.attachments?.[0]
+      ? {
+          id: m.attachments[0].id,
+          originalName: m.attachments[0].originalName,
+          mimeType: m.attachments[0].mimeType,
+          url: m.attachments[0].url,
+          previewUrl: m.attachments[0].localPreviewUrl ?? m.attachments[0].previewUrl,
+          missing: m.attachments[0].missing,
+        }
+      : null,
     deleted: Boolean(m.deletedAt),
   }
 }

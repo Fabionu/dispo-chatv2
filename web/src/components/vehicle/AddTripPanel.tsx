@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { ICON_ACTION_BASE, ICON_ACTION_IDLE } from '../HeaderIconButton'
-import { stopId, tripId, type VehicleOps, type VehicleStop } from '../../lib/vehicleOps'
+import {
+  stopId,
+  tripId,
+  vehicleDriverIds,
+  type VehicleOps,
+  type VehicleStop,
+} from '../../lib/vehicleOps'
 import StopForm from './StopForm'
 import AddTripStopCard from './AddTripStopCard'
 import { AREA_CLASS, INPUT_CLASS } from './tripFormStyles'
@@ -82,7 +88,9 @@ export default function AddTripPanel({ ops, onClose, onCreate, onPickLocation }:
     // Spread drops keys whose value is undefined once JSON-serialised, so empty
     // optional fields simply aren't stored.
     const next: VehicleOps = {
-      vehicle: ops.vehicle,
+      // Assignment is vehicle-room state and therefore carries into every new
+      // trip. vehicleDriverIds also migrates legacy trip-level assignments.
+      vehicle: { ...ops.vehicle, assignedDriverIds: vehicleDriverIds(ops) },
       trip: {
         // Fresh id so the mobile driver API can address this trip (drivers are
         // assigned afterward from the Trip tab, keeping creation lean).

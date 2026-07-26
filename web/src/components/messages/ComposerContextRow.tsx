@@ -1,16 +1,18 @@
-import { Pencil, Reply, X } from 'lucide-react'
+import { FileText, Image as ImageIcon, Pencil, Reply, X } from 'lucide-react'
+import type { ReplyToPreview } from '../../lib/types'
 
 type Props = {
   tone: 'reply' | 'edit'
   label: string
   snippet: string
+  attachment?: ReplyToPreview['attachment']
   onCancel: () => void
 }
 
 // A compact inset card above the textarea. Keeping it inside the composer's
 // edges (instead of stretching a divider across the entire capsule) makes the
 // reply/edit state feel like contextual content rather than a second toolbar.
-export default function ComposerContextRow({ tone, label, snippet, onCancel }: Props) {
+export default function ComposerContextRow({ tone, label, snippet, attachment, onCancel }: Props) {
   const accent = tone === 'reply' ? 'bg-active/70' : 'bg-white/[0.22]'
   const icon =
     tone === 'reply' ? (
@@ -30,6 +32,23 @@ export default function ComposerContextRow({ tone, label, snippet, onCancel }: P
           {snippet || '…'}
         </div>
       </div>
+      {tone === 'reply' && attachment && (
+        attachment.mimeType.startsWith('image/') && !attachment.missing ? (
+          <img
+            src={attachment.previewUrl ?? attachment.url}
+            alt=""
+            className="h-9 w-9 shrink-0 rounded-[0.5rem] object-cover bg-black/30"
+          />
+        ) : (
+          <span className="h-9 w-9 shrink-0 rounded-[0.5rem] bg-white/[0.055] flex items-center justify-center text-muted">
+            {attachment.mimeType.startsWith('image/') ? (
+              <ImageIcon size="0.9375rem" strokeWidth={1.8} />
+            ) : (
+              <FileText size="0.9375rem" strokeWidth={1.8} />
+            )}
+          </span>
+        )
+      )}
       <button
         type="button"
         onClick={onCancel}

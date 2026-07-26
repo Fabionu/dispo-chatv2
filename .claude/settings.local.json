@@ -451,7 +451,27 @@
       "Bash(curl -s -b cookies.txt -w \"time: %{time_total}s\\\\n\" \"http://localhost:3001/api/here/snap?at=50.075501,14.437801&zoom=14\")",
       "Bash(echo \"check-ignore exit: $?\")",
       "Bash(git ls-tree *)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://api.github.com/repos/Fabionu/dispo-chatv2)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://api.github.com/repos/Fabionu/dispo-chatv2)",
+      "Bash(ls \"C:/Users/Home/AndroidStudioProjects/DispoChat\" 2>/dev/null || echo \"NOT FOUND\")",
+      "Bash(find \"C:/Users/Home/AndroidStudioProjects/DispoChat/app/src/main\" -name \"*.kt\" -type f | head -100)",
+      "Bash(\"C:/Users/Home/AppData/Local/Android/Sdk/platform-tools/adb.exe\" devices *)",
+      "PowerShell($jbr = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; if \\(-not \\(Test-Path $jbr\\)\\) { $jbr = \"$env:LOCALAPPDATA\\\\Programs\\\\Android Studio\\\\jbr\" }; Test-Path $jbr; $env:JAVA_HOME = $jbr; Set-Location \"C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat\"; .\\\\gradlew.bat :app:compileDebugKotlin --console=plain -q)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; Set-Location \"C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat\"; .\\\\gradlew.bat :app:installDebug --console=plain -q 2>&1 | Select-Object -Last 15)",
+      "Bash(C:/Users/Home/AppData/Local/Android/Sdk/platform-tools/adb.exe shell *)",
+      "Bash(C:/Users/Home/AppData/Local/Android/Sdk/platform-tools/adb.exe exec-out *)",
+      "Bash(cd \"C:/Users/Home/Desktop/dispo-chatv2/server/src\" && grep -rn \"logo\\\\|serveImageObject\" --include=*.ts routes/companyProfile.ts 2>/dev/null | head -20; echo \"--- web avatarUrl ---\"; cat ../../web/src/lib/avatarCache.ts 2>/dev/null | head -40)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; Set-Location \"C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat\"; .\\\\gradlew.bat :app:installDebug --console=plain 2>&1 | Select-String -Pattern \"^e:|^w:|Kotlin|Installed|BUILD\" | Select-Object -First 30)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; Set-Location \"C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat\"; .\\\\gradlew.bat :app:installDebug --console=plain 2>&1 | Select-String -Pattern \"^e:|^w:|Installed|BUILD\" | Select-Object -First 40)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('express:', p.dependencies.express\\); console.log\\('type:', p.type\\)\")",
+      "Bash(node -e \"console.log\\(require\\('express/package.json'\\).version\\)\")",
+      "Bash(echo \"typecheck exit: $?\")",
+      "Bash(node \"C:/Users/Home/AppData/Local/Temp/claude/C--Users-Home-Desktop-dispo-chatv2/8349d88f-e785-40b5-a955-16328601324e/scratchpad/guard-check.mjs\")",
+      "Bash(curl -s -i http://localhost:3001/api/health)",
+      "Bash(curl -s -i http://localhost:3001/api/nope)",
+      "Bash(curl -s -i -X POST http://localhost:3001/api/nope)",
+      "Bash(curl -s -i http://localhost:3001/api/users/00000000-0000-0000-0000-000000000000/avatar)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; Set-Location \"C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat\"; .\\\\gradlew.bat :app:compileDebugKotlin --console=plain 2>&1 | Select-String -Pattern \"^e:|^w:|BUILD\" | Select-Object -First 40)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; Set-Location \"C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat\"; .\\\\gradlew.bat :app:installDebug --console=plain 2>&1 | Select-String -Pattern \"^e: |^w: |Installed|SUCCESSFUL|FAILED\" | Select-Object -First 30)"
     ]
   }
 }

@@ -31,31 +31,31 @@ type Props = {
 // 404s usually fire onError well before this; this only catches stalls.
 const LOAD_TIMEOUT_MS = 6000
 
-// WhatsApp-style thumbnail bounds. Every image attachment renders inside a
-// compact, fixed-bounded box rather than near-full size, so screenshots and
-// high-resolution photos all collapse to a controlled chat thumbnail. The box
+// Desktop thumbnail bounds. Every image attachment renders inside a bounded
+// preview that is large enough to inspect in the conversation without opening
+// the lightbox, while still keeping very tall screenshots under control. The box
 // is computed from the image's aspect ratio, clamped into [MIN, MAX] in both
 // axes; the <img> fills it with object-cover, cropping only the extreme aspect
 // ratios (very wide screenshots / very tall portraits) so they never turn into
 // thin slivers. The full image is always one tap away in the lightbox.
 //
 // Two profiles:
-//   • plain   — image sent on its own: stays compact.
+//   • plain   — image sent on its own: a readable desktop preview.
 //   • caption — image sent WITH a text body: larger maxes so the picture widens
 //     to sit visually with the caption below it (no narrow-image / wide-text
 //     mismatch). Still aspect-preserving and bounded — never full-width, and
 //     portraits stay reined in by the height cap.
 const BOUNDS = {
-  plain: { maxW: 300, maxH: 320, minW: 150, minH: 120 },
-  caption: { maxW: 480, maxH: 360, minW: 200, minH: 140 },
+  plain: { maxW: 420, maxH: 440, minW: 220, minH: 160 },
+  caption: { maxW: 560, maxH: 460, minW: 260, minH: 180 },
 } as const
 
 // Box reserved before we know the image's dimensions (just-sent blobs, GIFs,
 // and legacy images without stored width/height). Recomputed on load. Wider in
 // caption mode so a just-sent captioned image reflows less when it decodes.
 const FALLBACK = {
-  plain: { w: 240, h: 180 },
-  caption: { w: 360, h: 240 },
+  plain: { w: 320, h: 240 },
+  caption: { w: 440, h: 300 },
 } as const
 
 // Fit (w,h) into the max box preserving aspect ratio, then lift each axis to its
@@ -323,7 +323,7 @@ export default function AttachmentBlock({
       onClick={() => onActivate(attachment)}
       disabled={uploading || !hasUrl}
       aria-label={isPdf ? `Preview ${attachment.originalName}` : `Open ${attachment.originalName}`}
-      className="block w-[15rem] max-w-full overflow-hidden rounded-card border border-white/[0.05] bg-white/[0.02] hover:bg-white/[0.03] disabled:cursor-default transition-colors text-left"
+      className="block w-[20rem] max-w-full overflow-hidden rounded-card border border-white/[0.05] bg-white/[0.02] hover:bg-white/[0.03] disabled:cursor-default transition-colors text-left"
     >
       {/* Preview band. The generic glyph always renders; for sent PDFs a
           lazily-rasterised first-page thumbnail (PdfThumb) layers over it once
@@ -331,10 +331,10 @@ export default function AttachmentBlock({
           type badge and action icon render after the thumbnail layer so they
           stay on top of it. Non-PDF documents keep the glyph only (see
           lib/pdfThumbCache for the DOC/XLS thumbnail TODOs). */}
-      <div className="relative h-[6.5rem] bg-bg border-b border-white/[0.06] flex items-center justify-center">
+      <div className="relative h-[9rem] bg-bg border-b border-white/[0.06] flex items-center justify-center">
         <div className="absolute inset-0 opacity-[0.04] bg-gradient-to-b from-white to-transparent pointer-events-none" />
-        <div className="h-12 w-12 rounded-card border border-white/[0.10] bg-white/[0.03] flex items-center justify-center">
-          <DocIcon mime={attachment.mimeType} size={24} />
+        <div className="h-14 w-14 rounded-card border border-white/[0.10] bg-white/[0.03] flex items-center justify-center">
+          <DocIcon mime={attachment.mimeType} size={28} />
         </div>
         {isPdf && hasUrl && !uploading && (
           <PdfThumb attachmentId={attachment.id} url={attachment.url} />

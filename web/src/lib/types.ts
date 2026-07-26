@@ -236,6 +236,14 @@ export type ReplyToPreview = {
   authorName: string
   body: string
   hasAttachments: boolean
+  attachment?: {
+    id: string
+    originalName: string
+    mimeType: string
+    url: string
+    previewUrl?: string
+    missing?: boolean
+  } | null
   deleted: boolean
 }
 

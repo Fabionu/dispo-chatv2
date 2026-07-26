@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { type DbClient } from '../../db/pool.js'
 import { asyncHandler, withTransaction } from '../../http.js'
 import { insertSystemMessage, emitSystemMessage } from '../../util/messages.js'
+import { getIOIfReady, roomForGroup } from '../../realtime.js'
 import { authorizeInviter } from './authz.js'
 import { opsSchema, tripActivityEvents, assignedDriverDelta, type OpsLite } from './ops.js'
 
@@ -68,8 +69,10 @@ updateRouter.patch(
       // the client owns the whole ops blob, so re-validate that every assigned id
       // is an ACTIVE member of THIS group and drop any that isn't before it's
       // persisted (the driver API trusts assignedDriverIds for access control).
-      if (data.ops?.trip?.assignedDriverIds && data.ops.trip.assignedDriverIds.length > 0) {
-        const ids = data.ops.trip.assignedDriverIds
+      const requestedDriverIds =
+        data.ops?.vehicle.assignedDriverIds ?? data.ops?.trip?.assignedDriverIds
+      if (data.ops && requestedDriverIds !== undefined) {
+        const ids = requestedDriverIds
         const { rows: memberRows } = await client.query<{ user_id: string }>(
           `select gm.user_id
              from group_members gm
@@ -78,7 +81,10 @@ updateRouter.patch(
           [groupId, ids],
         )
         const memberIds = new Set(memberRows.map((r) => r.user_id))
-        data.ops.trip.assignedDriverIds = ids.filter((id) => memberIds.has(id))
+        data.ops.vehicle.assignedDriverIds = ids.filter((id) => memberIds.has(id))
+        // Canonical storage is group/vehicle-level. Remove the legacy trip copy
+        // so replacing a trip can never change assignment accidentally.
+        if (data.ops.trip) delete data.ops.trip.assignedDriverIds
       }
 
       const sets: string[] = []
@@ -178,6 +184,9 @@ updateRouter.patch(
 
     // Broadcast any activity rows now that the transaction has committed.
     for (const id of systemIds) await emitSystemMessage(id, groupId)
+    if (data.ops !== undefined) {
+      getIOIfReady()?.to(roomForGroup(groupId)).emit('trip:updated', { groupId })
+    }
 
     res.json({
       group: {

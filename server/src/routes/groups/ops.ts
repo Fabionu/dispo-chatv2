@@ -13,6 +13,9 @@ export const opsSchema = z.object({
       vehicleType: opsStr(80),
       trailerType: opsStr(80),
       assignedDrivers: opsStr(200),
+      // Persistent vehicle-room assignment. This survives replacing/clearing
+      // the active trip and changes only through the driver picker.
+      assignedDriverIds: z.array(z.string().uuid()).max(10).optional(),
       status: z
         .enum(['available', 'driving', 'loading', 'unloading', 'waiting', 'break', 'service', 'completed'])
         .optional(),
@@ -50,6 +53,7 @@ export const opsSchema = z.object({
       status: z
         .enum([
           'planned',
+          'accepted',
           'to_loading',
           'at_loading',
           'loaded',
@@ -132,6 +136,9 @@ export const opsSchema = z.object({
 // the full validation). Only the trip status/reference, assigned drivers, and the
 // route summary participate in the diff.
 export type OpsLite = {
+  vehicle?: {
+    assignedDriverIds?: string[]
+  }
   trip?: {
     status?: string
     reference?: string
@@ -148,8 +155,12 @@ export function assignedDriverDelta(
   oldOps: OpsLite | null,
   newOps: OpsLite,
 ): { added: string[]; removed: string[] } {
-  const before = new Set((oldOps?.trip?.assignedDriverIds ?? []).filter(Boolean))
-  const after = new Set((newOps?.trip?.assignedDriverIds ?? []).filter(Boolean))
+  const before = new Set(
+    (oldOps?.vehicle?.assignedDriverIds ?? oldOps?.trip?.assignedDriverIds ?? []).filter(Boolean),
+  )
+  const after = new Set(
+    (newOps?.vehicle?.assignedDriverIds ?? newOps?.trip?.assignedDriverIds ?? []).filter(Boolean),
+  )
   return {
     added: [...after].filter((id) => !before.has(id)),
     removed: [...before].filter((id) => !after.has(id)),

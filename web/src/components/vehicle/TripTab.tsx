@@ -27,7 +27,7 @@ type Props = {
   // Merge a patch into the active trip (creates the trip if none exists yet).
   onSaveTrip: (patch: Partial<ActiveTrip>) => Promise<void>
   // Start a brand-new, CLEAN trip (no carried-over fields or stops).
-  onAddTrip: () => Promise<void>
+  onAddTrip: () => void
   // Remove the active trip (and its stops) entirely.
   onClearTrip: () => Promise<void>
   // Persist the full, edited stop list. Coordinate changes recompute the trip
@@ -148,11 +148,13 @@ export default function TripTab({
         </div>
         {canManage && (
           <button
-            onClick={() => void run(onAddTrip)}
+            onClick={onAddTrip}
             disabled={busy}
-            className="mt-3 inline-flex items-center gap-1.5 h-8 px-3 rounded-btn bg-text text-bg text-[0.75rem] font-semibold hover:bg-text/90 disabled:opacity-50 transition-colors"
+            aria-label="Add trip"
+            title="Add trip"
+            className="mt-3 inline-flex items-center justify-center h-9 w-9 rounded-full bg-text text-bg hover:bg-text/90 disabled:opacity-50 transition-colors"
           >
-            <Plus size="0.875rem" strokeWidth={2.2} /> Add trip
+            <Plus size="1rem" strokeWidth={2.2} />
           </button>
         )}
       </div>

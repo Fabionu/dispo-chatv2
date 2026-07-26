@@ -33,6 +33,19 @@ export const MESSAGE_COLUMNS = `
       'author_name',     ru.display_name,
       'body',            case when rm.deleted_at is not null then '' else rm.body end,
       'has_attachments', exists (select 1 from attachments ra where ra.message_id = rm.id),
+      'attachment',      case when rm.deleted_at is not null then null else (
+        select jsonb_build_object(
+          'id',            ra.id,
+          'original_name', ra.original_name,
+          'mime_type',     ra.mime_type,
+          'preview_path',  ra.preview_path,
+          'missing',       ra.missing
+        )
+          from attachments ra
+         where ra.message_id = rm.id
+         order by ra.created_at asc
+         limit 1
+      ) end,
       'deleted',         rm.deleted_at is not null
     )
      from messages rm
@@ -83,6 +96,13 @@ export type MessageRow = {
     author_name: string
     body: string
     has_attachments: boolean
+    attachment: {
+      id: string
+      original_name: string
+      mime_type: string
+      preview_path: string | null
+      missing: boolean
+    } | null
     deleted: boolean
   } | null
   mentions: Array<{ user_id: string; display_name: string }> | null
@@ -137,6 +157,20 @@ export function mapMessageRow(m: MessageRow) {
           authorName: m.reply_to.author_name,
           body: m.reply_to.body,
           hasAttachments: m.reply_to.has_attachments,
+          attachment: m.reply_to.attachment
+            ? {
+                id: m.reply_to.attachment.id,
+                originalName: m.reply_to.attachment.original_name,
+                mimeType: m.reply_to.attachment.mime_type,
+                url: `/api/attachments/${m.reply_to.attachment.id}`,
+                ...(m.reply_to.attachment.preview_path
+                  ? {
+                      previewUrl: `/api/attachments/${m.reply_to.attachment.id}?variant=preview`,
+                    }
+                  : {}),
+                ...(m.reply_to.attachment.missing ? { missing: true } : {}),
+              }
+            : null,
           deleted: m.reply_to.deleted,
         }
       : null,

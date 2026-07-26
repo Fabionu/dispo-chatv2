@@ -123,7 +123,7 @@ export default function VehicleInfoTab({
         editable={canManage}
         onSave={(v) => onSaveVehicle({ status: v })}
       />
-      {/* Assigned drivers — a structured member picker (room members only), so
+      {/* Assigned drivers — a persistent structured member picker (room members only), so
           the mobile driver API can resolve "trips assigned to me" and a change
           logs an activity row. This marks who DRIVES this room operationally; it
           does not change anyone's company role. */}

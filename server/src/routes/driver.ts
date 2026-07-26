@@ -1,9 +1,19 @@
+import { randomUUID } from 'node:crypto'
+import { createReadStream } from 'node:fs'
+import { unlink } from 'node:fs/promises'
 import { Router } from 'express'
 import { z } from 'zod'
 import { pool } from '../db/pool.js'
 import { requireAuth } from '../auth.js'
 import { asyncHandler, withTransaction, HttpError } from '../http.js'
 import { getIOIfReady, roomForGroup } from '../realtime.js'
+import {
+  MAX_DOC_BYTES,
+  MAX_IMAGE_BYTES,
+  isImage,
+  uploadAttachment,
+} from '../middleware/upload.js'
+import { deleteFile, saveStream } from '../storage.js'
 import { opsSchema } from './groups/ops.js'
 
 // ── Driver-facing trip API ────────────────────────────────────────────────
@@ -26,6 +36,10 @@ driverRouter.use(requireAuth)
 
 type Ops = z.infer<typeof opsSchema>
 type Trip = NonNullable<Ops['trip']>
+
+function assignedDriverIds(ops: Ops, trip: Trip): string[] {
+  return ops.vehicle.assignedDriverIds ?? trip.assignedDriverIds ?? []
+}
 
 // A trip is drivable ("active") for the mobile list unless it's finished. A
 // missing status means a freshly-planned trip, which is active.
@@ -97,7 +111,7 @@ function buildDriverTrip(
   trip: Trip,
   names: Map<string, string>,
 ): DriverTripPayload {
-  const assignedIds = trip.assignedDriverIds ?? []
+  const assignedIds = assignedDriverIds(ops, trip)
   const route = trip.route
   return {
     tripId: trip.id ?? groupId,
@@ -154,7 +168,7 @@ function assertAssignedTrip(
   const ops = parseOps(row.meta)
   if (!ops?.trip) throw new HttpError(404, 'trip_not_found')
   const trip = ops.trip
-  if (!(trip.assignedDriverIds ?? []).includes(userId)) throw new HttpError(403, 'forbidden')
+  if (!assignedDriverIds(ops, trip).includes(userId)) throw new HttpError(403, 'forbidden')
   return { groupId: row.id, ops, trip }
 }
 
@@ -184,7 +198,8 @@ async function resolveAssignedTrip(
 
 // ── GET /api/driver/trips/active ──────────────────────────────────────────
 // Every active trip assigned to the caller. The SQL narrows to rooms the caller
-// belongs to whose trip's `assignedDriverIds` contains them (jsonb containment);
+// belongs to whose persistent vehicle assignment contains them (with a legacy
+// trip-level fallback for rooms not edited since the model change);
 // we then drop terminal (completed/cancelled) trips in JS.
 driverRouter.get(
   '/trips/active',
@@ -196,7 +211,13 @@ driverRouter.get(
          join group_members gm on gm.group_id = g.id and gm.user_id = $1
         where g.type = 'vehicle'
           and g.archived_at is null
-          and coalesce(g.meta->'ops'->'trip'->'assignedDriverIds' @> to_jsonb($1::text), false)
+          and coalesce(
+                coalesce(
+                  g.meta->'ops'->'vehicle'->'assignedDriverIds',
+                  g.meta->'ops'->'trip'->'assignedDriverIds'
+                ) @> to_jsonb($1::text),
+                false
+              )
         order by g.created_at desc`,
       [userId],
     )
@@ -207,12 +228,14 @@ driverRouter.get(
       const trip = ops?.trip
       if (!ops || !trip) continue
       // Re-check assignment + activeness against the parsed value (defensive).
-      if (!(trip.assignedDriverIds ?? []).includes(userId)) continue
+      if (!assignedDriverIds(ops, trip).includes(userId)) continue
       if (!isActiveStatus(trip.status)) continue
       active.push({ groupId: r.id, ops, trip })
     }
 
-    const names = await driverNameMap(active.flatMap((a) => a.trip.assignedDriverIds ?? []))
+    const names = await driverNameMap(
+      active.flatMap((a) => assignedDriverIds(a.ops, a.trip)),
+    )
     res.json({ trips: active.map((a) => buildDriverTrip(a.groupId, a.ops, a.trip, names)) })
   }),
 )
@@ -223,7 +246,7 @@ driverRouter.get(
   asyncHandler(async (req, res) => {
     const { userId } = req.session!
     const { groupId, ops, trip } = await resolveAssignedTrip(userId, req.params.tripId)
-    const names = await driverNameMap(trip.assignedDriverIds ?? [])
+    const names = await driverNameMap(assignedDriverIds(ops, trip))
     res.json({ trip: buildDriverTrip(groupId, ops, trip, names) })
   }),
 )
@@ -369,6 +392,331 @@ driverRouter.post(
 // re-checks entitlement inside the transaction, flips the stop's status in the ops
 // blob, and returns the refreshed trip. No system message / no route recompute —
 // this is a quiet manual progress update (a clear hook for later if desired).
+const driverActionSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('accept') }),
+  z.object({ action: z.literal('start') }),
+  z.object({
+    action: z.literal('manual_arrival'),
+    stopId: z.string().min(1).max(64),
+  }),
+])
+
+// Explicit driver lifecycle actions. Acceptance and starting are intentionally
+// separate acknowledgements; manual_arrival is the safe geofence fallback and
+// can only advance to the arrival state of the next planned loading/unloading
+// stop. Document-gated departure/completion still goes through /proofs.
+driverRouter.post(
+  '/trips/:tripId/actions',
+  asyncHandler(async (req, res) => {
+    const parsed = driverActionSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'invalid_input' })
+    const { userId } = req.session!
+    const { tripId } = req.params
+    const body = parsed.data
+
+    const { groupId, ops, trip, changed, stopId } = await withTransaction(async (client) => {
+      const { rows } = await client.query<{ id: string; meta: Record<string, unknown> | null }>(
+        `${TRIP_LOOKUP_SQL} for update of g`,
+        [userId, tripId],
+      )
+      const resolved = assertAssignedTrip(userId, rows[0])
+      if (!isActiveStatus(resolved.trip.status)) throw new HttpError(409, 'trip_not_active')
+      const current = resolved.trip.status ?? 'planned'
+      const nextStop = resolved.ops.stops.find((candidate) => candidate.status === 'planned')
+      let target: Trip['status']
+      let stopId: string | null = null
+
+      if (body.action === 'accept') {
+        if (current !== 'planned' && current !== 'accepted') {
+          throw new HttpError(409, 'invalid_trip_transition')
+        }
+        target = 'accepted'
+      } else if (body.action === 'start') {
+        if (current !== 'accepted' && current !== 'to_loading') {
+          throw new HttpError(409, 'trip_must_be_accepted')
+        }
+        if (!nextStop || nextStop.type !== 'loading') {
+          throw new HttpError(409, 'loading_stop_required')
+        }
+        target = 'to_loading'
+        stopId = nextStop.id
+      } else {
+        if (!nextStop || nextStop.id !== body.stopId) {
+          throw new HttpError(409, 'stop_out_of_sequence')
+        }
+        stopId = nextStop.id
+        if (nextStop.type === 'loading') {
+          if (current !== 'to_loading' && current !== 'at_loading') {
+            throw new HttpError(409, 'invalid_trip_transition')
+          }
+          target = 'at_loading'
+        } else if (nextStop.type === 'unloading') {
+          if (
+            current !== 'in_transit' &&
+            current !== 'to_unloading' &&
+            current !== 'at_unloading'
+          ) {
+            throw new HttpError(409, 'invalid_trip_transition')
+          }
+          target = 'at_unloading'
+        } else {
+          throw new HttpError(409, 'stop_not_geofenced')
+        }
+      }
+
+      const changed = current !== target
+      if (changed) {
+        resolved.trip.status = target
+        await client.query('update groups set meta = meta || $2::jsonb where id = $1', [
+          resolved.groupId,
+          JSON.stringify({ ops: resolved.ops }),
+        ])
+      }
+      return { ...resolved, changed, stopId }
+    })
+
+    const names = await driverNameMap(assignedDriverIds(ops, trip))
+    const payload = buildDriverTrip(groupId, ops, trip, names)
+    if (changed) {
+      const event = {
+        groupId,
+        tripId: payload.tripId,
+        status: payload.status,
+        stopId,
+        source: body.action,
+      }
+      getIOIfReady()?.to(roomForGroup(groupId)).emit('trip:status', event)
+    }
+    res.json({ trip: payload })
+  }),
+)
+
+const geofenceSchema = z.object({
+  stopId: z.string().min(1).max(64),
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  accuracyM: z.number().min(0).max(200),
+})
+
+const proofSchema = z.object({
+  stopId: z.string().min(1).max(64),
+  kind: z.enum(['loading', 'unloading']),
+})
+
+function distanceMetres(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number },
+): number {
+  const radius = 6_371_000
+  const radians = (degrees: number) => (degrees * Math.PI) / 180
+  const dLat = radians(to.lat - from.lat)
+  const dLng = radians(to.lng - from.lng)
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(radians(from.lat)) *
+      Math.cos(radians(to.lat)) *
+      Math.sin(dLng / 2) ** 2
+  return 2 * radius * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function canonicalTripId(groupId: string, trip: Trip): string {
+  return trip.id ?? groupId
+}
+
+// Arrival is automatic, but only for the next planned loading/unloading stop.
+// The phone performs a short foreground dwell first; the server independently
+// validates GPS accuracy and distance so a forged/stale client state cannot
+// advance the trip.
+driverRouter.post(
+  '/trips/:tripId/geofence',
+  asyncHandler(async (req, res) => {
+    const parsed = geofenceSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'invalid_input' })
+    const { userId } = req.session!
+    const { tripId } = req.params
+    const body = parsed.data
+
+    const { groupId, ops, trip, changed } = await withTransaction(async (client) => {
+      const { rows } = await client.query<{ id: string; meta: Record<string, unknown> | null }>(
+        `${TRIP_LOOKUP_SQL} for update of g`,
+        [userId, tripId],
+      )
+      const resolved = assertAssignedTrip(userId, rows[0])
+      if (!isActiveStatus(resolved.trip.status)) throw new HttpError(409, 'trip_not_active')
+
+      const stop = resolved.ops.stops.find((candidate) => candidate.id === body.stopId)
+      if (!stop) throw new HttpError(404, 'stop_not_found')
+      if (stop.status !== 'planned') throw new HttpError(409, 'stop_not_planned')
+      if (stop.type !== 'loading' && stop.type !== 'unloading') {
+        throw new HttpError(409, 'stop_not_geofenced')
+      }
+      const nextStop = resolved.ops.stops.find((candidate) => candidate.status === 'planned')
+      if (nextStop?.id !== stop.id) throw new HttpError(409, 'stop_out_of_sequence')
+      if (stop.lat === undefined || stop.lng === undefined) {
+        throw new HttpError(409, 'stop_has_no_coordinates')
+      }
+
+      // 120m is the normal fence; the radius expands modestly for a less precise
+      // fix, but never beyond 250m. accuracyM itself is capped at 200 by zod.
+      const radiusM = Math.min(250, Math.max(120, body.accuracyM + 70))
+      const distanceM = distanceMetres(body, { lat: stop.lat, lng: stop.lng })
+      if (distanceM > radiusM) throw new HttpError(409, 'outside_geofence')
+
+      const current = resolved.trip.status ?? 'planned'
+      const target: Trip['status'] = stop.type === 'loading' ? 'at_loading' : 'at_unloading'
+      const allowed =
+        stop.type === 'loading'
+          ? current === 'to_loading'
+          : current === 'in_transit' || current === 'to_unloading'
+      if (!allowed && current !== target) throw new HttpError(409, 'invalid_trip_transition')
+      const changed = current !== target
+
+      if (changed) {
+        resolved.trip.status = target
+        await client.query('update groups set meta = meta || $2::jsonb where id = $1', [
+          resolved.groupId,
+          JSON.stringify({ ops: resolved.ops }),
+        ])
+      }
+      return { ...resolved, changed }
+    })
+
+    const names = await driverNameMap(assignedDriverIds(ops, trip))
+    const payload = buildDriverTrip(groupId, ops, trip, names)
+    if (changed) {
+      getIOIfReady()?.to(roomForGroup(groupId)).emit('trip:status', {
+        groupId,
+        tripId: payload.tripId,
+        status: payload.status,
+        stopId: body.stopId,
+        source: 'geofence',
+      })
+    }
+    res.json({ trip: payload })
+  }),
+)
+
+// Loading/unloading progression is deliberately coupled to an immutable proof
+// row plus its stored scan. The storage object is uploaded before the DB
+// transaction, then deleted if the locked re-check or atomic DB write fails.
+driverRouter.post(
+  '/trips/:tripId/proofs',
+  uploadAttachment,
+  asyncHandler(async (req, res) => {
+    const file = req.file
+    if (file?.path) {
+      const tempPath = file.path
+      res.on('close', () => void unlink(tempPath).catch(() => {}))
+    }
+    const parsed = proofSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'invalid_input' })
+    if (!file) return res.status(400).json({ error: 'proof_required' })
+    if (!['image/jpeg', 'image/png', 'application/pdf'].includes(file.mimetype)) {
+      return res.status(415).json({ error: 'unsupported_proof_type' })
+    }
+    if (isImage(file.mimetype) && file.size > MAX_IMAGE_BYTES) {
+      return res.status(413).json({ error: 'image_too_large' })
+    }
+    if (!isImage(file.mimetype) && file.size > MAX_DOC_BYTES) {
+      return res.status(413).json({ error: 'file_too_large' })
+    }
+
+    const { userId } = req.session!
+    const { tripId } = req.params
+    const body = parsed.data
+
+    // Cheap authorization/state check before streaming a potentially large scan.
+    const preflight = await resolveAssignedTrip(userId, tripId)
+    const preflightStop = preflight.ops.stops.find((stop) => stop.id === body.stopId)
+    if (!preflightStop) throw new HttpError(404, 'stop_not_found')
+    if (preflightStop.type !== body.kind) throw new HttpError(409, 'proof_kind_mismatch')
+    const requiredStatus = body.kind === 'loading' ? 'at_loading' : 'at_unloading'
+    if (preflight.trip.status !== requiredStatus) {
+      throw new HttpError(409, 'proof_not_expected')
+    }
+
+    const proofId = randomUUID()
+    let storagePath: string | null = null
+    try {
+      storagePath = await saveStream(
+        proofId,
+        file.originalname,
+        createReadStream(file.path),
+        file.mimetype,
+      )
+
+      const result = await withTransaction(async (client) => {
+        const { rows } = await client.query<{ id: string; meta: Record<string, unknown> | null }>(
+          `${TRIP_LOOKUP_SQL} for update of g`,
+          [userId, tripId],
+        )
+        const resolved = assertAssignedTrip(userId, rows[0])
+        const stop = resolved.ops.stops.find((candidate) => candidate.id === body.stopId)
+        if (!stop) throw new HttpError(404, 'stop_not_found')
+        if (stop.type !== body.kind) throw new HttpError(409, 'proof_kind_mismatch')
+        if (stop.status !== 'planned') throw new HttpError(409, 'stop_not_planned')
+        const nextStop = resolved.ops.stops.find((candidate) => candidate.status === 'planned')
+        if (nextStop?.id !== stop.id) throw new HttpError(409, 'stop_out_of_sequence')
+        if (resolved.trip.status !== requiredStatus) {
+          throw new HttpError(409, 'proof_not_expected')
+        }
+
+        stop.status = 'done'
+        const nextSameKind = resolved.ops.stops.find(
+          (candidate) => candidate.status === 'planned' && candidate.type === body.kind,
+        )
+        const nextStatus: Trip['status'] =
+          body.kind === 'loading'
+            ? nextSameKind
+              ? 'to_loading'
+              : 'in_transit'
+            : nextSameKind
+              ? 'to_unloading'
+              : 'completed'
+        resolved.trip.status = nextStatus
+
+        await client.query(
+          `insert into trip_proofs (
+             id, group_id, trip_id, stop_id, uploaded_by, kind,
+             original_name, mime_type, byte_size, storage_path
+           ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [
+            proofId,
+            resolved.groupId,
+            canonicalTripId(resolved.groupId, resolved.trip),
+            stop.id,
+            userId,
+            body.kind,
+            file.originalname,
+            file.mimetype,
+            file.size,
+            storagePath,
+          ],
+        )
+        await client.query('update groups set meta = meta || $2::jsonb where id = $1', [
+          resolved.groupId,
+          JSON.stringify({ ops: resolved.ops }),
+        ])
+        return resolved
+      })
+
+      const names = await driverNameMap(assignedDriverIds(result.ops, result.trip))
+      const payload = buildDriverTrip(result.groupId, result.ops, result.trip, names)
+      getIOIfReady()?.to(roomForGroup(result.groupId)).emit('trip:status', {
+        groupId: result.groupId,
+        tripId: payload.tripId,
+        status: payload.status,
+        stopId: body.stopId,
+        source: 'proof',
+      })
+      res.status(201).json({ proofId, trip: payload })
+    } catch (error) {
+      if (storagePath) await deleteFile(storagePath)
+      throw error
+    }
+  }),
+)
+
 const stopStatusSchema = z.object({ status: z.enum(['planned', 'done', 'cancelled']) })
 
 driverRouter.post(
@@ -390,6 +738,11 @@ driverRouter.post(
       const resolved = assertAssignedTrip(userId, rows[0])
       const stop = resolved.ops.stops.find((s) => s.id === stopId)
       if (!stop) throw new HttpError(404, 'stop_not_found')
+      // Loading and unloading completion must always go through /proofs so the
+      // document and status transition are committed together.
+      if (status === 'done' && (stop.type === 'loading' || stop.type === 'unloading')) {
+        throw new HttpError(409, 'proof_required')
+      }
       stop.status = status
       // Write the ops blob back the same way the dispatcher's PATCH does — merge
       // the `ops` key into meta so unrelated meta (plates) is preserved.
@@ -400,7 +753,7 @@ driverRouter.post(
       return resolved
     })
 
-    const names = await driverNameMap(trip.assignedDriverIds ?? [])
+    const names = await driverNameMap(assignedDriverIds(ops, trip))
     res.json({ trip: buildDriverTrip(groupId, ops, trip, names) })
   }),
 )

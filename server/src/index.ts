@@ -69,6 +69,23 @@ app.use('/api/here', hereRouter)
 app.use('/api/places', placesRouter)
 app.use('/api/notifications', notificationsRouter)
 
+// Unmatched /api paths answer as the API, never as the app. Without this, the
+// SPA fallback below (a GET '*' catch-all) returns index.html with a 200 for any
+// endpoint that was typo'd, renamed or never existed — the caller then
+// "successfully" receives HTML where it expected JSON or an image, and a missing
+// route surfaces as corrupt data instead of a 404. That is exactly how the
+// Android app's avatar loading broke: it requested GET /api/profile/avatar (only
+// POST/DELETE exist there; the image lives at /api/users/:id/avatar), got 200 +
+// HTML, failed to decode it, and silently fell back to a placeholder glyph.
+//
+// Registered after every router, so it only sees requests nothing above claimed,
+// and before the static/SPA block so it wins for /api in every build mode.
+// Errors are unaffected: asyncHandler forwards them to errorHandler, which skips
+// plain middleware like this one.
+app.use('/api', (_req, res) => {
+  res.status(404).json({ error: 'not_found' })
+})
+
 // In production, serve the built frontend from web/dist.
 if (isProd) {
   const webDist = resolve(__dirname, '../../web/dist')

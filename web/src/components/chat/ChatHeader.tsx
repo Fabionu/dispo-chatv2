@@ -170,16 +170,13 @@ export default function ChatHeader({
           aria-pressed={searchOpen}
           title={searchOpen ? 'Close search' : 'Search conversation'}
           onClick={() => (searchOpen ? onCloseSearch() : onOpenSearch())}
-          className={`h-9 px-2.5 flex items-center justify-center gap-1.5 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+          className={`h-9 w-9 flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
             searchOpen
               ? 'text-text bg-white/[0.06]'
               : 'text-muted hover:text-text hover:bg-white/[0.05]'
           }`}
         >
           <Search size="1.1875rem" strokeWidth={1.8} />
-          <span className={`${searchOpen ? 'hidden' : 'hidden sm:inline'} text-[0.75rem] font-medium`}>
-            Search
-          </span>
         </button>
         {routeMapAvailable && (
           <HeaderIconButton

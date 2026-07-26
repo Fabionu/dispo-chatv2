@@ -18,7 +18,7 @@ type Props = {
 // Structured "assigned drivers" field for the vehicle-room Info tab. Replaces the
 // old free-text note with a real member picker: managers open a popover of the
 // room's members (drivers surfaced first) and toggle who drives, shown back as
-// compact avatar chips. The selection writes `trip.assignedDriverIds` — the REAL
+// compact avatar chips. The selection writes `vehicle.assignedDriverIds` — the REAL
 // user ids the mobile driver API filters on — so this is an OPERATIONAL room/trip
 // assignment and does NOT change anyone's company role. Non-managers see the
 // chips read-only.

@@ -48,6 +48,7 @@ export const VEHICLE_STATUSES: ReadonlyArray<{ value: VehicleStatus; label: stri
 // change it; nothing is ever computed from GPS/maps.
 export type TripStatus =
   | 'planned'
+  | 'accepted'
   | 'to_loading'
   | 'at_loading'
   | 'loaded'
@@ -64,6 +65,7 @@ export type TripStatus =
 
 export const TRIP_STATUSES: ReadonlyArray<{ value: TripStatus; label: string }> = [
   { value: 'planned', label: 'Planned' },
+  { value: 'accepted', label: 'Accepted' },
   { value: 'to_loading', label: 'Going to loading' },
   { value: 'at_loading', label: 'At loading' },
   { value: 'loaded', label: 'Loaded' },
@@ -169,6 +171,8 @@ export function vehicleStatusTone(s: VehicleStatus | undefined): StatusTone {
 // the muted-green `done`; Cancelled is the coral `alert`.
 export function tripStatusTone(s: TripStatus | undefined): ChipTone {
   switch (s) {
+    case 'accepted':
+      return 'indigo'
     case 'to_loading':
     case 'to_unloading':
       return 'blue'
@@ -216,6 +220,8 @@ export type VehicleInfo = {
    *  (`ActiveTrip.assignedDriverIds`) so the driver API can filter by real user;
    *  this free-text field is kept for legacy/quick notes. */
   assignedDrivers?: string
+  /** Persistent structured driver assignment for this vehicle room. */
+  assignedDriverIds?: string[]
   status?: VehicleStatus
   /** Structured truck dimensions/weight (cm/kg) for restriction-aware routing and
    *  a future mobile truck-navigation handoff. Belongs to the vehicle (the truck),
@@ -363,6 +369,12 @@ export function tripDriverIds(trip: ActiveTrip | null | undefined): string[] {
   return [...new Set(trip.assignedDriverIds.filter((id) => typeof id === 'string' && id))]
 }
 
+/** Persistent driver ids, with legacy trip-level assignment as a read fallback. */
+export function vehicleDriverIds(ops: VehicleOps): string[] {
+  const ids = ops.vehicle.assignedDriverIds ?? ops.trip?.assignedDriverIds ?? []
+  return [...new Set(ids.filter((id) => typeof id === 'string' && id))]
+}
+
 // Parse a free-text coordinate pair ("lat, lng") into decimal degrees. Accepts
 // an optional N/S/E/W hemisphere suffix per component (e.g.
 // "48.99280 N, 21.24404 E") as well as bare signed decimals
@@ -477,7 +489,7 @@ export function stopPlace(s: VehicleStop): TripPlace {
 // trip has no stops to measure against. Interlude/terminal states (customs, ferry,
 // break, service, cancelled) are intentionally excluded; they aren't linear.
 const TRIP_LIFECYCLE: readonly TripStatus[] = [
-  'planned', 'to_loading', 'at_loading', 'loaded', 'in_transit',
+  'planned', 'accepted', 'to_loading', 'at_loading', 'loaded', 'in_transit',
   'to_unloading', 'at_unloading', 'unloaded', 'completed',
 ]
 

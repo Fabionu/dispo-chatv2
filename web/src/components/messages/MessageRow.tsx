@@ -1,4 +1,4 @@
-import { memo, useRef, useState } from 'react'
+import { memo, useRef, useState, type MouseEvent } from 'react'
 import { ChevronDown, Pin } from 'lucide-react'
 import type { Attachment, GroupType } from '../../lib/types'
 import AttachmentBlock from '../attachments/AttachmentBlock'
@@ -31,6 +31,7 @@ type Props = {
   // of my rows, so its reference is stable unless the roster actually changes.
   readers?: Reader[]
   prev?: LocalMessage
+  next?: LocalMessage
   // True when this is the very first message of the whole thread (no older page
   // to load) — the day divider then reads "Conversation started · <date>".
   conversationStart?: boolean
@@ -72,6 +73,7 @@ function MessageRow({
   currentUserId,
   readers,
   prev,
+  next,
   conversationStart,
   groupType,
   highlighted,
@@ -116,6 +118,13 @@ function MessageRow({
   // Drives the author chrome (avatar + name), group spacing, and the bubble
   // corner grouping in BOTH display styles.
   const startNewGroup = !sameAuthorAsPrev || showDayDivider
+  const sameAuthorAsNext =
+    next !== undefined &&
+    next.kind !== 'system' &&
+    next.authorId === message.authorId &&
+    new Date(next.createdAt).toDateString() === new Date(message.createdAt).toDateString() &&
+    new Date(next.createdAt).getTime() - new Date(message.createdAt).getTime() < GROUP_WINDOW_MS
+  const endGroup = !sameAuthorAsNext
 
   // Which message timeline style to render — 'bubble' (classic) or 'plain' (the
   // no-bubble grouped operational-log stream). Reads live via a <html> attribute
@@ -136,6 +145,23 @@ function MessageRow({
   // Optimistic + failed bubbles aren't real messages yet, so they shouldn't
   // expose the menu. Deleted placeholders shouldn't either.
   const canShowActions = !deleted && !pending && !failed
+  // Desktop shortcut: double-clicking the message row starts a reply. Keep
+  // controls inside the row (author/profile, attachment preview, reply quote,
+  // receipts, actions) independent so their own click behaviour still wins.
+  function handleDoubleClick(event: MouseEvent<HTMLElement>) {
+    if (!canShowActions) return
+    const target = event.target as HTMLElement
+    if (
+      target.closest(
+        'button, a, input, textarea, select, [role="button"], [contenteditable="true"]',
+      )
+    ) {
+      return
+    }
+    event.preventDefault()
+    setMenu(null)
+    onReply(message)
+  }
   // Attachments with a real, fetchable URL — excludes just-sent blob: previews
   // (optimistic sends) and known-missing objects, so Download is never offered
   // before a downloadable file actually exists on the server.
@@ -176,13 +202,15 @@ function MessageRow({
   // meta footer re-add a small inset on media bubbles (see below).
   const bubblePad = hasAttachment ? 'p-1.5' : 'px-3.5 pt-2 pb-1.5'
   const bubbleBase = `${bubblePad} text-[length:var(--chat-msg-font-size)] leading-[1.45] flex flex-col text-text transition-[box-shadow,border-color] duration-500`
-  // Corner shape: an 8px rounded rectangle (matching the app's small-radius
-  // language — no pills) with a tighter 3px "tail" on the sender-side bottom
-  // corner as the directional cue. Inside a same-author run the top corner on
-  // that side also tightens, so consecutive bubbles read as one stacked group.
-  const grouped = !startNewGroup
-  const shapeMine = `rounded-[1rem] rounded-br-[0.375rem]${grouped ? ' rounded-tr-[0.5rem]' : ''}`
-  const shapeOther = `rounded-[1rem] rounded-bl-[0.375rem]${grouped ? ' rounded-tl-[0.5rem]' : ''}`
+  // The sender-side corners describe the bubble's exact position in a run:
+  // single, first, middle, or last. Joined 5px corners make consecutive
+  // messages interlock while the first/last keep a rounded outer edge.
+  const shapeMine = `rounded-[1rem] ${
+    startNewGroup ? 'rounded-tr-[1rem]' : 'rounded-tr-[0.3125rem]'
+  } ${endGroup ? 'rounded-br-[1rem]' : 'rounded-br-[0.3125rem]'}`
+  const shapeOther = `rounded-[1rem] ${
+    startNewGroup ? 'rounded-tl-[1rem]' : 'rounded-tl-[0.3125rem]'
+  } ${endGroup ? 'rounded-bl-[1rem]' : 'rounded-bl-[0.3125rem]'}`
   const deletedSkin = `bg-white/[0.02] text-muted italic ${mine ? shapeMine : shapeOther}`
   // Bubble skins sit on the raised chat card (`chat` #202020). Incoming uses
   // the next neutral surface step (`surface-2` #303030), which separates it
@@ -233,6 +261,15 @@ function MessageRow({
       {failed ? <span className="not-italic text-alert">Failed</span> : formatTime(message.createdAt)}
     </>
   )
+  const metaReserve = failed
+    ? 'w-[2.875rem]'
+    : mine
+      ? edited
+        ? 'w-[5.5rem]'
+        : 'w-[3.25rem]'
+      : edited
+        ? 'w-[4.25rem]'
+        : 'w-[2.125rem]'
 
   // ── Plain stream (grouped "operational log") ────────────────────────────────
   // Slack/Discord-style work-log for INCOMING messages: a group start shows the
@@ -315,6 +352,7 @@ function MessageRow({
         )}
         <div
           data-message-id={message.id}
+          onDoubleClick={handleDoubleClick}
           onContextMenu={(e) => {
             if (!canShowActions) return
             e.preventDefault()
@@ -548,6 +586,7 @@ function MessageRow({
       )}
       <div
         data-message-id={message.id}
+        onDoubleClick={handleDoubleClick}
         className={`flex ${startNewGroup ? 'mt-3' : 'mt-0.5'}`}
       >
         {/* Avatar gutter — incoming vehicle-group messages only (a DM's peer is
@@ -594,7 +633,7 @@ function MessageRow({
               setMenu({ x: e.clientX, y: e.clientY })
             }}
           >
-            <div className={`min-w-0 ${bubbleBase} ${bubbleSkin} ${highlightSkin}`}>
+            <div className={`relative min-w-0 ${bubbleBase} ${bubbleSkin} ${highlightSkin}`}>
               {pinned && (
                 <span
                   className={`flex items-center gap-1 text-[0.65625rem] mb-1 leading-none ${mine ? 'text-muted' : 'text-active'}`}
@@ -648,14 +687,24 @@ function MessageRow({
                       }`}
                     >
                       {renderBody(message.body, message.mentions, currentUserId, tripCtx)}
+                      <span
+                        aria-hidden="true"
+                        className={`inline-block h-[0.6875rem] ${metaReserve}`}
+                      />
                     </span>
                   )}
                   {/* Subtle footer row: the time (and `edited`) on their own line,
                       tucked into the bubble's bottom-right corner — below the
                       text/caption (or the media in an attachment-only bubble). */}
                   <span
-                    className={`self-end inline-flex items-center gap-1 whitespace-nowrap text-[0.65625rem] leading-none text-faint select-none mt-0.5 -mb-0.5 ${
-                      hasAttachment ? '-mr-0.5' : '-mr-1.5'
+                    className={`inline-flex items-center gap-1 whitespace-nowrap text-[0.65625rem] leading-none text-faint select-none ${
+                      message.body
+                        ? `absolute bottom-[0.3125rem] ${
+                            hasAttachment ? 'right-[0.375rem]' : 'right-[0.5rem]'
+                          }`
+                        : `self-end mt-0.5 -mb-0.5 ${
+                            hasAttachment ? '-mr-0.5' : '-mr-1.5'
+                          }`
                     }`}
                   >
                     {meta}
@@ -737,6 +786,7 @@ function propsEqual(a: Props, b: Props): boolean {
   return (
     a.message === b.message &&
     a.prev === b.prev &&
+    a.next === b.next &&
     a.conversationStart === b.conversationStart &&
     a.mine === b.mine &&
     a.currentUserId === b.currentUserId &&

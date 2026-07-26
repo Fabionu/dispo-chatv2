@@ -405,8 +405,11 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           snippet={
             replyContext.deleted
               ? '(deleted message)'
-              : replyContext.body || (replyContext.hasAttachments ? 'Attachment' : '')
+              : replyContext.body ||
+                replyContext.attachment?.originalName ||
+                (replyContext.hasAttachments ? 'Attachment' : '')
           }
+          attachment={replyContext.attachment}
           onCancel={onCancelReply}
         />
       )}

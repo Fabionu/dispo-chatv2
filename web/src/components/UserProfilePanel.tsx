@@ -31,6 +31,8 @@ type Props = {
   /** Open or create a direct conversation, then navigate to it. */
   onMessage: (userId: string, name: string) => Promise<void>
   onClose: () => void
+  /** Render in ChatView's shared right-hand panel slot on desktop. */
+  sidePanel?: boolean
 }
 
 type Relationship =
@@ -58,6 +60,7 @@ export default function UserProfilePanel({
   groupRole,
   onMessage,
   onClose,
+  sidePanel = false,
 }: Props) {
   const [profile, setProfile] = useState<PublicProfile | null>(null)
   const [failed, setFailed] = useState(false)
@@ -218,7 +221,11 @@ export default function UserProfilePanel({
           desktop the panel is a real in-flow column, so there's no backdrop and
           the chat beside it stays fully clickable. Same as Group info. */}
       <div
-        className="fixed inset-0 z-40 bg-black/65 backdrop-blur-[1px]"
+        className={
+          sidePanel
+            ? 'fixed inset-0 z-40 xl:hidden'
+            : 'fixed inset-0 z-40 bg-black/65 backdrop-blur-[1px]'
+        }
         onClick={onClose}
         aria-hidden
       />
@@ -231,9 +238,17 @@ export default function UserProfilePanel({
         // in-flow right column beside the chat — same rail background, width,
         // and panel radius as the Group info column, so it reads as the same
         // card surface with the standard gap from the chat (the row's xl:gap-3).
-        className="fixed left-1/2 top-1/2 z-50 h-[calc(100dvh-1.5rem)] max-h-[44rem] w-[calc(100%-1.5rem)] max-w-[30rem]
-                   -translate-x-1/2 -translate-y-1/2 rounded-modal border border-white/[0.08]
-                   bg-rail shadow-[0_32px_80px_rgba(0,0,0,0.65)] flex flex-col overflow-hidden"
+        className={
+          sidePanel
+            ? `fixed top-0 right-0 bottom-0 z-40 flex w-full max-w-[25rem] flex-col overflow-hidden bg-rail
+               shadow-[-16px_0_48px_rgba(0,0,0,0.4)]
+               xl:static xl:z-auto xl:w-[clamp(22.5rem,26vw,26.25rem)] xl:max-w-none xl:shrink-0
+               xl:rounded-panel xl:shadow-none`
+            : `fixed left-1/2 top-1/2 z-50 h-[calc(100dvh-1.5rem)] max-h-[44rem]
+               w-[calc(100%-1.5rem)] max-w-[30rem] -translate-x-1/2 -translate-y-1/2
+               rounded-modal border border-white/[0.08] bg-rail
+               shadow-[0_32px_80px_rgba(0,0,0,0.65)] flex flex-col overflow-hidden`
+        }
       >
         {/* Header — same seam as the other right/side panels. */}
         <div className="h-[var(--header-height)] flex items-center justify-between px-4 shrink-0">

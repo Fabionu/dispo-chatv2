@@ -351,6 +351,13 @@ messagesRouter.post(
         reply_author: string | null
         reply_body: string | null
         reply_has_attachments: boolean | null
+        reply_attachment: {
+          id: string
+          original_name: string
+          mime_type: string
+          preview_path: string | null
+          missing: boolean
+        } | null
         reply_is_deleted: boolean | null
       }>(
         `with member as (
@@ -387,6 +394,19 @@ messagesRouter.post(
                 ru.display_name as reply_author,
                 case when rm.deleted_at is not null then '' else rm.body end as reply_body,
                 exists (select 1 from attachments ra where ra.message_id = rm.id) as reply_has_attachments,
+                case when rm.deleted_at is not null then null else (
+                  select jsonb_build_object(
+                    'id',            ra.id,
+                    'original_name', ra.original_name,
+                    'mime_type',     ra.mime_type,
+                    'preview_path',  ra.preview_path,
+                    'missing',       ra.missing
+                  )
+                    from attachments ra
+                   where ra.message_id = rm.id
+                   order by ra.created_at asc
+                   limit 1
+                ) end as reply_attachment,
                 (rm.deleted_at is not null) as reply_is_deleted
          from ins
          join users u on u.id = $2
@@ -486,6 +506,20 @@ messagesRouter.post(
                 authorName: row.reply_author,
                 body: row.reply_body ?? '',
                 hasAttachments: row.reply_has_attachments ?? false,
+                attachment: row.reply_attachment
+                  ? {
+                      id: row.reply_attachment.id,
+                      originalName: row.reply_attachment.original_name,
+                      mimeType: row.reply_attachment.mime_type,
+                      url: `/api/attachments/${row.reply_attachment.id}`,
+                      ...(row.reply_attachment.preview_path
+                        ? {
+                            previewUrl: `/api/attachments/${row.reply_attachment.id}?variant=preview`,
+                          }
+                        : {}),
+                      ...(row.reply_attachment.missing ? { missing: true } : {}),
+                    }
+                  : null,
                 deleted: row.reply_is_deleted ?? false,
               }
             : null,

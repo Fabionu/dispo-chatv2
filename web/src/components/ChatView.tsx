@@ -1278,6 +1278,7 @@ export default function ChatView({
                           // undefined so they don't re-render on read updates.
                           readers={m.authorId === currentUserId ? readers : undefined}
                           prev={visibleMessages[i - 1]}
+                          next={visibleMessages[i + 1]}
                           conversationStart={i === 0 && !nextCursor}
                           groupType={group.type}
                           highlighted={highlightedMessageId === m.id}
@@ -1486,6 +1487,7 @@ export default function ChatView({
           onOpenProfile={(m) => openProfile(m.id, m.displayName)}
           onGroupUpdated={(partial) => onGroupUpdated?.(group.id, partial)}
           onOpenRouteMap={routeMapAvailable ? openTripRoute : undefined}
+          onAddTrip={() => setAddTripOpen(true)}
           initialTab={groupInfoTab}
         />
         </Suspense>
@@ -1521,6 +1523,7 @@ export default function ChatView({
           }
           onMessage={messageProfileUser}
           onClose={() => setProfileTarget(null)}
+          sidePanel
         />
       )}
 
