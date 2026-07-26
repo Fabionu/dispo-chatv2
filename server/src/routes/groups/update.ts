@@ -5,7 +5,13 @@ import { asyncHandler, withTransaction } from '../../http.js'
 import { insertSystemMessage, emitSystemMessage } from '../../util/messages.js'
 import { getIOIfReady, roomForGroup } from '../../realtime.js'
 import { authorizeInviter } from './authz.js'
-import { opsSchema, tripActivityEvents, assignedDriverDelta, type OpsLite } from './ops.js'
+import {
+  opsSchema,
+  tripActivityEvents,
+  assignedDriverDelta,
+  driverIdsForOpsSave,
+  type OpsLite,
+} from './ops.js'
 
 // Resolve user ids → display names for a driver-assignment activity row. Returns
 // a map so the caller can preserve the original id order in the payload.
@@ -26,19 +32,38 @@ export const updateRouter = Router()
 // admin OR workspace admin/dispatcher) — the same boundary as inviting, since
 // both are "manage this group" actions. Plates live in `meta`; we merge rather
 // than replace so unrelated legacy keys (e.g. an old `trip`) are preserved.
-const updateGroupSchema = z.object({
-  name: z.string().trim().min(1).max(120).optional(),
-  description: z.string().trim().max(400).nullable().optional(),
-  tractorPlate: z.string().trim().max(20).nullable().optional(),
-  trailerPlate: z.string().trim().max(20).nullable().optional(),
-  // Operational blob (vehicle/trip/stops) for the vehicle room's side panel.
-  ops: opsSchema.optional(),
-  // Set by the client only when this save is an explicit "Edit route" action
-  // (never on the automatic background route recompute), so the server logs a
-  // "Route was edited" activity row only for a deliberate edit — and even then
-  // only when the route data actually changed (see the diff below).
-  routeEdited: z.boolean().optional(),
-})
+const updateGroupSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    description: z.string().trim().max(400).nullable().optional(),
+    tractorPlate: z.string().trim().max(20).nullable().optional(),
+    trailerPlate: z.string().trim().max(20).nullable().optional(),
+    // Operational blob (vehicle/trip/stops) for the vehicle room's side panel.
+    ops: opsSchema.optional(),
+    // Set ONLY by the Assigned drivers picker. All other ops saves preserve the
+    // assignment already stored in the locked database row, even when a stale
+    // client happens to carry an older list in its wholesale ops blob.
+    driverAssignmentEdited: z.boolean().optional(),
+    // Set by the client only when this save is an explicit "Edit route" action
+    // (never on the automatic background route recompute), so the server logs a
+    // "Route was edited" activity row only for a deliberate edit — and even then
+    // only when the route data actually changed (see the diff below).
+    routeEdited: z.boolean().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (
+      data.driverAssignmentEdited === true &&
+      (data.ops === undefined ||
+        (data.ops.vehicle.assignedDriverIds === undefined &&
+          data.ops.trip?.assignedDriverIds === undefined))
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['driverAssignmentEdited'],
+        message: 'driver_assignment_requires_explicit_list',
+      })
+    }
+  })
 
 updateRouter.patch(
   '/:id',
@@ -65,25 +90,36 @@ updateRouter.patch(
         oldOps = (pre[0]?.meta?.ops as OpsLite | undefined) ?? null
       }
 
-      // Driver assignment references real accounts, so it must be trustworthy:
-      // the client owns the whole ops blob, so re-validate that every assigned id
-      // is an ACTIVE member of THIS group and drop any that isn't before it's
-      // persisted (the driver API trusts assignedDriverIds for access control).
-      const requestedDriverIds =
-        data.ops?.vehicle.assignedDriverIds ?? data.ops?.trip?.assignedDriverIds
-      if (data.ops && requestedDriverIds !== undefined) {
-        const ids = requestedDriverIds
-        const { rows: memberRows } = await client.query<{ user_id: string }>(
-          `select gm.user_id
-             from group_members gm
-             join users u on u.id = gm.user_id
-            where gm.group_id = $1 and gm.user_id = any($2::uuid[]) and u.deleted_at is null`,
-          [groupId, ids],
+      // Driver assignment is protected server-side from the wholesale ops-save
+      // model. Status, route, stop, completion and trip replacement saves keep
+      // the LOCKED database value; only the explicitly flagged picker save can
+      // change it. Re-validating the resulting ids against active room members
+      // keeps the driver API's authorization boundary trustworthy.
+      if (data.ops) {
+        const ids = driverIdsForOpsSave(
+          oldOps,
+          data.ops as OpsLite,
+          data.driverAssignmentEdited === true,
         )
-        const memberIds = new Set(memberRows.map((r) => r.user_id))
-        data.ops.vehicle.assignedDriverIds = ids.filter((id) => memberIds.has(id))
-        // Canonical storage is group/vehicle-level. Remove the legacy trip copy
-        // so replacing a trip can never change assignment accidentally.
+        if (ids === undefined) {
+          delete data.ops.vehicle.assignedDriverIds
+        } else if (ids.length === 0) {
+          data.ops.vehicle.assignedDriverIds = []
+        } else {
+          const { rows: memberRows } = await client.query<{ user_id: string }>(
+            `select gm.user_id
+               from group_members gm
+               join users u on u.id = gm.user_id
+              where gm.group_id = $1 and gm.user_id = any($2::uuid[]) and u.deleted_at is null`,
+            [groupId, ids],
+          )
+          const memberIds = new Set(memberRows.map((r) => r.user_id))
+          data.ops.vehicle.assignedDriverIds = ids.filter((id) => memberIds.has(id))
+        }
+
+        // Canonical storage is group/vehicle-level. Always remove the legacy
+        // trip copy, including on ordinary saves, so trip completion/replacement
+        // can never own or reset the persistent assignment again.
         if (data.ops.trip) delete data.ops.trip.assignedDriverIds
       }
 

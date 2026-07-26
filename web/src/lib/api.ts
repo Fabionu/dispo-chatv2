@@ -205,8 +205,12 @@ export const api = {
         description: string | null
         tractorPlate: string | null
         trailerPlate: string | null
-        // Manual operational blob (vehicle/trip/stops) — replaced wholesale.
+        // Manual operational blob (vehicle/trip/stops). Driver assignment is
+        // server-preserved unless driverAssignmentEdited is explicitly true.
         ops: VehicleOps
+        // Set only by the explicit Assigned drivers picker. Ordinary ops saves
+        // are not allowed to alter the server's persistent vehicle assignment.
+        driverAssignmentEdited: boolean
         // Flags this save as a deliberate "Edit route" so the server logs a
         // "Route was edited" activity row (only when the route actually changed).
         // Never set on the automatic background recompute.

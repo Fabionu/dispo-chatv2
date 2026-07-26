@@ -1,9 +1,10 @@
-import { useRef, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import {
   Archive,
   ArchiveRestore,
   Bell,
   BellOff,
+  ChevronDown,
   MailOpen,
   Pin,
   PinOff,
@@ -17,13 +18,24 @@ import { TripStatusInline } from '../components/vehicle/opsControls'
 import Avatar from '../components/Avatar'
 import GroupAvatar from '../components/GroupAvatar'
 import IdentitySlot from '../components/IdentitySlot'
-import ConversationRowMenu, {
-  type ConversationRowMenuHandle,
-  type RowMenuAction,
-} from '../components/ConversationRowMenu'
 import { MENU_GLYPH } from '../components/menuStyles'
 import { statusMeta, OFFLINE } from '../lib/availability'
 import { typingStatusText, type TypingUser } from '../lib/typing'
+
+// One cell in a row's inline action strip. `label` is the short form shown
+// under the glyph; `title` is the full wording (tooltip + accessible name).
+type RowAction = {
+  key: string
+  label: string
+  title: string
+  icon: ReactNode
+  onSelect: () => void
+  // Destructive styling (alert colour).
+  danger?: boolean
+  // When set, the FIRST click swaps the cell to this label and a second click
+  // runs onSelect — an inline confirmation, no separate modal.
+  confirmLabel?: string
+}
 
 // Compact last-activity stamp: today → HH:MM, yesterday → "Yesterday", otherwise
 // DD/MM. Empty string when there's no timestamp.
@@ -59,6 +71,8 @@ export default function GroupRow({
   online,
   currentUserId,
   size,
+  actionsOpen,
+  onActionsOpenChange,
   onClick,
   onTogglePin,
   onToggleArchive,
@@ -76,8 +90,12 @@ export default function GroupRow({
   currentUserId: string
   // Identity-slot diameter in design px (tracks display density).
   size: number
+  // Whether THIS row's action strip is expanded. Owned by the list so only one
+  // row can be open at a time.
+  actionsOpen: boolean
+  onActionsOpenChange: (open: boolean) => void
   onClick: () => void
-  // Per-conversation row actions (the hover ⋮ menu). Each takes the row's group
+  // Per-conversation row actions (the inline strip). Each takes the row's group
   // plus the desired next state where it's a toggle.
   onTogglePin: (group: Group, pinned: boolean) => void
   onToggleArchive: (group: Group, archived: boolean) => void
@@ -120,17 +138,37 @@ export default function GroupRow({
   const draft = useDraft(currentUserId, group.id).replace(/\s+/g, ' ').trim()
   const typingText = typingStatusText(typingUsers, group.type === 'direct')
 
-  // ── Per-conversation row actions (hover arrow menu) ────────────────────────
-  // While the menu is open the row stays in its "actions active" state — the
-  // trigger stays visible and the preview-line indicators remain shifted left
-  // even after the cursor leaves the row.
-  const [menuOpen, setMenuOpen] = useState(false)
-  // Right-clicking anywhere on the row opens the SAME actions menu at the cursor.
-  const rowMenuRef = useRef<ConversationRowMenuHandle>(null)
+  // ── Per-conversation row actions (inline strip under the row) ─────────────
+  // Opening them expands a horizontal action bar directly beneath THIS row
+  // rather than floating a popover over the rail: the actions stay tied to the
+  // conversation they belong to, and nothing covers the rest of the list.
+  // While it's open the row stays in its "actions active" state — the trigger
+  // stays visible and the preview-line indicators remain shifted left even
+  // after the cursor leaves the row.
+  const menuOpen = actionsOpen
+  // Two-step inline confirm for the destructive action (no separate modal).
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  // Collapsing (including when ANOTHER row takes over) always re-arms delete.
+  useEffect(() => {
+    if (!menuOpen) setConfirmDelete(false)
+  }, [menuOpen])
+  const closeActions = () => onActionsOpenChange(false)
+  // Right-clicking anywhere on the row opens the SAME actions.
   const openMenuAtCursor = (e: React.MouseEvent) => {
     e.preventDefault()
-    rowMenuRef.current?.openAt(e.clientX, e.clientY)
+    onActionsOpenChange(true)
   }
+  // Escape closes the strip, matching every other dismissible surface.
+  useEffect(() => {
+    if (!menuOpen) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      onActionsOpenChange(false)
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [menuOpen, onActionsOpenChange])
   const archived = Boolean(group.archivedAt)
   const pinned = Boolean(group.pinnedAt)
   const muted = Boolean(group.muted)
@@ -144,44 +182,51 @@ export default function GroupRow({
   // selected→0 view used for the badge.
   const actuallyUnread = (group.unreadCount ?? 0) > 0
   const ICON = MENU_GLYPH
-  const menuActions: RowMenuAction[] = [
+  // Labels stay SHORT: five cells share the rail's width, so "Mark as read"
+  // becomes "Read". The aria-label carries the full wording.
+  const rowMenuActions: RowAction[] = [
     {
       key: 'pin',
       label: pinned ? 'Unpin' : 'Pin',
+      title: pinned ? 'Unpin conversation' : 'Pin conversation',
       icon: pinned ? <PinOff {...ICON} /> : <Pin {...ICON} />,
       onSelect: () => onTogglePin(group, !pinned),
     },
     {
       key: 'read',
-      label: actuallyUnread ? 'Mark as read' : 'Mark as unread',
+      label: actuallyUnread ? 'Read' : 'Unread',
+      title: actuallyUnread ? 'Mark as read' : 'Mark as unread',
       icon: <MailOpen {...ICON} />,
       onSelect: () => (actuallyUnread ? onMarkRead(group) : onMarkUnread(group)),
     },
     {
       key: 'mute',
-      label: muted ? 'Unmute notifications' : 'Mute notifications',
+      label: muted ? 'Unmute' : 'Mute',
+      title: muted ? 'Unmute notifications' : 'Mute notifications',
       icon: muted ? <Bell {...ICON} /> : <BellOff {...ICON} />,
       onSelect: () => onToggleMute(group, !muted),
     },
     {
       key: 'archive',
-      label: archived ? 'Unarchive' : 'Archive',
+      label: archived ? 'Restore' : 'Archive',
+      title: archived ? 'Unarchive conversation' : 'Archive conversation',
       icon: archived ? <ArchiveRestore {...ICON} /> : <Archive {...ICON} />,
       onSelect: () => onToggleArchive(group, !archived),
     },
     {
       key: 'delete',
-      label: 'Delete conversation',
+      label: 'Delete',
+      title: 'Delete conversation',
       icon: <Trash2 {...ICON} />,
       danger: true,
-      separator: true,
-      confirmLabel: 'Confirm delete',
+      confirmLabel: 'Sure?',
       onSelect: () => onDelete(group),
     },
   ]
-  // On-hover/focus overlay holding the arrow menu at the right end of preview
-  // line. The inline indicators slide left to expose this slot. Pointer events
-  // stay off until revealed so the hidden trigger never blocks the row click.
+  // On-hover/focus overlay holding the disclosure trigger at the right end of
+  // the preview line. The inline indicators slide left to expose this slot.
+  // Pointer events stay off until revealed so the hidden trigger never blocks
+  // the row click.
   const rowActions = (
     <div
       style={{
@@ -192,12 +237,26 @@ export default function GroupRow({
         menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
       }`}
     >
-      <ConversationRowMenu
-        ref={rowMenuRef}
-        actions={menuActions}
-        ariaLabel={`Conversation actions for ${groupLabel(group)}`}
-        onOpenChange={setMenuOpen}
-      />
+      <button
+        type="button"
+        aria-label={`Conversation actions for ${groupLabel(group)}`}
+        aria-expanded={menuOpen}
+        onClick={(e) => {
+          // Never let the click fall through to the row (which opens the chat).
+          e.stopPropagation()
+          e.preventDefault()
+          onActionsOpenChange(!menuOpen)
+        }}
+        className={`h-5 w-5 flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+          menuOpen ? 'bg-white/[0.08] text-text' : 'text-muted hover:text-text hover:bg-white/[0.06]'
+        }`}
+      >
+        <ChevronDown
+          size="0.75rem"
+          strokeWidth={1.8}
+          className={`transition-transform ${menuOpen ? 'rotate-180' : ''}`}
+        />
+      </button>
     </div>
   )
   // Muted indicator — part of the preview-line state cluster.
@@ -351,6 +410,59 @@ export default function GroupRow({
         </span>
       </button>
       {rowActions}
+
+      {/* The actions themselves: a horizontal strip directly under this row.
+          Animated with a 0fr→1fr grid row so the height transitions without a
+          hard-coded max-height, and kept out of the tab order while closed. */}
+      <div
+        className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+          menuOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+        }`}
+      >
+        <div className="overflow-hidden">
+          {/* No surface of its own: a tinted card under a row on the rail's
+              near-black background reads as a different material. The cells run
+              the row's full width and only light up on hover. */}
+          <div
+            role="group"
+            aria-label={`Actions for ${groupLabel(group)}`}
+            className={`mb-1 flex w-full items-stretch transition-opacity duration-150 ${
+              menuOpen ? 'opacity-100' : 'opacity-0'
+            }`}
+          >
+            {rowMenuActions.map((a) => {
+              const confirming = a.confirmLabel != null && confirmDelete
+              const danger = a.danger || confirming
+              return (
+                <button
+                  key={a.key}
+                  type="button"
+                  tabIndex={menuOpen ? 0 : -1}
+                  aria-label={confirming ? `${a.title} — confirm` : a.title}
+                  title={a.title}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (a.confirmLabel && !confirmDelete) {
+                      setConfirmDelete(true)
+                      return
+                    }
+                    closeActions()
+                    a.onSelect()
+                  }}
+                  className={`flex-1 min-w-0 flex flex-col items-center gap-1 rounded-btn px-1 py-1.5 transition-colors ${
+                    danger ? 'text-alert hover:bg-alert/10' : 'text-muted hover:bg-white/[0.06] hover:text-text'
+                  }`}
+                >
+                  {a.icon}
+                  <span className="text-[0.625rem] leading-none truncate max-w-full">
+                    {confirming ? a.confirmLabel : a.label}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

@@ -2,9 +2,9 @@ import { z } from 'zod'
 import { type SystemEvent } from '../../util/messages.js'
 
 // Manual vehicle-room operational data (vehicle details, one active trip, its
-// stops). Stored wholesale under `meta.ops` — the client owns the full object
-// and sends it on every change, so we validate shape/enums/caps but otherwise
-// replace the key as-is. Strictly manual: no coordinates/GPS/computed ETA.
+// stops). Stored under `meta.ops`; the client sends the full object on every
+// change, but update.ts server-merges the persistent driver assignment unless
+// the dedicated picker explicitly changes it. We validate shape/enums/caps here.
 const opsStr = (max: number) => z.string().trim().max(max).optional()
 
 export const opsSchema = z.object({
@@ -146,6 +146,32 @@ export type OpsLite = {
     route?: { status?: string; distanceText?: string; durationText?: string; polylines?: string[] }
   } | null
 } | null
+
+function normaliseDriverIds(ids: string[] | undefined): string[] | undefined {
+  if (ids === undefined) return undefined
+  return [...new Set(ids.filter(Boolean))]
+}
+
+/**
+ * Resolve the assignment that must be written with an ops save.
+ *
+ * Ordinary trip/stop/route saves always keep the database snapshot, ignoring
+ * any stale assignment carried by the client's wholesale ops blob. Only the
+ * explicitly flagged driver-picker save may use the incoming list. The legacy
+ * trip-level value remains a read fallback so the next save migrates old rooms
+ * into canonical vehicle-level storage without losing their drivers.
+ */
+export function driverIdsForOpsSave(
+  oldOps: OpsLite | null,
+  newOps: OpsLite,
+  assignmentEdited: boolean,
+): string[] | undefined {
+  const stored = oldOps?.vehicle?.assignedDriverIds ?? oldOps?.trip?.assignedDriverIds
+  if (!assignmentEdited) return normaliseDriverIds(stored)
+
+  const requested = newOps?.vehicle?.assignedDriverIds ?? newOps?.trip?.assignedDriverIds
+  return normaliseDriverIds(requested ?? [])
+}
 
 // The set of driver ids added / removed between two ops snapshots. Pure and
 // order-insensitive, so a save that re-sends the same assignment yields empty

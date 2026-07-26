@@ -471,7 +471,16 @@
       "Bash(curl -s -i -X POST http://localhost:3001/api/nope)",
       "Bash(curl -s -i http://localhost:3001/api/users/00000000-0000-0000-0000-000000000000/avatar)",
       "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; Set-Location \"C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat\"; .\\\\gradlew.bat :app:compileDebugKotlin --console=plain 2>&1 | Select-String -Pattern \"^e:|^w:|BUILD\" | Select-Object -First 40)",
-      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; Set-Location \"C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat\"; .\\\\gradlew.bat :app:installDebug --console=plain 2>&1 | Select-String -Pattern \"^e: |^w: |Installed|SUCCESSFUL|FAILED\" | Select-Object -First 30)"
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; Set-Location \"C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat\"; .\\\\gradlew.bat :app:installDebug --console=plain 2>&1 | Select-String -Pattern \"^e: |^w: |Installed|SUCCESSFUL|FAILED\" | Select-Object -First 30)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; Set-Location \"C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat\"; .\\\\gradlew.bat :app:compileDebugKotlin --console=plain 2>&1 | Select-String -Pattern \"^e: |^w: |SUCCESSFUL|FAILED\" | Select-Object -First 30)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(npx eslint *)",
+      "Bash(rm src/components/ConversationRowMenu.tsx)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; Set-Location \"C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat\"; .\\\\gradlew.bat :app:installDebug --console=plain 2>&1 | Select-String -Pattern \"^e: |^w: |Installed|SUCCESSFUL|FAILED\" | Select-Object -First 20)",
+      "Bash(sed -i \"s#from './MessageActionsMenu'#from './MessageActionsPanel'#\" src/components/messages/messageActionItems.tsx)",
+      "Bash(rm src/components/messages/MessageActionsMenu.tsx)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; Set-Location \"C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat\"; .\\\\gradlew.bat :app:compileDebugKotlin --console=plain 2>&1 | Select-String -Pattern \"^e: |^w: |SUCCESSFUL|FAILED\" | Select-Object -First 25)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; Set-Location \"C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat\"; .\\\\gradlew.bat :app:installDebug --console=plain 2>&1 | Select-String -Pattern \"^e: |^w: |Installed|SUCCESSFUL|FAILED\" | Select-Object -First 25)"
     ]
   }
 }

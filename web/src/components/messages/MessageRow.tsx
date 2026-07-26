@@ -1,8 +1,8 @@
-import { memo, useRef, useState, type MouseEvent } from 'react'
+import { memo, useEffect, useRef, useState, type MouseEvent } from 'react'
 import { ChevronDown, Pin } from 'lucide-react'
 import type { Attachment, GroupType } from '../../lib/types'
 import AttachmentBlock from '../attachments/AttachmentBlock'
-import MessageActionsMenu from './MessageActionsMenu'
+import MessageActionsPanel from './MessageActionsPanel'
 import ReadReceipts, { type Reader } from './ReadReceipts'
 import ReplyQuote from './ReplyQuote'
 import { DELETE_WINDOW_MS, formatTime } from './messageUtils'
@@ -159,7 +159,7 @@ function MessageRow({
       return
     }
     event.preventDefault()
-    setMenu(null)
+    setMenuOpen(false)
     onReply(message)
   }
   // Attachments with a real, fetchable URL — excludes just-sent blob: previews
@@ -182,12 +182,34 @@ function MessageRow({
   // incoming bubbles sit flush to the left.
   const showAuthorChrome = !mine && groupType === 'vehicle'
 
-  // The actions menu is opened two ways: from the chevron (anchored under it)
-  // or by right-clicking the bubble (anchored at the cursor). One state covers
-  // both — 'chevron' or a {x,y} cursor point, else null (closed).
-  const [menu, setMenu] = useState<'chevron' | { x: number; y: number } | null>(null)
-  const menuOpen = menu !== null
+  // The actions open two ways — the chevron or a right-click on the bubble —
+  // and land in the same place either way: inline under this bubble. No anchor
+  // maths, so one boolean covers both.
+  const [menuOpen, setMenuOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const rowRef = useRef<HTMLDivElement>(null)
+
+  // Clicking outside THIS row closes its panel — which also means opening
+  // another message's actions collapses this one, without lifting state up
+  // through the memo boundary.
+  useEffect(() => {
+    if (!menuOpen) return
+    // globalThis — React's MouseEvent type is imported above and shadows the
+    // DOM one this listener actually receives.
+    function onDown(e: globalThis.MouseEvent) {
+      if (rowRef.current?.contains(e.target as Node)) return
+      setMenuOpen(false)
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [menuOpen])
 
   // 82% keeps bubbles comfortably inset on small screens; the wider absolute
   // cap lets conversations occupy more of the enlarged desktop chat column on
@@ -331,7 +353,7 @@ function MessageRow({
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => setMenu((m) => (m === 'chevron' ? null : 'chevron'))}
+        onClick={() => setMenuOpen((open) => !open)}
         aria-label="Message actions"
         aria-haspopup="menu"
         aria-expanded={menuOpen}
@@ -351,12 +373,13 @@ function MessageRow({
           <DayDivider iso={message.createdAt} conversationStart={conversationStart} />
         )}
         <div
+          ref={rowRef}
           data-message-id={message.id}
           onDoubleClick={handleDoubleClick}
           onContextMenu={(e) => {
             if (!canShowActions) return
             e.preventDefault()
-            setMenu({ x: e.clientX, y: e.clientY })
+            setMenuOpen(true)
           }}
           className={`relative pl-1.5 pr-2 ${startNewGroup ? 'mt-4' : 'mt-0.5'}`}
         >
@@ -562,18 +585,17 @@ function MessageRow({
                       Tap to retry
                     </button>
                   )}
+
+                  {menuOpen && (
+                    <MessageActionsPanel
+                      actions={actions}
+                      mine={mine}
+                      onClose={() => setMenuOpen(false)}
+                    />
+                  )}
               </div>
             </div>
           </div>
-
-          {menuOpen && (menu !== 'chevron' || triggerRef.current) && (
-            <MessageActionsMenu
-              anchorEl={menu === 'chevron' ? triggerRef.current : undefined}
-              anchorPoint={menu !== 'chevron' && menu ? menu : undefined}
-              actions={actions}
-              onClose={() => setMenu(null)}
-            />
-          )}
         </div>
       </>
     )
@@ -585,6 +607,7 @@ function MessageRow({
         <DayDivider iso={message.createdAt} conversationStart={conversationStart} />
       )}
       <div
+        ref={rowRef}
         data-message-id={message.id}
         onDoubleClick={handleDoubleClick}
         className={`flex ${startNewGroup ? 'mt-3' : 'mt-0.5'}`}
@@ -630,7 +653,7 @@ function MessageRow({
             onContextMenu={(e) => {
               if (!canShowActions) return
               e.preventDefault()
-              setMenu({ x: e.clientX, y: e.clientY })
+              setMenuOpen(true)
             }}
           >
             <div className={`relative min-w-0 ${bubbleBase} ${bubbleSkin} ${highlightSkin}`}>
@@ -736,7 +759,7 @@ function MessageRow({
               <button
                 ref={triggerRef}
                 type="button"
-                onClick={() => setMenu((m) => (m === 'chevron' ? null : 'chevron'))}
+                onClick={() => setMenuOpen((open) => !open)}
                 aria-label="Message actions"
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
@@ -750,15 +773,10 @@ function MessageRow({
               </button>
             )}
 
-            {menuOpen && (menu !== 'chevron' || triggerRef.current) && (
-              <MessageActionsMenu
-                anchorEl={menu === 'chevron' ? triggerRef.current : undefined}
-                anchorPoint={menu !== 'chevron' && menu ? menu : undefined}
-                actions={actions}
-                onClose={() => setMenu(null)}
-              />
-            )}
           </div>
+          {menuOpen && (
+            <MessageActionsPanel actions={actions} mine={mine} onClose={() => setMenuOpen(false)} />
+          )}
           {failed && mine && message.localId && (
             <button
               onClick={() => onRetry(message.localId!, message.body, message.pendingFile ?? null)}

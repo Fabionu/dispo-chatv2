@@ -12,7 +12,7 @@ import {
 import type { Attachment } from '../../lib/types'
 import { downloadAttachment } from '../attachments/attachmentUtils'
 import { MENU_GLYPH } from '../menuStyles'
-import { type MessageAction } from './MessageActionsMenu'
+import { type MessageAction } from './MessageActionsPanel'
 import type { LocalMessage } from './types'
 
 // Inputs needed to build a message's action-menu items. Kept as a plain params

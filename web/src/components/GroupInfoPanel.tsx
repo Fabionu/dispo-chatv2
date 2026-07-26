@@ -290,8 +290,11 @@ export default function GroupInfoPanel({
   // `ops` re-derives on the next render (single source of truth = the group's
   // server-backed meta; no separate local copy that could drift). Throws on
   // failure so the calling control surfaces a retryable error.
-  async function saveOps(next: VehicleOps) {
-    const { group: updated } = await api.groups.update(group.id, { ops: next })
+  async function saveOps(next: VehicleOps, options?: { driverAssignmentEdited?: boolean }) {
+    const { group: updated } = await api.groups.update(group.id, {
+      ops: next,
+      ...(options?.driverAssignmentEdited ? { driverAssignmentEdited: true } : {}),
+    })
     onGroupUpdated({ meta: updated.meta })
   }
   // Focused helpers so each tab patches just its slice. Spreading an `undefined`
@@ -303,11 +306,14 @@ export default function GroupInfoPanel({
   // Driver assignment belongs to the vehicle room, not to one trip, so it
   // survives trip replacement/clearing until a manager changes it manually.
   const saveDrivers = (ids: string[]) =>
-    saveOps({
-      ...ops,
-      vehicle: { ...ops.vehicle, assignedDriverIds: ids },
-      trip: ops.trip ? { ...ops.trip, assignedDriverIds: undefined } : null,
-    })
+    saveOps(
+      {
+        ...ops,
+        vehicle: { ...ops.vehicle, assignedDriverIds: ids },
+        trip: ops.trip ? { ...ops.trip, assignedDriverIds: undefined } : null,
+      },
+      { driverAssignmentEdited: true },
+    )
   // Clearing a trip also drops its stops — they belong to the trip, so leaving
   // them behind would resurface on the next trip as stale data.
   const clearTrip = () => saveOps({ ...ops, trip: null, stops: [] })

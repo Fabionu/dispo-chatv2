@@ -152,6 +152,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // Active members of the caller's own company (internal/trusted contacts).
   const [members, setMembers] = useState<WorkspaceMember[]>([])
   const [selection, setSelection] = useState<Selection>(initialSelection)
+  // Which conversation row has its inline action strip expanded. Held here, not
+  // per row, so opening one collapses whichever was open.
+  const [rowActionsId, setRowActionsId] = useState<string | null>(null)
   // Sidebar quick-filter text. Filters the conversation lists by name (and a
   // vehicle's tractor plate) so "Jump to…" actually narrows the rail.
   const [query, setQuery] = useState('')
@@ -892,7 +895,14 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                         currentUserId={user.id}
                         size={conversationAvatar}
                         selected={selection?.kind === 'group' && selection.id === item.group.id}
-                        onClick={() => setSelection({ kind: 'group', id: item.group.id })}
+                        actionsOpen={rowActionsId === item.group.id}
+                        onActionsOpenChange={(open) =>
+                          setRowActionsId(open ? item.group.id : null)
+                        }
+                        onClick={() => {
+                          setRowActionsId(null)
+                          setSelection({ kind: 'group', id: item.group.id })
+                        }}
                         onTogglePin={togglePin}
                         onToggleArchive={toggleArchive}
                         onToggleMute={toggleMute}

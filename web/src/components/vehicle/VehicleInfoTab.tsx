@@ -10,7 +10,7 @@ type Props = {
   vehicle: VehicleInfo
   // The room's members — the pool the assigned-drivers picker chooses from.
   members: GroupMember[]
-  // Currently-assigned driver user ids (structured assignment; lives on the trip).
+  // Currently-assigned driver user ids (persistent vehicle-room assignment).
   assignedDriverIds: string[]
   // Persist a group-level detail (name / plates / description) — reuses the
   // existing PATCH path, so plate editing behaves exactly as before.
@@ -19,8 +19,7 @@ type Props = {
   ) => Promise<void>
   // Persist a patch onto the vehicle ops sub-object.
   onSaveVehicle: (patch: Partial<VehicleInfo>) => Promise<void>
-  // Persist the structured assigned-driver ids (creates a trip to hold them when
-  // none exists yet). Membership is re-validated server-side.
+  // Persist independently of the active trip. Membership is re-validated server-side.
   onSaveDrivers: (ids: string[]) => Promise<void>
 }
 

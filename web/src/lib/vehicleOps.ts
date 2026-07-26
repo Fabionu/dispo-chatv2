@@ -215,10 +215,8 @@ export function stopStatusTone(s: StopStatus): StatusTone {
 export type VehicleInfo = {
   vehicleType?: string
   trailerType?: string
-  /** Manually-entered assigned driver(s) — free text (an informal note). The
-   *  STRUCTURED, mobile-facing assignment lives on the trip
-   *  (`ActiveTrip.assignedDriverIds`) so the driver API can filter by real user;
-   *  this free-text field is kept for legacy/quick notes. */
+  /** Manually-entered assigned driver(s) — free text (an informal legacy note).
+   *  The structured, mobile-facing assignment is `assignedDriverIds` below. */
   assignedDrivers?: string
   /** Persistent structured driver assignment for this vehicle room. */
   assignedDriverIds?: string[]
@@ -266,10 +264,8 @@ export type ActiveTrip = {
   weight?: string
   pallets?: string
   status?: TripStatus
-  /** User ids of the driver(s) assigned to this trip — REAL room members, so the
-   *  mobile driver API can return "trips assigned to me" and the room can log a
-   *  "assigned X as driver" activity row. Distinct from the free-text
-   *  `vehicle.assignedDrivers` note. Empty/absent when nobody is assigned. */
+  /** @deprecated Legacy trip-level assignment. Read only as a migration fallback;
+   *  canonical assignment lives on `vehicle.assignedDriverIds`. */
   assignedDriverIds?: string[]
   /** Manual ETA — typed by the dispatcher, never computed from a map/route. */
   eta?: string
