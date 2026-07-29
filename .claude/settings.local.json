@@ -487,7 +487,8 @@
       "Bash(node \"C:/Users/Home/AppData/Local/Temp/claude/C--Users-Home-Desktop-dispo-chatv2/7a854975-788d-45c0-84bb-2e3bc192df2b/scratchpad/migrate-tokens.mjs\")",
       "Bash(echo \"TSC EXIT:$?\")",
       "Bash(awk '{v=$2; sub\\(\"white/\",\"\",v\\); if \\(v!=\"2\"&&v!=\"4\"&&v!=\"6\"&&v!=\"8\"&&v!=\"10\"&&v!=\"16\"&&v!=\"24\"\\) print \"  OFF-SCALE: \"$0}')",
-      "Bash(echo \"BUILD EXIT:$?\")"
+      "Bash(echo \"BUILD EXIT:$?\")",
+      "Bash(ls -d \"/c/Program Files/Android/Android Studio/jbr\" 2>/dev/null; grep -i \"java.home\" \"C:/Users/Home/AndroidStudioProjects/DispoChat/gradle.properties\" 2>/dev/null; echo \"---\"; ls \"C:/Users/Home/AndroidStudioProjects/DispoChat/local.properties\" && cat \"C:/Users/Home/AndroidStudioProjects/DispoChat/local.properties\")"
     ]
   }
 }
