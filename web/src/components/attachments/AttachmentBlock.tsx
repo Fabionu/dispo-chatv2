@@ -219,7 +219,7 @@ export default function AttachmentBlock({
               narrow screens, so it never exceeds its column. */}
           <div
             ref={frameRef}
-            className="relative overflow-hidden rounded-card border border-white/[0.06] bg-bg"
+            className="relative overflow-hidden rounded-card border border-white/6 bg-bg"
             style={{
               width: box ? box.w : fallback.w,
               aspectRatio: box ? `${box.w} / ${box.h}` : `${fallback.w} / ${fallback.h}`,
@@ -261,7 +261,7 @@ export default function AttachmentBlock({
               }`}
             />
             {!loaded && (
-              <div className="absolute inset-0 flex items-center justify-center bg-white/[0.03] animate-pulse pointer-events-none">
+              <div className="absolute inset-0 flex items-center justify-center bg-white/4 animate-pulse pointer-events-none">
                 <ImageIcon size="1.375rem" strokeWidth={1.5} className="text-faint" />
               </div>
             )}
@@ -286,19 +286,19 @@ export default function AttachmentBlock({
 
   if (isImage && imgFailed) {
     return (
-      <div className="flex items-center gap-2.5 rounded-card border border-white/[0.08] bg-white/[0.02] px-2.5 py-2 max-w-[22.5rem]">
-        <div className="h-9 w-9 rounded-chip border border-white/[0.10] bg-white/[0.03] flex items-center justify-center shrink-0">
+      <div className="flex items-center gap-2.5 rounded-card border border-white/8 bg-white/2 px-2.5 py-2 max-w-[22.5rem]">
+        <div className="h-9 w-9 rounded-chip border border-white/10 bg-white/4 flex items-center justify-center shrink-0">
           <ImageOff size="0.9375rem" strokeWidth={1.6} className="text-faint" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-[0.75rem] text-muted truncate">{attachment.originalName}</div>
-          <div className="text-[0.65625rem] text-faint">Image unavailable</div>
+          <div className="text-sm text-muted truncate">{attachment.originalName}</div>
+          <div className="text-xs text-faint">Image unavailable</div>
         </div>
         <button
           type="button"
           onClick={retryImage}
           aria-label="Retry loading image"
-          className="flex items-center gap-1 rounded-chip border border-white/[0.10] px-1.5 py-1 text-[0.65625rem] text-muted hover:text-text hover:bg-white/[0.04] transition-colors shrink-0"
+          className="flex items-center gap-1 rounded-chip border border-white/10 px-1.5 py-1 text-xs text-muted hover:text-text hover:bg-white/4 transition-colors shrink-0"
         >
           <RotateCw size="0.75rem" strokeWidth={1.8} />
           Retry
@@ -323,7 +323,7 @@ export default function AttachmentBlock({
       onClick={() => onActivate(attachment)}
       disabled={uploading || !hasUrl}
       aria-label={isPdf ? `Preview ${attachment.originalName}` : `Open ${attachment.originalName}`}
-      className="block w-[20rem] max-w-full overflow-hidden rounded-card border border-white/[0.05] bg-white/[0.02] hover:bg-white/[0.03] disabled:cursor-default transition-colors text-left"
+      className="block w-[20rem] max-w-full overflow-hidden rounded-card border border-white/6 bg-white/2 hover:bg-white/4 disabled:cursor-default transition-colors text-left"
     >
       {/* Preview band. The generic glyph always renders; for sent PDFs a
           lazily-rasterised first-page thumbnail (PdfThumb) layers over it once
@@ -331,9 +331,9 @@ export default function AttachmentBlock({
           type badge and action icon render after the thumbnail layer so they
           stay on top of it. Non-PDF documents keep the glyph only (see
           lib/pdfThumbCache for the DOC/XLS thumbnail TODOs). */}
-      <div className="relative h-[9rem] bg-bg border-b border-white/[0.06] flex items-center justify-center">
+      <div className="relative h-[9rem] bg-bg border-b border-white/6 flex items-center justify-center">
         <div className="absolute inset-0 opacity-[0.04] bg-gradient-to-b from-white to-transparent pointer-events-none" />
-        <div className="h-14 w-14 rounded-card border border-white/[0.10] bg-white/[0.03] flex items-center justify-center">
+        <div className="h-14 w-14 rounded-card border border-white/10 bg-white/4 flex items-center justify-center">
           <DocIcon mime={attachment.mimeType} size={28} />
         </div>
         {isPdf && hasUrl && !uploading && (
@@ -341,11 +341,11 @@ export default function AttachmentBlock({
         )}
         {/* Opaque-enough pill + bright text so the label stays readable over a
             white page thumbnail as well as the dark placeholder band. */}
-        <span className="absolute top-2 left-2 rounded-chip border border-pure-white/10 bg-black/65 backdrop-blur-[2px] px-1.5 py-0.5 text-[0.59375rem] font-semibold tracking-wide text-pure-white/90">
+        <span className="absolute top-2 left-2 rounded-chip border border-pure-white/10 bg-black/65 backdrop-blur-[2px] px-1.5 py-0.5 text-2xs font-semibold tracking-wide text-pure-white/90">
           {docExt}
         </span>
         {uploading && (
-          <span className="absolute top-2 right-2 flex items-center gap-1 rounded-chip bg-black/55 px-1.5 py-0.5 text-[0.625rem] text-pure-white/90">
+          <span className="absolute top-2 right-2 flex items-center gap-1 rounded-chip bg-black/55 px-1.5 py-0.5 text-2xs text-pure-white/90">
             <Loader2 size="0.6875rem" strokeWidth={2} className="animate-spin" />
             Uploading…
           </span>
@@ -358,8 +358,8 @@ export default function AttachmentBlock({
       </div>
       {/* Footer */}
       <div className="px-2.5 py-2">
-        <div className="text-[0.75rem] text-text truncate">{attachment.originalName}</div>
-        <div className="text-[0.65625rem] text-muted mt-0.5">
+        <div className="text-sm text-text truncate">{attachment.originalName}</div>
+        <div className="text-xs text-muted mt-0.5">
           {docExt} · {formatBytes(attachment.byteSize)}
         </div>
       </div>

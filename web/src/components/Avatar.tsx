@@ -44,16 +44,24 @@ export default function Avatar({
   }, [userId, version])
 
   const style = { width: rem(size), height: rem(size) }
-  // No-photo fallback: a white generic-contact glyph on a neutral dark-grey disc
-  // (`bg` — darker than the rail/panels), with only a hairline neutral border so
-  // the circle stays defined even on the equally-dark chat header. No warm tint,
-  // no initials — a photo-less person reads as a person, consistently everywhere.
+  // No-photo fallback: a contact glyph in `muted` on a LIFTED neutral disc
+  // (`surface-2`). The lift is what carries the placeholder — on `bg` the disc
+  // was the exact tone of the rail behind it, so the glyph floated on nothing and
+  // needed a loud ring to be seen at all. With a filled disc the border drops
+  // back to a hairline that only defines the edge. The disc is drawn by the
+  // fallback only: a real photo covers this box exactly, so photographed avatars
+  // stay unringed. No warm tint, no initials — a photo-less person reads as a
+  // person, consistently everywhere.
+  // Same lucide drawing, weight and box fraction as GroupAvatar's `Users`, so a
+  // person and a room are one family differing only in headcount. Lucide draws
+  // every icon on a shared 24 grid with matched optical sizing, so both render at
+  // the SAME fraction — per-icon scale fudging is what makes icon sets drift.
   const fallbackNode = (
     <span
       style={style}
-      className={`rounded-full bg-bg border border-white/[0.08] flex items-center justify-center shrink-0 text-text ${className}`}
+      className={`rounded-full bg-surface-2 border border-white/10 flex items-center justify-center shrink-0 text-muted ${className}`}
     >
-      <User size={rem(Math.max(13, Math.round(size * 0.58)))} strokeWidth={1.7} />
+      <User size={rem(Math.max(13, Math.round(size * 0.52)))} strokeWidth={1.7} />
     </span>
   )
 

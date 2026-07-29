@@ -629,12 +629,12 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           list state (search, groups, DMs, requests, panels) is preserved and
           returns intact on expand. */}
       {sidebarCollapsed ? (
-        <aside className="w-full min-w-0 overflow-hidden flex flex-col items-center py-2.5 gap-1">
+        <aside className="w-full min-w-0 overflow-hidden flex flex-col items-center py-2.5 gap-1 bg-sidebar rounded-panel border border-white/8">
           <button
             onClick={toggleSidebar}
             title="Expand sidebar"
             aria-label="Expand sidebar"
-            className="h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.07] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+            className="h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/8 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
           >
             <PanelLeftOpen size="1.0625rem" strokeWidth={1.8} />
           </button>
@@ -645,8 +645,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             aria-current={inboxActive ? 'page' : undefined}
             // Same split as the expanded header: subtle persistent selected state,
             // separate transient hover.
-            className={`flex items-center justify-center rounded-full p-1 transition-colors hover:bg-white/[0.07] ${
-              inboxActive ? 'bg-white/[0.095]' : ''
+            className={`flex items-center justify-center rounded-full p-1 transition-colors hover:bg-white/8 ${
+              inboxActive ? 'bg-white/10' : ''
             }`}
           >
             <CompanyLogo size={sidebarAvatar} version={logoVersion} className="!rounded-full" />
@@ -660,15 +660,18 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             }}
             title={user.displayName}
             aria-label="Open account menu"
-            className="rounded-full p-0.5 hover:bg-white/[0.07] transition-colors"
+            className="rounded-full p-0.5 hover:bg-white/8 transition-colors"
           >
             <Avatar userId={user.id} name={user.displayName} size={sidebarAvatar} version={avatarVersion} />
           </button>
         </aside>
       ) : (
-      /* Left rail — intentionally flat on the workspace background. It keeps
-          overflow clipping for its drawers and menus, but no outer card surface. */
-      <aside className="w-full min-w-0 overflow-hidden flex flex-col">
+      /* Left rail — its own panel, one tone above the shell and one below the
+          chat card. It used to be flat on the workspace background, which only
+          read because the chat card was much lighter; at the current darkened
+          palette a transparent rail makes the whole window one black field, so
+          the rail now carries a surface + hairline edge of its own. */
+      <aside className="w-full min-w-0 overflow-hidden flex flex-col bg-sidebar rounded-panel border border-white/8">
         {profilePanelOpen ? (
           <ProfileSidebarPanel
             initialProfile={cachedProfile}
@@ -700,7 +703,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             surface, and there's no persistent "selected" tint — the header keeps
             the sidebar colour at rest. The collapse control sits to its right.
             (No workspace switcher — actions live in the user menu below.) */}
-        <div className="h-[var(--header-height)] flex items-stretch transition-colors hover:bg-white/[0.07]">
+        <div className="h-[var(--header-height)] flex items-stretch transition-colors hover:bg-white/8">
           <button
             onClick={() => setSelection({ kind: 'inbox' })}
             title="Workspace home"
@@ -740,7 +743,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         <div className="px-2.5 pt-2.5 pb-1.5 flex items-center gap-1.5">
           <label
             htmlFor="rail-search"
-            className="flex-1 h-[var(--sidebar-search-height)] flex items-center gap-2 px-3 rounded-full border border-white/[0.12] bg-surface-2/60 hover:bg-surface-2/80 hover:border-white/[0.18] focus-within:bg-surface-2 focus-within:border-white/[0.24] transition-colors cursor-text"
+            className="flex-1 h-[var(--sidebar-search-height)] flex items-center gap-2 px-3 rounded-full border border-white/10 bg-surface-2/60 hover:bg-surface-2/80 hover:border-white/16 focus-within:bg-surface-2 focus-within:border-white/20 transition-colors cursor-text"
           >
             <Search size="0.875rem" strokeWidth={1.7} className="text-muted shrink-0" />
             <input
@@ -773,8 +776,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               aria-expanded={newMenuOpen}
               className={`h-[var(--sidebar-search-height)] w-[var(--sidebar-search-height)] flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
                 newMenuOpen
-                  ? 'bg-white/[0.09] text-text'
-                  : 'text-muted hover:bg-white/[0.07] hover:text-text'
+                  ? 'bg-white/10 text-text'
+                  : 'text-muted hover:bg-white/8 hover:text-text'
               }`}
             >
               <Menu size="1.0625rem" strokeWidth={1.9} />
@@ -975,7 +978,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           <button
             onClick={() => setUserMenuOpen((v) => !v)}
             className={`w-full flex items-center gap-2 px-2 py-2 rounded-btn transition-colors text-left ${
-              userMenuOpen ? 'bg-white/[0.10]' : 'hover:bg-white/[0.07]'
+              userMenuOpen ? 'bg-white/10' : 'hover:bg-white/8'
             }`}
           >
             <div className="relative shrink-0">
@@ -985,7 +988,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               {user.role !== 'driver' && cachedProfile && (
                 <span
                   title={away ? AWAY.label : statusMeta(cachedProfile.availabilityStatus).label}
-                  className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-bg"
+                  className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-sidebar"
                   style={{
                     backgroundColor: away
                       ? AWAY.color
@@ -1020,9 +1023,11 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
       </aside>
       )}
 
-      {/* Main — the single raised workspace card. No white outline: the lighter
-          rail tone, rounded clipping and shell gap provide separation. */}
-      <main className="workspace-main flex flex-col min-w-0 bg-rail rounded-panel overflow-hidden">
+      {/* Main — the raised workspace card, the lightest of the three surfaces.
+          The hairline outline pairs with the rail's: with the palette this close
+          to black, the tone step alone no longer draws the card's edge against
+          the shell gap. */}
+      <main className="workspace-main flex flex-col min-w-0 bg-rail rounded-panel overflow-hidden border border-white/8">
         {selectedGroup ? (
           <ChatView
             key={selectedGroup.id}
@@ -1061,11 +1066,11 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               // explicit state instead of silently dropping to the Inbox.
               <div className="flex-1 flex items-center justify-center px-6">
                 <div className="text-center max-w-[20rem]">
-                  <p className="text-[0.8125rem] text-muted">This invitation is no longer pending.</p>
+                  <p className="text-base text-muted">This invitation is no longer pending.</p>
                   <button
                     type="button"
                     onClick={() => setSelection(null)}
-                    className="mt-3 text-[0.78125rem] text-text font-semibold hover:underline underline-offset-4"
+                    className="mt-3 text-base text-text font-semibold hover:underline underline-offset-4"
                   >
                     Back to inbox
                   </button>

@@ -84,11 +84,11 @@ export default function CompanySidebarPanel({ onBack, onSaved }: Props) {
         >
           <ArrowLeft size="1.25rem" strokeWidth={1.8} />
         </button>
-        <span className="text-[0.8125rem] font-semibold">Company profile</span>
+        <span className="text-base font-semibold">Company profile</span>
       </div>
 
       {!company ? (
-        <div className="flex-1 flex items-center justify-center text-[0.75rem] text-faint">
+        <div className="flex-1 flex items-center justify-center text-sm text-faint">
           {error ?? 'Loading…'}
         </div>
       ) : (
@@ -114,11 +114,11 @@ export default function CompanySidebarPanel({ onBack, onSaved }: Props) {
             >
               <CompanyLogo size={72} version={logoVersion} className="!rounded-full" />
             </AvatarPhotoEditor>
-            <div className="mt-2.5 text-[1rem] font-semibold tracking-[-0.2px]">{company.name}</div>
+            <div className="mt-2.5 text-xl font-semibold tracking-[-0.2px]">{company.name}</div>
             {!canEdit && (
-              <div className="mt-1 text-[0.6875rem] text-faint">Managed by a workspace admin</div>
+              <div className="mt-1 text-xs text-faint">Managed by a workspace admin</div>
             )}
-            {error && <div className="text-[0.71875rem] text-alert mt-2">{error}</div>}
+            {error && <div className="text-sm text-alert mt-2">{error}</div>}
           </div>
 
           {/* Registration */}

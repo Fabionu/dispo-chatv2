@@ -359,13 +359,13 @@ export default function GroupInfoPanel({
         // own borderless surface — same rail bg + radius as the sidebar/chat
         // cards, with a gap from the chat (the row's xl:gap-3) — so the chat
         // reflows narrower and the panel matches the app's flat card shell.
-        className="fixed top-0 right-0 bottom-0 z-40 w-full max-w-[25rem] shadow-[-16px_0_48px_rgba(0,0,0,0.4)] bg-rail flex flex-col
+        className="fixed top-0 right-0 bottom-0 z-40 w-full max-w-[25rem] shadow-drawer bg-rail flex flex-col
                    xl:static xl:z-auto xl:w-[clamp(22.5rem,26vw,26.25rem)] xl:max-w-none xl:shrink-0 xl:shadow-none
                    xl:rounded-panel xl:overflow-hidden"
       >
         {/* Header — same height as the chat header so the two line up. */}
         <div className="h-[var(--header-height)] flex items-center justify-between px-4 shrink-0">
-          <span className="text-[0.8125rem] font-semibold">Group info</span>
+          <span className="text-base font-semibold">Group info</span>
           <button
             onClick={onClose}
             aria-label="Close group info"
@@ -405,14 +405,14 @@ export default function GroupInfoPanel({
                 size={120}
               />
             </AvatarPhotoEditor>
-            <div className="mt-3 text-[1rem] font-semibold tracking-[-0.2px]">
+            <div className="mt-3 text-xl font-semibold tracking-[-0.2px]">
               {groupLabel(group)}
             </div>
-            <div className="mt-0.5 text-[0.75rem] text-muted">
+            <div className="mt-0.5 text-sm text-muted">
               {members.length} member{members.length === 1 ? '' : 's'}
             </div>
             {vehicleMeta && (
-              <div className="mt-1 text-[0.71875rem] text-faint">{vehicleMeta}</div>
+              <div className="mt-1 text-sm text-faint">{vehicleMeta}</div>
             )}
             {ops.vehicle.status && (
               <div className="mt-2">
@@ -422,18 +422,18 @@ export default function GroupInfoPanel({
                 />
               </div>
             )}
-            {error && <div className="text-[0.71875rem] text-alert mt-2">{error}</div>}
+            {error && <div className="text-sm text-alert mt-2">{error}</div>}
           </div>
 
           {/* Tab bar — compact segmented control for the operational sections. */}
-          <div className="mt-4 flex items-center gap-0.5 rounded-card bg-white/[0.03] p-0.5">
+          <div className="mt-4 flex items-center gap-0.5 rounded-card bg-white/4 p-0.5">
             {PANEL_TABS.map((t) => (
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
                 aria-current={tab === t.id ? 'true' : undefined}
-                className={`flex-1 h-7 rounded-btn text-[0.71875rem] font-medium transition-colors ${
-                  tab === t.id ? 'bg-white/[0.08] text-text' : 'text-muted hover:text-text'
+                className={`flex-1 h-7 rounded-btn text-sm font-medium transition-colors ${
+                  tab === t.id ? 'bg-white/8 text-text' : 'text-muted hover:text-text'
                 }`}
               >
                 {t.label}

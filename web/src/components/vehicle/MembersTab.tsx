@@ -57,7 +57,7 @@ export default function MembersTab({
           canManage ? (
             <button
               onClick={onInvite}
-              className="inline-flex items-center gap-1 text-[0.71875rem] text-muted hover:text-text transition-colors"
+              className="inline-flex items-center gap-1 text-sm text-muted hover:text-text transition-colors"
             >
               <UserPlus size="0.75rem" strokeWidth={1.8} />
               Invite
@@ -89,7 +89,7 @@ export default function MembersTab({
             ))}
           </div>
         )}
-        {error && <div className="text-[0.71875rem] text-alert px-2 pt-1">{error}</div>}
+        {error && <div className="text-sm text-alert px-2 pt-1">{error}</div>}
       </PanelSection>
 
       {/* Pending invites (manage-capable only) */}
@@ -104,16 +104,16 @@ export default function MembersTab({
               {pending.map((p) => (
                 <div
                   key={p.id}
-                  className="flex items-center gap-3 px-2 py-2 rounded-chip hover:bg-white/[0.02] transition-colors"
+                  className="flex items-center gap-3 px-2 py-2 rounded-chip hover:bg-white/2 transition-colors"
                 >
                   <Avatar userId={p.userId} name={p.displayName} size={34} />
                   <div className="min-w-0 flex-1 flex flex-col gap-px">
-                    <div className="text-[0.875rem] leading-tight truncate">{p.displayName}</div>
-                    <div className="text-[0.75rem] leading-tight text-faint truncate">Invitation pending</div>
+                    <div className="text-lg leading-tight truncate">{p.displayName}</div>
+                    <div className="text-sm leading-tight text-faint truncate">Invitation pending</div>
                   </div>
                   <button
                     onClick={() => void onCancelInvite(p.id)}
-                    className="shrink-0 text-[0.75rem] text-muted hover:text-alert px-2 transition-colors"
+                    className="shrink-0 text-sm text-muted hover:text-alert px-2 transition-colors"
                   >
                     Cancel
                   </button>

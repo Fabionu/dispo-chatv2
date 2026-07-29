@@ -2,8 +2,9 @@ import { randomBytes, createHash } from 'node:crypto'
 import type { Request } from 'express'
 import { env } from '../env.js'
 
-// Company invite links expire 15 minutes after creation.
-export const INVITE_TTL_MS = 15 * 60 * 1000
+// Email-delivered company invites need enough time to survive normal inbox
+// delays while remaining short-lived and single-use.
+export const INVITE_TTL_MS = 48 * 60 * 60 * 1000
 
 // The workspace roles an invite may grant, mirroring users.role's check
 // constraint (server/src/db/migrations/0001_init.sql) and workspace_invites.role

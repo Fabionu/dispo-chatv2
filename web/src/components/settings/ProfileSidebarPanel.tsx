@@ -157,11 +157,11 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
           >
             <ArrowLeft size="1.25rem" strokeWidth={1.8} />
           </button>
-          <span className="text-[0.8125rem] font-semibold">Profile</span>
+          <span className="text-base font-semibold">Profile</span>
         </div>
 
         {!profile ? (
-          <div className="flex-1 flex items-center justify-center text-[0.75rem] text-faint">
+          <div className="flex-1 flex items-center justify-center text-sm text-faint">
             {error ?? 'Loading…'}
           </div>
         ) : (
@@ -190,15 +190,15 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
                   version={avatarVersion}
                 />
               </AvatarPhotoEditor>
-              <div className="mt-3 text-[1rem] font-semibold tracking-[-0.2px]">
+              <div className="mt-3 text-xl font-semibold tracking-[-0.2px]">
                 {profile.displayName}
               </div>
-              <div className="mt-0.5 text-[0.75rem] text-muted">
+              <div className="mt-0.5 text-sm text-muted">
                 {ROLE_LABEL[profile.role]}
                 {profile.jobTitle ? ` · ${profile.jobTitle}` : ''}
               </div>
               {!isDriver && <StatusSelect value={availability} away={away} onChange={setStatus} />}
-              {error && <div className="text-[0.71875rem] text-alert mt-2">{error}</div>}
+              {error && <div className="text-sm text-alert mt-2">{error}</div>}
             </div>
 
             {/* Work details — each editable row changes on its own. */}
@@ -264,17 +264,17 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
                 history is preserved but personal details are removed. */}
             <Section label="Danger zone">
               <div className="rounded-card border border-alert/20 bg-alert/[0.04] px-3.5 py-3">
-                <div className="text-[0.78125rem] text-text font-medium leading-tight">
+                <div className="text-base text-text font-medium leading-tight">
                   Delete account
                 </div>
-                <p className="text-[0.71875rem] text-faint mt-1 leading-[1.45]">
+                <p className="text-sm text-faint mt-1 leading-[1.45]">
                   Permanently removes your name, photo and profile details. Your messages stay in
                   conversations but show as a deleted user. This can’t be undone.
                 </p>
                 <button
                   onClick={() => setConfirmDelete(true)}
                   disabled={deleting}
-                  className="mt-3 inline-flex items-center gap-1.5 h-8 px-3 rounded-btn border border-alert/40 text-alert text-[0.75rem] font-semibold hover:bg-alert/10 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="mt-3 inline-flex items-center gap-1.5 h-8 px-3 rounded-btn border border-alert/40 text-alert text-sm font-semibold hover:bg-alert/10 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {deleting ? (
                     <Loader2 size="0.8125rem" strokeWidth={2.2} className="animate-spin" />
@@ -333,7 +333,7 @@ function StatusSelect({
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[0.71875rem] font-medium transition-opacity hover:opacity-90"
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium transition-opacity hover:opacity-90"
         style={{ color: display.color, backgroundColor: `${display.color}22` }}
       >
         <span className="h-2 w-2 rounded-full" style={{ backgroundColor: display.color }} />

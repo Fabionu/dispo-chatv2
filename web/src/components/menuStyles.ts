@@ -15,7 +15,7 @@
 // Separator: a subtle hairline used only where grouping helps (e.g. before the
 //            destructive group).
 export const MENU_SURFACE =
-  'rounded-card border border-white/[0.08] bg-surface shadow-[0_12px_32px_rgba(0,0,0,0.5)]'
+  'rounded-card border border-white/8 bg-surface shadow-overlay'
 
 // The standard action-menu container: surface + edge-to-edge item hovers +
 // the y-inset every action menu shares.
@@ -24,13 +24,13 @@ export const MENU_CONTAINER = `${MENU_SURFACE} overflow-hidden py-1`
 // One menu row. Fixed metrics — no size/weight change on hover, so nothing
 // shifts. Disabled rows dim uniformly and lose their hover fill.
 export const MENU_ITEM =
-  'w-full flex items-center gap-2.5 px-3 py-2 text-[0.8125rem] font-normal text-left ' +
+  'w-full flex items-center gap-2.5 px-3 py-2 text-base font-normal text-left ' +
   'whitespace-nowrap transition-colors ' +
   'disabled:opacity-30 disabled:cursor-default disabled:hover:bg-transparent'
 
 // Row tones. Danger is the app's single destructive treatment: alert text with
 // a quiet alert-tinted hover — never a filled/bright row.
-const MENU_ITEM_DEFAULT = 'text-text hover:bg-white/[0.04]'
+const MENU_ITEM_DEFAULT = 'text-text hover:bg-white/4'
 const MENU_ITEM_DANGER = 'text-alert hover:bg-alert/10'
 
 export function menuItemClass(tone: 'default' | 'danger' = 'default'): string {
@@ -48,4 +48,4 @@ export function menuIconClass(tone: 'default' | 'danger' = 'default'): string {
 export const MENU_GLYPH = { size: '0.875rem', strokeWidth: 1.7 } as const
 
 // Hairline group separator (e.g. above the destructive group).
-export const MENU_SEPARATOR = 'my-1 h-px bg-white/[0.06]'
+export const MENU_SEPARATOR = 'my-1 h-px bg-white/6'

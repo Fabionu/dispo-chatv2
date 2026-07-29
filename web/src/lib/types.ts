@@ -374,6 +374,8 @@ export type WorkspaceInvite = {
   usedAt: string | null
   createdByName: string | null
   usedByName: string | null
+  recipientEmail: string | null
+  emailSentAt: string | null
 }
 
 // The freshly-generated invite, returned once at creation with the shareable
@@ -386,12 +388,14 @@ export type WorkspaceInviteCreated = {
   status: 'active'
   createdAt: string
   expiresAt: string
+  recipientEmail: string | null
+  emailSent: boolean
 }
 
 // Result of validating an invite token on the public registration page. `role`
 // on the valid branch lets the page tell the invitee which role they'll join as.
 export type InviteValidation =
-  | { status: 'valid'; companyName: string; role: Role }
+  | { status: 'valid'; companyName: string; role: Role; recipientEmail: string | null }
   | { status: 'used' | 'expired' | 'invalid' }
 
 // A person returned by the platform-wide directory search. `connection` is

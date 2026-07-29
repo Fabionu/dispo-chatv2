@@ -109,7 +109,9 @@ const patchSchema = z.object({
   country: z.string().trim().max(80).nullable().optional(),
   city: z.string().trim().max(80).nullable().optional(),
   operationalAddress: z.string().trim().max(240).nullable().optional(),
-  dispatchEmail: z.string().trim().max(254).nullable().optional(),
+  // This field locks after its first save, so reject malformed addresses before
+  // an admin can permanently store one.
+  dispatchEmail: z.string().trim().toLowerCase().email().max(254).nullable().optional(),
   dispatchPhone: z.string().trim().max(40).nullable().optional(),
   website: z.string().trim().max(200).nullable().optional(),
 })

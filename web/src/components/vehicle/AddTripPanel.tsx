@@ -130,13 +130,13 @@ export default function AddTripPanel({ ops, onClose, onCreate, onPickLocation }:
         // screens; xl+ a static, in-flow right column beside the chat as its own
         // borderless rail surface (matching radius + gap), so the chat reflows
         // narrower and stays visible.
-        className="fixed top-0 right-0 bottom-0 z-40 w-full max-w-[25rem] shadow-[-16px_0_48px_rgba(0,0,0,0.4)] bg-rail flex flex-col
+        className="fixed top-0 right-0 bottom-0 z-40 w-full max-w-[25rem] shadow-drawer bg-rail flex flex-col
                    xl:static xl:z-auto xl:w-[clamp(22.5rem,26vw,26.25rem)] xl:max-w-none xl:shrink-0 xl:shadow-none
                    xl:rounded-panel xl:overflow-hidden"
       >
         {/* Header — same height as the chat header so the two line up. */}
         <div className="h-[var(--header-height)] flex items-center justify-between px-4 shrink-0">
-          <span className="text-[0.8125rem] font-semibold">Add trip</span>
+          <span className="text-base font-semibold">Add trip</span>
           <button
             onClick={onClose}
             disabled={submitting}
@@ -148,7 +148,7 @@ export default function AddTripPanel({ ops, onClose, onCreate, onPickLocation }:
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3.5">
-          <p className="text-[0.71875rem] text-muted leading-[1.45]">
+          <p className="text-sm text-muted leading-[1.45]">
             {replacing
               ? 'Creating a new trip will replace the current active trip.'
               : 'Manually create a trip for this vehicle and add its stops.'}
@@ -245,7 +245,7 @@ export default function AddTripPanel({ ops, onClose, onCreate, onPickLocation }:
             {editingId === null && <StopForm onSubmit={addStop} onPickLocation={onPickLocation} />}
           </div>
 
-          {error && <div className="text-[0.75rem] text-alert">{error}</div>}
+          {error && <div className="text-sm text-alert">{error}</div>}
         </div>
 
         {/* Footer action area — sits on the panel's rail surface, no divider. */}
@@ -253,14 +253,14 @@ export default function AddTripPanel({ ops, onClose, onCreate, onPickLocation }:
           <button
             onClick={onClose}
             disabled={submitting}
-            className="text-[0.78125rem] text-muted hover:text-text border border-white/[0.12] rounded-btn px-3 py-1.5 transition-colors disabled:opacity-60"
+            className="text-base text-muted hover:text-text border border-white/10 rounded-btn px-3 py-1.5 transition-colors disabled:opacity-60"
           >
             Cancel
           </button>
           <button
             onClick={() => void submit()}
             disabled={submitting}
-            className="text-[0.78125rem] font-semibold bg-text text-bg rounded-btn px-3.5 py-1.5 hover:bg-text/90 transition-colors disabled:opacity-60"
+            className="text-base font-semibold bg-text text-bg rounded-btn px-3.5 py-1.5 hover:bg-text/90 transition-colors disabled:opacity-60"
           >
             {submitting ? 'Creating…' : 'Create trip'}
           </button>
@@ -273,7 +273,7 @@ export default function AddTripPanel({ ops, onClose, onCreate, onPickLocation }:
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-[0.75rem] text-text mb-1.5">{label}</label>
+      <label className="block text-sm text-text mb-1.5">{label}</label>
       {children}
     </div>
   )

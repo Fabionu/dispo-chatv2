@@ -9,8 +9,8 @@ import { MENU_SURFACE } from '../menuStyles'
 // the two states read as the SAME control: hairline border, subtle fill and a
 // calm brighten on focus (mirrors tripFormStyles / the sidebar search).
 const FIELD_SURFACE =
-  'h-9 border border-white/[0.06] bg-white/[0.04] px-3 transition-colors'
-const FIELD_FOCUS = 'outline-none focus:border-white/[0.16] focus:bg-white/[0.05]'
+  'h-9 border border-white/6 bg-white/4 px-3 transition-colors'
+const FIELD_FOCUS = 'outline-none focus:border-white/16 focus:bg-white/6'
 
 // Build a HerePlace from directly-entered coordinates so the selection flow is
 // identical to picking a search result (caller reads `position` + `label`).
@@ -119,13 +119,13 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
 
   return (
     <div ref={rootRef} className="relative flex flex-col gap-1.5">
-      {label && <label className="text-[0.6875rem] font-medium text-muted">{label}</label>}
+      {label && <label className="text-xs font-medium text-muted">{label}</label>}
 
       {value ? (
         // Selected state — locked chip with the chosen place + clear button.
         <div className={`flex items-center gap-2 ${fieldSurface}`}>
           <MapPin size="0.9375rem" className="shrink-0 text-active" strokeWidth={1.8} />
-          <span className="flex-1 truncate text-[0.8125rem]" title={value.label}>
+          <span className="flex-1 truncate text-base" title={value.label}>
             {value.label || value.title}
           </span>
           <button
@@ -156,7 +156,7 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
           aria-controls={listboxId}
           autoComplete="off"
           autoFocus={autoFocus}
-          className={`${fieldSurface} ${FIELD_FOCUS} text-[0.8125rem] placeholder:text-faint`}
+          className={`${fieldSurface} ${FIELD_FOCUS} text-base placeholder:text-faint`}
         />
       )}
 
@@ -174,19 +174,19 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
               <button
                 type="button"
                 onClick={() => select(coordPlace(coord))}
-                className="w-full text-left px-3 py-2 hover:bg-white/[0.05] transition-colors flex items-start gap-2"
+                className="w-full text-left px-3 py-2 hover:bg-white/6 transition-colors flex items-start gap-2"
               >
                 <MapPin size="0.875rem" className="mt-0.5 shrink-0 text-active" strokeWidth={1.8} />
                 <span className="min-w-0">
-                  <span className="block text-[0.8125rem]">Go to coordinates</span>
-                  <span className="block text-[0.6875rem] text-muted tabular-nums">
+                  <span className="block text-base">Go to coordinates</span>
+                  <span className="block text-xs text-muted tabular-nums">
                     {coord.lat.toFixed(5)}, {coord.lng.toFixed(5)}
                   </span>
                 </span>
               </button>
             </li>
           ) : (
-            <li className="px-3 py-2.5 text-[0.75rem] text-amber-200/80">
+            <li className="px-3 py-2.5 text-sm text-amber-200/80">
               Invalid coordinates — latitude −90 to 90, longitude −180 to 180.
             </li>
           )}
@@ -200,20 +200,20 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
           className={`absolute z-20 top-full mt-1 w-full max-h-72 overflow-y-auto ${MENU_SURFACE}`}
         >
           {loading && items.length === 0 && (
-            <li className="px-3 py-2.5 text-[0.75rem] text-muted">Searching…</li>
+            <li className="px-3 py-2.5 text-sm text-muted">Searching…</li>
           )}
           {items.map((item) => (
             <li key={item.id} role="option" aria-selected={false}>
               <button
                 type="button"
                 onClick={() => select(item)}
-                className="w-full text-left px-3 py-2 hover:bg-white/[0.05] transition-colors flex items-start gap-2"
+                className="w-full text-left px-3 py-2 hover:bg-white/6 transition-colors flex items-start gap-2"
               >
                 <MapPin size="0.875rem" className="mt-0.5 shrink-0 text-muted" strokeWidth={1.8} />
                 <span className="min-w-0">
-                  <span className="block text-[0.8125rem] truncate">{item.title}</span>
+                  <span className="block text-base truncate">{item.title}</span>
                   {item.label && item.label !== item.title && (
-                    <span className="block text-[0.6875rem] text-muted truncate">{item.label}</span>
+                    <span className="block text-xs text-muted truncate">{item.label}</span>
                   )}
                 </span>
               </button>

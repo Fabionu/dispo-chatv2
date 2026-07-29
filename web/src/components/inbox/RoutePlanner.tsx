@@ -891,7 +891,7 @@ export default function RoutePlanner({ onBack }: Props) {
           <Flag size="0.6875rem" strokeWidth={2.2} />
         </span>
       ) : (
-        <span className="h-5 w-5 rounded-full border border-white/[0.22] bg-white/[0.06] text-[0.625rem] font-semibold flex items-center justify-center">
+        <span className="h-5 w-5 rounded-full border border-white/20 bg-white/6 text-2xs font-semibold flex items-center justify-center">
           {stopIndex}
         </span>
       )
@@ -916,7 +916,7 @@ export default function RoutePlanner({ onBack }: Props) {
         <button
           onClick={() => setEditingId(null)}
           aria-label="Cancel edit"
-          className="h-8 w-8 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
+          className="h-8 w-8 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 transition-colors"
         >
           <X size="0.9375rem" strokeWidth={2} />
         </button>
@@ -934,13 +934,13 @@ export default function RoutePlanner({ onBack }: Props) {
         >
           <ArrowLeft size="1.25rem" strokeWidth={1.8} />
         </button>
-        <div className="min-w-0 text-[0.9375rem] font-semibold tracking-[-0.2px] leading-tight truncate">
+        <div className="min-w-0 text-xl font-semibold tracking-[-0.2px] leading-tight truncate">
           Route planner
         </div>
       </header>
 
       {/* Map region — the panel floats over this and never resizes it. */}
-      <div ref={regionRef} className="relative flex-1 min-h-[22.5rem] rounded-card overflow-hidden border border-white/[0.08]">
+      <div ref={regionRef} className="relative flex-1 min-h-[22.5rem] rounded-card overflow-hidden border border-white/8">
         <HereMap
           markers={markers}
           savedPlaces={placesOpen ? places : []}
@@ -968,8 +968,8 @@ export default function RoutePlanner({ onBack }: Props) {
         <div className="absolute z-20 right-3 top-3 flex items-center gap-1.5">
           <button
             onClick={() => setPlacesOpen((value) => !value)}
-            className={`flex h-8 items-center gap-1.5 rounded-full border px-3 text-[0.75rem] font-medium shadow-[0_4px_14px_rgba(0,0,0,0.3)] transition-colors ${
-              placesOpen ? 'border-text bg-text text-bg' : 'border-white/[0.08] bg-rail/90 text-text hover:bg-rail'
+            className={`flex h-8 items-center gap-1.5 rounded-full border px-3 text-sm font-medium shadow-raised transition-colors ${
+              placesOpen ? 'border-text bg-text text-bg' : 'border-white/8 bg-rail/90 text-text hover:bg-rail'
             }`}
           >
             <MapPinned size="0.875rem" strokeWidth={2} />
@@ -983,8 +983,8 @@ export default function RoutePlanner({ onBack }: Props) {
                 ? 'Toggle HERE truck/HGV restriction overlay'
                 : 'Truck overlay not available on this HERE plan'
             }
-            className={`flex h-8 items-center gap-1.5 rounded-full border px-3 text-[0.75rem] font-medium shadow-[0_4px_14px_rgba(0,0,0,0.3)] transition-colors ${
-              truckOverlay ? 'bg-active text-bg border-active' : 'bg-rail/90 text-text border-white/[0.08] hover:bg-rail'
+            className={`flex h-8 items-center gap-1.5 rounded-full border px-3 text-sm font-medium shadow-raised transition-colors ${
+              truckOverlay ? 'bg-active text-bg border-active' : 'bg-rail/90 text-text border-white/8 hover:bg-rail'
             } disabled:cursor-not-allowed disabled:opacity-40`}
           >
             <Truck size="0.875rem" strokeWidth={2} />
@@ -1009,7 +1009,7 @@ export default function RoutePlanner({ onBack }: Props) {
         <button
           onClick={() => setPanelCollapsed(false)}
           aria-label="Open route panel"
-          className={`absolute z-20 top-3 left-3 flex items-center gap-1.5 h-9 pl-2.5 pr-3 rounded-full border border-white/[0.08] bg-rail/90 text-text text-[0.75rem] font-medium shadow-[0_4px_14px_rgba(0,0,0,0.3)] transition-opacity hover:bg-rail ${
+          className={`absolute z-20 top-3 left-3 flex items-center gap-1.5 h-9 pl-2.5 pr-3 rounded-full border border-white/8 bg-rail/90 text-text text-sm font-medium shadow-raised transition-opacity hover:bg-rail ${
             panelCollapsed ? 'opacity-100' : 'opacity-0 pointer-events-none'
           }`}
         >
@@ -1023,17 +1023,17 @@ export default function RoutePlanner({ onBack }: Props) {
           style={{ transform: panelCollapsed ? 'translateX(calc(-100% - 1rem))' : 'translateX(0)' }}
           aria-hidden={panelCollapsed}
         >
-          <div className="flex items-center justify-between pl-3.5 pr-2 h-11 rounded-[1.25rem] border border-white/[0.08] bg-rail shadow-[0_6px_20px_rgba(0,0,0,0.3)] shrink-0">
+          <div className="flex items-center justify-between pl-3.5 pr-2 h-11 rounded-[1.25rem] border border-white/8 bg-rail shadow-raised shrink-0">
             <div className="min-w-0">
-              <div className="text-[0.8125rem] font-semibold tracking-[-0.1px]">Route</div>
-              <div className="text-[0.625rem] text-faint leading-tight">Plan your delivery path</div>
+              <div className="text-base font-semibold tracking-[-0.1px]">Route</div>
+              <div className="text-2xs text-faint leading-tight">Plan your delivery path</div>
             </div>
             <div className="flex items-center gap-0.5">
               {points.length > 0 && (
                 <button
                   onClick={clearRoute}
                   title="Clear route"
-                  className="h-7 px-2 flex items-center gap-1 rounded-btn text-[0.6875rem] text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
+                  className="h-7 px-2 flex items-center gap-1 rounded-btn text-xs text-muted hover:text-text hover:bg-white/6 transition-colors"
                 >
                   <Trash2 size="0.8125rem" strokeWidth={1.8} /> Clear
                 </button>
@@ -1042,7 +1042,7 @@ export default function RoutePlanner({ onBack }: Props) {
                 onClick={() => setPanelCollapsed(true)}
                 title="Collapse panel"
                 aria-label="Collapse panel"
-                className="h-7 w-7 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
+                className="h-7 w-7 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 transition-colors"
               >
                 <ChevronLeft size="1rem" strokeWidth={2} />
               </button>
@@ -1050,7 +1050,7 @@ export default function RoutePlanner({ onBack }: Props) {
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2">
-            <section className="rounded-[1.25rem] border border-white/[0.08] bg-rail p-2 flex flex-col gap-1.5">
+            <section className="rounded-[1.25rem] border border-white/8 bg-rail p-2 flex flex-col gap-1.5">
             {/* Start — draggable so it can be reordered into the route (drop it
                 lower and the next point becomes the new start). */}
             {start ? (
@@ -1111,7 +1111,7 @@ export default function RoutePlanner({ onBack }: Props) {
             {stops.length < MAX_STOPS &&
               (addingStop ? (
                 <div className="flex items-center gap-2.5">
-                  <span className="h-5 w-5 shrink-0 rounded-full border border-white/[0.18] bg-white/[0.06] text-muted flex items-center justify-center">
+                  <span className="h-5 w-5 shrink-0 rounded-full border border-white/16 bg-white/6 text-muted flex items-center justify-center">
                     <Plus size="0.6875rem" strokeWidth={2.2} />
                   </span>
                   <div className="flex-1 min-w-0">
@@ -1135,7 +1135,7 @@ export default function RoutePlanner({ onBack }: Props) {
                   <button
                     onClick={() => setAddingStop(false)}
                     aria-label="Cancel add stop"
-                    className="h-8 w-8 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
+                    className="h-8 w-8 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 transition-colors"
                   >
                     <X size="0.9375rem" strokeWidth={2} />
                   </button>
@@ -1145,7 +1145,7 @@ export default function RoutePlanner({ onBack }: Props) {
                 // here" slot, not floating text — clear but secondary.
                 <button
                   onClick={() => setAddingStop(true)}
-                  className="self-start ml-7 h-7 flex items-center gap-1.5 px-2.5 rounded-full bg-white/[0.04] text-[0.71875rem] text-muted hover:text-text hover:bg-white/[0.08] transition-colors"
+                  className="self-start ml-7 h-7 flex items-center gap-1.5 px-2.5 rounded-full bg-white/4 text-sm text-muted hover:text-text hover:bg-white/8 transition-colors"
                 >
                   <Plus size="0.8125rem" strokeWidth={2} /> Add stop
                 </button>
@@ -1191,20 +1191,20 @@ export default function RoutePlanner({ onBack }: Props) {
               <button
                 onClick={() => setTruckOpen((o) => !o)}
                 aria-expanded={truckOpen}
-                className={`w-full h-10 flex items-center justify-between gap-2 px-2 text-left hover:bg-white/[0.04] transition-colors ${
+                className={`w-full h-10 flex items-center justify-between gap-2 px-2 text-left hover:bg-white/4 transition-colors ${
                   truckOpen ? 'rounded-[0.875rem]' : 'rounded-full'
                 }`}
               >
                 {/* Left section is fixed (icon + label never wrap or shrink);
                     the collapsed value takes the leftover width and truncates,
                     with the chevron pinned on the far right. */}
-                <span className="flex items-center gap-2.5 text-[0.75rem] font-medium shrink-0 whitespace-nowrap">
-                  <span className="h-7 w-7 rounded-full bg-white/[0.06] text-muted flex items-center justify-center shrink-0">
+                <span className="flex items-center gap-2.5 text-sm font-medium shrink-0 whitespace-nowrap">
+                  <span className="h-7 w-7 rounded-full bg-white/6 text-muted flex items-center justify-center shrink-0">
                     <Truck size="0.875rem" strokeWidth={1.8} />
                   </span>
                   Truck profile
                 </span>
-                <span className="flex-1 min-w-0 flex items-center justify-end gap-1.5 text-[0.6875rem] text-muted">
+                <span className="flex-1 min-w-0 flex items-center justify-end gap-1.5 text-xs text-muted">
                   {!truckOpen && (
                     <span className="truncate" title={collapsedTruckLabel}>
                       {collapsedTruckLabel}
@@ -1215,7 +1215,7 @@ export default function RoutePlanner({ onBack }: Props) {
               </button>
 
               {truckOpen && (
-                <div className="flex flex-col gap-2.5 px-1.5 pt-2 pb-1.5 border-t border-white/[0.05]">
+                <div className="flex flex-col gap-2.5 px-1.5 pt-2 pb-1.5 border-t border-white/6">
                   {/* Presets */}
                   <div className="flex items-center gap-1.5">
                     <PresetSelect
@@ -1228,7 +1228,7 @@ export default function RoutePlanner({ onBack }: Props) {
                       onClick={() => setSavingPreset((s) => !s)}
                       title="Save current profile as a preset"
                       aria-label="Save preset"
-                      className="h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
+                      className="h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 transition-colors"
                     >
                       <Bookmark size="0.875rem" strokeWidth={1.8} />
                     </button>
@@ -1237,7 +1237,7 @@ export default function RoutePlanner({ onBack }: Props) {
                         onClick={() => removePreset(activePreset.id)}
                         title="Delete this preset"
                         aria-label="Delete preset"
-                        className="h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-alert hover:bg-white/[0.06] transition-colors"
+                        className="h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-alert hover:bg-white/6 transition-colors"
                       >
                         <Trash2 size="0.875rem" strokeWidth={1.8} />
                       </button>
@@ -1252,12 +1252,12 @@ export default function RoutePlanner({ onBack }: Props) {
                         onKeyDown={(e) => e.key === 'Enter' && commitSavePreset()}
                         placeholder="Preset name"
                         autoFocus
-                        className="h-8 flex-1 min-w-0 rounded-full border border-white/[0.06] bg-white/[0.04] px-2.5 text-[0.75rem] outline-none transition-colors focus:border-white/[0.16] focus:bg-white/[0.05] placeholder:text-faint"
+                        className="h-8 flex-1 min-w-0 rounded-full border border-white/6 bg-white/4 px-2.5 text-sm outline-none transition-colors focus:border-white/16 focus:bg-white/6 placeholder:text-faint"
                       />
                       <button
                         onClick={commitSavePreset}
                         disabled={!presetName.trim()}
-                        className="h-8 px-2.5 flex items-center gap-1 rounded-btn bg-active text-bg text-[0.75rem] font-semibold hover:bg-active/90 disabled:opacity-40 transition-colors"
+                        className="h-8 px-2.5 flex items-center gap-1 rounded-btn bg-active text-bg text-sm font-semibold hover:bg-active/90 disabled:opacity-40 transition-colors"
                       >
                         <Check size="0.8125rem" strokeWidth={2.4} /> Save
                       </button>
@@ -1286,7 +1286,7 @@ export default function RoutePlanner({ onBack }: Props) {
                 onClick={() => void calculate(true)}
                 disabled={routeButtonDisabled}
                 title={!hasEndpoints ? 'Set a start and destination first' : undefined}
-                className={`w-full h-10 rounded-full border-2 border-rail font-semibold text-[0.8125rem] flex items-center justify-center gap-2 transition-colors ${
+                className={`w-full h-10 rounded-full border-2 border-rail font-semibold text-base flex items-center justify-center gap-2 transition-colors ${
                   routeButtonDisabled
                     ? 'bg-rail text-muted cursor-default'
                     : 'bg-text text-bg hover:bg-white'
@@ -1302,7 +1302,7 @@ export default function RoutePlanner({ onBack }: Props) {
                 {routeButtonLabel}
               </button>
               {route && dirty && !loading && (
-                <div className="px-2 pt-0.5 text-[0.6875rem] text-amber-200/80">
+                <div className="px-2 pt-0.5 text-xs text-amber-200/80">
                   Route is outdated — press “Update route”.
                 </div>
               )}
@@ -1310,24 +1310,24 @@ export default function RoutePlanner({ onBack }: Props) {
 
             {/* Status */}
             {error && (
-              <div className="text-[0.71875rem] leading-snug text-alert bg-alert/10 border border-alert/20 rounded-card px-2.5 py-2">{error}</div>
+              <div className="text-sm leading-snug text-alert bg-alert/10 border border-alert/20 rounded-card px-2.5 py-2">{error}</div>
             )}
-            {snapNote && <div className="text-[0.6875rem] text-amber-200/80">{snapNote}</div>}
+            {snapNote && <div className="text-xs text-amber-200/80">{snapNote}</div>}
 
             {/* Summary + notices */}
             {route && !loading && (
-              <div className="flex flex-col gap-2 rounded-[1.25rem] border border-white/[0.08] bg-rail p-2">
-                <div className="grid grid-cols-4 divide-x divide-white/[0.06]">
+              <div className="flex flex-col gap-2 rounded-[1.25rem] border border-white/8 bg-rail p-2">
+                <div className="grid grid-cols-4 divide-x divide-white/6">
                   <Stat label="Distance" value={formatDistance(route.summary.length)} />
                   <Stat label="Duration" value={formatDuration(route.summary.duration)} />
                   <Stat label="ETA" value={formatEta(route.summary.duration)} />
                   <Stat label="Tolls" value={tollSummaryValue(route.tolls, dirty)} />
                 </div>
                 {!dirty && route.tolls && (
-                  <div className="border-t border-white/[0.06] pt-2">
+                  <div className="border-t border-white/6 pt-2">
                     {route.tolls.details.length > 0 ? (
                       <details className="group">
-                        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-full px-2 py-1 text-[0.71875rem] text-muted transition-colors hover:bg-white/[0.04] hover:text-text">
+                        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-full px-2 py-1 text-sm text-muted transition-colors hover:bg-white/4 hover:text-text">
                           <span>Toll details · {route.tolls.details.reduce((count, detail) => count + detail.fares.length, 0)} charges</span>
                           <ChevronDown size="0.8125rem" className="transition-transform group-open:rotate-180" />
                         </summary>
@@ -1348,14 +1348,14 @@ export default function RoutePlanner({ onBack }: Props) {
                                   className="flex min-w-0 items-start justify-between gap-3 py-1"
                                 >
                                   <span className="min-w-0">
-                                    <span className="block truncate text-[0.71875rem] text-text">
+                                    <span className="block truncate text-sm text-text">
                                       {fare.name || detail.tollSystem || 'Road toll'}
                                     </span>
                                     {context && (
-                                      <span className="block truncate text-[0.625rem] text-faint">{context}</span>
+                                      <span className="block truncate text-2xs text-faint">{context}</span>
                                     )}
                                   </span>
-                                  <span className="shrink-0 text-[0.71875rem] tabular-nums text-muted">
+                                  <span className="shrink-0 text-sm tabular-nums text-muted">
                                     {amount ? formatMoney(amount) : 'Included'}
                                   </span>
                                 </div>
@@ -1365,22 +1365,22 @@ export default function RoutePlanner({ onBack }: Props) {
                         </div>
                       </details>
                     ) : (
-                      <div className="px-2 text-[0.6875rem] text-muted">
+                      <div className="px-2 text-xs text-muted">
                         {route.tolls.status === 'unavailable'
                           ? 'Toll data is unavailable for part of this route.'
                           : 'No toll charges were found for this route.'}
                       </div>
                     )}
-                    <div className="px-2 pt-1.5 text-[0.59375rem] leading-snug text-faint">
+                    <div className="px-2 pt-1.5 text-2xs leading-snug text-faint">
                       Estimated by HERE · final operator charges may differ.
                     </div>
                   </div>
                 )}
                 {notices.length > 0 && (
                   <div className="flex flex-col gap-1.5">
-                    <div className="text-[0.625rem] font-semibold text-faint uppercase tracking-badge">Notices</div>
+                    <div className="text-2xs font-semibold text-faint uppercase tracking-badge">Notices</div>
                     {notices.map((n, i) => (
-                      <div key={`${n.code}-${i}`} className="flex items-start gap-2 text-[0.71875rem] leading-snug text-amber-200/90">
+                      <div key={`${n.code}-${i}`} className="flex items-start gap-2 text-sm leading-snug text-amber-200/90">
                         <TriangleAlert size="0.8125rem" className="mt-0.5 shrink-0" strokeWidth={1.8} />
                         <span>{n.title || n.code || 'Route notice'}</span>
                       </div>
@@ -1402,8 +1402,8 @@ export default function RoutePlanner({ onBack }: Props) {
             {/* Coordinate header — the copy button copies EXACTLY the displayed
                 string. Clicking it keeps the menu open (it's inside the menu, so
                 the outside-click closer ignores it). */}
-            <div className="pl-3 pr-1.5 py-1 flex items-center justify-between gap-2 border-b border-white/[0.06] mb-1">
-              <span className="text-[0.625rem] uppercase tracking-wide text-muted tabular-nums truncate">
+            <div className="pl-3 pr-1.5 py-1 flex items-center justify-between gap-2 border-b border-white/6 mb-1">
+              <span className="text-2xs uppercase tracking-wide text-muted tabular-nums truncate">
                 {fmtCoord({ lat: menu.lat, lng: menu.lng })}
               </span>
               <CopyCoordButton text={fmtCoord({ lat: menu.lat, lng: menu.lng })} />
@@ -1439,9 +1439,9 @@ export default function RoutePlanner({ onBack }: Props) {
               className={`absolute z-30 min-w-[11.25rem] ${MENU_CONTAINER}`}
               style={{ left: markerMenu.x, top: markerMenu.y }}
             >
-              <div className="px-3 py-1.5 border-b border-white/[0.06] mb-1">
-                <div className="text-[0.625rem] uppercase tracking-wide text-muted">{heading}</div>
-                <div className="text-[0.75rem] text-text truncate" title={point.label}>
+              <div className="px-3 py-1.5 border-b border-white/6 mb-1">
+                <div className="text-2xs uppercase tracking-wide text-muted">{heading}</div>
+                <div className="text-sm text-text truncate" title={point.label}>
                   {point.label}
                 </div>
               </div>
@@ -1479,12 +1479,12 @@ export default function RoutePlanner({ onBack }: Props) {
               className={`absolute z-30 w-[13rem] ${MENU_CONTAINER}`}
               style={{ left: savedPlaceMenu.x, top: savedPlaceMenu.y }}
             >
-              <div className="border-b border-white/[0.06] px-3 py-2 mb-1">
-                <div className="truncate text-[0.8125rem] font-semibold text-text" title={place.name}>{place.name}</div>
-                <div className="mt-0.5 text-[0.625rem] uppercase tracking-wide text-faint">
+              <div className="border-b border-white/6 px-3 py-2 mb-1">
+                <div className="truncate text-base font-semibold text-text" title={place.name}>{place.name}</div>
+                <div className="mt-0.5 text-2xs uppercase tracking-wide text-faint">
                   {PLACE_CATEGORY_LABEL[place.category]}
                 </div>
-                {place.address && <div className="mt-1 line-clamp-2 text-[0.6875rem] leading-snug text-muted">{place.address}</div>}
+                {place.address && <div className="mt-1 line-clamp-2 text-xs leading-snug text-muted">{place.address}</div>}
               </div>
               <button onClick={() => useSavedPlace(place, 'start')} className={menuItemClass()}>
                 <span className={menuIconClass()}><Navigation {...MENU_GLYPH} /></span>
@@ -1502,7 +1502,7 @@ export default function RoutePlanner({ onBack }: Props) {
                 <span className={menuIconClass()}><Flag {...MENU_GLYPH} /></span>
                 Use as destination
               </button>
-              <div className="my-1 border-t border-white/[0.06]" />
+              <div className="my-1 border-t border-white/6" />
               <button
                 onClick={() => {
                   setPlaceError(null)

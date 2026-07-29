@@ -227,12 +227,12 @@ export default function ImagePreviewModal({
           actions FLOAT over the image (below), so no height is reserved here. */}
       {!embedded && (
         <div
-          className="shrink-0 mb-2 h-11 flex items-center justify-between gap-3 px-3.5 rounded-card bg-white/[0.05]"
+          className="shrink-0 mb-2 h-11 flex items-center justify-between gap-3 px-3.5 rounded-card bg-white/6"
           onClick={stop}
         >
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <ImageIcon size="0.9375rem" strokeWidth={1.6} className="text-muted shrink-0" />
-            <div className="text-[0.78125rem] text-text truncate min-w-0">
+            <div className="text-base text-text truncate min-w-0">
               {attachment.originalName}
             </div>
           </div>
@@ -293,7 +293,7 @@ export default function ImagePreviewModal({
           onClick={stop}
           className={`absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 ${
             embedded
-              ? 'rounded-full bg-bg/[0.92] px-1 py-0.5 shadow-[0_2px_10px_rgba(0,0,0,0.45)]'
+              ? 'rounded-full bg-bg/[0.92] px-1 py-0.5 shadow-raised'
               : ''
           }`}
         >

@@ -120,7 +120,7 @@ export default function AttachmentSendPreviewModal({
 
       {/* Top bar: filename + icon-only replace/close (themed tooltips). */}
       <div className="flex items-center justify-between gap-3 px-2 py-1.5 shrink-0">
-        <div className="text-[0.78125rem] text-text truncate flex-1 min-w-0">{file.name}</div>
+        <div className="text-base text-text truncate flex-1 min-w-0">{file.name}</div>
         <div className="flex items-center gap-0.5 shrink-0">
           <HeaderIconButton label="Replace" onClick={pickReplace}>
             <RefreshCw size="1.125rem" strokeWidth={1.8} />
@@ -161,7 +161,7 @@ export default function AttachmentSendPreviewModal({
       {/* Caption + send. */}
       <div className="shrink-0 pt-3">
         {error && (
-          <div className="text-[0.71875rem] text-alert mb-1.5 text-center">{error}</div>
+          <div className="text-sm text-alert mb-1.5 text-center">{error}</div>
         )}
         {/* Caption bar — the same near-black tone, capsule shape, spacing and
             circular send control as ChatComposer, with no extra edge treatment. */}

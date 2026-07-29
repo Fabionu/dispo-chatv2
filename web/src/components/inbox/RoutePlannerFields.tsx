@@ -21,7 +21,7 @@ export function NumberField({
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[0.6875rem] text-muted">{label}</span>
+      <span className="text-xs text-muted">{label}</span>
       <input
         type="number"
         inputMode="numeric"
@@ -29,7 +29,7 @@ export function NumberField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="h-8 rounded-full border border-white/[0.06] bg-white/[0.04] px-2.5 text-[0.8125rem] outline-none transition-colors focus:border-white/[0.16] focus:bg-white/[0.05] placeholder:text-faint"
+        className="h-8 rounded-full border border-white/6 bg-white/4 px-2.5 text-base outline-none transition-colors focus:border-white/16 focus:bg-white/6 placeholder:text-faint"
       />
     </label>
   )
@@ -66,7 +66,7 @@ export function CopyCoordButton({ text }: { text: string }) {
       onClick={copy}
       aria-label="Copy coordinates"
       title={state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : 'Copy coordinates'}
-      className="h-5 w-5 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+      className="h-5 w-5 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
     >
       {state === 'copied' ? (
         <Check size="0.75rem" strokeWidth={2.4} className="text-done" />
@@ -93,7 +93,7 @@ type PresetOption = { id: string | null; name: string; specs: string }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="px-2.5 pt-2 pb-1 text-[0.625rem] font-semibold uppercase tracking-badge text-faint">
+    <div className="px-2.5 pt-2 pb-1 text-2xs font-semibold uppercase tracking-badge text-faint">
       {children}
     </div>
   )
@@ -188,7 +188,7 @@ export function PresetSelect({
         onClick={() => (open ? setOpen(false) : openMenu())}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="h-8 w-full min-w-0 flex items-center justify-between gap-1.5 rounded-full border border-white/[0.06] bg-white/[0.04] px-2.5 text-[0.75rem] outline-none transition-colors focus:border-white/[0.16] focus:bg-white/[0.05]"
+        className="h-8 w-full min-w-0 flex items-center justify-between gap-1.5 rounded-full border border-white/6 bg-white/4 px-2.5 text-sm outline-none transition-colors focus:border-white/16 focus:bg-white/6"
       >
         <span className={`truncate ${active ? 'text-text' : 'text-faint'}`} title={active?.name}>
           {active ? active.name : 'Preset…'}
@@ -221,12 +221,12 @@ export function PresetSelect({
                   onMouseEnter={() => setHighlight(i)}
                   onClick={() => choose(o.id)}
                   className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-left transition-colors ${
-                    i === highlight ? 'bg-white/[0.05]' : ''
+                    i === highlight ? 'bg-white/6' : ''
                   }`}
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[0.75rem] text-text truncate">{o.name}</span>
-                    <span className="block text-[0.65625rem] text-muted truncate mt-0.5">
+                    <span className="block text-sm text-text truncate">{o.name}</span>
+                    <span className="block text-xs text-muted truncate mt-0.5">
                       {o.specs}
                     </span>
                   </span>
@@ -248,8 +248,8 @@ export function PresetSelect({
 export function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 flex flex-col gap-0.5 px-2 py-1">
-      <span className="text-[0.625rem] uppercase tracking-badge text-faint">{label}</span>
-      <span className="text-[0.8125rem] font-semibold tracking-[-0.2px] tabular-nums truncate">{value}</span>
+      <span className="text-2xs uppercase tracking-badge text-faint">{label}</span>
+      <span className="text-base font-semibold tracking-[-0.2px] tabular-nums truncate">{value}</span>
     </div>
   )
 }

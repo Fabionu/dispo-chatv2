@@ -76,7 +76,7 @@ export default function StopLocationMap({ initialQuery, onConfirm, onCancel }: P
     <div className="flex-1 flex flex-col min-h-0 bg-bg">
       {/* Search bar */}
       <div className="shrink-0 px-3 pt-2.5 pb-1.5 flex flex-col gap-1.5">
-        <div className="flex items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.04] px-3.5 h-10 transition-colors focus-within:border-white/[0.12]">
+        <div className="flex items-center gap-2 rounded-full border border-white/6 bg-white/4 px-3.5 h-10 transition-colors focus-within:border-white/10">
           {selected ? (
             <MapPin size="0.9375rem" strokeWidth={1.8} className="shrink-0 text-active" />
           ) : (
@@ -84,7 +84,7 @@ export default function StopLocationMap({ initialQuery, onConfirm, onCancel }: P
           )}
           {selected ? (
             <>
-              <span className="flex-1 truncate text-[0.8125rem]" title={selected.label}>
+              <span className="flex-1 truncate text-base" title={selected.label}>
                 {selected.label || selected.title}
               </span>
               <button
@@ -105,7 +105,7 @@ export default function StopLocationMap({ initialQuery, onConfirm, onCancel }: P
                 if (e.key === 'Enter' && coord) pick(coordPlace(coord))
               }}
               placeholder="Search address, place, or lat, lng…"
-              className="flex-1 min-w-0 bg-transparent text-[0.8125rem] outline-none placeholder:text-faint"
+              className="flex-1 min-w-0 bg-transparent text-base outline-none placeholder:text-faint"
             />
           )}
         </div>
@@ -115,32 +115,32 @@ export default function StopLocationMap({ initialQuery, onConfirm, onCancel }: P
           <button
             type="button"
             onClick={() => pick(coordPlace(coord))}
-            className="w-full text-left rounded-soft border border-white/[0.06] bg-rail px-3 py-2 hover:bg-white/[0.05] transition-colors flex items-start gap-2"
+            className="w-full text-left rounded-soft border border-white/6 bg-rail px-3 py-2 hover:bg-white/6 transition-colors flex items-start gap-2"
           >
             <MapPin size="0.875rem" className="mt-0.5 shrink-0 text-active" strokeWidth={1.8} />
             <span className="min-w-0">
-              <span className="block text-[0.8125rem]">Go to coordinates</span>
-              <span className="block text-[0.6875rem] text-muted tabular-nums">{coordText(coord)}</span>
+              <span className="block text-base">Go to coordinates</span>
+              <span className="block text-xs text-muted tabular-nums">{coordText(coord)}</span>
             </span>
           </button>
         )}
         {!selected && !coord && (loading || items.length > 0) && (
-          <div className="rounded-soft border border-white/[0.06] bg-rail overflow-hidden max-h-56 overflow-y-auto">
+          <div className="rounded-soft border border-white/6 bg-rail overflow-hidden max-h-56 overflow-y-auto">
             {loading && items.length === 0 && (
-              <div className="px-3 py-2 text-[0.75rem] text-muted">Searching…</div>
+              <div className="px-3 py-2 text-sm text-muted">Searching…</div>
             )}
             {items.map((it) => (
               <button
                 key={it.id}
                 type="button"
                 onClick={() => pick(it)}
-                className="w-full text-left px-3 py-2 hover:bg-white/[0.05] transition-colors flex items-start gap-2"
+                className="w-full text-left px-3 py-2 hover:bg-white/6 transition-colors flex items-start gap-2"
               >
                 <MapPin size="0.875rem" className="mt-0.5 shrink-0 text-muted" strokeWidth={1.8} />
                 <span className="min-w-0">
-                  <span className="block text-[0.8125rem] truncate">{it.title}</span>
+                  <span className="block text-base truncate">{it.title}</span>
                   {it.label && it.label !== it.title && (
-                    <span className="block text-[0.6875rem] text-muted truncate">{it.label}</span>
+                    <span className="block text-xs text-muted truncate">{it.label}</span>
                   )}
                 </span>
               </button>
@@ -148,7 +148,7 @@ export default function StopLocationMap({ initialQuery, onConfirm, onCancel }: P
           </div>
         )}
         {!selected && !coord && !loading && items.length === 0 && (
-          <div className="text-[0.71875rem] text-faint px-1.5">
+          <div className="text-sm text-faint px-1.5">
             {trimmed.length === 0
               ? "Search for the stop's address, or right-click a spot on the map."
               : trimmed.length < 3
@@ -181,14 +181,14 @@ export default function StopLocationMap({ initialQuery, onConfirm, onCancel }: P
             setItems([])
           }}
         />
-        <div className="absolute top-2 left-1/2 -translate-x-1/2 text-[0.6875rem] text-faint bg-bg/70 backdrop-blur-sm rounded-full px-2.5 py-1 pointer-events-none">
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 text-xs text-faint bg-bg/70 backdrop-blur-sm rounded-full px-2.5 py-1 pointer-events-none">
           Right-click the map to drop a pin
         </div>
       </div>
 
       {/* Action bar */}
       <div className="shrink-0 flex items-center gap-2 px-3 py-2.5">
-        <div className="flex-1 min-w-0 text-[0.75rem] text-muted truncate">
+        <div className="flex-1 min-w-0 text-sm text-muted truncate">
           {selected ? (
             <span className="tabular-nums">{coordText(selected.position)}</span>
           ) : (
@@ -198,7 +198,7 @@ export default function StopLocationMap({ initialQuery, onConfirm, onCancel }: P
         <button
           type="button"
           onClick={onCancel}
-          className="h-8 px-3 inline-flex items-center rounded-full text-[0.75rem] text-muted hover:text-text hover:bg-white/[0.04] transition-colors"
+          className="h-8 px-3 inline-flex items-center rounded-full text-sm text-muted hover:text-text hover:bg-white/4 transition-colors"
         >
           Cancel
         </button>
@@ -206,7 +206,7 @@ export default function StopLocationMap({ initialQuery, onConfirm, onCancel }: P
           type="button"
           onClick={() => selected && onConfirm(coordText(selected.position))}
           disabled={!selected}
-          className="h-8 px-3.5 inline-flex items-center gap-1.5 rounded-full bg-white/[0.1] text-[0.75rem] font-medium text-text hover:bg-white/[0.16] disabled:opacity-40 disabled:cursor-default transition-colors"
+          className="h-8 px-3.5 inline-flex items-center gap-1.5 rounded-full bg-white/10 text-sm font-medium text-text hover:bg-white/16 disabled:opacity-40 disabled:cursor-default transition-colors"
         >
           <Check size="0.875rem" strokeWidth={2.2} /> Use coordinates
         </button>

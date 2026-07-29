@@ -80,14 +80,14 @@ function JourneyNode({
             origin ? 'border border-white/40' : 'bg-white/60'
           }`}
         />
-        {origin && <span className="w-px flex-1 bg-white/[0.12] mt-1" />}
+        {origin && <span className="w-px flex-1 bg-white/10 mt-1" />}
       </div>
       <div className={`min-w-0 flex-1 ${origin ? 'pb-2.5' : ''}`}>
         <div className="flex items-baseline gap-1.5">
-          <span className="text-[0.6875rem] text-faint">{label}</span>
-          {time && <span className="text-[0.71875rem] text-text tabular-nums">{time}</span>}
+          <span className="text-xs text-faint">{label}</span>
+          {time && <span className="text-sm text-text tabular-nums">{time}</span>}
         </div>
-        <div className={`text-[0.71875rem] leading-[1.4] truncate mt-0.5 ${place ? 'text-muted' : 'text-faint'}`}>
+        <div className={`text-sm leading-[1.4] truncate mt-0.5 ${place ? 'text-muted' : 'text-faint'}`}>
           {place || 'Not set'}
         </div>
       </div>
@@ -142,8 +142,8 @@ export default function TripTab({
   if (!trip) {
     return (
       <div className="flex flex-col items-center text-center py-8 px-4">
-        <div className="text-[0.78125rem] text-muted">No active trip.</div>
-        <div className="text-[0.71875rem] text-faint mt-1">
+        <div className="text-base text-muted">No active trip.</div>
+        <div className="text-sm text-faint mt-1">
           Add a trip to track its stops, cargo and status.
         </div>
         {canManage && (
@@ -188,7 +188,7 @@ export default function TripTab({
           <button
             onClick={() => void run(onClearTrip)}
             disabled={busy}
-            className="inline-flex items-center gap-1 text-[0.6875rem] text-muted hover:text-alert transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-1 text-xs text-muted hover:text-alert transition-colors disabled:opacity-50"
           >
             <Trash2 size="0.75rem" strokeWidth={1.8} /> Clear trip
           </button>
@@ -203,12 +203,12 @@ export default function TripTab({
         type="button"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
-        className="w-full text-left rounded-card border border-white/[0.08] bg-white/[0.025] hover:bg-white/[0.04] transition-colors p-3"
+        className="w-full text-left rounded-card border border-white/8 bg-white/2 hover:bg-white/4 transition-colors p-3"
       >
         {/* Header — order reference + client, with the status on the right. */}
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-[0.8125rem] font-semibold leading-tight truncate">
+            <div className="text-base font-semibold leading-tight truncate">
               {trip.reference ? (
                 `#${trip.reference}`
               ) : (
@@ -216,7 +216,7 @@ export default function TripTab({
               )}
             </div>
             {trip.client && (
-              <div className="text-[0.75rem] text-muted leading-tight truncate mt-0.5">{trip.client}</div>
+              <div className="text-sm text-muted leading-tight truncate mt-0.5">{trip.client}</div>
             )}
           </div>
           <StatusChip tone={tripStatusTone(trip.status)} label={statusLabel} />
@@ -229,11 +229,11 @@ export default function TripTab({
         </div>
 
         {/* Footer — route total (when computed) on the left, expand toggle right. */}
-        <div className="flex items-center justify-between gap-2 mt-2.5 pt-2 border-t border-white/[0.05]">
-          <span className="text-[0.6875rem] text-faint tabular-nums truncate">
+        <div className="flex items-center justify-between gap-2 mt-2.5 pt-2 border-t border-white/6">
+          <span className="text-xs text-faint tabular-nums truncate">
             {routeOk ? `${routeOk.distanceText} · ${routeOk.durationText}` : ''}
           </span>
-          <span className="flex items-center gap-1 text-[0.6875rem] text-faint shrink-0">
+          <span className="flex items-center gap-1 text-xs text-faint shrink-0">
             {expanded ? 'Less' : 'Details'}
             <ChevronDown
               size="0.875rem"
@@ -281,7 +281,7 @@ export default function TripTab({
               {canManage && editingStop !== 'new' && (
                 <button
                   onClick={() => setEditingStop('new')}
-                  className="inline-flex items-center gap-1 text-[0.71875rem] text-muted hover:text-text transition-colors"
+                  className="inline-flex items-center gap-1 text-sm text-muted hover:text-text transition-colors"
                 >
                   <Plus size="0.75rem" strokeWidth={1.8} /> Add stop
                 </button>
@@ -295,7 +295,7 @@ export default function TripTab({
             )}
 
             {stops.length === 0 && editingStop !== 'new' ? (
-              <div className="text-[0.75rem] text-faint py-4 text-center">No stops yet.</div>
+              <div className="text-sm text-faint py-4 text-center">No stops yet.</div>
             ) : (
               <div className="flex flex-col gap-1.5">
                 {stops.map((stop) =>
@@ -322,17 +322,17 @@ export default function TripTab({
 
           <SubHeading>Route</SubHeading>
           {route?.status === 'ok' ? (
-            <div className="py-2 border-b border-white/[0.04]">
+            <div className="py-2 border-b border-white/4">
               <div className="flex items-stretch gap-6">
                 <div>
-                  <div className="text-[0.6875rem] text-muted">Distance</div>
-                  <div className="text-[0.78125rem] text-text mt-0.5 tabular-nums">
+                  <div className="text-xs text-muted">Distance</div>
+                  <div className="text-base text-text mt-0.5 tabular-nums">
                     {route.distanceText}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[0.6875rem] text-muted">Driving time</div>
-                  <div className="text-[0.78125rem] text-text mt-0.5 tabular-nums">
+                  <div className="text-xs text-muted">Driving time</div>
+                  <div className="text-base text-text mt-0.5 tabular-nums">
                     {route.durationText}
                   </div>
                 </div>
@@ -341,7 +341,7 @@ export default function TripTab({
                 <button
                   onClick={() => void run(onEditRoute)}
                   disabled={busy}
-                  className="mt-2 inline-flex items-center gap-1 text-[0.71875rem] text-muted hover:text-text transition-colors disabled:opacity-50"
+                  className="mt-2 inline-flex items-center gap-1 text-sm text-muted hover:text-text transition-colors disabled:opacity-50"
                 >
                   <MapPin size="0.75rem" strokeWidth={1.8} /> Edit route
                 </button>
@@ -351,8 +351,8 @@ export default function TripTab({
             // Coordinates exist for ≥2 stops, but the stored route isn't an "ok"
             // result yet — show an accurate state (never "missing coordinates")
             // with ways to build it from the current stops.
-            <div className="py-2 border-b border-white/[0.04]">
-              <div className="text-[0.71875rem] text-faint leading-[1.45]">
+            <div className="py-2 border-b border-white/4">
+              <div className="text-sm text-faint leading-[1.45]">
                 {route?.status === 'failed'
                   ? "Route couldn't be calculated last time — try again."
                   : 'Route ready — not calculated yet.'}
@@ -362,7 +362,7 @@ export default function TripTab({
                   <button
                     onClick={() => void run(onCalculateRoute)}
                     disabled={busy}
-                    className="inline-flex items-center gap-1 text-[0.71875rem] text-muted hover:text-text transition-colors disabled:opacity-50"
+                    className="inline-flex items-center gap-1 text-sm text-muted hover:text-text transition-colors disabled:opacity-50"
                   >
                     <RefreshCw size="0.75rem" strokeWidth={1.8} /> Calculate route
                   </button>
@@ -370,7 +370,7 @@ export default function TripTab({
                     <button
                       onClick={() => void run(onEditRoute)}
                       disabled={busy}
-                      className="inline-flex items-center gap-1 text-[0.71875rem] text-muted hover:text-text transition-colors disabled:opacity-50"
+                      className="inline-flex items-center gap-1 text-sm text-muted hover:text-text transition-colors disabled:opacity-50"
                     >
                       <MapPin size="0.75rem" strokeWidth={1.8} /> Edit route
                     </button>
@@ -379,7 +379,7 @@ export default function TripTab({
               )}
             </div>
           ) : (
-            <div className="py-2 border-b border-white/[0.04] text-[0.71875rem] text-faint leading-[1.45]">
+            <div className="py-2 border-b border-white/4 text-sm text-faint leading-[1.45]">
               Add coordinates to at least two stops to build a route.
             </div>
           )}

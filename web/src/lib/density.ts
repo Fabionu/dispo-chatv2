@@ -16,15 +16,15 @@ export type Density = 'compact' | 'default' | 'comfortable'
 export const rem = (px: number): string => `${px / 16}rem`
 
 export const SIDEBAR_AVATAR_SIZE: Record<Density, number> = {
-  compact: 32,
-  default: 34,
-  comfortable: 36,
+  compact: 37,
+  default: 39,
+  comfortable: 41,
 }
 
 export const SIDEBAR_CONVERSATION_AVATAR_SIZE: Record<Density, number> = {
-  compact: 38,
-  default: 40,
-  comfortable: 42,
+  compact: 46,
+  default: 48,
+  comfortable: 51,
 }
 
 const STORAGE_KEY = 'dispo:density'

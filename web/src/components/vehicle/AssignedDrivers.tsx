@@ -117,14 +117,14 @@ export default function AssignedDrivers({ members, assignedIds, canManage, onSav
   }, [open, draft, assignedIds])
 
   return (
-    <div ref={rootRef} className="relative py-2 border-b border-white/[0.03] last:border-0">
+    <div ref={rootRef} className="relative py-2 border-b border-white/4 last:border-0">
       <div className="flex items-center justify-between gap-2 mb-1">
-        <label className="block text-[0.6875rem] text-faint">Assigned drivers</label>
+        <label className="block text-xs text-faint">Assigned drivers</label>
         {canManage && (
           <button
             type="button"
             onClick={() => (open ? void commit() : openPicker())}
-            className="inline-flex items-center gap-1 text-[0.6875rem] text-muted hover:text-text transition-colors"
+            className="inline-flex items-center gap-1 text-xs text-muted hover:text-text transition-colors"
           >
             <Plus size="0.75rem" strokeWidth={1.9} />
             {assignedMembers.length ? 'Edit' : 'Assign'}
@@ -138,10 +138,10 @@ export default function AssignedDrivers({ members, assignedIds, canManage, onSav
           {assignedMembers.map((m) => (
             <span
               key={m.id}
-              className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.05] border border-white/[0.06] pl-1 pr-2 py-0.5"
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/6 border border-white/6 pl-1 pr-2 py-0.5"
             >
               <Avatar userId={m.id} name={m.displayName} size={18} />
-              <span className="text-[0.71875rem] text-text max-w-[9rem] truncate">
+              <span className="text-sm text-text max-w-[9rem] truncate">
                 {m.displayName}
               </span>
               {canManage && (
@@ -159,17 +159,17 @@ export default function AssignedDrivers({ members, assignedIds, canManage, onSav
           ))}
         </div>
       ) : (
-        <div className="text-[0.71875rem] text-faint">No driver assigned</div>
+        <div className="text-sm text-faint">No driver assigned</div>
       )}
 
-      {error && <div className="text-[0.6875rem] text-alert mt-1">Could not save. Try again.</div>}
+      {error && <div className="text-xs text-alert mt-1">Could not save. Try again.</div>}
 
       {/* Member picker popover (managers only). A custom multi-select — never a
           browser <select> — of the room's members, each a toggle with avatar. */}
       {open && (
-        <div className="absolute left-0 right-0 top-full z-20 mt-1 rounded-card border border-white/[0.1] bg-rail shadow-[0_12px_32px_rgba(0,0,0,0.5)] p-1">
+        <div className="absolute left-0 right-0 top-full z-20 mt-1 rounded-card border border-white/10 bg-rail shadow-overlay p-1">
           {members.length === 0 ? (
-            <div className="text-[0.71875rem] text-faint px-2 py-3 text-center">
+            <div className="text-sm text-faint px-2 py-3 text-center">
               No members to assign yet.
             </div>
           ) : (
@@ -183,21 +183,21 @@ export default function AssignedDrivers({ members, assignedIds, canManage, onSav
                     onClick={() => toggleDraft(m.id)}
                     aria-pressed={on}
                     className={`flex items-center gap-2 h-10 px-2 rounded-btn text-left transition-colors ${
-                      on ? 'bg-white/[0.06]' : 'hover:bg-white/[0.03]'
+                      on ? 'bg-white/6' : 'hover:bg-white/4'
                     }`}
                   >
                     <Avatar userId={m.id} name={m.displayName} size={24} />
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[0.78125rem] text-text truncate">
+                      <span className="block text-base text-text truncate">
                         {m.displayName}
                       </span>
                       {m.userRole === 'driver' && (
-                        <span className="block text-[0.625rem] text-faint leading-tight">Driver</span>
+                        <span className="block text-2xs text-faint leading-tight">Driver</span>
                       )}
                     </span>
                     <span
                       className={`h-5 w-5 shrink-0 flex items-center justify-center rounded-full border transition-colors ${
-                        on ? 'bg-text text-bg border-transparent' : 'border-white/[0.16] text-transparent'
+                        on ? 'bg-text text-bg border-transparent' : 'border-white/16 text-transparent'
                       }`}
                     >
                       <Check size="0.75rem" strokeWidth={2.4} />
@@ -211,7 +211,7 @@ export default function AssignedDrivers({ members, assignedIds, canManage, onSav
             <button
               type="button"
               onClick={() => void commit()}
-              className="h-7 px-3 rounded-btn bg-white/[0.08] text-text text-[0.71875rem] font-medium hover:bg-white/[0.12] transition-colors"
+              className="h-7 px-3 rounded-btn bg-white/8 text-text text-sm font-medium hover:bg-white/10 transition-colors"
             >
               Done
             </button>

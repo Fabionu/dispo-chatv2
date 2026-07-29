@@ -50,11 +50,11 @@ export default function ReadReceiptsPanel({ message, others, onOpenProfile, onCl
       <aside
         role="dialog"
         aria-label="Read receipts"
-        className="fixed top-0 right-0 bottom-0 z-40 flex w-full max-w-[25rem] flex-col bg-rail shadow-[-16px_0_48px_rgba(0,0,0,0.4)]
+        className="fixed top-0 right-0 bottom-0 z-40 flex w-full max-w-[25rem] flex-col bg-rail shadow-drawer
                    xl:static xl:z-auto xl:w-[clamp(22.5rem,26vw,26.25rem)] xl:max-w-none xl:shrink-0 xl:overflow-hidden xl:rounded-panel xl:shadow-none"
       >
         <div className="h-[var(--header-height)] flex shrink-0 items-center justify-between px-4">
-          <span className="text-[0.8125rem] font-semibold">Read receipts</span>
+          <span className="text-base font-semibold">Read receipts</span>
           <button
             type="button"
             onClick={onClose}
@@ -66,9 +66,9 @@ export default function ReadReceiptsPanel({ message, others, onOpenProfile, onCl
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 pb-5">
-          <div className="mb-5 rounded-card bg-white/[0.025] px-3.5 py-3">
-            <div className="line-clamp-3 text-[0.78125rem] leading-[1.5] text-text">{preview}</div>
-            <div className="mt-1.5 flex items-center gap-1.5 text-[0.65625rem] text-muted">
+          <div className="mb-5 rounded-card bg-white/2 px-3.5 py-3">
+            <div className="line-clamp-3 text-base leading-[1.5] text-text">{preview}</div>
+            <div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted">
               <Clock3 size="0.75rem" strokeWidth={1.8} />
               Sent {formatDay(message.createdAt).toLowerCase()} at {formatTime(message.createdAt)}
             </div>
@@ -112,27 +112,27 @@ function ReceiptSection({
     <section className="mb-5">
       <div className="mb-2 flex items-center gap-2 px-1">
         {icon}
-        <span className="text-[0.6875rem] font-semibold uppercase tracking-badge text-muted">
+        <span className="text-xs font-semibold uppercase tracking-badge text-muted">
           {title}
         </span>
       </div>
-      <div className="overflow-hidden rounded-card bg-white/[0.018] divide-y divide-white/[0.04]">
+      <div className="overflow-hidden rounded-card bg-white/2 divide-y divide-white/4">
         {readers.length === 0 ? (
-          <div className="px-3 py-4 text-center text-[0.71875rem] text-muted">Nobody yet</div>
+          <div className="px-3 py-4 text-center text-sm text-muted">Nobody yet</div>
         ) : (
           readers.map((reader) => (
             <button
               key={reader.id}
               type="button"
               onClick={() => onOpenProfile(reader.id, reader.displayName)}
-              className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-white/[0.03]"
+              className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-white/4"
             >
               <Avatar userId={reader.id} name={reader.displayName} size={38} />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[0.8125rem] font-medium text-text">
+                <span className="block truncate text-base font-medium text-text">
                   {reader.displayName}
                 </span>
-                <span className="mt-0.5 block truncate text-[0.6875rem] text-muted">
+                <span className="mt-0.5 block truncate text-xs text-muted">
                   {seen && reader.lastReadAt ? seenAt(reader.lastReadAt) : 'Waiting to be seen'}
                 </span>
               </span>

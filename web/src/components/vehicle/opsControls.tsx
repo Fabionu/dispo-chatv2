@@ -56,8 +56,8 @@ export function StatusChip({
 }) {
   const pill =
     size === 'lg'
-      ? 'h-7 gap-2 px-3 text-[0.8125rem] font-semibold bg-white/[0.08] border border-white/[0.06]'
-      : 'gap-1.5 px-2 py-0.5 text-[0.65625rem] font-medium bg-white/[0.05]'
+      ? 'h-7 gap-2 px-3 text-base font-semibold bg-white/8 border border-white/6'
+      : 'gap-1.5 px-2 py-0.5 text-xs font-medium bg-white/6'
   const dot = size === 'lg' ? 'h-2 w-2' : 'h-1.5 w-1.5'
   return (
     <span className={`inline-flex items-center rounded-full ${pill} ${TONE_TEXT[tone]}`}>
@@ -136,14 +136,14 @@ export function SelectRow<T extends string>({
   }
 
   return (
-    <div className="py-2 border-b border-white/[0.03] last:border-0">
-      <label className="block text-[0.6875rem] text-faint mb-1">{label}</label>
+    <div className="py-2 border-b border-white/4 last:border-0">
+      <label className="block text-xs text-faint mb-1">{label}</label>
       {editable ? (
         <select
           value={value ?? ''}
           disabled={saving}
           onChange={(e) => void change((e.target.value || undefined) as T | undefined)}
-          className="h-8 w-full cursor-pointer rounded-card border border-white/[0.06] bg-white/[0.02] px-2 text-[0.78125rem] text-text outline-none transition-colors hover:border-white/[0.12] focus:border-white/[0.16] disabled:opacity-50"
+          className="h-8 w-full cursor-pointer rounded-card border border-white/6 bg-white/2 px-2 text-base text-text outline-none transition-colors hover:border-white/10 focus:border-white/16 disabled:opacity-50"
         >
           <option value="">Not set</option>
           {options.map((o) => (
@@ -153,9 +153,9 @@ export function SelectRow<T extends string>({
           ))}
         </select>
       ) : (
-        <div className={`text-[0.78125rem] ${current ? 'text-text' : 'text-faint'}`}>{current ?? 'Not set'}</div>
+        <div className={`text-base ${current ? 'text-text' : 'text-faint'}`}>{current ?? 'Not set'}</div>
       )}
-      {error && <div className="text-[0.6875rem] text-alert mt-1">Could not save. Try again.</div>}
+      {error && <div className="text-xs text-alert mt-1">Could not save. Try again.</div>}
     </div>
   )
 }

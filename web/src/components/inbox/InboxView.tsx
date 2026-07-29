@@ -81,8 +81,8 @@ export default function InboxView({
   return (
     <>
       <header className="h-[var(--header-height)] flex flex-col justify-center px-5 shrink-0">
-        <div className="text-[0.9375rem] font-semibold tracking-[-0.2px] leading-tight">Workspace</div>
-        <div className="text-[0.75rem] text-muted leading-tight mt-0.5">Operational tools for {workspaceName}.</div>
+        <div className="text-xl font-semibold tracking-[-0.2px] leading-tight">Workspace</div>
+        <div className="text-sm text-muted leading-tight mt-0.5">Operational tools for {workspaceName}.</div>
       </header>
       <div className="flex-1 overflow-y-auto px-5 py-5">
         <div className="max-w-[57.5rem] mx-auto flex flex-col gap-4">
@@ -155,8 +155,8 @@ export function VehicleRoomPicker({
       <div className="-mx-2 max-h-[22rem] overflow-y-auto">
         {rooms.length === 0 ? (
           <div className="px-4 py-8 text-center">
-            <div className="text-[0.78125rem] text-muted">No vehicle rooms available.</div>
-            <div className="mt-1 text-[0.6875rem] text-faint">
+            <div className="text-base text-muted">No vehicle rooms available.</div>
+            <div className="mt-1 text-xs text-faint">
               Create a vehicle room before adding a trip.
             </div>
           </div>
@@ -170,7 +170,7 @@ export function VehicleRoomPicker({
                   key={room.id}
                   type="button"
                   onClick={() => onSelect(room.id)}
-                  className="group flex w-full items-center gap-3 rounded-card px-2.5 py-2.5 text-left transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                  className="group flex w-full items-center gap-3 rounded-card px-2.5 py-2.5 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
                 >
                   <GroupAvatar
                     groupId={room.id}
@@ -179,10 +179,10 @@ export function VehicleRoomPicker({
                     size={38}
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[0.8125rem] font-medium text-text">
+                    <span className="block truncate text-base font-medium text-text">
                       {groupLabel(room)}
                     </span>
-                    <span className="mt-0.5 block truncate text-[0.6875rem] text-muted">
+                    <span className="mt-0.5 block truncate text-xs text-muted">
                       {[plate && `Truck ${plate}`, hasTrip ? 'Current trip will be replaced' : 'Ready for a new trip']
                         .filter(Boolean)
                         .join(' · ')}
@@ -217,14 +217,14 @@ function ToolCard({
   return (
     <button
       onClick={onClick}
-      className="group flex items-center gap-3 rounded-panel border border-white/[0.06] bg-white/[0.015] px-4 py-3.5 text-left transition-colors hover:border-white/[0.12] hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+      className="group flex items-center gap-3 rounded-panel border border-white/6 bg-white/2 px-4 py-3.5 text-left transition-colors hover:border-white/10 hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
     >
       <span className="flex h-9 w-9 shrink-0 items-center justify-center text-active">
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[0.875rem] font-semibold tracking-[-0.2px]">{title}</span>
-        <span className="mt-0.5 block text-[0.75rem] leading-[1.5] text-muted">{subtitle}</span>
+        <span className="block text-lg font-semibold tracking-[-0.2px]">{title}</span>
+        <span className="mt-0.5 block text-sm leading-[1.5] text-muted">{subtitle}</span>
       </span>
       <ChevronRight
         size="1rem"

@@ -55,17 +55,25 @@ html[data-density='comfortable'] {
   color-scheme: dark;
 
   /* Runtime color palette. Values are RGB channels so Tailwind utilities can
-     preserve opacity modifiers (bg-surface/90, border-white/[0.08], etc.). */
+     preserve opacity modifiers (bg-surface/90, border-white/8, etc. — see the
+     wash scale in tailwind.config.js). */
   --color-bg: 0 0 0;
-  --color-chat: 32 32 32;
-  --color-surface: 32 32 32;
-  --color-surface-2: 48 48 48;
-  --color-rail: 32 32 32;
-  --color-composer: 16 16 16;
+  /* The left rail's own panel surface. It sits BETWEEN the pure-black shell
+     (which is now only the outer frame + the gap between the two panels) and the
+     raised chat card, so the workspace reads as two distinct panels on a void
+     instead of one flat black field. Without it the rail is transparent on `bg`
+     and, at the current darkened chat tone, the seam between rail and chat
+     disappears. */
+  --color-sidebar: 12 12 12;
+  --color-chat: 22 22 22;
+  --color-surface: 22 22 22;
+  --color-surface-2: 38 38 38;
+  --color-rail: 22 22 22;
+  --color-composer: 8 8 8;
   --color-text: 245 245 245;
   --color-muted: 163 163 163;
   --color-faint: 118 118 118;
-  --color-bubble-own: 16 16 16;
+  --color-bubble-own: 8 8 8;
   --color-done: 125 138 120;
   --color-active: 200 149 114;
   --color-alert: 217 119 87;
@@ -84,7 +92,8 @@ html[data-density='comfortable'] {
        --header-height      main-pane header & sidebar switcher seam (aligned)
        --sidebar-width      left rail
        --composer-size      composer send control size
-       --chat-max-width     centred message-column cap
+       --chat-max-width     centred message-column cap (a reading width, NOT the
+                            pane width — see .chat-column below)
        --chat-gutter        message-column horizontal padding (L/R)
 
      The sidebar scales with the SAME tiers so the rail never reads as a
@@ -120,33 +129,34 @@ html[data-density='comfortable'] {
   --sidebar-conv-font-size: calc(var(--sidebar-row-font-size) + 2px);
   --sidebar-conv-meta-font-size: calc(var(--sidebar-meta-font-size) + 1px);
   --header-height: 56px;
-  --sidebar-width: 460px;
+  --sidebar-width: 560px;
   --composer-size: 32px;
-  --chat-max-width: 960px;
+  --chat-max-width: 860px;
   --chat-gutter: 16px;
   /* Width of our custom scrollbar — reserved on the scroller AND added to the
      composer's right so both centred columns share the exact same content box
      (see .chat-column). Constant across tiers. */
   --chat-scrollbar-gutter: 10px;
 
-  --sidebar-title-font-size: 16px;
-  --sidebar-row-font-size: 14px;
-  --sidebar-meta-font-size: 12px;
-  --sidebar-section-font-size: 10.5px;
-  --sidebar-icon-size: 19px;
-  --sidebar-user-avatar-size: 32px;
-  --sidebar-search-height: 36px;
-  --sidebar-row-height: 40px;
-  --sidebar-badge-size: 19px;
-  --sidebar-row-gap: 10px;
-  --sidebar-row-pad-x: 11px;
-  --sidebar-row-pad-y: 8px;
-  --sidebar-section-gap: 24px;
+  --sidebar-title-font-size: 19px;
+  --sidebar-row-font-size: 16px;
+  --sidebar-meta-font-size: 13.5px;
+  --sidebar-section-font-size: 12px;
+  --sidebar-icon-size: 23px;
+  --sidebar-user-avatar-size: 37px;
+  --sidebar-search-height: 44px;
+  --sidebar-row-height: 52px;
+  --sidebar-badge-size: 23px;
+  --sidebar-row-gap: 13px;
+  --sidebar-row-pad-x: 14px;
+  --sidebar-row-pad-y: 10px;
+  --sidebar-section-gap: 28px;
 }
 
 html[data-theme='light'] {
   color-scheme: light;
   --color-bg: 238 238 238;
+  --color-sidebar: 244 244 244;
   --color-chat: 250 250 250;
   --color-surface: 250 250 250;
   --color-surface-2: 232 232 232;
@@ -167,24 +177,24 @@ html[data-theme='light'] {
   --app-font-size: 13px;
   --chat-msg-font-size: 13.5px;
   --header-height: 52px;
-  --sidebar-width: 400px;
+  --sidebar-width: 480px;
   --composer-size: 30px;
-  --chat-max-width: 900px;
+  --chat-max-width: 720px;
   --chat-gutter: 14px;
 
-  --sidebar-title-font-size: 15.5px;
-  --sidebar-row-font-size: 13.5px;
-  --sidebar-meta-font-size: 11.5px;
-  --sidebar-section-font-size: 10px;
-  --sidebar-icon-size: 18px;
-  --sidebar-user-avatar-size: 28px;
-  --sidebar-search-height: 34px;
-  --sidebar-row-height: 38px;
-  --sidebar-badge-size: 18px;
-  --sidebar-row-gap: 9px;
-  --sidebar-row-pad-x: 10px;
-  --sidebar-row-pad-y: 7px;
-  --sidebar-section-gap: 22px;
+  --sidebar-title-font-size: 18px;
+  --sidebar-row-font-size: 15.5px;
+  --sidebar-meta-font-size: 13px;
+  --sidebar-section-font-size: 11.5px;
+  --sidebar-icon-size: 22px;
+  --sidebar-user-avatar-size: 32px;
+  --sidebar-search-height: 41px;
+  --sidebar-row-height: 48px;
+  --sidebar-badge-size: 22px;
+  --sidebar-row-gap: 12px;
+  --sidebar-row-pad-x: 13px;
+  --sidebar-row-pad-y: 9px;
+  --sidebar-section-gap: 26px;
 }
 
 /* default — desktop / 1080p (current hand-tuned scale; matches :root). */
@@ -192,24 +202,24 @@ html[data-theme='light'] {
   --app-font-size: 14px;
   --chat-msg-font-size: 14.5px;
   --header-height: 56px;
-  --sidebar-width: 460px;
+  --sidebar-width: 560px;
   --composer-size: 32px;
-  --chat-max-width: 960px;
+  --chat-max-width: 860px;
   --chat-gutter: 16px;
 
-  --sidebar-title-font-size: 16px;
-  --sidebar-row-font-size: 14px;
-  --sidebar-meta-font-size: 12px;
-  --sidebar-section-font-size: 10.5px;
-  --sidebar-icon-size: 19px;
-  --sidebar-user-avatar-size: 32px;
-  --sidebar-search-height: 36px;
-  --sidebar-row-height: 40px;
-  --sidebar-badge-size: 19px;
-  --sidebar-row-gap: 10px;
-  --sidebar-row-pad-x: 11px;
-  --sidebar-row-pad-y: 8px;
-  --sidebar-section-gap: 24px;
+  --sidebar-title-font-size: 19px;
+  --sidebar-row-font-size: 16px;
+  --sidebar-meta-font-size: 13.5px;
+  --sidebar-section-font-size: 12px;
+  --sidebar-icon-size: 23px;
+  --sidebar-user-avatar-size: 37px;
+  --sidebar-search-height: 44px;
+  --sidebar-row-height: 52px;
+  --sidebar-badge-size: 23px;
+  --sidebar-row-gap: 13px;
+  --sidebar-row-pad-x: 14px;
+  --sidebar-row-pad-y: 10px;
+  --sidebar-section-gap: 28px;
 }
 
 /* comfortable — 2K/QHD and larger: noticeably more scale so a 2560×1440 (and up)
@@ -219,29 +229,29 @@ html[data-theme='light'] {
    chrome (modals, buttons, icons, menus, panels); these px tokens carry the
    chat/sidebar's own tuned bump. Keep in sync with the no-JS
    @media(min-width:2200px) fallback below AND SIDEBAR_AVATAR_SIZE.comfortable
-   in lib/density.ts (design px: 36 × 1.125 ≈ the 41px avatar below). */
+   in lib/density.ts (design px: 41 × 1.125 ≈ the 46px avatar below). */
 [data-density='comfortable'] {
   --app-font-size: 16px;
   --chat-msg-font-size: 17px;
   --header-height: 72px;
-  --sidebar-width: 800px;
+  --sidebar-width: 940px;
   --composer-size: 40px;
-  --chat-max-width: 1440px;
+  --chat-max-width: 920px;
   --chat-gutter: 28px;
 
-  --sidebar-title-font-size: 18px;
-  --sidebar-row-font-size: 16px;
-  --sidebar-meta-font-size: 13.5px;
-  --sidebar-section-font-size: 11.5px;
-  --sidebar-icon-size: 24px;
-  --sidebar-user-avatar-size: 42px;
-  --sidebar-search-height: 46px;
-  --sidebar-row-height: 52px;
-  --sidebar-badge-size: 23px;
-  --sidebar-row-gap: 13px;
-  --sidebar-row-pad-x: 14px;
-  --sidebar-row-pad-y: 10px;
-  --sidebar-section-gap: 30px;
+  --sidebar-title-font-size: 21px;
+  --sidebar-row-font-size: 18.5px;
+  --sidebar-meta-font-size: 15px;
+  --sidebar-section-font-size: 13px;
+  --sidebar-icon-size: 29px;
+  --sidebar-user-avatar-size: 46px;
+  --sidebar-search-height: 55px;
+  --sidebar-row-height: 64px;
+  --sidebar-badge-size: 28px;
+  --sidebar-row-gap: 16px;
+  --sidebar-row-pad-x: 17px;
+  --sidebar-row-pad-y: 12px;
+  --sidebar-section-gap: 35px;
 }
 
 /* No-JS / pre-hydration fallback: follow the display size when no explicit
@@ -253,24 +263,24 @@ html[data-theme='light'] {
     --app-font-size: 13px;
     --chat-msg-font-size: 13.5px;
     --header-height: 52px;
-    --sidebar-width: 400px;
+    --sidebar-width: 480px;
     --composer-size: 30px;
-    --chat-max-width: 900px;
+    --chat-max-width: 720px;
     --chat-gutter: 14px;
 
-    --sidebar-title-font-size: 15.5px;
-    --sidebar-row-font-size: 13.5px;
-    --sidebar-meta-font-size: 11.5px;
-    --sidebar-section-font-size: 10px;
-    --sidebar-icon-size: 18px;
-    --sidebar-user-avatar-size: 28px;
-    --sidebar-search-height: 34px;
-    --sidebar-row-height: 38px;
-    --sidebar-badge-size: 18px;
-    --sidebar-row-gap: 9px;
-    --sidebar-row-pad-x: 10px;
-    --sidebar-row-pad-y: 7px;
-    --sidebar-section-gap: 22px;
+    --sidebar-title-font-size: 18px;
+    --sidebar-row-font-size: 15.5px;
+    --sidebar-meta-font-size: 13px;
+    --sidebar-section-font-size: 11.5px;
+    --sidebar-icon-size: 22px;
+    --sidebar-user-avatar-size: 32px;
+    --sidebar-search-height: 41px;
+    --sidebar-row-height: 48px;
+    --sidebar-badge-size: 22px;
+    --sidebar-row-gap: 12px;
+    --sidebar-row-pad-x: 13px;
+    --sidebar-row-pad-y: 9px;
+    --sidebar-section-gap: 26px;
   }
 }
 @media (min-width: 2200px) and (min-height: 1100px) {
@@ -278,24 +288,24 @@ html[data-theme='light'] {
     --app-font-size: 16px;
     --chat-msg-font-size: 17px;
     --header-height: 72px;
-    --sidebar-width: 800px;
+    --sidebar-width: 940px;
     --composer-size: 40px;
-    --chat-max-width: 1440px;
+    --chat-max-width: 920px;
     --chat-gutter: 28px;
 
-    --sidebar-title-font-size: 18px;
-    --sidebar-row-font-size: 16px;
-    --sidebar-meta-font-size: 13.5px;
-    --sidebar-section-font-size: 11.5px;
-    --sidebar-icon-size: 24px;
-    --sidebar-user-avatar-size: 42px;
-    --sidebar-search-height: 46px;
-    --sidebar-row-height: 52px;
-    --sidebar-badge-size: 23px;
-    --sidebar-row-gap: 13px;
-    --sidebar-row-pad-x: 14px;
-    --sidebar-row-pad-y: 10px;
-    --sidebar-section-gap: 30px;
+    --sidebar-title-font-size: 21px;
+    --sidebar-row-font-size: 18.5px;
+    --sidebar-meta-font-size: 15px;
+    --sidebar-section-font-size: 13px;
+    --sidebar-icon-size: 29px;
+    --sidebar-user-avatar-size: 46px;
+    --sidebar-search-height: 55px;
+    --sidebar-row-height: 64px;
+    --sidebar-badge-size: 28px;
+    --sidebar-row-gap: 16px;
+    --sidebar-row-pad-x: 17px;
+    --sidebar-row-pad-y: 12px;
+    --sidebar-section-gap: 35px;
   }
 }
 
@@ -311,24 +321,24 @@ html[data-theme='light'] {
     --app-font-size: 17px;
     --chat-msg-font-size: 18px;
     --header-height: 76px;
-    --sidebar-width: 900px;
+    --sidebar-width: 1060px;
     --composer-size: 42px;
-    --chat-max-width: 1800px;
+    --chat-max-width: 1000px;
     --chat-gutter: 32px;
 
-    --sidebar-title-font-size: 19px;
-    --sidebar-row-font-size: 17px;
-    --sidebar-meta-font-size: 14.5px;
-    --sidebar-section-font-size: 12px;
-    --sidebar-icon-size: 25px;
-    --sidebar-user-avatar-size: 45px;
-    --sidebar-search-height: 49px;
-    --sidebar-row-height: 55px;
-    --sidebar-badge-size: 24px;
-    --sidebar-row-gap: 14px;
-    --sidebar-row-pad-x: 15px;
-    --sidebar-row-pad-y: 11px;
-    --sidebar-section-gap: 32px;
+    --sidebar-title-font-size: 22px;
+    --sidebar-row-font-size: 19.5px;
+    --sidebar-meta-font-size: 16px;
+    --sidebar-section-font-size: 13.5px;
+    --sidebar-icon-size: 30px;
+    --sidebar-user-avatar-size: 49px;
+    --sidebar-search-height: 59px;
+    --sidebar-row-height: 68px;
+    --sidebar-badge-size: 29px;
+    --sidebar-row-gap: 17px;
+    --sidebar-row-pad-x: 18px;
+    --sidebar-row-pad-y: 13px;
+    --sidebar-section-gap: 37px;
   }
 }
 
@@ -364,28 +374,33 @@ html[data-density-mode='auto'] {
   --app-font-size: 15px;
   --chat-msg-font-size: 15px;
   --header-height: 56px;
-  --sidebar-width: clamp(460px, 30vw, 600px);
+  --sidebar-width: clamp(560px, 34vw, 700px);
   --composer-size: 34px;
-  --chat-max-width: 1080px;
+  --chat-max-width: 860px;
   --chat-gutter: 18px;
 
-  --sidebar-title-font-size: 17px;
-  --sidebar-row-font-size: 15px;
-  --sidebar-meta-font-size: 13px;
-  --sidebar-section-font-size: 11px;
-  --sidebar-icon-size: 20px;
-  --sidebar-user-avatar-size: 36px;
-  --sidebar-search-height: 40px;
-  --sidebar-row-height: 44px;
-  --sidebar-badge-size: 20px;
-  --sidebar-row-gap: 11px;
-  --sidebar-row-pad-x: 12px;
-  --sidebar-row-pad-y: 8px;
-  --sidebar-section-gap: 26px;
+  --sidebar-title-font-size: 20px;
+  --sidebar-row-font-size: 17px;
+  --sidebar-meta-font-size: 14.5px;
+  --sidebar-section-font-size: 12.5px;
+  --sidebar-icon-size: 24px;
+  --sidebar-user-avatar-size: 39px;
+  --sidebar-search-height: 48px;
+  --sidebar-row-height: 56px;
+  --sidebar-badge-size: 24px;
+  --sidebar-row-gap: 14px;
+  --sidebar-row-pad-x: 15px;
+  --sidebar-row-pad-y: 10px;
+  --sidebar-section-gap: 30px;
 }
 
+/* The conversation column is capped as a READING column, not as "use the pane".
+   Message rows align to its two edges, so every extra pixel of width pushes an
+   outgoing and an incoming bubble further apart — past ~900px a short exchange
+   reads as two disconnected margins with a void down the middle instead of one
+   thread. The pane keeps growing on big displays; the thread inside it doesn't. */
 html[data-density-mode='auto'] .chat-column {
-  max-width: clamp(900px, 80cqw, 1080px);
+  max-width: clamp(640px, 66cqw, 860px);
 }
 
 @media (max-width: 1280px) {
@@ -394,24 +409,24 @@ html[data-density-mode='auto'] .chat-column {
     --app-font-size: 13.5px;
     --chat-msg-font-size: 13.5px;
     --header-height: 50px;
-    --sidebar-width: clamp(350px, 33vw, 430px);
+    --sidebar-width: clamp(420px, 39vw, 520px);
     --composer-size: 30px;
-    --chat-max-width: 860px;
+    --chat-max-width: 720px;
     --chat-gutter: 13px;
 
-    --sidebar-title-font-size: 15.5px;
-    --sidebar-row-font-size: 13.5px;
-    --sidebar-meta-font-size: 11.5px;
-    --sidebar-section-font-size: 10px;
-    --sidebar-icon-size: 18px;
-    --sidebar-user-avatar-size: 30px;
-    --sidebar-search-height: 34px;
-    --sidebar-row-height: 38px;
-    --sidebar-badge-size: 18px;
-    --sidebar-row-gap: 9px;
-    --sidebar-row-pad-x: 10px;
-    --sidebar-row-pad-y: 7px;
-    --sidebar-section-gap: 22px;
+    --sidebar-title-font-size: 18px;
+    --sidebar-row-font-size: 15.5px;
+    --sidebar-meta-font-size: 13px;
+    --sidebar-section-font-size: 11.5px;
+    --sidebar-icon-size: 22px;
+    --sidebar-user-avatar-size: 33px;
+    --sidebar-search-height: 41px;
+    --sidebar-row-height: 48px;
+    --sidebar-badge-size: 22px;
+    --sidebar-row-gap: 12px;
+    --sidebar-row-pad-x: 13px;
+    --sidebar-row-pad-y: 9px;
+    --sidebar-section-gap: 26px;
   }
 }
 
@@ -421,28 +436,28 @@ html[data-density-mode='auto'] .chat-column {
     --app-font-size: 15.5px;
     --chat-msg-font-size: 15.5px;
     --header-height: 60px;
-    --sidebar-width: clamp(600px, 26vw, 700px);
+    --sidebar-width: clamp(720px, 31vw, 840px);
     --composer-size: 35px;
-    --chat-max-width: 1280px;
+    --chat-max-width: 920px;
     --chat-gutter: 20px;
 
-    --sidebar-title-font-size: 17.5px;
-    --sidebar-row-font-size: 15.5px;
-    --sidebar-meta-font-size: 13px;
-    --sidebar-section-font-size: 11px;
-    --sidebar-icon-size: 21px;
-    --sidebar-user-avatar-size: 38px;
-    --sidebar-search-height: 42px;
-    --sidebar-row-height: 46px;
-    --sidebar-badge-size: 21px;
-    --sidebar-row-gap: 12px;
-    --sidebar-row-pad-x: 13px;
-    --sidebar-row-pad-y: 9px;
-    --sidebar-section-gap: 27px;
+    --sidebar-title-font-size: 20.5px;
+    --sidebar-row-font-size: 18px;
+    --sidebar-meta-font-size: 14.5px;
+    --sidebar-section-font-size: 12.5px;
+    --sidebar-icon-size: 25px;
+    --sidebar-user-avatar-size: 43px;
+    --sidebar-search-height: 50px;
+    --sidebar-row-height: 58px;
+    --sidebar-badge-size: 25px;
+    --sidebar-row-gap: 15px;
+    --sidebar-row-pad-x: 16px;
+    --sidebar-row-pad-y: 11px;
+    --sidebar-section-gap: 31px;
   }
 
   html[data-density-mode='auto'] .chat-column {
-    max-width: clamp(1060px, 72cqw, 1280px);
+    max-width: clamp(760px, 52cqw, 920px);
   }
 }
 
@@ -452,14 +467,14 @@ html[data-density-mode='auto'] .chat-column {
     --app-font-size: 16px;
     --chat-msg-font-size: 16px;
     --header-height: 64px;
-    --sidebar-width: clamp(680px, 24vw, 760px);
+    --sidebar-width: clamp(820px, 29vw, 910px);
     --composer-size: 37px;
-    --chat-max-width: 1450px;
+    --chat-max-width: 1000px;
     --chat-gutter: 24px;
   }
 
   html[data-density-mode='auto'] .chat-column {
-    max-width: clamp(1200px, 68cqw, 1450px);
+    max-width: clamp(820px, 46cqw, 1000px);
   }
 }
 
@@ -596,7 +611,7 @@ input, button, textarea, select {
 
 /* Custom scrollbar — slim, dark, in keeping with the operations-tool feel.
    Track is transparent so the scrollbar blends into whatever surface it sits
-   on; thumb uses the same white/[0.08] palette as our borders, lifts on hover.
+   on; thumb uses the same wash palette as our borders, lifts on hover.
    Firefox falls back to `scrollbar-width` + `scrollbar-color`. */
 * {
   scrollbar-width: thin;

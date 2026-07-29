@@ -58,12 +58,12 @@ export default function DocumentPreviewModal({
           and the card uses the full area. */}
       {!embedded && (
         <div
-          className="shrink-0 mb-2 h-11 flex items-center justify-between gap-3 px-3.5 rounded-card bg-white/[0.05]"
+          className="shrink-0 mb-2 h-11 flex items-center justify-between gap-3 px-3.5 rounded-card bg-white/6"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <DocIcon mime={attachment.mimeType} size={15} className="text-muted shrink-0" />
-            <div className="text-[0.78125rem] text-text truncate min-w-0">
+            <div className="text-base text-text truncate min-w-0">
               {attachment.originalName}
             </div>
           </div>

@@ -341,10 +341,10 @@ export const api = {
   workspaceInvites: {
     list: () => request<{ invites: WorkspaceInvite[] }>('/workspace-invites'),
     // The admin picks the role the new member joins with; the server validates it.
-    create: (role: Role) =>
+    create: (role: Role, recipientEmail?: string) =>
       request<{ invite: WorkspaceInviteCreated }>('/workspace-invites', {
         method: 'POST',
-        body: JSON.stringify({ role }),
+        body: JSON.stringify({ role, ...(recipientEmail ? { recipientEmail } : {}) }),
       }),
     // Change the role of a still-pending (active) invite before it's accepted.
     setRole: (id: string, role: Role) =>
@@ -363,10 +363,26 @@ export const api = {
     validate: (token: string) =>
       request<InviteValidation>(`/auth/invite/${encodeURIComponent(token)}`),
     accept: (token: string, body: { email: string; password: string; displayName: string }) =>
-      request<{ user: { id: string; email: string; displayName: string; role: string } }>(
+      request<
+        | { user: { id: string; email: string; displayName: string; role: string } }
+        | { verificationRequired: true; email: string; emailSent: boolean }
+      >(
         `/auth/invite/${encodeURIComponent(token)}/accept`,
         { method: 'POST', body: JSON.stringify(body) },
       ),
+  },
+
+  emailVerification: {
+    resend: (email: string) =>
+      request<{ ok: true }>('/auth/email-verification/resend', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      }),
+    confirm: (token: string) =>
+      request<{ ok: true }>('/auth/email-verification/confirm', {
+        method: 'POST',
+        body: JSON.stringify({ token }),
+      }),
   },
 
   profile: {

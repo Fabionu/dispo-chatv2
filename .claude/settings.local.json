@@ -480,7 +480,14 @@
       "Bash(sed -i \"s#from './MessageActionsMenu'#from './MessageActionsPanel'#\" src/components/messages/messageActionItems.tsx)",
       "Bash(rm src/components/messages/MessageActionsMenu.tsx)",
       "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; Set-Location \"C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat\"; .\\\\gradlew.bat :app:compileDebugKotlin --console=plain 2>&1 | Select-String -Pattern \"^e: |^w: |SUCCESSFUL|FAILED\" | Select-Object -First 25)",
-      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; Set-Location \"C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat\"; .\\\\gradlew.bat :app:installDebug --console=plain 2>&1 | Select-String -Pattern \"^e: |^w: |Installed|SUCCESSFUL|FAILED\" | Select-Object -First 25)"
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\"; Set-Location \"C:\\\\Users\\\\Home\\\\AndroidStudioProjects\\\\DispoChat\"; .\\\\gradlew.bat :app:installDebug --console=plain 2>&1 | Select-String -Pattern \"^e: |^w: |Installed|SUCCESSFUL|FAILED\" | Select-Object -First 25)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(awk -F: '$2>0{n+=$2; f++} END{print \"  \"n\" inline <button> across \"f\" files\"}')",
+      "Bash(sort -t'|' -k2)",
+      "Bash(node \"C:/Users/Home/AppData/Local/Temp/claude/C--Users-Home-Desktop-dispo-chatv2/7a854975-788d-45c0-84bb-2e3bc192df2b/scratchpad/migrate-tokens.mjs\")",
+      "Bash(echo \"TSC EXIT:$?\")",
+      "Bash(awk '{v=$2; sub\\(\"white/\",\"\",v\\); if \\(v!=\"2\"&&v!=\"4\"&&v!=\"6\"&&v!=\"8\"&&v!=\"10\"&&v!=\"16\"&&v!=\"24\"\\) print \"  OFF-SCALE: \"$0}')",
+      "Bash(echo \"BUILD EXIT:$?\")"
     ]
   }
 }

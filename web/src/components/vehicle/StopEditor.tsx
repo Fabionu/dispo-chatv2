@@ -99,10 +99,10 @@ export default function StopEditor({
   }
 
   return (
-    <div className="rounded-soft border border-white/[0.12] bg-white/[0.03] p-2.5 flex flex-col gap-2">
+    <div className="rounded-soft border border-white/10 bg-white/4 p-2.5 flex flex-col gap-2">
       <div className="grid grid-cols-2 gap-2">
         <label className="flex flex-col gap-1">
-          <span className="text-[0.6875rem] text-muted">Type</span>
+          <span className="text-xs text-muted">Type</span>
           <select value={type} onChange={(e) => setType(e.target.value as StopType)} className={SELECT_PILL}>
             {STOP_TYPES.map((o) => (
               <option key={o.value} value={o.value}>
@@ -112,7 +112,7 @@ export default function StopEditor({
           </select>
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-[0.6875rem] text-muted">Status</span>
+          <span className="text-xs text-muted">Status</span>
           <select value={status} onChange={(e) => setStatus(e.target.value as StopStatus)} className={SELECT_PILL}>
             {STOP_STATUSES.map((o) => (
               <option key={o.value} value={o.value}>
@@ -125,7 +125,7 @@ export default function StopEditor({
       {/* Planned date + time — two separate pill fields, each with its own custom
           picker (calendar / clock). */}
       <div className="flex flex-col gap-1">
-        <span className="text-[0.6875rem] text-muted">Planned date &amp; time</span>
+        <span className="text-xs text-muted">Planned date &amp; time</span>
         <div className="flex gap-2">
           <DateField value={plannedDate} onChange={setPlannedDate} className="flex-1 min-w-0" />
           <TimeField value={plannedTime} onChange={setPlannedTime} className="w-[7.25rem] shrink-0" />
@@ -182,7 +182,7 @@ export default function StopEditor({
           className={PILL}
         />
         {coordInvalid && (
-          <span className="text-[0.65625rem] text-faint px-1">
+          <span className="text-xs text-faint px-1">
             Couldn't read these coordinates — they'll be kept as typed.
           </span>
         )}
@@ -195,7 +195,7 @@ export default function StopEditor({
         placeholder="Optional notes"
         className={AREA_PILL}
       />
-      {error && <div className="text-[0.6875rem] text-alert">Could not save. Try again.</div>}
+      {error && <div className="text-xs text-alert">Could not save. Try again.</div>}
       {/* Circular Save/Cancel — same integrated icon buttons as the inline fields. */}
       <div className="flex items-center justify-end gap-1.5">
         <button
@@ -203,7 +203,7 @@ export default function StopEditor({
           disabled={saving}
           aria-label="Cancel"
           title="Cancel"
-          className="h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] disabled:opacity-50 transition-colors"
+          className="h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 disabled:opacity-50 transition-colors"
         >
           <X size="0.875rem" strokeWidth={2} />
         </button>

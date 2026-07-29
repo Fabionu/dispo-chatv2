@@ -7,6 +7,7 @@ import {
 import SignIn from './pages/SignIn'
 import Workspace from './pages/Workspace'
 import InviteRegister from './pages/InviteRegister'
+import EmailVerification from './pages/EmailVerification'
 import Spinner from './components/Spinner'
 import { MessageCacheProvider } from './hooks/useMessageCache'
 import { useEffect } from 'react'
@@ -40,8 +41,16 @@ function inviteToken(): string | null {
   return m ? decodeURIComponent(m[1]) : null
 }
 
+function emailVerificationToken(): string | null {
+  if (!/^\/verify-email\/?$/.test(window.location.pathname)) return null
+  return new URLSearchParams(window.location.search).get('token')
+}
+
 function Gate() {
   const auth = useAuth()
+
+  const verificationToken = emailVerificationToken()
+  if (verificationToken) return <EmailVerification token={verificationToken} />
 
   const token = inviteToken()
   if (token) return <InviteRegister token={token} />

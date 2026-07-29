@@ -408,7 +408,7 @@ export default function TripRouteMap({
   if (routable.length < 2 && !editing) {
     return (
       <div className="flex-1 flex items-center justify-center bg-bg px-6 text-center">
-        <div className="text-[0.78125rem] text-muted leading-[1.5]">
+        <div className="text-base text-muted leading-[1.5]">
           Add coordinates to at least two stops to see the trip route.
         </div>
       </div>
@@ -444,14 +444,14 @@ export default function TripRouteMap({
 
         {/* Compact route summary overlay — distance + driving time, or a quiet
             calculating state. Gains a subtle "Editing" tag while in edit mode. */}
-        <div className="absolute top-2 left-2 rounded-full bg-bg/80 backdrop-blur-sm border border-white/[0.08] px-3 py-1.5 text-[0.71875rem] flex items-center gap-2 shadow-lg">
+        <div className="absolute top-2 left-2 rounded-full bg-bg/80 backdrop-blur-sm border border-white/8 px-3 py-1.5 text-sm flex items-center gap-2 shadow-raised">
           {editing && (
             <span className="flex items-center gap-1.5 text-active font-medium">
               <span className="h-1.5 w-1.5 rounded-full bg-active" />
               Editing
             </span>
           )}
-          {editing && <span className="h-3 w-px bg-white/[0.12]" />}
+          {editing && <span className="h-3 w-px bg-white/10" />}
           {loading && !ok ? (
             <>
               <Spinner size={13} /> <span className="text-muted">Calculating route…</span>
@@ -470,7 +470,7 @@ export default function TripRouteMap({
           <button
             type="button"
             onClick={startEdit}
-            className="absolute z-20 top-2 right-2 flex items-center gap-1.5 h-8 px-3 rounded-full bg-bg/80 backdrop-blur-sm border border-white/[0.08] text-[0.71875rem] font-medium text-text hover:bg-bg transition-colors shadow-lg"
+            className="absolute z-20 top-2 right-2 flex items-center gap-1.5 h-8 px-3 rounded-full bg-bg/80 backdrop-blur-sm border border-white/8 text-sm font-medium text-text hover:bg-bg transition-colors shadow-raised"
           >
             <Pencil size="0.8125rem" strokeWidth={2} />
             Edit route
@@ -484,7 +484,7 @@ export default function TripRouteMap({
               type="button"
               onClick={cancelEdit}
               disabled={saving}
-              className="flex items-center gap-1.5 h-8 px-3 rounded-full bg-bg/80 backdrop-blur-sm border border-white/[0.08] text-[0.71875rem] font-medium text-muted hover:text-text hover:bg-bg transition-colors shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 h-8 px-3 rounded-full bg-bg/80 backdrop-blur-sm border border-white/8 text-sm font-medium text-muted hover:text-text hover:bg-bg transition-colors shadow-raised disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <X size="0.8125rem" strokeWidth={2} />
               Cancel
@@ -494,7 +494,7 @@ export default function TripRouteMap({
               onClick={save}
               disabled={saveDisabled}
               title={!dirty ? 'Adjust the route first (drag, add or remove a stop)' : undefined}
-              className="flex items-center gap-1.5 h-8 px-3 rounded-full bg-active text-bg text-[0.71875rem] font-semibold hover:bg-active/90 transition-colors shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 h-8 px-3 rounded-full bg-active text-bg text-sm font-semibold hover:bg-active/90 transition-colors shadow-raised disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {saving ? <Spinner size={13} /> : <Check size="0.8125rem" strokeWidth={2.4} />}
               Save route
@@ -506,11 +506,11 @@ export default function TripRouteMap({
         {editing && (
           <div className="absolute z-20 bottom-2 left-2 max-w-[calc(100%-1rem)]">
             {saveError ? (
-              <div className="rounded-full bg-alert/15 border border-alert/25 text-alert px-3 py-1.5 text-[0.6875rem] shadow-lg">
+              <div className="rounded-full bg-alert/15 border border-alert/25 text-alert px-3 py-1.5 text-xs shadow-raised">
                 {saveError}
               </div>
             ) : (
-              <div className="rounded-full bg-bg/80 backdrop-blur-sm border border-white/[0.08] text-muted px-3 py-1.5 text-[0.6875rem] shadow-lg">
+              <div className="rounded-full bg-bg/80 backdrop-blur-sm border border-white/8 text-muted px-3 py-1.5 text-xs shadow-raised">
                 Drag a stop to move it · right-click to add · click a stop to remove.
               </div>
             )}
@@ -524,7 +524,7 @@ export default function TripRouteMap({
             className={`absolute z-30 min-w-[10rem] ${MENU_CONTAINER}`}
             style={{ left: menu.x, top: menu.y }}
           >
-            <div className="px-3 py-1.5 text-[0.625rem] uppercase tracking-wide text-muted border-b border-white/[0.06] mb-1">
+            <div className="px-3 py-1.5 text-2xs uppercase tracking-wide text-muted border-b border-white/6 mb-1">
               {menu.lat.toFixed(5)}, {menu.lng.toFixed(5)}
             </div>
             <button type="button" onClick={addStopFromMenu} className={menuItemClass()}>
@@ -544,7 +544,7 @@ export default function TripRouteMap({
             className={`absolute z-30 min-w-[10rem] ${MENU_CONTAINER}`}
             style={{ left: markerMenu.x, top: markerMenu.y }}
           >
-            <div className="px-3 py-1.5 text-[0.625rem] uppercase tracking-wide text-muted border-b border-white/[0.06] mb-1">
+            <div className="px-3 py-1.5 text-2xs uppercase tracking-wide text-muted border-b border-white/6 mb-1">
               {markerMenu.kind === 'origin'
                 ? 'Start'
                 : markerMenu.kind === 'destination'

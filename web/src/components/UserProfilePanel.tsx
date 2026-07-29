@@ -241,18 +241,18 @@ export default function UserProfilePanel({
         className={
           sidePanel
             ? `fixed top-0 right-0 bottom-0 z-40 flex w-full max-w-[25rem] flex-col overflow-hidden bg-rail
-               shadow-[-16px_0_48px_rgba(0,0,0,0.4)]
+               shadow-drawer
                xl:static xl:z-auto xl:w-[clamp(22.5rem,26vw,26.25rem)] xl:max-w-none xl:shrink-0
                xl:rounded-panel xl:shadow-none`
             : `fixed left-1/2 top-1/2 z-50 h-[calc(100dvh-1.5rem)] max-h-[44rem]
                w-[calc(100%-1.5rem)] max-w-[30rem] -translate-x-1/2 -translate-y-1/2
-               rounded-modal border border-white/[0.08] bg-rail
-               shadow-[0_32px_80px_rgba(0,0,0,0.65)] flex flex-col overflow-hidden`
+               rounded-modal border border-white/8 bg-rail
+               shadow-modal flex flex-col overflow-hidden`
         }
       >
         {/* Header — same seam as the other right/side panels. */}
         <div className="h-[var(--header-height)] flex items-center justify-between px-4 shrink-0">
-          <span className="text-[0.8125rem] font-semibold">Profile</span>
+          <span className="text-base font-semibold">Profile</span>
           <button
             onClick={onClose}
             aria-label="Close profile"
@@ -264,11 +264,11 @@ export default function UserProfilePanel({
 
         {failed ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-2 px-6 text-center">
-            <p className="text-[0.75rem] text-faint">Could not load this profile.</p>
+            <p className="text-sm text-faint">Could not load this profile.</p>
             <button
               type="button"
               onClick={() => setAttempt((n) => n + 1)}
-              className="text-[0.78125rem] text-text font-semibold hover:underline underline-offset-4"
+              className="text-base text-text font-semibold hover:underline underline-offset-4"
             >
               Try again
             </button>
@@ -295,14 +295,14 @@ export default function UserProfilePanel({
               >
                 <Avatar userId={profile.id} name={displayName} size={96} />
               </AvatarPhotoEditor>
-              <div className="mt-3 text-[1rem] font-semibold tracking-[-0.2px]">
+              <div className="mt-3 text-xl font-semibold tracking-[-0.2px]">
                 {displayName}
               </div>
               {profile.deleted ? (
-                <div className="mt-0.5 text-[0.75rem] text-muted">Deleted account</div>
+                <div className="mt-0.5 text-sm text-muted">Deleted account</div>
               ) : (
                 (roleLabel || profile.jobTitle) && (
-                  <div className="mt-0.5 text-[0.75rem] text-muted">
+                  <div className="mt-0.5 text-sm text-muted">
                     {roleLabel}
                     {profile.jobTitle ? `${roleLabel ? ' · ' : ''}${profile.jobTitle}` : ''}
                   </div>
@@ -312,7 +312,7 @@ export default function UserProfilePanel({
                   (read-only). Drivers carry no availability. */}
               {!profile.deleted && !isDriver && status && (
                 <span
-                  className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[0.71875rem] font-medium"
+                  className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium"
                   style={{ color: status.color, backgroundColor: `${status.color}22` }}
                 >
                   <span
@@ -376,14 +376,14 @@ export default function UserProfilePanel({
                 </div>
               )}
               {actionError && (
-                <p className="mt-1.5 text-[0.6875rem] leading-[1.4] text-alert">{actionError}</p>
+                <p className="mt-1.5 text-xs leading-[1.4] text-alert">{actionError}</p>
               )}
             </div>
 
             {profile.deleted ? (
               // Anonymized account: name only — every personal detail was
               // removed with the account, so there is nothing more to show.
-              <p className="text-[0.71875rem] text-faint text-center leading-[1.45] px-2">
+              <p className="text-sm text-faint text-center leading-[1.45] px-2">
                 This account was deleted. Its profile details are no longer
                 available.
               </p>

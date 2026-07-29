@@ -65,16 +65,23 @@ export default function GroupAvatar({
   }, [showImage, groupId, version])
 
   const style = { width: rem(size), height: rem(size) }
-  // No-image fallback: a white multi-user glyph on the SAME neutral dark-grey
-  // disc as the user Avatar (so every fallback matches the theme), but a distinct
-  // icon so a group reads as a group. No warm tint; hairline neutral border keeps
-  // the circle defined on the equally-dark chat header.
+  // No-image fallback: a MULTI-PERSON glyph on the same lifted neutral disc as
+  // the user Avatar, so both fallbacks share one treatment and differ only in
+  // what they depict — one person vs several. The room-vs-person distinction is
+  // also carried by SHAPE (circle vs squircle), so the two cues reinforce each
+  // other. Hairline border, matching the user Avatar; it disappears behind a
+  // real image once one loads.
+  // Deliberately lucide's drawing rather than a hand-rolled silhouette to match
+  // Avatar's filled glyph: a bespoke two-person shape has to solve head
+  // separation, shoulder overlap and overall proportion at ~25px, and the
+  // attempts at it read squat and cracked. A properly drawn icon wins over a
+  // matching-but-bad one.
   const fallback = (
     <span
       style={style}
-      className={`${radius} bg-bg border border-white/[0.08] flex items-center justify-center shrink-0 text-text ${className}`}
+      className={`${radius} bg-surface-2 border border-white/10 flex items-center justify-center shrink-0 text-muted ${className}`}
     >
-      <Users size={rem(Math.max(12, Math.round(size * 0.46)))} strokeWidth={1.7} />
+      <Users size={rem(Math.max(12, Math.round(size * 0.52)))} strokeWidth={1.7} />
     </span>
   )
 

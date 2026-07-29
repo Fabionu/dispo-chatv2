@@ -1008,8 +1008,8 @@ export default function ChatView({
         <div className="absolute inset-0 z-30 pointer-events-none flex items-center justify-center bg-chat/80 backdrop-blur-[2px]">
           <div className="flex flex-col items-center gap-2.5 rounded-card border-2 border-dashed border-white/20 px-10 py-8 text-center">
             <Upload size="1.625rem" strokeWidth={1.6} className="text-muted" />
-            <div className="text-[0.875rem] font-semibold text-text">Drop to send</div>
-            <div className="text-[0.71875rem] text-faint">Images up to 10MB · files up to 25MB</div>
+            <div className="text-lg font-semibold text-text">Drop to send</div>
+            <div className="text-sm text-faint">Images up to 10MB · files up to 25MB</div>
           </div>
         </div>
       )}
@@ -1040,15 +1040,15 @@ export default function ChatView({
       />
 
       {searchContext && (
-        <div className="shrink-0 h-9 px-4 flex items-center justify-between gap-3 border-y border-white/[0.05] bg-white/[0.025]">
-          <span className="text-[0.71875rem] text-muted">Viewing an older search result</span>
+        <div className="shrink-0 h-9 px-4 flex items-center justify-between gap-3 border-y border-white/6 bg-white/2">
+          <span className="text-sm text-muted">Viewing an older search result</span>
           <button
             type="button"
             onClick={() => {
               setSearchContext(null)
               requestAnimationFrame(scrollToBottom)
             }}
-            className="text-[0.71875rem] font-medium text-text hover:text-white transition-colors"
+            className="text-sm font-medium text-text hover:text-white transition-colors"
           >
             Back to latest
           </button>
@@ -1074,7 +1074,7 @@ export default function ChatView({
           between Chat and the tool without losing either; the × closes the tool.
           No banner at all when only chat is open. */}
       {(mapPick || tripRouteOpen || attachmentTabs.length > 0) && (
-        <div className="shrink-0 h-9 px-3 flex items-center gap-1 border-b border-white/[0.04] overflow-x-auto [scrollbar-width:none]">
+        <div className="shrink-0 h-9 px-3 flex items-center gap-1 border-b border-white/4 overflow-x-auto [scrollbar-width:none]">
           <ToolTab
             active={activeTool === 'chat'}
             icon={<MessageSquare size="0.75rem" strokeWidth={2} />}
@@ -1219,7 +1219,7 @@ export default function ChatView({
                 >
                 {visibleMessages.length === 0 ? (
                   <div className="flex-1 flex items-center justify-center">
-                    <p className="text-[0.78125rem] text-faint">No messages yet. Say something.</p>
+                    <p className="text-base text-faint">No messages yet. Say something.</p>
                   </div>
                 ) : (
                   // PERF / TODO (message-list virtualization): every loaded
@@ -1243,7 +1243,7 @@ export default function ChatView({
                         <button
                           onClick={loadOlder}
                           disabled={loadingOlder}
-                          className="text-[0.71875rem] text-muted hover:text-text border border-white/[0.10] rounded-full px-3 py-1 transition-colors disabled:opacity-50"
+                          className="text-sm text-muted hover:text-text border border-white/10 rounded-full px-3 py-1 transition-colors disabled:opacity-50"
                         >
                           {loadingOlder ? 'Loading…' : 'Load earlier messages'}
                         </button>
@@ -1339,7 +1339,7 @@ export default function ChatView({
                 onClick={scrollToBottom}
                 aria-label="Scroll to latest messages"
                 style={{ bottom: composerHeight + 8 }}
-                className="absolute left-1/2 -translate-x-1/2 z-10 h-9 w-9 rounded-full bg-surface border border-white/[0.10] text-text hover:bg-surface-2 hover:border-white/[0.20] flex items-center justify-center transition-colors shadow-[0_4px_14px_rgba(0,0,0,0.55)]"
+                className="absolute left-1/2 -translate-x-1/2 z-10 h-9 w-9 rounded-full bg-surface border border-white/10 text-text hover:bg-surface-2 hover:border-white/20 flex items-center justify-center transition-colors shadow-raised"
               >
                 <ArrowDown size="1rem" strokeWidth={1.8} />
               </button>
@@ -1347,7 +1347,7 @@ export default function ChatView({
             {notice && (
               <div
                 style={{ bottom: composerHeight + 8 }}
-                className="absolute left-1/2 -translate-x-1/2 z-10 rounded-chip bg-surface border border-white/[0.10] text-[0.71875rem] text-muted px-3 py-1.5 shadow-[0_4px_14px_rgba(0,0,0,0.55)]"
+                className="absolute left-1/2 -translate-x-1/2 z-10 rounded-chip bg-surface border border-white/10 text-sm text-muted px-3 py-1.5 shadow-raised"
               >
                 {notice}
               </div>
@@ -1372,7 +1372,7 @@ export default function ChatView({
                     height increases/decreases the message-list bottom reserve;
                     the conversation visibly lifts and settles with it. */}
                 <TypingIndicator users={typingUsers} />
-                {error && <div className="text-[0.71875rem] text-alert mb-1.5">{error}</div>}
+                {error && <div className="text-sm text-alert mb-1.5">{error}</div>}
                 <ChatComposer
                   ref={composerHandleRef}
                   placeholder={`Message ${groupLabel(group)}`}

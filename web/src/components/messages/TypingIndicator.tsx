@@ -59,13 +59,13 @@ export default function TypingIndicator({ users }: { users: TypingUser[] }) {
                 </span>
               ))}
               {displayedUsers.length > 2 && (
-                <span className="relative z-0 flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-rail bg-surface-2 px-1 text-[0.53125rem] font-semibold text-muted">
+                <span className="relative z-0 flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-rail bg-surface-2 px-1 text-2xs font-semibold text-muted">
                   +{displayedUsers.length - 2}
                 </span>
               )}
             </span>
             <span className="flex min-w-0 flex-col items-start gap-1">
-              <span className="max-w-full truncate px-1 text-[0.75rem] font-medium leading-none text-muted">
+              <span className="max-w-full truncate px-1 text-sm font-medium leading-none text-muted">
                 {text}
               </span>
               {/* Same neutral skin and sender-side tail as an incoming message

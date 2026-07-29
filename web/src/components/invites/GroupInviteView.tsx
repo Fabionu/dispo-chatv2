@@ -48,10 +48,10 @@ export default function GroupInviteView({ invite, onAccepted, onDeclined }: Prop
       {/* Header — mirrors ChatView / ConnectionRequestView */}
       <header className="h-[var(--header-height)] flex items-center justify-between px-5 shrink-0">
         <div className="min-w-0">
-          <div className="text-[0.84375rem] font-semibold truncate">{title}</div>
-          <div className="text-[0.6875rem] text-muted truncate">Vehicle group invitation</div>
+          <div className="text-lg font-semibold truncate">{title}</div>
+          <div className="text-xs text-muted truncate">Vehicle group invitation</div>
         </div>
-        <span className="font-mono text-[0.6875rem] text-muted border border-white/[0.08] rounded-chip px-2 py-0.5 shrink-0">
+        <span className="font-mono text-xs text-muted border border-white/8 rounded-chip px-2 py-0.5 shrink-0">
           Pending
         </span>
       </header>
@@ -67,8 +67,8 @@ export default function GroupInviteView({ invite, onAccepted, onDeclined }: Prop
             <span className="eyebrow text-faint">Group invitation</span>
           </div>
 
-          <h2 className="mt-2 text-[1.3125rem] font-semibold tracking-[-0.3px] leading-tight">{title}</h2>
-          <div className="mt-1 text-[0.8125rem] text-muted">
+          <h2 className="mt-2 text-3xl font-semibold tracking-[-0.3px] leading-tight">{title}</h2>
+          <div className="mt-1 text-base text-muted">
             Invited by {invite.invitedByName}
           </div>
 
@@ -79,7 +79,7 @@ export default function GroupInviteView({ invite, onAccepted, onDeclined }: Prop
             </div>
           )}
 
-          <div className="mt-5 text-[0.6875rem] text-faint">Invited {formatDay(invite.createdAt)}</div>
+          <div className="mt-5 text-xs text-faint">Invited {formatDay(invite.createdAt)}</div>
         </div>
       </div>
 
@@ -87,19 +87,19 @@ export default function GroupInviteView({ invite, onAccepted, onDeclined }: Prop
           separate footer surface or divider, so it blends into the page. */}
       <div className="shrink-0 px-6 py-3.5">
         <div className="mx-auto w-full max-w-[27.5rem]">
-          {error && <div className="text-[0.71875rem] text-alert text-center mb-2">{error}</div>}
+          {error && <div className="text-sm text-alert text-center mb-2">{error}</div>}
           <div className="flex items-center gap-2.5">
             <button
               onClick={() => void decline()}
               disabled={busy !== null}
-              className="flex-1 h-10 rounded-btn border border-white/[0.14] text-text text-[0.8125rem] font-medium hover:bg-white/[0.04] disabled:opacity-50 transition-colors"
+              className="flex-1 h-10 rounded-btn border border-white/16 text-text text-base font-medium hover:bg-white/4 disabled:opacity-50 transition-colors"
             >
               {busy === 'decline' ? 'Declining…' : 'Decline'}
             </button>
             <button
               onClick={() => void accept()}
               disabled={busy !== null}
-              className="flex-1 h-10 rounded-btn bg-text text-bg text-[0.8125rem] font-semibold hover:bg-text/90 disabled:opacity-50 transition-colors"
+              className="flex-1 h-10 rounded-btn bg-text text-bg text-base font-semibold hover:bg-text/90 disabled:opacity-50 transition-colors"
             >
               {busy === 'accept' ? 'Accepting…' : 'Accept'}
             </button>
@@ -112,9 +112,9 @@ export default function GroupInviteView({ invite, onAccepted, onDeclined }: Prop
 
 function PlateCard({ label, value }: { label: string; value?: string }) {
   return (
-    <div className="rounded-card border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-left">
+    <div className="rounded-card border border-white/8 bg-white/2 px-3 py-2 text-left">
       <div className="eyebrow text-faint mb-1">{label}</div>
-      <div className="font-mono text-[0.8125rem] text-text truncate">{value || '—'}</div>
+      <div className="font-mono text-base text-text truncate">{value || '—'}</div>
     </div>
   )
 }

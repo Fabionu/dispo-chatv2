@@ -37,7 +37,7 @@ export default function PinnedBar({ messages, onJump, onUnpin }: Props) {
   const visible = expanded ? pins : pins.slice(0, 1)
 
   return (
-    <div className="shrink-0 border-b border-white/[0.06] bg-rail/50">
+    <div className="shrink-0 border-b border-white/6 bg-rail/50">
       <div className="pr-[var(--chat-scrollbar-gutter)]">
         <div className="chat-column">
           <div className="flex items-start gap-3 py-2">
@@ -45,7 +45,7 @@ export default function PinnedBar({ messages, onJump, onUnpin }: Props) {
                 sized to the row height so it centres against the first pin. */}
             <div className="flex h-7 items-center gap-1.5 text-active shrink-0">
               <Pin size="0.8125rem" strokeWidth={2} className="fill-current" />
-              <span className="text-[0.75rem] font-semibold leading-none tracking-[0.01em]">
+              <span className="text-sm font-semibold leading-none tracking-[0.01em]">
                 Pinned{multiple ? ` · ${pins.length}` : ''}
               </span>
             </div>
@@ -60,13 +60,13 @@ export default function PinnedBar({ messages, onJump, onUnpin }: Props) {
                     type="button"
                     onClick={() => onJump(m.id)}
                     title="Jump to message"
-                    className="min-w-0 flex-1 flex h-7 items-center rounded-chip -ml-1.5 px-1.5 hover:bg-white/[0.05] transition-colors"
+                    className="min-w-0 flex-1 flex h-7 items-center rounded-chip -ml-1.5 px-1.5 hover:bg-white/6 transition-colors"
                   >
-                    <span className="text-[0.8125rem] font-medium text-text/90 shrink-0 leading-5">
+                    <span className="text-base font-medium text-text/90 shrink-0 leading-5">
                       {m.authorName}
                     </span>
                     <span className="text-faint mx-1.5 shrink-0 leading-5">—</span>
-                    <span className="text-[0.8125rem] text-muted truncate min-w-0 leading-5">
+                    <span className="text-base text-muted truncate min-w-0 leading-5">
                       {snippetFor(m)}
                     </span>
                   </button>
@@ -75,7 +75,7 @@ export default function PinnedBar({ messages, onJump, onUnpin }: Props) {
                     onClick={() => onUnpin(m)}
                     aria-label="Unpin message"
                     title="Unpin"
-                    className="h-6 w-6 inline-flex items-center justify-center rounded-full text-faint hover:text-text hover:bg-white/[0.06] transition-colors shrink-0 opacity-0 group-hover/pin:opacity-100 focus:opacity-100"
+                    className="h-6 w-6 inline-flex items-center justify-center rounded-full text-faint hover:text-text hover:bg-white/6 transition-colors shrink-0 opacity-0 group-hover/pin:opacity-100 focus:opacity-100"
                   >
                     <X size="0.8125rem" strokeWidth={2} />
                   </button>
@@ -91,7 +91,7 @@ export default function PinnedBar({ messages, onJump, onUnpin }: Props) {
                 onClick={() => setExpanded((v) => !v)}
                 aria-label={expanded ? 'Collapse pinned' : 'Show all pinned'}
                 aria-expanded={expanded}
-                className="h-7 w-7 inline-flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] transition-colors shrink-0"
+                className="h-7 w-7 inline-flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 transition-colors shrink-0"
               >
                 <ChevronDown
                   size="0.9375rem"

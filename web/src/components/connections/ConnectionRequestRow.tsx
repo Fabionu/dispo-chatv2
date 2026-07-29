@@ -29,8 +29,8 @@ export default function ConnectionRequestRow({ connection, selected, size, onCli
       }}
       className={`w-full flex items-center rounded-btn text-left transition-colors ${
         selected
-          ? 'bg-white/[0.075] text-text'
-          : 'text-muted hover:bg-white/[0.07] hover:text-text'
+          ? 'bg-white/8 text-text'
+          : 'text-muted hover:bg-white/8 hover:text-text'
       }`}
     >
       <IdentitySlot>
@@ -50,7 +50,7 @@ export default function ConnectionRequestRow({ connection, selected, size, onCli
           >
             {peer.email}
           </span>
-          <span className="shrink-0 h-[1.0625rem] px-1.5 rounded-full bg-white/[0.07] text-muted text-[0.625rem] font-semibold leading-none flex items-center justify-center">
+          <span className="shrink-0 h-[1.0625rem] px-1.5 rounded-full bg-white/8 text-muted text-2xs font-semibold leading-none flex items-center justify-center">
             Request
           </span>
         </span>

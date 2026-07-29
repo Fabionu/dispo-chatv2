@@ -54,7 +54,7 @@ export default function ConnectionRequestsSection({
       <button
         onClick={toggle}
         aria-expanded={open}
-        className="w-full flex items-center gap-1.5 px-2 mb-1.5 py-0.5 rounded-chip hover:bg-white/[0.05] transition-colors"
+        className="w-full flex items-center gap-1.5 px-2 mb-1.5 py-0.5 rounded-chip hover:bg-white/6 transition-colors"
       >
         <ChevronDown
           size="0.6875rem"
@@ -68,7 +68,7 @@ export default function ConnectionRequestsSection({
           Connection requests
         </span>
         {count > 0 && (
-          <span className="font-mono text-[0.625rem] font-semibold bg-text text-bg rounded-full min-w-[0.9375rem] h-[0.9375rem] px-1 flex items-center justify-center shrink-0">
+          <span className="font-mono text-2xs font-semibold bg-text text-bg rounded-full min-w-[0.9375rem] h-[0.9375rem] px-1 flex items-center justify-center shrink-0">
             {count}
           </span>
         )}
@@ -81,7 +81,7 @@ export default function ConnectionRequestsSection({
               error — shown above whatever rows we already had, so a failed
               refresh never hides existing data. */}
           {error && (
-            <div className="flex items-center justify-between gap-2 px-2 py-1 text-[0.75rem] leading-[1.45]">
+            <div className="flex items-center justify-between gap-2 px-2 py-1 text-sm leading-[1.45]">
               <span className="text-alert">Couldn’t load requests.</span>
               <button
                 type="button"

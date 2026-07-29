@@ -163,7 +163,7 @@ export default function ImageLightbox({ src, title, onClose }: Props) {
       onClick={onClose}
     >
       <div className="flex items-center justify-between gap-3 px-2 py-1.5" onClick={stop}>
-        <div className="text-[0.78125rem] text-text truncate flex-1 min-w-0">{title}</div>
+        <div className="text-base text-text truncate flex-1 min-w-0">{title}</div>
         <IconButton label="Close" onClick={onClose}>
           <X size="1.125rem" strokeWidth={1.8} />
         </IconButton>

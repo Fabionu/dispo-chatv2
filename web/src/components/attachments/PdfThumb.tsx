@@ -53,7 +53,7 @@ export default function PdfThumb({ attachmentId, url }: Props) {
   return (
     <div ref={ref} className="absolute inset-0 pointer-events-none">
       {inView && !src && !failed && (
-        <div className="absolute inset-0 bg-white/[0.03] animate-pulse" />
+        <div className="absolute inset-0 bg-white/4 animate-pulse" />
       )}
       {src && (
         <>

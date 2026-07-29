@@ -50,14 +50,14 @@ export default function MentionPicker({ members, activeIndex, onHover, onSelect 
             }}
             onMouseEnter={() => onHover(i)}
             className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 text-left transition-colors ${
-              active ? 'bg-white/[0.07]' : 'hover:bg-white/[0.03]'
+              active ? 'bg-white/8' : 'hover:bg-white/4'
             }`}
           >
             <Avatar userId={m.id} name={m.displayName} size={24} />
             <span className="min-w-0 flex-1">
-              <span className="block text-[0.78125rem] text-text truncate">{m.displayName}</span>
+              <span className="block text-base text-text truncate">{m.displayName}</span>
               {m.workspace && (
-                <span className="block text-[0.65625rem] text-faint truncate">{m.workspace}</span>
+                <span className="block text-xs text-faint truncate">{m.workspace}</span>
               )}
             </span>
             <AtSign size="0.75rem" strokeWidth={1.8} className="text-faint shrink-0" />

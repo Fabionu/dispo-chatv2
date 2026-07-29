@@ -45,14 +45,14 @@ export default function MessageActionsPanel({ actions, mine, onClose }: Props) {
       // rounded-[1rem] — the bubble's own outer radius (shapeMine/shapeOther),
       // so the strip reads as that bubble's footer, not a foreign card.
       className={`mt-1 flex w-max items-center gap-0.5 rounded-[1rem] border px-1 py-1 ${
-        mine ? 'bg-bubble-own border-white/[0.07]' : 'bg-surface-2 border-white/[0.06]'
+        mine ? 'bg-bubble-own border-white/8' : 'bg-surface-2 border-white/6'
       }`}
     >
       {actions.map((a, i) => {
         const alert = a.tone === 'alert'
         return (
           <Fragment key={i}>
-            {a.separator && <span aria-hidden className="mx-0.5 h-4 w-px bg-white/[0.08]" />}
+            {a.separator && <span aria-hidden className="mx-0.5 h-4 w-px bg-white/8" />}
             <button
               type="button"
               role="menuitem"
@@ -69,7 +69,7 @@ export default function MessageActionsPanel({ actions, mine, onClose }: Props) {
               className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-btn transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 disabled:opacity-30 disabled:cursor-default disabled:hover:bg-transparent ${
                 alert
                   ? 'text-alert hover:bg-alert/10'
-                  : 'text-muted hover:bg-white/[0.06] hover:text-text'
+                  : 'text-muted hover:bg-white/6 hover:text-text'
               }`}
             >
               {a.icon}

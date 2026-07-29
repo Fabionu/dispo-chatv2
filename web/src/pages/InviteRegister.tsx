@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext'
 import { api, ApiError } from '../lib/api'
 import type { InviteValidation } from '../lib/types'
 import { ROLE_LABEL } from '../components/settings/ProfileSidebarPanel'
+import VerificationNotice from '../components/auth/VerificationNotice'
 
 type Props = { token: string }
 
@@ -25,12 +26,20 @@ export default function InviteRegister({ token }: Props) {
   const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [verification, setVerification] = useState<{
+    email: string
+    emailSent: boolean
+  } | null>(null)
 
   useEffect(() => {
     let cancelled = false
     api.invite
       .validate(token)
-      .then((v) => !cancelled && setValidation(v))
+      .then((v) => {
+        if (cancelled) return
+        setValidation(v)
+        if (v.status === 'valid' && v.recipientEmail) setEmail(v.recipientEmail)
+      })
       .catch(() => !cancelled && setValidation({ status: 'invalid' }))
       .finally(() => !cancelled && setChecking(false))
     return () => {
@@ -47,7 +56,11 @@ export default function InviteRegister({ token }: Props) {
     }
     setSubmitting(true)
     try {
-      await api.invite.accept(token, { email, password, displayName })
+      const result = await api.invite.accept(token, { email, password, displayName })
+      if ('verificationRequired' in result) {
+        setVerification({ email: result.email, emailSent: result.emailSent })
+        return
+      }
       // Account created + signed in (cookie set). Drop the invite path and let
       // the auth gate swap to the workspace.
       window.history.replaceState({}, '', '/')
@@ -60,7 +73,9 @@ export default function InviteRegister({ token }: Props) {
         } else {
           setError(
             err.code === 'email_taken'
-              ? 'An account with that email already exists in this company.'
+              ? 'An account with that email already exists.'
+              : err.code === 'invite_email_mismatch'
+                ? 'Use the email address this invitation was sent to.'
               : err.code === 'weak_password'
                 ? 'Password must be at least 8 characters.'
                 : err.code === 'too_many_requests'
@@ -78,25 +93,38 @@ export default function InviteRegister({ token }: Props) {
     }
   }
 
+  if (verification) {
+    return (
+      <VerificationNotice
+        email={verification.email}
+        emailSent={verification.emailSent}
+        onBack={() => {
+          window.history.replaceState({}, '', '/')
+          window.location.reload()
+        }}
+      />
+    )
+  }
+
   return (
     <div className="min-h-screen w-full bg-bg text-text flex flex-col">
       <div className="px-8 sm:px-12 lg:px-16 py-8 flex items-center gap-3">
-        <div className="h-9 w-9 rounded-card border border-white/[0.1] bg-white/[0.03] flex items-center justify-center">
+        <div className="h-9 w-9 rounded-card border border-white/10 bg-white/4 flex items-center justify-center">
           <Box size="1.0625rem" strokeWidth={1.5} />
         </div>
-        <div className="text-[0.9375rem] font-semibold tracking-[-0.2px]">Dispo-chat</div>
+        <div className="text-xl font-semibold tracking-[-0.2px]">Dispo-chat</div>
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center px-6 pb-12">
         <div className="w-full max-w-[26.25rem]">
           {checking ? (
-            <div className="flex items-center justify-center gap-2 text-muted text-[0.8125rem] py-16">
+            <div className="flex items-center justify-center gap-2 text-muted text-base py-16">
               <Loader2 size="1rem" className="animate-spin" /> Checking invite…
             </div>
           ) : validation?.status === 'valid' ? (
             <>
-              <h1 className="text-[1.375rem] font-semibold tracking-[-0.2px] mb-2">Join your team</h1>
-              <p className="text-muted text-[0.8125rem] mb-7">
+              <h1 className="text-3xl font-semibold tracking-[-0.2px] mb-2">Join your team</h1>
+              <p className="text-muted text-base mb-7">
                 Create your account to join{' '}
                 <span className="text-text font-medium">{validation.companyName}</span> on Dispo-chat.
               </p>
@@ -107,15 +135,15 @@ export default function InviteRegister({ token }: Props) {
                     role they'll have. */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[0.78125rem] text-text mb-1.5">Company</label>
-                    <div className="flex items-center gap-2 w-full bg-white/[0.03] border border-white/[0.08] rounded-btn px-3 py-2.5 text-[0.84375rem] text-muted">
+                    <label className="block text-base text-text mb-1.5">Company</label>
+                    <div className="flex items-center gap-2 w-full bg-white/4 border border-white/8 rounded-btn px-3 py-2.5 text-lg text-muted">
                       <Building2 size="0.9375rem" strokeWidth={1.6} className="text-faint shrink-0" />
                       <span className="truncate">{validation.companyName}</span>
                     </div>
                   </div>
                   <div>
-                    <label className="block text-[0.78125rem] text-text mb-1.5">Role</label>
-                    <div className="flex items-center gap-2 w-full bg-white/[0.03] border border-white/[0.08] rounded-btn px-3 py-2.5 text-[0.84375rem] text-muted">
+                    <label className="block text-base text-text mb-1.5">Role</label>
+                    <div className="flex items-center gap-2 w-full bg-white/4 border border-white/8 rounded-btn px-3 py-2.5 text-lg text-muted">
                       <UserCog size="0.9375rem" strokeWidth={1.6} className="text-faint shrink-0" />
                       <span className="truncate">{ROLE_LABEL[validation.role]}</span>
                     </div>
@@ -139,11 +167,12 @@ export default function InviteRegister({ token }: Props) {
                   onChange={setEmail}
                   placeholder="Type your email…"
                   autoComplete="email"
+                  readOnly={Boolean(validation.recipientEmail)}
                   required
                 />
 
                 <div>
-                  <label className="block text-[0.78125rem] text-text mb-1.5" htmlFor="password">
+                  <label className="block text-base text-text mb-1.5" htmlFor="password">
                     Password
                   </label>
                   <div className="relative">
@@ -155,7 +184,7 @@ export default function InviteRegister({ token }: Props) {
                       placeholder="At least 8 characters"
                       autoComplete="new-password"
                       required
-                      className="w-full bg-transparent border border-white/[0.08] rounded-btn pl-3 pr-10 py-2.5 text-[0.84375rem] focus:outline-none focus:border-white/[0.22] transition-colors"
+                      className="w-full bg-transparent border border-white/8 rounded-btn pl-3 pr-10 py-2.5 text-lg focus:outline-none focus:border-white/20 transition-colors"
                     />
                     <button
                       type="button"
@@ -181,7 +210,7 @@ export default function InviteRegister({ token }: Props) {
                 />
 
                 {error && (
-                  <div className="text-[0.78125rem] text-alert border border-alert/30 bg-alert/5 rounded-btn px-3 py-2">
+                  <div className="text-base text-alert border border-alert/30 bg-alert/5 rounded-btn px-3 py-2">
                     {error}
                   </div>
                 )}
@@ -189,7 +218,7 @@ export default function InviteRegister({ token }: Props) {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full mt-2 bg-text text-bg font-semibold text-[0.84375rem] py-3 rounded-btn hover:bg-text/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full mt-2 bg-text text-bg font-semibold text-lg py-3 rounded-btn hover:bg-text/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {submitting && <Loader2 size="0.9375rem" strokeWidth={2.2} className="animate-spin" />}
                   {submitting ? 'Creating account…' : 'Create account'}
@@ -202,7 +231,7 @@ export default function InviteRegister({ token }: Props) {
         </div>
       </div>
 
-      <div className="flex items-center justify-center gap-2 text-[0.71875rem] text-muted pb-8">
+      <div className="flex items-center justify-center gap-2 text-sm text-muted pb-8">
         <Lock size="0.6875rem" strokeWidth={1.5} />
         <span>Encrypted connection · SOC 2 Type II · GDPR compliant</span>
       </div>
@@ -219,7 +248,7 @@ function DeadLink({ status }: { status: 'used' | 'expired' | 'invalid' }) {
     },
     expired: {
       title: 'This invite link has expired',
-      body: 'Invite links expire 15 minutes after they’re created. Ask your company admin for a fresh one.',
+      body: 'Invite links expire 48 hours after they’re created. Ask your company admin for a fresh one.',
     },
     invalid: {
       title: 'This invite link isn’t valid',
@@ -232,11 +261,11 @@ function DeadLink({ status }: { status: 'used' | 'expired' | 'invalid' }) {
       <div className="mx-auto mb-4 h-11 w-11 rounded-full border border-alert/30 bg-alert/10 flex items-center justify-center text-alert">
         <TriangleAlert size="1.25rem" strokeWidth={1.8} />
       </div>
-      <h1 className="text-[1.1875rem] font-semibold tracking-[-0.2px] mb-2">{copy.title}</h1>
-      <p className="text-muted text-[0.8125rem] leading-[1.55] mb-6">{copy.body}</p>
+      <h1 className="text-2xl font-semibold tracking-[-0.2px] mb-2">{copy.title}</h1>
+      <p className="text-muted text-base leading-[1.55] mb-6">{copy.body}</p>
       <a
         href="/"
-        className="inline-flex items-center justify-center bg-text text-bg font-semibold text-[0.8125rem] px-5 py-2.5 rounded-btn hover:bg-text/90 transition-colors"
+        className="inline-flex items-center justify-center bg-text text-bg font-semibold text-base px-5 py-2.5 rounded-btn hover:bg-text/90 transition-colors"
       >
         Go to sign in
       </a>
@@ -253,6 +282,7 @@ function Field({
   type = 'text',
   autoComplete,
   required,
+  readOnly = false,
 }: {
   id: string
   label: string
@@ -262,10 +292,11 @@ function Field({
   type?: string
   autoComplete?: string
   required?: boolean
+  readOnly?: boolean
 }) {
   return (
     <div>
-      <label className="block text-[0.78125rem] text-text mb-1.5" htmlFor={id}>
+      <label className="block text-base text-text mb-1.5" htmlFor={id}>
         {label}
       </label>
       <input
@@ -276,7 +307,8 @@ function Field({
         placeholder={placeholder}
         autoComplete={autoComplete}
         required={required}
-        className="w-full bg-transparent border border-white/[0.08] rounded-btn px-3 py-2.5 text-[0.84375rem] focus:outline-none focus:border-white/[0.22] transition-colors"
+        readOnly={readOnly}
+        className="w-full bg-transparent border border-white/8 rounded-btn px-3 py-2.5 text-lg focus:outline-none focus:border-white/20 transition-colors"
       />
     </div>
   )

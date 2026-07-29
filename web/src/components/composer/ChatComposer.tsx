@@ -387,7 +387,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           drop the selection before the wrap runs). Hidden while the @-mention
           picker is open to avoid stacking two popovers. */}
       {hasSelection && !pickerOpen && !tripOpen && (
-        <div className="absolute left-1/2 -translate-x-1/2 bottom-[calc(100%+8px)] z-20 flex items-center gap-0.5 rounded-chip border border-white/[0.12] bg-surface-2 px-1 py-1 shadow-[0_2px_12px_rgba(0,0,0,0.5)]">
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-[calc(100%+8px)] z-20 flex items-center gap-0.5 rounded-chip border border-white/10 bg-surface-2 px-1 py-1 shadow-raised">
           <FormatButton label="Bold" shortcut="Ctrl/Cmd+B" onClick={() => applyFormat('*')}>
             <Bold size="0.9375rem" strokeWidth={2.4} />
           </FormatButton>
@@ -395,7 +395,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
             <Italic size="0.9375rem" strokeWidth={2.2} />
           </FormatButton>
           {/* Downward caret so it reads as a tooltip anchored to the input. */}
-          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-px h-2 w-2 rotate-45 border-r border-b border-white/[0.12] bg-surface-2" />
+          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-px h-2 w-2 rotate-45 border-r border-b border-white/10 bg-surface-2" />
         </div>
       )}
       {replyContext && (
@@ -454,7 +454,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           aria-label={editContext ? 'Save edit' : 'Send message'}
           className={`h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 flex items-center justify-center rounded-full transition-colors ${
             disabled
-              ? 'bg-white/[0.07] text-faint cursor-default'
+              ? 'bg-white/8 text-faint cursor-default'
               : 'bg-text text-bg hover:bg-white'
           }`}
         >
@@ -485,7 +485,7 @@ function FormatButton({
       title={`${label} (${shortcut})`}
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
-      className="h-7 w-7 flex items-center justify-center rounded-[0.1875rem] text-muted hover:text-text hover:bg-white/[0.08] transition-colors"
+      className="h-7 w-7 flex items-center justify-center rounded-[0.1875rem] text-muted hover:text-text hover:bg-white/8 transition-colors"
     >
       {children}
     </button>

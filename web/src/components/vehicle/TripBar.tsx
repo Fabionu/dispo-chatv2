@@ -22,20 +22,20 @@ export default function TripBar({ trip, onOpen }: { trip: TripSummary; onOpen: (
       onClick={onOpen}
       title="View trip details"
       style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 2.4fr) minmax(0, 1fr)' }}
-      className="group/tripbar shrink-0 mx-3 mb-1.5 h-11 px-3.5 grid items-center gap-3 text-left rounded-card bg-white/[0.03] hover:bg-white/[0.05] active:bg-white/[0.06] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+      className="group/tripbar shrink-0 mx-3 mb-1.5 h-11 px-3.5 grid items-center gap-3 text-left rounded-card bg-white/4 hover:bg-white/6 active:bg-white/6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
     >
       {/* Status + completion stay in the left track. */}
       <span className="flex items-center gap-2.5 min-w-0 justify-self-start">
         {trip.progress && <ProgressRing progress={trip.progress} tone={trip.statusTone} />}
         <span
-          className={`truncate text-[0.78125rem] font-medium ${TONE_TEXT[trip.statusTone]}`}
+          className={`truncate text-base font-medium ${TONE_TEXT[trip.statusTone]}`}
         >
           {trip.statusLabel}
         </span>
       </span>
 
       {/* Loading, intermediate, and unloading stops remain one centered route. */}
-      <span className="min-w-0 w-full flex items-center justify-center text-[0.78125rem]">
+      <span className="min-w-0 w-full flex items-center justify-center text-base">
         {routePlaces.length > 0 && (
           <span className="inline-flex max-w-full min-w-0 items-center justify-center gap-2 overflow-hidden">
             {routePlaces.map((place, index) => (
@@ -57,7 +57,7 @@ export default function TripBar({ trip, onOpen }: { trip: TripSummary; onOpen: (
       {/* Order / client + open affordance stay in the right track. */}
       <span className="flex items-center gap-2 min-w-0 justify-self-end text-faint">
         {orderClient && (
-          <span className="hidden lg:block max-w-[14rem] truncate text-[0.75rem] text-muted">
+          <span className="hidden lg:block max-w-[14rem] truncate text-sm text-muted">
             {orderClient}
           </span>
         )}
@@ -123,7 +123,7 @@ function ProgressRing({ progress, tone }: { progress: TripProgress; tone: ChipTo
           strokeDashoffset={C * (1 - pct)}
         />
       </svg>
-      <span className="absolute text-[0.5625rem] font-semibold tabular-nums text-text">
+      <span className="absolute text-2xs font-semibold tabular-nums text-text">
         {label}
       </span>
     </span>

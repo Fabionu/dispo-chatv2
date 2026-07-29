@@ -30,15 +30,15 @@ export default function TripMentionPicker({ reference, subtitle, onSelect }: Pro
           e.preventDefault()
           onSelect()
         }}
-        className="w-full flex items-center gap-2.5 px-2.5 py-1.5 text-left bg-white/[0.07] transition-colors"
+        className="w-full flex items-center gap-2.5 px-2.5 py-1.5 text-left bg-white/8 transition-colors"
       >
         <span className="h-6 w-6 rounded-full bg-active/15 text-active flex items-center justify-center shrink-0">
           <Hash size="0.75rem" strokeWidth={2.2} />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[0.78125rem] text-text truncate">Trip #{reference}</span>
+          <span className="block text-base text-text truncate">Trip #{reference}</span>
           {subtitle && (
-            <span className="block text-[0.65625rem] text-faint truncate">{subtitle}</span>
+            <span className="block text-xs text-faint truncate">{subtitle}</span>
           )}
         </span>
       </button>

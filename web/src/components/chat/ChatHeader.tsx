@@ -103,17 +103,17 @@ export default function ChatHeader({
               onClick={() =>
                 onOpenProfile(group.directPeer?.id ?? '', group.directPeer?.name ?? groupLabel(group))
               }
-              className="block max-w-full text-left text-[1rem] font-semibold truncate leading-tight hover:underline underline-offset-2 focus-visible:outline-none focus-visible:underline"
+              className="block max-w-full text-left text-xl font-semibold truncate leading-tight hover:underline underline-offset-2 focus-visible:outline-none focus-visible:underline"
             >
               {groupLabel(group)}
             </button>
           ) : (
-            <div className="text-[1rem] font-semibold truncate leading-tight">{groupLabel(group)}</div>
+            <div className="text-xl font-semibold truncate leading-tight">{groupLabel(group)}</div>
           )}
           <div
             role={typingText ? 'status' : undefined}
             aria-live={typingText ? 'polite' : undefined}
-            className={`text-[0.8125rem] truncate leading-tight mt-0.5 ${typingText ? 'text-active font-medium' : 'text-muted'}`}
+            className={`text-base truncate leading-tight mt-0.5 ${typingText ? 'text-active font-medium' : 'text-muted'}`}
           >
             {typingText || subtitle}
           </div>
@@ -136,7 +136,7 @@ export default function ChatHeader({
         {searchOpen && (
           <div
             data-search-region
-            className="flex items-center gap-1 h-9 pl-3 pr-1 mr-0.5 rounded-full border border-white/[0.14] bg-surface-2/80 focus-within:border-white/[0.24]"
+            className="flex items-center gap-1 h-9 pl-3 pr-1 mr-0.5 rounded-full border border-white/16 bg-surface-2/80 focus-within:border-white/20"
           >
             <input
               ref={searchInputRef}
@@ -147,7 +147,7 @@ export default function ChatHeader({
               }}
               placeholder="Search messages…"
               aria-label="Search this conversation"
-              className="w-40 sm:w-52 bg-transparent text-[0.8125rem] outline-none placeholder:text-muted"
+              className="w-40 sm:w-52 bg-transparent text-base outline-none placeholder:text-muted"
             />
             {searchQuery && (
               <button
@@ -156,7 +156,7 @@ export default function ChatHeader({
                   searchInputRef.current?.focus()
                 }}
                 aria-label="Clear search"
-                className="h-6 w-6 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.08] transition-colors shrink-0"
+                className="h-6 w-6 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/8 transition-colors shrink-0"
               >
                 <X size="0.875rem" strokeWidth={2} />
               </button>
@@ -172,8 +172,8 @@ export default function ChatHeader({
           onClick={() => (searchOpen ? onCloseSearch() : onOpenSearch())}
           className={`h-9 w-9 flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
             searchOpen
-              ? 'text-text bg-white/[0.06]'
-              : 'text-muted hover:text-text hover:bg-white/[0.05]'
+              ? 'text-text bg-white/6'
+              : 'text-muted hover:text-text hover:bg-white/6'
           }`}
         >
           <Search size="1.1875rem" strokeWidth={1.8} />

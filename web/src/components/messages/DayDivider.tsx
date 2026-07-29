@@ -15,7 +15,7 @@ export default function DayDivider({
   const day = formatDay(iso)
   return (
     <div className="flex justify-center py-3">
-      <span className="inline-flex items-center rounded-full bg-white/[0.03] px-2.5 py-0.5 text-[0.6875rem] leading-[1.5] text-faint">
+      <span className="inline-flex items-center rounded-full bg-white/4 px-2.5 py-0.5 text-xs leading-[1.5] text-faint">
         {conversationStart ? `Conversation started · ${day}` : day}
       </span>
     </div>

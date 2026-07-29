@@ -91,14 +91,14 @@ export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
         <>
           <button
             onClick={onClose}
-            className="h-8 px-3 text-[0.78125rem] text-muted hover:text-text border border-white/[0.12] rounded-btn transition-colors"
+            className="h-8 px-3 text-base text-muted hover:text-text border border-white/10 rounded-btn transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={() => void submit()}
             disabled={submitting}
-            className="h-8 px-3.5 text-[0.78125rem] font-semibold bg-text text-bg rounded-btn hover:bg-text/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1.5"
+            className="h-8 px-3.5 text-base font-semibold bg-text text-bg rounded-btn hover:bg-text/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1.5"
           >
             {submitting && <Loader2 size="0.8125rem" strokeWidth={2.2} className="animate-spin" />}
             {submitting ? 'Creating…' : 'Create room'}
@@ -145,19 +145,19 @@ export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
           <div>
             <div className="eyebrow mb-2">Add members</div>
             {members.length > 0 ? (
-              <div className="max-h-44 overflow-y-auto rounded-card border border-white/[0.06] py-1">
+              <div className="max-h-44 overflow-y-auto rounded-card border border-white/6 py-1">
                 {members.map((m) => (
                   <label
                     key={m.id}
                     className={`flex items-center gap-2.5 px-2.5 py-1.5 cursor-pointer transition-colors ${
-                      selected.has(m.id) ? 'bg-white/[0.04]' : 'hover:bg-white/[0.03]'
+                      selected.has(m.id) ? 'bg-white/4' : 'hover:bg-white/4'
                     }`}
                   >
                     <Avatar userId={m.id} name={m.displayName} size={26} />
-                    <span className="text-[0.78125rem] text-text flex-1 truncate">
+                    <span className="text-base text-text flex-1 truncate">
                       {m.displayName}
                     </span>
-                    <span className="text-[0.6875rem] text-faint capitalize shrink-0">{m.role}</span>
+                    <span className="text-xs text-faint capitalize shrink-0">{m.role}</span>
                     <input
                       type="checkbox"
                       className="checkbox"
@@ -168,12 +168,12 @@ export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
                 ))}
               </div>
             ) : (
-              <div className="rounded-card border border-white/[0.06] px-3 py-4 flex flex-col items-center text-center">
-                <div className="h-8 w-8 rounded-full border border-white/[0.06] bg-white/[0.03] flex items-center justify-center mb-2">
+              <div className="rounded-card border border-white/6 px-3 py-4 flex flex-col items-center text-center">
+                <div className="h-8 w-8 rounded-full border border-white/6 bg-white/4 flex items-center justify-center mb-2">
                   <Users size="0.875rem" strokeWidth={1.6} className="text-faint" />
                 </div>
-                <p className="text-[0.75rem] text-muted">No one else to add yet</p>
-                <p className="text-[0.6875rem] text-faint mt-0.5">
+                <p className="text-sm text-muted">No one else to add yet</p>
+                <p className="text-xs text-faint mt-0.5">
                   You can invite members to the room later.
                 </p>
               </div>
@@ -182,7 +182,7 @@ export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
         )}
 
         {error && (
-          <div className="text-[0.75rem] text-alert border border-alert/30 bg-alert/5 rounded-card px-3 py-2">
+          <div className="text-sm text-alert border border-alert/30 bg-alert/5 rounded-card px-3 py-2">
             {error}
           </div>
         )}
@@ -202,7 +202,7 @@ function ModalField({
 }) {
   return (
     <div>
-      <label className="block text-[0.75rem] text-text mb-1.5">
+      <label className="block text-sm text-text mb-1.5">
         {label}
         {required && <span className="text-faint"> *</span>}
       </label>

@@ -11,8 +11,8 @@ export const ICON_ACTION_BASE =
   'h-9 w-9 flex items-center justify-center rounded-full transition-colors ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ' +
   'disabled:opacity-30 disabled:cursor-default'
-export const ICON_ACTION_IDLE = 'text-muted hover:text-text hover:bg-white/[0.05]'
-export const ICON_ACTION_ACTIVE = 'text-text bg-white/[0.06]'
+export const ICON_ACTION_IDLE = 'text-muted hover:text-text hover:bg-white/6'
+export const ICON_ACTION_ACTIVE = 'text-text bg-white/6'
 
 // Compact 24×24 sibling of ICON_ACTION_BASE for inline row affordances (e.g. the
 // edit pencil on an EditableRow / stop card) that must stay small enough not to
@@ -22,7 +22,7 @@ export const ICON_ACTION_ACTIVE = 'text-text bg-white/[0.06]'
 // the glyph and any resting-visibility utilities.
 export const ICON_ACTION_SMALL =
   'h-6 w-6 flex items-center justify-center rounded-full text-muted ' +
-  'hover:text-text hover:bg-white/[0.05] ' +
+  'hover:text-text hover:bg-white/6 ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ' +
   'disabled:opacity-30 disabled:cursor-default'
 

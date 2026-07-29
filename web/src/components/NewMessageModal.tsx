@@ -109,14 +109,14 @@ export default function NewMessageModal({ onClose, onOpenGroup }: Props) {
       <div className="space-y-3">
         {/* Search field — the app's standard input recipe (card radius, faint
             fill, calm focus), sized as the modal's primary control. */}
-        <label className="flex items-center gap-2.5 h-9 px-3 rounded-card border border-white/[0.06] bg-white/[0.04] focus-within:border-white/[0.16] focus-within:bg-white/[0.05] transition-colors cursor-text">
+        <label className="flex items-center gap-2.5 h-9 px-3 rounded-card border border-white/6 bg-white/4 focus-within:border-white/16 focus-within:bg-white/6 transition-colors cursor-text">
           <Search size="0.875rem" strokeWidth={1.6} className="text-faint shrink-0" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             autoFocus
             placeholder="Search people…"
-            className="bg-transparent text-[0.8125rem] flex-1 outline-none placeholder:text-faint min-w-0"
+            className="bg-transparent text-base flex-1 outline-none placeholder:text-faint min-w-0"
           />
         </label>
 
@@ -126,8 +126,8 @@ export default function NewMessageModal({ onClose, onOpenGroup }: Props) {
         <div className="max-h-72 min-h-[8.5rem] overflow-y-auto -mx-2 flex flex-col">
           {query.trim().length < 2 ? (
             <EmptyState icon={<Search size="0.9375rem" strokeWidth={1.6} className="text-faint" />}>
-              <p className="text-[0.75rem] text-muted">Start typing to search</p>
-              <p className="text-[0.6875rem] text-faint mt-0.5">
+              <p className="text-sm text-muted">Start typing to search</p>
+              <p className="text-xs text-faint mt-0.5">
                 At least 2 characters — name, email, or company.
               </p>
             </EmptyState>
@@ -137,8 +137,8 @@ export default function NewMessageModal({ onClose, onOpenGroup }: Props) {
             </div>
           ) : searched && results.length === 0 ? (
             <EmptyState icon={<SearchX size="0.9375rem" strokeWidth={1.6} className="text-faint" />}>
-              <p className="text-[0.75rem] text-muted">No people found</p>
-              <p className="text-[0.6875rem] text-faint mt-0.5">
+              <p className="text-sm text-muted">No people found</p>
+              <p className="text-xs text-faint mt-0.5">
                 Try a different name, email, or company.
               </p>
             </EmptyState>
@@ -160,7 +160,7 @@ export default function NewMessageModal({ onClose, onOpenGroup }: Props) {
         </div>
 
         {error && (
-          <div className="text-[0.75rem] text-alert border border-alert/30 bg-alert/5 rounded-card px-3 py-2">
+          <div className="text-sm text-alert border border-alert/30 bg-alert/5 rounded-card px-3 py-2">
             {error}
           </div>
         )}
@@ -175,7 +175,7 @@ export default function NewMessageModal({ onClose, onOpenGroup }: Props) {
 function EmptyState({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-4">
-      <div className="h-9 w-9 rounded-full border border-white/[0.06] bg-white/[0.03] flex items-center justify-center mb-2.5">
+      <div className="h-9 w-9 rounded-full border border-white/6 bg-white/4 flex items-center justify-center mb-2.5">
         {icon}
       </div>
       {children}
@@ -202,11 +202,11 @@ function ResultRow({
   const pending = justRequested || user.connection?.status === 'pending'
 
   return (
-    <div className="flex items-center gap-2.5 px-2 py-2 rounded-card hover:bg-white/[0.04] transition-colors">
+    <div className="flex items-center gap-2.5 px-2 py-2 rounded-card hover:bg-white/4 transition-colors">
       <Avatar userId={user.id} name={user.displayName} size={28} />
       <div className="min-w-0 flex-1">
-        <div className="text-[0.78125rem] text-text truncate">{user.displayName}</div>
-        <div className="text-[0.6875rem] text-faint truncate">
+        <div className="text-base text-text truncate">{user.displayName}</div>
+        <div className="text-xs text-faint truncate">
           {user.sameWorkspace ? 'Your company' : user.workspace.name} · {user.email}
         </div>
       </div>
@@ -216,7 +216,7 @@ function ResultRow({
           {busy ? 'Opening…' : 'Message'}
         </RowButton>
       ) : pending ? (
-        <span className="text-[0.6875rem] text-muted px-2 shrink-0">Request sent</span>
+        <span className="text-xs text-muted px-2 shrink-0">Request sent</span>
       ) : (
         <RowButton busy={busy} disabled={disabled} onClick={onConnect}>
           {busy ? 'Sending…' : 'Connect'}
@@ -243,10 +243,10 @@ function RowButton({
     <button
       onClick={onClick}
       disabled={disabled || busy}
-      className={`shrink-0 text-[0.71875rem] font-medium rounded-btn px-2.5 py-1 transition-colors disabled:opacity-50 ${
+      className={`shrink-0 text-sm font-medium rounded-btn px-2.5 py-1 transition-colors disabled:opacity-50 ${
         primary
           ? 'bg-text text-bg font-semibold hover:bg-text/90'
-          : 'border border-white/[0.14] text-text hover:bg-white/[0.04]'
+          : 'border border-white/16 text-text hover:bg-white/4'
       }`}
     >
       {children}

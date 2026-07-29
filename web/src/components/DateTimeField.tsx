@@ -31,11 +31,11 @@ export function joinPlannedAt(date: string, time: string): string {
 
 // ── Shared styling (matches the Add-trip pill fields) ───────────────────────
 const FIELD_WRAP =
-  'flex items-center rounded-full border border-white/[0.06] bg-white/[0.04] pr-1 transition-colors focus-within:border-white/[0.12] focus-within:bg-white/[0.05]'
+  'flex items-center rounded-full border border-white/6 bg-white/4 pr-1 transition-colors focus-within:border-white/10 focus-within:bg-white/6'
 const FIELD_INPUT =
-  'flex-1 min-w-0 bg-transparent pl-4 pr-1 py-2 text-[0.78125rem] text-text placeholder:text-faint outline-none'
+  'flex-1 min-w-0 bg-transparent pl-4 pr-1 py-2 text-base text-text placeholder:text-faint outline-none'
 const FIELD_BTN =
-  'h-7 w-7 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] transition-colors'
+  'h-7 w-7 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 transition-colors'
 const POPOVER = `absolute z-30 mt-1.5 ${MENU_SURFACE} p-2`
 
 // Close a popover on outside-click or Escape.
@@ -161,25 +161,25 @@ export function DateField({
               type="button"
               onClick={() => shift(-1)}
               aria-label="Previous month"
-              className="h-6 w-6 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
+              className="h-6 w-6 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 transition-colors"
             >
               <ChevronLeft size="0.9375rem" strokeWidth={1.8} />
             </button>
-            <span className="text-[0.78125rem] font-medium text-text tabular-nums">
+            <span className="text-base font-medium text-text tabular-nums">
               {MONTHS[view.m]} {view.y}
             </span>
             <button
               type="button"
               onClick={() => shift(1)}
               aria-label="Next month"
-              className="h-6 w-6 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
+              className="h-6 w-6 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 transition-colors"
             >
               <ChevronRight size="0.9375rem" strokeWidth={1.8} />
             </button>
           </div>
           <div className="grid grid-cols-7 gap-0.5 mb-1">
             {WEEKDAYS.map((w) => (
-              <div key={w} className="h-6 flex items-center justify-center text-[0.625rem] text-faint font-medium">
+              <div key={w} className="h-6 flex items-center justify-center text-2xs text-faint font-medium">
                 {w}
               </div>
             ))}
@@ -193,12 +193,12 @@ export function DateField({
                   key={i}
                   type="button"
                   onClick={() => selectDay(d)}
-                  className={`h-7 rounded-full text-[0.75rem] tabular-nums flex items-center justify-center transition-colors ${
+                  className={`h-7 rounded-full text-sm tabular-nums flex items-center justify-center transition-colors ${
                     isSelected(d)
                       ? 'bg-active text-bg font-semibold'
                       : isToday(d)
-                        ? 'text-active hover:bg-white/[0.06]'
-                        : 'text-text hover:bg-white/[0.06]'
+                        ? 'text-active hover:bg-white/6'
+                        : 'text-text hover:bg-white/6'
                   }`}
                 >
                   {d}
@@ -277,15 +277,15 @@ export function TimeField({
       {open && (
         <div className={`${POPOVER} right-0 flex gap-2`}>
           <div className="flex flex-col">
-            <div className="text-[0.625rem] text-faint font-medium text-center mb-1">Hour</div>
+            <div className="text-2xs text-faint font-medium text-center mb-1">Hour</div>
             <div className="h-44 w-12 overflow-y-auto flex flex-col gap-0.5 pr-1 [scrollbar-width:thin]">
               {HOURS.map((h) => (
                 <button
                   key={h}
                   type="button"
                   onClick={() => setHour(h)}
-                  className={`h-7 shrink-0 rounded-full text-[0.75rem] tabular-nums transition-colors ${
-                    parsed?.h === h ? 'bg-active text-bg font-semibold' : 'text-text hover:bg-white/[0.06]'
+                  className={`h-7 shrink-0 rounded-full text-sm tabular-nums transition-colors ${
+                    parsed?.h === h ? 'bg-active text-bg font-semibold' : 'text-text hover:bg-white/6'
                   }`}
                 >
                   {String(h).padStart(2, '0')}
@@ -294,15 +294,15 @@ export function TimeField({
             </div>
           </div>
           <div className="flex flex-col">
-            <div className="text-[0.625rem] text-faint font-medium text-center mb-1">Min</div>
+            <div className="text-2xs text-faint font-medium text-center mb-1">Min</div>
             <div className="h-44 w-12 overflow-y-auto flex flex-col gap-0.5 [scrollbar-width:thin]">
               {MINUTES.map((min) => (
                 <button
                   key={min}
                   type="button"
                   onClick={() => setMinute(min)}
-                  className={`h-7 shrink-0 rounded-full text-[0.75rem] tabular-nums transition-colors ${
-                    parsed?.min === min ? 'bg-active text-bg font-semibold' : 'text-text hover:bg-white/[0.06]'
+                  className={`h-7 shrink-0 rounded-full text-sm tabular-nums transition-colors ${
+                    parsed?.min === min ? 'bg-active text-bg font-semibold' : 'text-text hover:bg-white/6'
                   }`}
                 >
                   {String(min).padStart(2, '0')}

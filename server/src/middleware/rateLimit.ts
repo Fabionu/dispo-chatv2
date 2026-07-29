@@ -85,7 +85,10 @@ const keyByUserOrIp = (req: Request): string => {
 // ── Limiter specs ────────────────────────────────────────────────────────────
 type Spec = { prefix: string; options: Partial<Options> }
 
-const SPECS: Record<'signin' | 'signup' | 'message' | 'groupCreate' | 'inviteCreate', Spec> = {
+const SPECS: Record<
+  'signin' | 'signup' | 'emailVerification' | 'message' | 'groupCreate' | 'inviteCreate',
+  Spec
+> = {
   // Aggressive on signin — brute-force is the main threat.
   signin: {
     prefix: 'signin:',
@@ -104,6 +107,19 @@ const SPECS: Record<'signin' | 'signup' | 'message' | 'groupCreate' | 'inviteCre
     options: {
       windowMs: 60 * 60 * 1000,
       limit: 5,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      keyGenerator: ipKey,
+      message: { error: 'too_many_requests' },
+    },
+  },
+  // Public verification/resend endpoints: enough room for genuine retries,
+  // low enough to prevent email bombing and token-guessing scripts.
+  emailVerification: {
+    prefix: 'emailverify:',
+    options: {
+      windowMs: 15 * 60 * 1000,
+      limit: 8,
       standardHeaders: 'draft-7',
       legacyHeaders: false,
       keyGenerator: ipKey,
@@ -170,6 +186,7 @@ function delegate(name: keyof typeof SPECS): RequestHandler {
 
 export const signinLimiter = delegate('signin')
 export const signupLimiter = delegate('signup')
+export const emailVerificationLimiter = delegate('emailVerification')
 export const messageLimiter = delegate('message')
 export const groupCreateLimiter = delegate('groupCreate')
 export const inviteCreateLimiter = delegate('inviteCreate')

@@ -28,13 +28,13 @@ export default function Modal({ title, subtitle, onClose, children, footer }: Pr
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="relative w-full max-w-[26.25rem] rounded-modal border border-white/[0.08] bg-surface"
+        className="relative w-full max-w-[26.25rem] rounded-modal border border-white/8 bg-surface"
         style={{ boxShadow: '0 32px 80px rgba(0,0,0,0.65)' }}
       >
-        <header className="flex items-start justify-between px-5 pt-4 pb-3 border-b border-white/[0.06]">
+        <header className="flex items-start justify-between px-5 pt-4 pb-3 border-b border-white/6">
           <div className="min-w-0">
-            <h2 className="text-[0.9375rem] font-semibold tracking-[-0.2px]">{title}</h2>
-            {subtitle && <p className="text-[0.75rem] text-muted mt-0.5">{subtitle}</p>}
+            <h2 className="text-xl font-semibold tracking-[-0.2px]">{title}</h2>
+            {subtitle && <p className="text-sm text-muted mt-0.5">{subtitle}</p>}
           </div>
           <button
             onClick={onClose}
@@ -52,7 +52,7 @@ export default function Modal({ title, subtitle, onClose, children, footer }: Pr
         <div className="px-5 py-4">{children}</div>
 
         {footer && (
-          <div className="px-5 py-3 border-t border-white/[0.06] flex items-center justify-end gap-2">
+          <div className="px-5 py-3 border-t border-white/6 flex items-center justify-end gap-2">
             {footer}
           </div>
         )}

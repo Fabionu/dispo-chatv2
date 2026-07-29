@@ -248,7 +248,7 @@ export default function GroupRow({
           onActionsOpenChange(!menuOpen)
         }}
         className={`h-5 w-5 flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
-          menuOpen ? 'bg-white/[0.08] text-text' : 'text-muted hover:text-text hover:bg-white/[0.06]'
+          menuOpen ? 'bg-white/8 text-text' : 'text-muted hover:text-text hover:bg-white/6'
         }`}
       >
         <ChevronDown
@@ -266,7 +266,10 @@ export default function GroupRow({
 
   return (
     <div className="relative group/row" onContextMenu={openMenuAtCursor}>
-      <button
+      {/* Anchor the disclosure trigger to the fixed-height conversation row.
+          The outer wrapper also contains the expanding action strip. */}
+      <div className="relative">
+        <button
         onClick={onClick}
         style={{
           minHeight: 'var(--sidebar-row-height)',
@@ -278,8 +281,8 @@ export default function GroupRow({
         }}
         className={`w-full flex items-center rounded-btn text-left transition-colors ${
           selected
-            ? 'bg-white/[0.095] text-text'
-            : 'text-muted hover:bg-white/[0.07] hover:text-text'
+            ? 'bg-white/10 text-text'
+            : 'text-muted hover:bg-white/8 hover:text-text'
         }`}
       >
         {/* Identity — shape encodes the conversation type: circle = person,
@@ -299,7 +302,7 @@ export default function GroupRow({
           {peerDot && (
             <span
               title={peerDot.label}
-              className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-bg"
+              className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-sidebar"
               style={{ backgroundColor: peerDot.color }}
             />
           )}
@@ -408,8 +411,9 @@ export default function GroupRow({
             </span>
           </span>
         </span>
-      </button>
-      {rowActions}
+        </button>
+        {rowActions}
+      </div>
 
       {/* The actions themselves: a horizontal strip directly under this row.
           Animated with a 0fr→1fr grid row so the height transitions without a
@@ -450,11 +454,11 @@ export default function GroupRow({
                     a.onSelect()
                   }}
                   className={`flex-1 min-w-0 flex flex-col items-center gap-1 rounded-btn px-1 py-1.5 transition-colors ${
-                    danger ? 'text-alert hover:bg-alert/10' : 'text-muted hover:bg-white/[0.06] hover:text-text'
+                    danger ? 'text-alert hover:bg-alert/10' : 'text-muted hover:bg-white/6 hover:text-text'
                   }`}
                 >
                   {a.icon}
-                  <span className="text-[0.625rem] leading-none truncate max-w-full">
+                  <span className="text-2xs leading-none truncate max-w-full">
                     {confirming ? a.confirmLabel : a.label}
                   </span>
                 </button>

@@ -56,7 +56,7 @@ export default function PointRow({
         <Flag size="0.6875rem" strokeWidth={2.2} />
       </span>
     ) : (
-      <span className="h-5 w-5 shrink-0 rounded-full border border-white/[0.22] bg-white/[0.06] text-[0.625rem] font-semibold flex items-center justify-center">
+      <span className="h-5 w-5 shrink-0 rounded-full border border-white/20 bg-white/6 text-2xs font-semibold flex items-center justify-center">
         {index}
       </span>
     )
@@ -83,8 +83,8 @@ export default function PointRow({
     >
       <div className="shrink-0">{badge}</div>
       <div
-        className={`min-w-0 flex-1 flex items-center gap-1.5 rounded-card border bg-white/[0.04] px-2 py-1.5 transition-colors ${
-          dragging ? 'border-white/[0.16]' : 'border-white/[0.06]'
+        className={`min-w-0 flex-1 flex items-center gap-1.5 rounded-card border bg-white/4 px-2 py-1.5 transition-colors ${
+          dragging ? 'border-white/16' : 'border-white/6'
         }`}
       >
         {draggable && (
@@ -101,19 +101,19 @@ export default function PointRow({
             <button
               onClick={onEdit}
               title="Edit address"
-              className="block w-full text-left text-[0.78125rem] leading-tight truncate hover:text-text transition-colors"
+              className="block w-full text-left text-base leading-tight truncate hover:text-text transition-colors"
             >
               {point.label}
             </button>
           ) : (
-            <div className="text-[0.78125rem] leading-tight truncate" title={point.label}>
+            <div className="text-base leading-tight truncate" title={point.label}>
               {point.label}
             </div>
           )}
           <button
             onClick={copyCoord}
             title="Copy coordinates"
-            className="group flex items-center gap-1 text-[0.65625rem] text-muted hover:text-text transition-colors tabular-nums"
+            className="group flex items-center gap-1 text-xs text-muted hover:text-text transition-colors tabular-nums"
           >
             {coord.lat.toFixed(5)}, {coord.lng.toFixed(5)}
             {copied ? (

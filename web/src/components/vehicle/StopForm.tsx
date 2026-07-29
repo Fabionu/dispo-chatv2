@@ -112,7 +112,7 @@ export default function StopForm({
       <button
         type="button"
         onClick={() => setPhase('type')}
-        className="w-full inline-flex items-center justify-center gap-1.5 rounded-full border border-white/[0.06] bg-white/[0.04] py-2 text-[0.78125rem] text-muted hover:text-text hover:bg-white/[0.06] transition-colors"
+        className="w-full inline-flex items-center justify-center gap-1.5 rounded-full border border-white/6 bg-white/4 py-2 text-base text-muted hover:text-text hover:bg-white/6 transition-colors"
       >
         <Plus size="0.875rem" strokeWidth={2} /> Add stop
       </button>
@@ -122,14 +122,14 @@ export default function StopForm({
   // Type picker — choose what kind of stop before any fields appear.
   if (phase === 'type') {
     return (
-      <div className="rounded-soft border border-white/[0.06] bg-white/[0.02] p-2.5 flex flex-col gap-2">
+      <div className="rounded-soft border border-white/6 bg-white/2 p-2.5 flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <span className="text-[0.6875rem] text-muted">Choose stop type</span>
+          <span className="text-xs text-muted">Choose stop type</span>
           <button
             type="button"
             onClick={() => (editing ? setPhase('form') : setPhase('idle'))}
             aria-label="Back"
-            className="h-6 w-6 flex items-center justify-center rounded-full text-faint hover:text-text hover:bg-white/[0.05] transition-colors"
+            className="h-6 w-6 flex items-center justify-center rounded-full text-faint hover:text-text hover:bg-white/6 transition-colors"
           >
             <X size="0.8125rem" strokeWidth={1.8} />
           </button>
@@ -143,7 +143,7 @@ export default function StopForm({
                 setType(o.value)
                 setPhase('form')
               }}
-              className="h-8 rounded-full border border-white/[0.06] bg-white/[0.04] text-[0.71875rem] text-text hover:bg-white/[0.09] transition-colors"
+              className="h-8 rounded-full border border-white/6 bg-white/4 text-sm text-text hover:bg-white/10 transition-colors"
             >
               {o.label}
             </button>
@@ -156,14 +156,14 @@ export default function StopForm({
   // Form — the stop's fields. The type is shown up top and can be changed (back to
   // the picker) without losing the typed details.
   return (
-    <div className="rounded-soft border border-white/[0.06] bg-white/[0.02] p-2.5 flex flex-col gap-2">
+    <div className="rounded-soft border border-white/6 bg-white/2 p-2.5 flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[0.75rem] font-medium text-text truncate">{labelOf(STOP_TYPES, type)}</span>
+          <span className="text-sm font-medium text-text truncate">{labelOf(STOP_TYPES, type)}</span>
           <button
             type="button"
             onClick={() => setPhase('type')}
-            className="shrink-0 text-[0.6875rem] text-muted hover:text-text transition-colors"
+            className="shrink-0 text-xs text-muted hover:text-text transition-colors"
           >
             Change
           </button>
@@ -172,7 +172,7 @@ export default function StopForm({
           type="button"
           onClick={cancel}
           aria-label={editing ? 'Cancel editing stop' : 'Cancel adding stop'}
-          className="h-6 w-6 flex items-center justify-center rounded-full text-faint hover:text-text hover:bg-white/[0.05] transition-colors"
+          className="h-6 w-6 flex items-center justify-center rounded-full text-faint hover:text-text hover:bg-white/6 transition-colors"
         >
           <X size="0.8125rem" strokeWidth={1.8} />
         </button>
@@ -242,14 +242,14 @@ export default function StopForm({
               onClick={pickOnMap}
               aria-label="Find coordinates on map"
               title="Find on map"
-              className="h-9 w-9 shrink-0 flex items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.04] text-muted hover:text-text hover:bg-white/[0.08] transition-colors"
+              className="h-9 w-9 shrink-0 flex items-center justify-center rounded-full border border-white/6 bg-white/4 text-muted hover:text-text hover:bg-white/8 transition-colors"
             >
               <MapPinned size="1rem" strokeWidth={1.8} />
             </button>
           )}
         </div>
         {coordInvalid && (
-          <span className="text-[0.65625rem] text-faint px-1">
+          <span className="text-xs text-faint px-1">
             Couldn't read these coordinates — they'll be kept as typed.
           </span>
         )}
@@ -267,7 +267,7 @@ export default function StopForm({
         <button
           type="button"
           onClick={cancel}
-          className="h-8 px-3 inline-flex items-center rounded-full text-[0.75rem] text-muted hover:text-text hover:bg-white/[0.04] transition-colors"
+          className="h-8 px-3 inline-flex items-center rounded-full text-sm text-muted hover:text-text hover:bg-white/4 transition-colors"
         >
           Cancel
         </button>
@@ -275,7 +275,7 @@ export default function StopForm({
           type="button"
           onClick={submit}
           disabled={!canSave}
-          className="h-8 px-3.5 inline-flex items-center gap-1.5 rounded-full bg-white/[0.1] text-[0.75rem] font-medium text-text hover:bg-white/[0.16] disabled:opacity-40 disabled:cursor-default transition-colors"
+          className="h-8 px-3.5 inline-flex items-center gap-1.5 rounded-full bg-white/10 text-sm font-medium text-text hover:bg-white/16 disabled:opacity-40 disabled:cursor-default transition-colors"
         >
           {editing ? 'Save stop' : (
             <>

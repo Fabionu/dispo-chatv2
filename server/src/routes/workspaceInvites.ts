@@ -13,6 +13,7 @@ import {
   COMPANY_ROLES,
   DEFAULT_INVITE_ROLE,
 } from '../util/workspaceInvites.js'
+import { sendWorkspaceInviteEmail } from '../email/resend.js'
 
 // The role an invite grants. Constrained to the fixed company-role set; absent
 // on create means the default ('dispatcher'), keeping older clients working.
@@ -50,6 +51,8 @@ type InviteRow = {
   used_at: string | null
   created_by_name: string | null
   used_by_name: string | null
+  recipient_email: string | null
+  email_sent_at: string | null
 }
 
 function mapInvite(r: InviteRow) {
@@ -64,6 +67,8 @@ function mapInvite(r: InviteRow) {
     usedAt: r.used_at,
     createdByName: r.created_by_name,
     usedByName: r.used_by_name,
+    recipientEmail: r.recipient_email,
+    emailSentAt: r.email_sent_at,
   }
 }
 
@@ -78,6 +83,7 @@ workspaceInvitesRouter.get(
     const { workspaceId } = req.session!
     const { rows } = await pool.query<InviteRow>(
       `select wi.id, wi.role, wi.created_at, wi.expires_at, wi.used_at,
+              wi.recipient_email, wi.email_sent_at,
               cu.display_name as created_by_name,
               uu.display_name as used_by_name
          from workspace_invites wi
@@ -93,11 +99,14 @@ workspaceInvitesRouter.get(
 )
 
 // ── POST /api/workspace-invites ──────────────────────────────────────────
-// Generate a single-use link that expires in 15 minutes. Returns the raw token
+// Generate a single-use link that expires in 48 hours. Returns the raw token
 // + ready-to-share URL ONCE; afterwards only status/expiry are visible. The
 // admin picks the role the new member receives (validated against the fixed
 // company-role set); an omitted role falls back to the default for older clients.
-const createInviteSchema = z.object({ role: roleSchema.optional() })
+const createInviteSchema = z.object({
+  role: roleSchema.optional(),
+  recipientEmail: z.string().trim().toLowerCase().email().max(254).optional(),
+})
 
 workspaceInvitesRouter.post(
   '/',
@@ -105,8 +114,12 @@ workspaceInvitesRouter.post(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const parsed = createInviteSchema.safeParse(req.body ?? {})
-    if (!parsed.success) return res.status(400).json({ error: 'invalid_role' })
+    if (!parsed.success) {
+      const invalidEmail = parsed.error.issues.some((issue) => issue.path[0] === 'recipientEmail')
+      return res.status(400).json({ error: invalidEmail ? 'invalid_email' : 'invalid_role' })
+    }
     const role = parsed.data.role ?? DEFAULT_INVITE_ROLE
+    const recipientEmail = parsed.data.recipientEmail ?? null
 
     const { userId, workspaceId } = req.session!
     const token = generateInviteToken()
@@ -118,20 +131,51 @@ workspaceInvitesRouter.post(
       role: string
       created_at: string
       expires_at: string
+      inviter_name: string
+      workspace_name: string
     }>(
-      `insert into workspace_invites (workspace_id, token_hash, created_by, expires_at, role)
-       values ($1, $2, $3, $4, $5)
-       returning id, role, created_at, expires_at`,
-      [workspaceId, tokenHash, userId, expiresAt, role],
+      `with inserted as (
+         insert into workspace_invites (
+           workspace_id, token_hash, created_by, expires_at, role, recipient_email
+         )
+         values ($1, $2, $3, $4, $5, $6)
+         returning id, role, created_at, expires_at
+       )
+       select i.*, u.display_name as inviter_name, w.name as workspace_name
+         from inserted i
+         join users u on u.id = $3
+         join workspaces w on w.id = $1`,
+      [workspaceId, tokenHash, userId, expiresAt, role, recipientEmail],
     )
 
     const row = rows[0]
+    const url = inviteUrl(req, token)
+    let emailSent = false
+    if (recipientEmail) {
+      const delivery = await sendWorkspaceInviteEmail({
+        to: recipientEmail,
+        inviterName: row.inviter_name,
+        companyName: row.workspace_name,
+        roleLabel: role[0].toUpperCase() + role.slice(1),
+        inviteUrl: url,
+        inviteId: row.id,
+      })
+      emailSent = delivery.sent
+      if (emailSent) {
+        await pool.query('update workspace_invites set email_sent_at = now() where id = $1', [
+          row.id,
+        ])
+      }
+    }
+
     res.status(201).json({
       invite: {
         id: row.id,
         role: row.role,
         token,
-        url: inviteUrl(req, token),
+        url,
+        recipientEmail,
+        emailSent,
         status: 'active' as const,
         createdAt: row.created_at,
         expiresAt: row.expires_at,

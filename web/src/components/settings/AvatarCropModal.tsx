@@ -348,7 +348,7 @@ export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
         role="dialog"
         aria-modal="true"
         aria-label="Crop photo"
-        className="relative w-full max-w-[28.75rem] rounded-modal border border-white/[0.08] bg-surface overflow-hidden"
+        className="relative w-full max-w-[28.75rem] rounded-modal border border-white/8 bg-surface overflow-hidden"
         style={{ boxShadow: '0 32px 80px rgba(0,0,0,0.65)' }}
       >
         {/* Header: close (left) · helper title (centre) · replace + rotate
@@ -358,7 +358,7 @@ export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
             <X size="1.0625rem" strokeWidth={1.8} />
           </IconBtn>
           <div className="flex-1 min-w-0 text-center">
-            <span className="text-[0.78125rem] text-muted">Drag image to adjust</span>
+            <span className="text-base text-muted">Drag image to adjust</span>
           </div>
           <IconBtn label="Rotate" side="bottom" onClick={() => void rotate()} disabled={busy}>
             <RotateCw size="1rem" strokeWidth={1.7} />
@@ -475,7 +475,7 @@ export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
         </div>
 
         {error && (
-          <div className="text-[0.71875rem] text-alert text-center px-4 py-2 bg-bg">{error}</div>
+          <div className="text-sm text-alert text-center px-4 py-2 bg-bg">{error}</div>
         )}
       </div>
     </div>
@@ -503,10 +503,10 @@ function IconBtn({
 }) {
   const styles =
     variant === 'accent'
-      ? 'h-12 w-12 rounded-full bg-active text-bg shadow-[0_8px_24px_rgba(0,0,0,0.45)] hover:bg-active/90 focus-visible:ring-2 focus-visible:ring-active/60 disabled:opacity-60'
+      ? 'h-12 w-12 rounded-full bg-active text-bg shadow-overlay hover:bg-active/90 focus-visible:ring-2 focus-visible:ring-active/60 disabled:opacity-60'
       : variant === 'float'
         ? 'h-9 w-9 rounded-full bg-black/45 backdrop-blur border border-pure-white/10 text-pure-white hover:bg-black/65 focus-visible:ring-2 focus-visible:ring-pure-white/40 disabled:opacity-40'
-        : 'h-8 w-8 rounded-full text-muted hover:text-text hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-white/30 disabled:opacity-40 disabled:hover:bg-transparent'
+        : 'h-8 w-8 rounded-full text-muted hover:text-text hover:bg-white/6 focus-visible:ring-2 focus-visible:ring-white/20 disabled:opacity-40 disabled:hover:bg-transparent'
 
   const tip =
     side === 'top'
@@ -528,7 +528,7 @@ function IconBtn({
       </button>
       <span
         role="tooltip"
-        className={`pointer-events-none absolute z-10 whitespace-nowrap rounded-chip border border-white/[0.10] bg-surface px-2 py-1 text-[0.6875rem] text-text opacity-0 transition-opacity duration-100 group-hover:opacity-100 ${tip}`}
+        className={`pointer-events-none absolute z-10 whitespace-nowrap rounded-chip border border-white/10 bg-surface px-2 py-1 text-xs text-text opacity-0 transition-opacity duration-100 group-hover:opacity-100 ${tip}`}
         style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.55)' }}
       >
         {label}

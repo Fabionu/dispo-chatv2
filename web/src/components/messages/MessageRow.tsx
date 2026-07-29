@@ -233,7 +233,7 @@ function MessageRow({
   const shapeOther = `rounded-[1rem] ${
     startNewGroup ? 'rounded-tl-[1rem]' : 'rounded-tl-[0.3125rem]'
   } ${endGroup ? 'rounded-bl-[1rem]' : 'rounded-bl-[0.3125rem]'}`
-  const deletedSkin = `bg-white/[0.02] text-muted italic ${mine ? shapeMine : shapeOther}`
+  const deletedSkin = `bg-white/2 text-muted italic ${mine ? shapeMine : shapeOther}`
   // Bubble skins sit on the raised chat card (`chat` #202020). Incoming uses
   // the next neutral surface step (`surface-2` #303030), which separates it
   // through colour alone — no border or shadow. My own messages use the darker
@@ -323,7 +323,7 @@ function MessageRow({
     const metaCluster = (
       <span className="inline-flex items-center gap-1 shrink-0 leading-none select-none pb-[2px]">
         {edited && (
-          <span className="text-[0.625rem] text-faint italic opacity-0 transition-opacity group-hover/msg:opacity-100">
+          <span className="text-2xs text-faint italic opacity-0 transition-opacity group-hover/msg:opacity-100">
             edited
           </span>
         )}
@@ -337,7 +337,7 @@ function MessageRow({
         )}
         {/* Time is always visible (no hover-reveal) so the log is scannable
             without hovering each row. */}
-        <span className="text-[0.625rem] text-faint tabular-nums">
+        <span className="text-2xs text-faint tabular-nums">
           {time}
         </span>
       </span>
@@ -431,7 +431,7 @@ function MessageRow({
                 ownBubble
                   ? ''
                   : `-mx-1.5 px-1.5 rounded-btn transition-colors duration-500 ${
-                      highlighted ? 'bg-active/10' : 'hover:bg-white/[0.02]'
+                      highlighted ? 'bg-active/10' : 'hover:bg-white/2'
                     }`
               }`}
             >
@@ -445,7 +445,7 @@ function MessageRow({
                   <button
                     type="button"
                     onClick={() => onOpenProfile(message.authorId, authorLabel)}
-                    className="text-[0.84375rem] font-semibold text-text hover:underline underline-offset-2 focus-visible:outline-none focus-visible:underline"
+                    className="text-lg font-semibold text-text hover:underline underline-offset-2 focus-visible:outline-none focus-visible:underline"
                   >
                     {authorLabel}
                   </button>
@@ -473,13 +473,13 @@ function MessageRow({
                   )}
                   {pinned && (
                     <span
-                      className={`flex items-center gap-1 text-[0.65625rem] mb-0.5 leading-none ${mine ? 'text-muted' : 'text-active'}`}
+                      className={`flex items-center gap-1 text-xs mb-0.5 leading-none ${mine ? 'text-muted' : 'text-active'}`}
                     >
                       <Pin size="0.625rem" strokeWidth={2} className="fill-current" /> Pinned
                     </span>
                   )}
                   {forwarded && (
-                    <span className="block text-[0.65625rem] text-muted italic mb-0.5 leading-none">Forwarded</span>
+                    <span className="block text-xs text-muted italic mb-0.5 leading-none">Forwarded</span>
                   )}
 
                   {!deleted && message.attachments && message.attachments.length > 0 && (
@@ -536,7 +536,7 @@ function MessageRow({
                       <span className="min-w-0 text-[length:var(--chat-plain-font-size)] text-muted italic">
                         {mine ? 'You deleted this message' : 'This message was deleted'}
                       </span>
-                      <span className="shrink-0 text-[0.625rem] text-faint tabular-nums leading-none select-none pb-[2px] opacity-0 transition-opacity group-hover/msg:opacity-100">
+                      <span className="shrink-0 text-2xs text-faint tabular-nums leading-none select-none pb-[2px] opacity-0 transition-opacity group-hover/msg:opacity-100">
                         {time}
                       </span>
                     </div>
@@ -580,7 +580,7 @@ function MessageRow({
                   {failed && mine && message.localId && (
                     <button
                       onClick={() => onRetry(message.localId!, message.body, message.pendingFile ?? null)}
-                      className="block text-[0.65625rem] text-alert hover:text-text transition-colors mt-0.5"
+                      className="block text-xs text-alert hover:text-text transition-colors mt-0.5"
                     >
                       Tap to retry
                     </button>
@@ -636,7 +636,7 @@ function MessageRow({
             <button
               type="button"
               onClick={() => onOpenProfile(message.authorId, message.authorName)}
-              className="text-[0.6875rem] text-muted hover:text-text hover:underline underline-offset-2 mb-1 px-1 leading-none focus-visible:outline-none focus-visible:underline"
+              className="text-xs text-muted hover:text-text hover:underline underline-offset-2 mb-1 px-1 leading-none focus-visible:outline-none focus-visible:underline"
             >
               {message.authorName}
             </button>
@@ -659,14 +659,14 @@ function MessageRow({
             <div className={`relative min-w-0 ${bubbleBase} ${bubbleSkin} ${highlightSkin}`}>
               {pinned && (
                 <span
-                  className={`flex items-center gap-1 text-[0.65625rem] mb-1 leading-none ${mine ? 'text-muted' : 'text-active'}`}
+                  className={`flex items-center gap-1 text-xs mb-1 leading-none ${mine ? 'text-muted' : 'text-active'}`}
                 >
                   <Pin size="0.625rem" strokeWidth={2} className="fill-current" />
                   Pinned
                 </span>
               )}
               {forwarded && (
-                <span className="text-[0.65625rem] text-muted italic mb-1 leading-none">
+                <span className="text-xs text-muted italic mb-1 leading-none">
                   Forwarded
                 </span>
               )}
@@ -720,7 +720,7 @@ function MessageRow({
                       tucked into the bubble's bottom-right corner — below the
                       text/caption (or the media in an attachment-only bubble). */}
                   <span
-                    className={`inline-flex items-center gap-1 whitespace-nowrap text-[0.65625rem] leading-none text-faint select-none ${
+                    className={`inline-flex items-center gap-1 whitespace-nowrap text-xs leading-none text-faint select-none ${
                       message.body
                         ? `absolute bottom-[0.3125rem] ${
                             hasAttachment ? 'right-[0.375rem]' : 'right-[0.5rem]'
@@ -763,7 +763,7 @@ function MessageRow({
                 aria-label="Message actions"
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
-                className={`shrink-0 flex h-6 w-6 items-center justify-center rounded-full text-faint transition duration-200 hover:text-text hover:bg-white/[0.04] ${
+                className={`shrink-0 flex h-6 w-6 items-center justify-center rounded-full text-faint transition duration-200 hover:text-text hover:bg-white/4 ${
                   menuOpen
                     ? 'opacity-100 text-text'
                     : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
@@ -780,7 +780,7 @@ function MessageRow({
           {failed && mine && message.localId && (
             <button
               onClick={() => onRetry(message.localId!, message.body, message.pendingFile ?? null)}
-              className="text-[0.65625rem] text-alert hover:text-text transition-colors mt-1 px-1"
+              className="text-xs text-alert hover:text-text transition-colors mt-1 px-1"
             >
               Tap to retry
             </button>

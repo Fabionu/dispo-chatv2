@@ -18,7 +18,7 @@ function ReplyMedia({ replyTo }: { replyTo: ReplyToPreview }) {
   }
 
   return (
-    <span className="h-11 w-11 shrink-0 flex items-center justify-center bg-white/[0.055] text-muted">
+    <span className="h-11 w-11 shrink-0 flex items-center justify-center bg-white/6 text-muted">
       {image ? (
         <ImageIcon size="1rem" strokeWidth={1.8} />
       ) : (
@@ -48,7 +48,7 @@ export default function ReplyQuote({
     <span className="flex min-h-11 min-w-0 items-stretch">
       <span
         className={`w-[3px] shrink-0 ${
-          neutral ? 'bg-white/[0.28]' : 'bg-active/70'
+          neutral ? 'bg-white/20' : 'bg-active/70'
         }`}
         aria-hidden="true"
       />
@@ -59,13 +59,13 @@ export default function ReplyQuote({
       >
         <span className="min-w-0 flex-1">
           <span
-            className={`block truncate text-[0.6875rem] font-semibold leading-[1.15] ${
+            className={`block truncate text-xs font-semibold leading-[1.15] ${
               neutral ? 'text-text' : 'text-active'
             }`}
           >
             {replyTo.authorName}
           </span>
-          <span className="mt-1 block truncate text-[0.6875rem] leading-[1.15] text-muted">
+          <span className="mt-1 block truncate text-xs leading-[1.15] text-muted">
             {snippet}
           </span>
         </span>
@@ -75,7 +75,7 @@ export default function ReplyQuote({
   )
 
   const base =
-    'mb-1.5 block min-w-[11.5rem] max-w-full overflow-hidden rounded-[0.625rem] bg-white/[0.055] text-left'
+    'mb-1.5 block min-w-[11.5rem] max-w-full overflow-hidden rounded-[0.625rem] bg-white/6 text-left'
 
   if (!onJump) return <span className={base}>{content}</span>
 
@@ -83,7 +83,7 @@ export default function ReplyQuote({
     <button
       type="button"
       onClick={() => onJump(replyTo.id)}
-      className={`${base} transition-colors hover:bg-white/[0.085]`}
+      className={`${base} transition-colors hover:bg-white/8`}
       title="Jump to message"
     >
       {content}

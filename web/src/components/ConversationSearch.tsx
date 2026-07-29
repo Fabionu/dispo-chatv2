@@ -51,20 +51,20 @@ export default function ConversationSearch({ query, groupId, currentUserId, onJu
   return (
     <div
       data-search-region
-      className="absolute right-4 top-[3.625rem] z-30 w-[min(22.5rem,calc(100%-2rem))] rounded-panel bg-surface shadow-[0_16px_40px_rgba(0,0,0,0.55)] overflow-hidden"
+      className="absolute right-4 top-[3.625rem] z-30 w-[min(22.5rem,calc(100%-2rem))] rounded-panel bg-surface shadow-overlay overflow-hidden"
     >
       <div className="max-h-[min(50vh,26.25rem)] overflow-y-auto">
         {q.length < 2 ? (
-          <div className="px-3 py-4 text-[0.78125rem] text-faint">
+          <div className="px-3 py-4 text-base text-faint">
             Type at least 2 characters
           </div>
         ) : loading ? (
-          <div className="px-3 py-4 text-[0.78125rem] text-faint">Searching…</div>
+          <div className="px-3 py-4 text-base text-faint">Searching…</div>
         ) : results.length === 0 ? (
-          <div className="px-3 py-4 text-[0.78125rem] text-faint">No messages found</div>
+          <div className="px-3 py-4 text-base text-faint">No messages found</div>
         ) : (
           <div className="py-1">
-            <div className="px-3 pt-1 pb-1 text-[0.65625rem] uppercase tracking-wide text-faint">
+            <div className="px-3 pt-1 pb-1 text-xs uppercase tracking-wide text-faint">
               {results.length}
               {results.length === 50 ? '+' : ''} {results.length === 1 ? 'result' : 'results'}
             </div>
@@ -73,22 +73,22 @@ export default function ConversationSearch({ query, groupId, currentUserId, onJu
                 key={message.id}
                 type="button"
                 onClick={() => onJump(message)}
-                className="w-full text-left px-3 py-1.5 hover:bg-white/[0.04] transition-colors"
+                className="w-full text-left px-3 py-1.5 hover:bg-white/4 transition-colors"
               >
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-[0.75rem] font-semibold text-text truncate">
+                  <span className="text-sm font-semibold text-text truncate">
                     {message.authorId === currentUserId
                       ? 'You'
                       : message.authorName || 'Member'}
                   </span>
                   <span
-                    className="text-[0.65625rem] text-faint tabular-nums shrink-0"
+                    className="text-xs text-faint tabular-nums shrink-0"
                     title={new Date(message.createdAt).toLocaleString()}
                   >
                     {resultTimestamp(message.createdAt)}
                   </span>
                 </div>
-                <div className="text-[0.75rem] text-muted truncate">
+                <div className="text-sm text-muted truncate">
                   {highlight(message.body, q.toLowerCase())}
                 </div>
               </button>

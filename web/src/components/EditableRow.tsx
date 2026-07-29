@@ -101,8 +101,8 @@ export default function EditableRow({
 
   if (editing) {
     return (
-      <div className="py-2 border-b border-white/[0.03] last:border-0">
-        <label className="block text-[0.6875rem] text-faint mb-1">
+      <div className="py-2 border-b border-white/4 last:border-0">
+        <label className="block text-xs text-faint mb-1">
           {label}
           {required && <span className="text-faint"> *</span>}
         </label>
@@ -110,7 +110,7 @@ export default function EditableRow({
             the circular Save/Cancel buttons that sit inside its right edge,
             vertically centered. The input's own right padding keeps long text
             from sliding under the buttons. */}
-        <div className="flex items-center gap-1 rounded-full border border-white/[0.06] bg-white/[0.04] pr-0.5 transition-colors focus-within:border-white/[0.12] focus-within:bg-white/[0.05]">
+        <div className="flex items-center gap-1 rounded-full border border-white/6 bg-white/4 pr-0.5 transition-colors focus-within:border-white/10 focus-within:bg-white/6">
           {multiline ? (
             <textarea
               ref={inputRef}
@@ -119,7 +119,7 @@ export default function EditableRow({
               onKeyDown={onKeyDown}
               rows={2}
               placeholder={placeholder}
-              className="flex-1 min-w-0 resize-none bg-transparent pl-4 pr-1 py-2 text-[0.78125rem] text-text placeholder:text-faint outline-none"
+              className="flex-1 min-w-0 resize-none bg-transparent pl-4 pr-1 py-2 text-base text-text placeholder:text-faint outline-none"
             />
           ) : (
             <input
@@ -128,7 +128,7 @@ export default function EditableRow({
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={onKeyDown}
               placeholder={placeholder}
-              className="flex-1 min-w-0 bg-transparent pl-4 pr-1 py-2 text-[0.78125rem] text-text placeholder:text-faint outline-none"
+              className="flex-1 min-w-0 bg-transparent pl-4 pr-1 py-2 text-base text-text placeholder:text-faint outline-none"
             />
           )}
           <button
@@ -145,24 +145,24 @@ export default function EditableRow({
             disabled={saving}
             aria-label={`Cancel editing ${label}`}
             title="Cancel"
-            className="h-8 w-8 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.06] disabled:opacity-50 transition-colors"
+            className="h-8 w-8 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 disabled:opacity-50 transition-colors"
           >
             <X size="0.875rem" strokeWidth={2} />
           </button>
         </div>
-        {error && <div className="text-[0.6875rem] text-alert mt-1">{error}</div>}
+        {error && <div className="text-xs text-alert mt-1">{error}</div>}
       </div>
     )
   }
 
   return (
-    <div className="group py-2 border-b border-white/[0.03] last:border-0">
+    <div className="group py-2 border-b border-white/4 last:border-0">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[0.6875rem] text-faint">{label}</span>
-        {hint && <span className="text-[0.625rem] text-faint shrink-0">{hint}</span>}
+        <span className="text-xs text-faint">{label}</span>
+        {hint && <span className="text-2xs text-faint shrink-0">{hint}</span>}
       </div>
       <div className="flex items-center gap-2 mt-0.5">
-        <div className={`flex-1 text-[0.78125rem] break-words ${has ? 'text-text' : 'text-faint'}`}>
+        <div className={`flex-1 text-base break-words ${has ? 'text-text' : 'text-faint'}`}>
           {has ? current : 'Not set'}
         </div>
         {canEdit && (

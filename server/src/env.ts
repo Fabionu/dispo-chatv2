@@ -50,6 +50,11 @@ export const env = {
   PORT: Number(process.env.PORT ?? 3001),
   NODE_ENV: process.env.NODE_ENV ?? 'development',
   PUBLIC_ORIGIN: process.env.PUBLIC_ORIGIN ?? '',
+  // Transactional email (Resend). Both API key and a sender on a verified
+  // domain are required before delivery is attempted.
+  RESEND_API_KEY: process.env.RESEND_API_KEY ?? '',
+  EMAIL_FROM: process.env.EMAIL_FROM ?? '',
+  EMAIL_REPLY_TO: process.env.EMAIL_REPLY_TO ?? '',
   // Web Push (VAPID). Both keys must be present for closed-tab notifications.
   // Generate once with `npx web-push generate-vapid-keys` and keep the same
   // pair across deploys so existing browser subscriptions remain valid.

@@ -128,7 +128,7 @@ export default function MemberRow({
   }
 
   return (
-    <div className="flex items-center gap-3 px-2 py-2 rounded-chip hover:bg-white/[0.02] transition-colors">
+    <div className="flex items-center gap-3 px-2 py-2 rounded-chip hover:bg-white/2 transition-colors">
       <div className="relative shrink-0">
         <button
           type="button"
@@ -152,12 +152,12 @@ export default function MemberRow({
         onClick={() => onOpenProfile(member)}
         className="min-w-0 flex-1 flex flex-col gap-px text-left rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
       >
-        <span className="text-[0.875rem] leading-tight truncate hover:underline underline-offset-2">
+        <span className="text-lg leading-tight truncate hover:underline underline-offset-2">
           {member.displayName}
           {isSelf && <span className="text-faint"> (you)</span>}
         </span>
         {/* Group role (admin / member) as plain text — never the workspace role. */}
-        <span className="text-[0.75rem] leading-tight text-faint truncate">{groupRoleLabel}</span>
+        <span className="text-sm leading-tight text-faint truncate">{groupRoleLabel}</span>
       </button>
 
       {/* Compact text-based actions menu. The small ⋮ trigger keeps the row
@@ -177,7 +177,7 @@ export default function MemberRow({
               aria-label={`Manage ${member.displayName}`}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
-              className="h-7 w-7 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.04] transition-colors disabled:opacity-30 disabled:cursor-default"
+              className="h-7 w-7 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/4 transition-colors disabled:opacity-30 disabled:cursor-default"
             >
               <MoreVertical size="0.875rem" strokeWidth={1.8} />
             </button>
@@ -198,7 +198,7 @@ export default function MemberRow({
                       className={menuItemClass(a.tone === 'danger' ? 'danger' : 'default')}
                     >
                       <span className="flex-1">{a.label}</span>
-                      {a.hint && <span className="text-[0.625rem] text-faint shrink-0">{a.hint}</span>}
+                      {a.hint && <span className="text-2xs text-faint shrink-0">{a.hint}</span>}
                     </button>
                   </div>
                 ))}

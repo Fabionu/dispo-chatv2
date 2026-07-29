@@ -9,6 +9,7 @@ import {
   Info,
   Link2,
   Loader2,
+  Mail,
   Palette,
   Play,
   Plus,
@@ -136,7 +137,7 @@ export default function WorkspaceSettingsPanel({ onBack }: Props) {
     <div className="flex flex-col h-full">
       <PanelHeader title="Workspace settings" onBack={onBack} backLabel="Back to inbox" />
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        <div className="rounded-card border border-white/[0.06] bg-white/[0.015] divide-y divide-white/[0.05] overflow-hidden">
+        <div className="rounded-card border border-white/6 bg-white/2 divide-y divide-white/6 overflow-hidden">
           <CategoryRow
             icon={<Palette size="1rem" strokeWidth={1.8} />}
             title="Appearance"
@@ -169,7 +170,7 @@ export default function WorkspaceSettingsPanel({ onBack }: Props) {
             onClick={() => setCategory('about')}
           />
         </div>
-        <p className="text-[0.6875rem] text-faint mt-2.5 px-1 leading-[1.5]">
+        <p className="text-xs text-faint mt-2.5 px-1 leading-[1.5]">
           Appearance preferences are saved in this browser and apply to this device only.
         </p>
       </div>
@@ -195,14 +196,14 @@ function CategoryRow({
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-white/[0.03]"
+      className="w-full flex items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-white/4"
     >
-      <span className="h-8 w-8 shrink-0 flex items-center justify-center rounded-btn border border-white/[0.06] bg-white/[0.02] text-muted">
+      <span className="h-8 w-8 shrink-0 flex items-center justify-center rounded-btn border border-white/6 bg-white/2 text-muted">
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[0.8125rem] font-medium text-text leading-tight">{title}</span>
-        <span className="block text-[0.71875rem] text-faint mt-0.5 leading-[1.4] truncate">
+        <span className="block text-base font-medium text-text leading-tight">{title}</span>
+        <span className="block text-sm text-faint mt-0.5 leading-[1.4] truncate">
           {value}
         </span>
       </span>
@@ -216,12 +217,12 @@ function CategoryRow({
 function AppearanceSettings() {
   return (
     <div>
-      <div className="rounded-card border border-white/[0.06] bg-white/[0.015] px-4 divide-y divide-white/[0.05]">
+      <div className="rounded-card border border-white/6 bg-white/2 px-4 divide-y divide-white/6">
         <ThemeSetting />
         <MessageDisplaySetting />
         <DensitySetting />
       </div>
-      <p className="text-[0.6875rem] text-faint mt-2.5 px-1 leading-[1.5]">
+      <p className="text-xs text-faint mt-2.5 px-1 leading-[1.5]">
         Saved in this browser — applies to this device only.
       </p>
     </div>
@@ -262,13 +263,13 @@ function NotificationSettings() {
 
   return (
     <div>
-      <div className="rounded-card border border-white/[0.06] bg-white/[0.015] px-4 py-4 mb-3">
+      <div className="rounded-card border border-white/6 bg-white/2 px-4 py-4 mb-3">
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
-            <div className="text-[0.8125rem] font-medium leading-tight text-text">
+            <div className="text-base font-medium leading-tight text-text">
               Allow notifications
             </div>
-            <div className="mt-1 text-[0.71875rem] leading-[1.4] text-faint">
+            <div className="mt-1 text-sm leading-[1.4] text-faint">
               {permissionDescription}
             </div>
           </div>
@@ -284,7 +285,7 @@ function NotificationSettings() {
               browserNotifications.permission === 'denied'
             }
             className={`relative h-6 w-10 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 disabled:opacity-40 disabled:cursor-not-allowed ${
-              browserNotifications.enabled ? 'bg-text' : 'bg-white/[0.10]'
+              browserNotifications.enabled ? 'bg-text' : 'bg-white/10'
             }`}
           >
             <span
@@ -297,10 +298,10 @@ function NotificationSettings() {
           </button>
         </div>
       </div>
-      <div className="mb-2 px-1 text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-faint">
+      <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-[0.12em] text-faint">
         Notification sound
       </div>
-      <div className="rounded-card border border-white/[0.06] bg-white/[0.015] divide-y divide-white/[0.05] overflow-hidden">
+      <div className="rounded-card border border-white/6 bg-white/2 divide-y divide-white/6 overflow-hidden">
         {NOTIFICATION_SOUNDS.map((sound) => {
           const active = sound.value === selected
           return (
@@ -310,23 +311,23 @@ function NotificationSettings() {
                 onClick={() => setNotificationSound(sound.value)}
                 aria-pressed={active}
                 className={`min-w-0 flex-1 flex items-center gap-3 rounded-btn px-2 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
-                  active ? 'bg-white/[0.08]' : 'hover:bg-white/[0.05]'
+                  active ? 'bg-white/8' : 'hover:bg-white/6'
                 }`}
               >
                 <span
                   className={`h-5 w-5 shrink-0 rounded-full border flex items-center justify-center transition-colors ${
                     active
                       ? 'border-text bg-text text-bg'
-                      : 'border-white/[0.16] text-transparent'
+                      : 'border-white/16 text-transparent'
                   }`}
                 >
                   <Check size="0.75rem" strokeWidth={2.5} />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[0.78125rem] font-medium text-text">
+                  <span className="block text-base font-medium text-text">
                     {sound.label}
                   </span>
-                  <span className="mt-0.5 block text-[0.6875rem] leading-[1.4] text-faint">
+                  <span className="mt-0.5 block text-xs leading-[1.4] text-faint">
                     {sound.description}
                   </span>
                 </span>
@@ -337,7 +338,7 @@ function NotificationSettings() {
                   onClick={() => void playNotificationSound(sound.value as NotificationSound)}
                   aria-label={`Preview ${sound.label}`}
                   title={`Preview ${sound.label}`}
-                  className="h-8 w-8 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/[0.07] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                  className="h-8 w-8 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/8 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
                 >
                   <Play size="0.875rem" strokeWidth={1.9} fill="currentColor" />
                 </button>
@@ -346,7 +347,7 @@ function NotificationSettings() {
           )
         })}
       </div>
-      <p className="text-[0.6875rem] text-faint mt-2.5 px-1 leading-[1.5]">
+      <p className="text-xs text-faint mt-2.5 px-1 leading-[1.5]">
         Preview a sound before selecting it. Muted conversations always stay silent.
       </p>
     </div>
@@ -395,7 +396,7 @@ function PanelHeader({
       >
         <ArrowLeft size="1.25rem" strokeWidth={1.8} />
       </button>
-      <span className="text-[0.8125rem] font-semibold">{title}</span>
+      <span className="text-base font-semibold">{title}</span>
     </div>
   )
 }
@@ -478,7 +479,7 @@ function AboutSettings() {
     commitRaw !== 'Not available' && commitRaw.length > 10 ? commitRaw.slice(0, 7) : commitRaw
 
   return (
-    <div className="rounded-card border border-white/[0.06] bg-white/[0.015] px-4 py-1.5">
+    <div className="rounded-card border border-white/6 bg-white/2 px-4 py-1.5">
       <FieldRow label="App version" value={APP_VERSION} />
       <FieldRow label="Environment" value={environment} />
       <FieldRow label="Build date" value={buildDate} />
@@ -488,7 +489,7 @@ function AboutSettings() {
 }
 
 // ── Company members (admin) ─────────────────────────────────────────────────
-// Generate single-use, 15-minute invite links and review recent ones. The raw
+// Send single-use, 48-hour invite links by email and review recent ones. The raw
 // link is shown ONCE (right after generation); the list afterwards carries only
 // status + timing, mirroring the server (which stores just a token hash).
 function CompanyMembersSettings() {
@@ -503,6 +504,7 @@ function CompanyMembersSettings() {
   // Role the NEXT generated invite will grant. Chosen before generating; the
   // server validates + stores it and applies it when the invitee registers.
   const [role, setRole] = useState<Role>(DEFAULT_INVITE_ROLE)
+  const [recipientEmail, setRecipientEmail] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -521,17 +523,24 @@ function CompanyMembersSettings() {
   }, [load])
 
   async function generate() {
+    if (!recipientEmail.trim()) {
+      setGenError('Enter the email address of the person you want to invite.')
+      return
+    }
     setGenerating(true)
     setGenError(null)
     try {
-      const { invite } = await api.workspaceInvites.create(role)
+      const { invite } = await api.workspaceInvites.create(role, recipientEmail.trim())
       setFresh(invite)
+      setRecipientEmail('')
       await load()
     } catch (err) {
       setGenError(
         err instanceof ApiError && err.code === 'too_many_requests'
-          ? 'Too many links generated. Try again later.'
-          : 'Could not generate a link. Try again.',
+          ? 'Too many invitations sent. Try again later.'
+          : err instanceof ApiError && err.code === 'invalid_email'
+            ? 'Enter a valid email address.'
+            : 'Could not create the invitation. Try again.',
       )
     } finally {
       setGenerating(false)
@@ -570,9 +579,31 @@ function CompanyMembersSettings() {
           link slot (the fresh link with copy/countdown, or a quiet explainer
           while no link exists). */}
       <section>
-        <div className="eyebrow mb-2">New invite link</div>
-        <div className="rounded-card border border-white/[0.06] bg-white/[0.015] p-3.5">
-          <label htmlFor="invite-role" className="block text-[0.71875rem] text-muted">
+        <div className="eyebrow mb-2">New invitation</div>
+        <div className="rounded-card border border-white/6 bg-white/2 p-3.5">
+          <label htmlFor="invite-email" className="block text-sm text-muted">
+            Recipient email
+          </label>
+          <div className="relative mt-1.5 mb-3">
+            <Mail
+              size="0.875rem"
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint"
+            />
+            <input
+              id="invite-email"
+              type="email"
+              value={recipientEmail}
+              onChange={(event) => {
+                setRecipientEmail(event.target.value)
+                setGenError(null)
+              }}
+              placeholder="name@company.com"
+              autoComplete="off"
+              disabled={generating}
+              className="h-9 w-full rounded-card border border-white/8 bg-white/4 pl-9 pr-3 text-base text-text outline-none placeholder:text-faint focus:border-white/20 disabled:opacity-60"
+            />
+          </div>
+          <label htmlFor="invite-role" className="block text-sm text-muted">
             Invite as
           </label>
           <div className="mt-1.5 flex items-center gap-2">
@@ -582,29 +613,30 @@ function CompanyMembersSettings() {
             <button
               onClick={generate}
               disabled={generating}
-              className="shrink-0 h-9 px-3.5 flex items-center gap-1.5 rounded-btn bg-text text-bg font-semibold text-[0.78125rem] hover:bg-text/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              className="shrink-0 h-9 px-3.5 flex items-center gap-1.5 rounded-btn bg-text text-bg font-semibold text-base hover:bg-text/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {generating ? (
                 <Loader2 size="0.875rem" strokeWidth={2.2} className="animate-spin" />
               ) : (
                 <Plus size="0.875rem" strokeWidth={2.2} />
               )}
-              Generate
+              Send invite
             </button>
           </div>
-          <p className="text-[0.6875rem] text-faint mt-1.5 leading-[1.45]">
+          <p className="text-xs text-faint mt-1.5 leading-[1.45]">
             {INVITE_ROLE_HINT[role]}
           </p>
-          {genError && <div className="mt-2 text-[0.71875rem] text-alert">{genError}</div>}
+          {genError && <div className="mt-2 text-sm text-alert">{genError}</div>}
 
-          <div className="mt-3 pt-3 border-t border-white/[0.05]">
+          <div className="mt-3 pt-3 border-t border-white/6">
             {fresh ? (
               <FreshInviteLink invite={fresh} />
             ) : (
-              <div className="flex items-start gap-2 text-[0.6875rem] text-faint leading-[1.45]">
+              <div className="flex items-start gap-2 text-xs text-faint leading-[1.45]">
                 <Link2 size="0.8125rem" strokeWidth={1.8} className="shrink-0 mt-px" />
                 <span>
-                  Your link appears here once generated — single-use, valid for 15 minutes.
+                  The recipient receives a single-use email invitation valid for 48 hours. A
+                  manual copy of the link also appears here.
                 </span>
               </div>
             )}
@@ -616,19 +648,19 @@ function CompanyMembersSettings() {
       <section>
         <div className="eyebrow mb-2">Recent invites</div>
         {loading ? (
-          <div className="flex items-center gap-2 text-[0.75rem] text-faint px-1 py-1">
+          <div className="flex items-center gap-2 text-sm text-faint px-1 py-1">
             <Loader2 size="0.8125rem" className="animate-spin" /> Loading invites…
           </div>
         ) : loadError ? (
-          <div className="text-[0.75rem] text-alert px-1 py-1">Could not load invites.</div>
+          <div className="text-sm text-alert px-1 py-1">Could not load invites.</div>
         ) : invites.length === 0 ? (
-          <div className="rounded-card border border-white/[0.06] bg-white/[0.015] px-3.5 py-3 text-[0.71875rem] text-faint leading-[1.45]">
+          <div className="rounded-card border border-white/6 bg-white/2 px-3.5 py-3 text-sm text-faint leading-[1.45]">
             No invites yet — generate a link above to add your first member.
           </div>
         ) : (
           // No overflow-hidden — the row role dropdown must be able to open past
           // the card edge; first/last rows round their own hover corners instead.
-          <div className="rounded-card border border-white/[0.06] bg-white/[0.015] divide-y divide-white/[0.05]">
+          <div className="rounded-card border border-white/6 bg-white/2 divide-y divide-white/6">
             {invites.map((inv) => (
               <InviteListRow
                 key={inv.id}
@@ -659,6 +691,11 @@ function remaining(expiresAt: string, now: number): string | null {
   const ms = new Date(expiresAt).getTime() - now
   if (ms <= 0) return null
   const total = Math.floor(ms / 1000)
+  if (total >= 3600) {
+    const hours = Math.floor(total / 3600)
+    const minutes = Math.floor((total % 3600) / 60)
+    return `${hours}h ${minutes}m`
+  }
   const m = Math.floor(total / 60)
   const s = total % 60
   return `${m}:${String(s).padStart(2, '0')}`
@@ -698,9 +735,9 @@ function FreshInviteLink({ invite }: { invite: WorkspaceInviteCreated }) {
   return (
     <div>
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 text-[0.71875rem] font-medium text-done">
+        <div className="flex items-center gap-1.5 text-sm font-medium text-done">
           <span className="h-1.5 w-1.5 rounded-full bg-done" aria-hidden />
-          Link ready — shown only once
+          {invite.emailSent ? 'Invitation sent — link shown only once' : 'Link ready — email not sent'}
         </div>
         <RoleBadge role={invite.role} />
       </div>
@@ -710,7 +747,7 @@ function FreshInviteLink({ invite }: { invite: WorkspaceInviteCreated }) {
           readOnly
           value={invite.url}
           onFocus={(e) => e.currentTarget.select()}
-          className="flex-1 min-w-0 h-9 bg-white/[0.03] border border-white/[0.06] rounded-btn px-2.5 text-[0.71875rem] text-text font-mono truncate outline-none transition-colors focus:border-white/[0.16]"
+          className="flex-1 min-w-0 h-9 bg-white/4 border border-white/6 rounded-btn px-2.5 text-sm text-text font-mono truncate outline-none transition-colors focus:border-white/16"
         />
         <button
           onClick={copy}
@@ -725,7 +762,7 @@ function FreshInviteLink({ invite }: { invite: WorkspaceInviteCreated }) {
           )}
         </button>
       </div>
-      <div className="mt-1.5 flex items-center justify-between gap-2 text-[0.6875rem] text-faint">
+      <div className="mt-1.5 flex items-center justify-between gap-2 text-xs text-faint">
         {left ? (
           <span>
             Single-use · expires in <span className="tabular-nums text-muted">{left}</span>
@@ -773,17 +810,21 @@ function InviteListRow({
   const left = active ? remaining(invite.expiresAt, now) : null
   const by = invite.createdByName ? ` · by ${invite.createdByName}` : ''
   const primary =
-    invite.status === 'used' ? (invite.usedByName ?? 'Invite used') : 'Invite link'
+    invite.status === 'used'
+      ? (invite.usedByName ?? invite.recipientEmail ?? 'Invite used')
+      : (invite.recipientEmail ?? 'Invite link')
   const secondary = active
-    ? `Active · ${left ? `expires in ${left}` : 'expiring…'}${by}`
+    ? `${invite.emailSentAt ? 'Email sent' : 'Email not sent'} · ${
+        left ? `expires in ${left}` : 'expiring…'
+      }${by}`
     : invite.status === 'used'
       ? `Joined the company${invite.createdByName ? ` · invited by ${invite.createdByName}` : ''}`
       : `Expired · not used${by}`
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.02] transition-colors first:rounded-t-card last:rounded-b-card">
+    <div className="flex items-center gap-3 px-3 py-2.5 hover:bg-white/2 transition-colors first:rounded-t-card last:rounded-b-card">
       <div className="relative shrink-0">
-        <span className="h-[2.125rem] w-[2.125rem] flex items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.02] text-muted">
+        <span className="h-[2.125rem] w-[2.125rem] flex items-center justify-center rounded-full border border-white/6 bg-white/2 text-muted">
           {invite.status === 'used' ? (
             <Check size="0.9375rem" strokeWidth={2} />
           ) : (
@@ -803,13 +844,13 @@ function InviteListRow({
       </div>
       <div className="min-w-0 flex-1 flex flex-col gap-px">
         <div
-          className={`text-[0.8125rem] leading-tight truncate ${
+          className={`text-base leading-tight truncate ${
             invite.status === 'expired' ? 'text-muted' : 'text-text'
           }`}
         >
           {primary}
         </div>
-        <div className="text-[0.6875rem] leading-tight text-faint truncate">{secondary}</div>
+        <div className="text-xs leading-tight text-faint truncate">{secondary}</div>
       </div>
       {active ? (
         <>
@@ -825,7 +866,7 @@ function InviteListRow({
                 setConfirming(false)
                 onRevoke()
               }}
-              className="shrink-0 h-7 px-2.5 rounded-btn text-[0.6875rem] font-semibold text-alert bg-alert/10 hover:bg-alert/15 transition-colors"
+              className="shrink-0 h-7 px-2.5 rounded-btn text-xs font-semibold text-alert bg-alert/10 hover:bg-alert/15 transition-colors"
             >
               Revoke
             </button>
@@ -899,9 +940,9 @@ function RoleSelect({
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className={`flex items-center gap-1.5 rounded-card border bg-white/[0.03] text-text text-left outline-none transition-colors hover:border-white/[0.16] focus-visible:border-white/[0.22] disabled:opacity-50 disabled:cursor-default ${
-          open ? 'border-white/[0.22]' : 'border-white/[0.08]'
-        } ${compact ? 'h-7 w-[6.25rem] px-2 text-[0.6875rem]' : 'h-9 w-full px-2.5 text-[0.78125rem]'}`}
+        className={`flex items-center gap-1.5 rounded-card border bg-white/4 text-text text-left outline-none transition-colors hover:border-white/16 focus-visible:border-white/20 disabled:opacity-50 disabled:cursor-default ${
+          open ? 'border-white/20' : 'border-white/8'
+        } ${compact ? 'h-7 w-[6.25rem] px-2 text-xs' : 'h-9 w-full px-2.5 text-base'}`}
       >
         <span className="flex-1 min-w-0 truncate">{ROLE_LABEL[value]}</span>
         <ChevronDown
@@ -946,7 +987,7 @@ function RoleSelect({
 // A quiet, read-only role pill for used/expired invites and the fresh-link card.
 function RoleBadge({ role }: { role: Role }) {
   return (
-    <span className="shrink-0 text-[0.625rem] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border border-white/[0.1] bg-white/[0.04] text-muted">
+    <span className="shrink-0 text-2xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border border-white/10 bg-white/4 text-muted">
       {ROLE_LABEL[role]}
     </span>
   )
@@ -956,12 +997,12 @@ function RoleBadge({ role }: { role: Role }) {
 // Rows are separated by a hairline divider (none after the last).
 function FieldRow({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="flex items-center justify-between gap-3 py-2.5 border-b border-white/[0.03] last:border-0">
-      <span className="shrink-0 text-[0.75rem] text-muted">{label}</span>
+    <div className="flex items-center justify-between gap-3 py-2.5 border-b border-white/4 last:border-0">
+      <span className="shrink-0 text-sm text-muted">{label}</span>
       <span
         title={value}
         className={`min-w-0 truncate text-right text-text ${
-          mono ? 'font-mono text-[0.71875rem] tabular-nums' : 'text-[0.78125rem]'
+          mono ? 'font-mono text-sm tabular-nums' : 'text-base'
         }`}
       >
         {value}
@@ -984,8 +1025,8 @@ function SettingBlock({
 }) {
   return (
     <div className="py-4">
-      <div className="text-[0.8125rem] text-text font-medium leading-tight">{label}</div>
-      <div className="text-[0.71875rem] text-faint mt-1 leading-[1.4]">{description}</div>
+      <div className="text-base text-text font-medium leading-tight">{label}</div>
+      <div className="text-sm text-faint mt-1 leading-[1.4]">{description}</div>
       <div className="mt-3">{children}</div>
     </div>
   )
@@ -1006,7 +1047,7 @@ function Segmented({
   onChange: (value: string) => void
 }) {
   return (
-    <div className="inline-flex items-center gap-0.5 rounded-card bg-white/[0.04] p-0.5">
+    <div className="inline-flex items-center gap-0.5 rounded-card bg-white/4 p-0.5">
       {options.map((o) => {
         const active = o.value === value
         return (
@@ -1015,8 +1056,8 @@ function Segmented({
             type="button"
             onClick={() => onChange(o.value)}
             aria-pressed={active}
-            className={`h-7 px-3 rounded-btn text-[0.75rem] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
-              active ? 'bg-white/[0.08] text-text' : 'text-muted hover:text-text'
+            className={`h-7 px-3 rounded-btn text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+              active ? 'bg-white/8 text-text' : 'text-muted hover:text-text'
             }`}
           >
             {o.label}
