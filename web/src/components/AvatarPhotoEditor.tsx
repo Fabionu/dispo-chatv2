@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Eye, MoreVertical, Trash2, Upload } from 'lucide-react'
 import ImageLightbox from './ImageLightbox'
+import { rem } from '../lib/density'
 import { MENU_CONTAINER, MENU_GLYPH, menuIconClass, menuItemClass } from './menuStyles'
 
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024
@@ -112,7 +113,11 @@ export default function AvatarPhotoEditor({
       {/* The image is the hero. With a photo it's a "View photo" action that opens
           the lightbox; editors also get a hover-revealed three-dots Options menu
           in the bottom-right corner. */}
-      <div className={`group relative ${roundedClass}`} style={{ width: size, height: size }}>
+      {/* The frame is sized in REM, exactly like the Avatar / GroupAvatar /
+          CompanyLogo it wraps (they render `size` through lib/density's rem()).
+          In raw px it drifted from its own image on any display where --ui-scale
+          isn't 1 — the scrim and the corner button then sat off the picture. */}
+      <div className={`group relative ${roundedClass}`} style={{ width: rem(size), height: rem(size) }}>
         {children}
 
         {canView && (
@@ -123,7 +128,7 @@ export default function AvatarPhotoEditor({
             title="View photo"
             className={`absolute inset-0 ${roundedClass} flex items-center justify-center bg-black/50 text-pure-white opacity-0 hover:opacity-100 focus-visible:opacity-100 transition-opacity duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-active/60`}
           >
-            <Eye size={Math.max(16, Math.round(size * 0.22))} strokeWidth={1.6} />
+            <Eye size={rem(Math.max(16, Math.round(size * 0.22)))} strokeWidth={1.6} />
           </button>
         )}
 

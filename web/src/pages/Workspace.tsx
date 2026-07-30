@@ -1,16 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Archive,
-  Building2,
-  ChevronDown,
-  CircleUser,
-  LogOut,
   MailOpen,
   Menu,
-  PanelLeftClose,
-  PanelLeftOpen,
   Search,
-  Settings,
   UserPlus,
   Users,
   X,
@@ -25,7 +18,7 @@ import type {
   ReplyToPreview,
   WorkspaceMember,
 } from '../lib/types'
-import { groupLabel, tractorPlate } from '../lib/types'
+import { groupLabel, isUnread, tractorPlate } from '../lib/types'
 import { api } from '../lib/api'
 import { getSocket } from '../lib/socket'
 import { useMessageCacheActions } from '../hooks/useMessageCache'
@@ -35,12 +28,11 @@ import ConnectionRequestView from '../components/connections/ConnectionRequestVi
 import ConnectionRequestsSection from '../components/connections/ConnectionRequestsSection'
 import GroupInvitesSection from '../components/invites/GroupInvitesSection'
 import GroupInviteView from '../components/invites/GroupInviteView'
-import Avatar from '../components/Avatar'
 import { MENU_CONTAINER, MENU_GLYPH, MENU_SEPARATOR } from '../components/menuStyles'
 import Spinner from '../components/Spinner'
-import CompanyLogo from '../components/CompanyLogo'
 import CreateVehicleGroupModal from '../components/CreateVehicleGroupModal'
 import NewMessageModal from '../components/NewMessageModal'
+import AccountSidebarPanel from '../components/settings/AccountSidebarPanel'
 import ProfileSidebarPanel from '../components/settings/ProfileSidebarPanel'
 import CompanySidebarPanel from '../components/settings/CompanySidebarPanel'
 import WorkspaceSettingsPanel from '../components/settings/WorkspaceSettingsPanel'
@@ -57,15 +49,16 @@ import {
 } from '../lib/density'
 import { getStoredSidebarCollapsed, setStoredSidebarCollapsed } from '../lib/sidebar'
 import { preloadAvatar } from '../lib/avatarCache'
-import { statusMeta, AWAY } from '../lib/availability'
 import { useAuth } from '../auth/AuthContext'
 import GroupRow from './SidebarGroupRow'
 import ContactRow from './SidebarContactRow'
+import SidebarIdentityBar from './SidebarIdentityBar'
 import { FilterTab, ArchiveToggle, EmptyHint, MenuItem } from './sidebarBits'
 import { optimisticDirectGroup } from './workspaceUtils'
 import ConnectionStatusBanner from '../components/ConnectionStatusBanner'
 import { NOTIFICATION_OPEN_EVENT } from '../lib/browserNotifications'
 import UserProfilePanel from '../components/UserProfilePanel'
+import WorkspaceNavRail from './WorkspaceNavRail'
 
 type Props = {
   user: User
@@ -75,13 +68,25 @@ type Props = {
 
 type NewGroupKind = 'vehicle' | 'direct'
 
+// What the LEFT RAIL is showing. The rail is a small navigation stack, not a set
+// of popovers: 'list' is the conversation list (home), and every other value is a
+// drill-in view that REPLACES it inside the same panel. Each level's Back goes
+// one step left along this chain:
+//   list ← account ← profile / settings
+//   list ← company
+// The list's own state (selection, search text, filter, scroll offset) is held
+// here in Workspace and therefore survives every drill-in unchanged.
+type SidebarView = 'list' | 'account' | 'profile' | 'company' | 'settings'
+
 // Sidebar pill filter — which slice of the single unified list is shown.
 //   'all'      → active (non-archived) vehicle rooms + DMs + company contacts
 //   'archived' → archived conversations only (no contacts)
 //   'groups'   → active vehicle/group rooms only
 //   'dms'      → active direct messages + company contacts
+//   'unread'   → everything still unread, rooms and DMs alike (no contacts —
+//                a colleague without a thread has nothing to be unread)
 // Archive/pin/mute/hide are per-user prefs (see group_members, migration 0023).
-type SidebarFilter = 'all' | 'archived' | 'groups' | 'dms'
+type SidebarFilter = 'all' | 'archived' | 'groups' | 'dms' | 'unread'
 
 // One entry in the unified rail list: either a real conversation (vehicle room
 // or DM Group) or a company colleague you don't have a DM with yet.
@@ -116,11 +121,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   const density = useDensity()
   const sidebarAvatar = SIDEBAR_AVATAR_SIZE[density]
   const conversationAvatar = SIDEBAR_CONVERSATION_AVATAR_SIZE[density]
-  // The workspace header logo reads larger than the rail's avatar metric, while
-  // the header's padding/height (--header-height) stay fixed — it's still
-  // vertically centered, just a bigger image. Footer avatar + collapsed rail keep
-  // the standard `sidebarAvatar` size.
-  const headerLogoSize = sidebarAvatar + 7
   // Auto-away presence: grey "Away" on the footer status dot when idle / tab
   // hidden. Doesn't change the stored (manual) status — presence only.
   const away = useIdle()
@@ -128,18 +128,17 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // re-requests the server snapshot; we call it whenever the group set changes
   // (below), since a new co-member who's already online won't emit a transition.
   const { online: onlineIds, resync: resyncPresence } = usePresence()
-  const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [newMenuOpen, setNewMenuOpen] = useState(false)
   // Collapsed left rail — frees the main area for wide chats. Persisted
   // so the choice survives reloads; collapsing/expanding never reloads the app or
   // touches the current selection.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(getStoredSidebarCollapsed)
   const [modal, setModal] = useState<NewGroupKind | null>(null)
-  // "My profile" and "Workspace settings" both open as sidebar drawers that
-  // replace the conversation list (the chat stays visible on the right).
-  const [profilePanelOpen, setProfilePanelOpen] = useState(false)
-  const [companyPanelOpen, setCompanyPanelOpen] = useState(false)
-  const [settingsPanelOpen, setSettingsPanelOpen] = useState(false)
+  // Which view the rail is on. Account / profile / company / settings all render
+  // INSIDE the rail in place of the conversation list (the chat stays visible on
+  // the right); the list itself is never unmounted from the app's state, only
+  // from the DOM, and comes back exactly as it was (see listScroll below).
+  const [sidebarView, setSidebarView] = useState<SidebarView>('list')
   const [profileTarget, setProfileTarget] = useState<{ id: string; name: string } | null>(null)
   // Prefetched once at mount so opening "My profile" is instant (the panel
   // remounts each open, so without this it would refetch every time and flash
@@ -175,8 +174,33 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // a PDF/image tab should remain available until the user explicitly closes it.
   const [attachmentTabs, setAttachmentTabs] = useState<AttachmentWorkspaceTab[]>([])
 
-  const userMenuRef = useRef<HTMLDivElement>(null)
   const newMenuRef = useRef<HTMLDivElement>(null)
+  const sidebarSlotRef = useRef<HTMLDivElement>(null)
+  // Where the conversation list was scrolled to. A drill-in view unmounts the
+  // scroller, so the offset is read off the live node the moment we navigate away
+  // (openSidebarView) and re-applied by the callback ref as soon as the list
+  // mounts again — during the commit, before paint, so coming back from
+  // Account/Profile/Company never flashes the rail at the top.
+  const listRef = useRef<HTMLElement | null>(null)
+  const listScrollTop = useRef(0)
+  const attachList = useCallback((node: HTMLElement | null) => {
+    listRef.current = node
+    if (node) node.scrollTop = listScrollTop.current
+  }, [])
+  // The single entry point for leaving the conversation list: it snapshots the
+  // scroll offset first, so restoring never depends on a scroll event having
+  // been delivered.
+  const openSidebarView = useCallback((view: SidebarView) => {
+    if (listRef.current) listScrollTop.current = listRef.current.scrollTop
+    setSidebarView(view)
+  }, [])
+
+  // Keep the animated-but-mounted sidebar out of keyboard navigation while its
+  // grid track is collapsed. React 18's HTML typings do not expose `inert` as a
+  // JSX prop yet, although the browser DOM property is supported.
+  useEffect(() => {
+    if (sidebarSlotRef.current) sidebarSlotRef.current.inert = sidebarCollapsed
+  }, [sidebarCollapsed])
   // Mirror the currently-open group id into a ref so the socket handler (set up
   // once) can tell whether an arriving message belongs to the open chat without
   // re-subscribing on every selection change.
@@ -313,23 +337,17 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     }
   }, [refreshMembers])
 
-  // Close menus on outside click / Esc.
+  // Close the rail's actions menu on outside click / Esc. It is the only
+  // floating menu the rail still raises — the account menu that used to hang off
+  // the footer is now the 'account' sidebar view.
   useEffect(() => {
-    if (!userMenuOpen && !newMenuOpen) return
+    if (!newMenuOpen) return
     function onMouseDown(e: MouseEvent) {
       const t = e.target as Node
-      if (userMenuOpen && userMenuRef.current && !userMenuRef.current.contains(t)) {
-        setUserMenuOpen(false)
-      }
-      if (newMenuOpen && newMenuRef.current && !newMenuRef.current.contains(t)) {
-        setNewMenuOpen(false)
-      }
+      if (newMenuRef.current && !newMenuRef.current.contains(t)) setNewMenuOpen(false)
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        setUserMenuOpen(false)
-        setNewMenuOpen(false)
-      }
+      if (e.key === 'Escape') setNewMenuOpen(false)
     }
     document.addEventListener('mousedown', onMouseDown)
     document.addEventListener('keydown', onKey)
@@ -337,7 +355,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
       document.removeEventListener('mousedown', onMouseDown)
       document.removeEventListener('keydown', onKey)
     }
-  }, [userMenuOpen, newMenuOpen])
+  }, [newMenuOpen])
 
   function startCreate(kind: NewGroupKind) {
     setNewMenuOpen(false)
@@ -530,6 +548,14 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         if (archived) continue
         if (filter === 'groups' && g.type !== 'vehicle') continue
         if (filter === 'dms' && g.type !== 'direct') continue
+        // Unread cuts ACROSS the type filters: rooms and DMs alike, whatever is
+        // still unread. `groups` carries live unread counts (socket-updated in
+        // useWorkspaceGroups), so a conversation leaves this list the moment it
+        // is read and re-enters when a new message lands — no refetch.
+        // The conversation you are READING stays put: opening it from here marks
+        // it read, and dropping the row out from under the click would move the
+        // whole list while you are still in it.
+        if (filter === 'unread' && !isUnread(g) && openGroupId !== g.id) continue
       }
       if (!matchesQuery(g)) continue
       matched.push(g)
@@ -547,7 +573,15 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
       }
     }
     return items
-  }, [groups, filter, matchesQuery, filteredContacts])
+  }, [groups, filter, matchesQuery, filteredContacts, openGroupId])
+
+  // How many ACTIVE conversations are still unread — the Unread pill's live
+  // count. Derived from the same `groups` state the rows read, so it moves the
+  // instant a conversation is read, muted-or-not, room or DM.
+  const unreadConversationCount = useMemo(
+    () => groups.filter((g) => !g.archivedAt && isUnread(g)).length,
+    [groups],
+  )
 
   const pendingReceived = connections.pendingReceived
 
@@ -558,7 +592,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         ? 'No direct messages or contacts yet.'
         : filter === 'archived'
           ? 'No archived conversations.'
-          : 'No conversations yet.'
+          : filter === 'unread'
+            ? 'Nothing unread — you’re all caught up.'
+            : 'No conversations yet.'
 
   const selectedGroup = useMemo<Group | null>(() => {
     if (selection?.kind !== 'group') return null
@@ -613,141 +649,77 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     setSelection({ kind: 'group', id: groupId })
   }, [])
 
-  // App shell: navigation sits directly on the workspace background while the
-  // main pane owns the raised rail surface. The shared outer gap keeps the two
-  // regions distinct without outlining either one.
+  // App shell: the rail reads as one black field with the workspace background,
+  // while the main pane carries the raised conversation surface. The shared outer
+  // gap plus each panel's hairline keep the two regions distinct.
   return (
     <div
-      className={`workspace-shell h-screen w-full gap-3 p-2 2xl:p-3 bg-bg text-text overflow-hidden ${
+      className={`workspace-shell h-screen w-full p-2 2xl:p-3 bg-bg text-text overflow-hidden ${
         sidebarCollapsed ? 'workspace-shell--collapsed' : ''
       }`}
     >
       <ConnectionStatusBanner />
-      {/* Collapsed left rail — a slim icon strip so the main area (wide
-          chats) gets the freed width. Keeps the essentials reachable: expand,
-          workspace home, and the account menu (clicking it expands first). All
-          list state (search, groups, DMs, requests, panels) is preserved and
-          returns intact on expand. */}
-      {sidebarCollapsed ? (
-        <aside className="w-full min-w-0 overflow-hidden flex flex-col items-center py-2.5 gap-1 bg-sidebar rounded-panel border border-white/8">
-          <button
-            onClick={toggleSidebar}
-            title="Expand sidebar"
-            aria-label="Expand sidebar"
-            className="h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/8 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
-          >
-            <PanelLeftOpen size="1.0625rem" strokeWidth={1.8} />
-          </button>
-          <button
-            onClick={() => setSelection({ kind: 'inbox' })}
-            title={`${workspace.name} — home`}
-            aria-label="Workspace home"
-            aria-current={inboxActive ? 'page' : undefined}
-            // Same split as the expanded header: subtle persistent selected state,
-            // separate transient hover.
-            className={`flex items-center justify-center rounded-full p-1 transition-colors hover:bg-white/8 ${
-              inboxActive ? 'bg-white/10' : ''
-            }`}
-          >
-            <CompanyLogo size={sidebarAvatar} version={logoVersion} className="!rounded-full" />
-          </button>
-          <div className="flex-1" />
-          <button
-            onClick={() => {
-              setStoredSidebarCollapsed(false)
-              setSidebarCollapsed(false)
-              setUserMenuOpen(true)
-            }}
-            title={user.displayName}
-            aria-label="Open account menu"
-            className="rounded-full p-0.5 hover:bg-white/8 transition-colors"
-          >
-            <Avatar userId={user.id} name={user.displayName} size={sidebarAvatar} version={avatarVersion} />
-          </button>
-        </aside>
-      ) : (
-      /* Left rail — its own panel, one tone above the shell and one below the
-          chat card. It used to be flat on the workspace background, which only
-          read because the chat card was much lighter; at the current darkened
-          palette a transparent rail makes the whole window one black field, so
-          the rail now carries a surface + hairline edge of its own. */
-      <aside className="w-full min-w-0 overflow-hidden flex flex-col bg-sidebar rounded-panel border border-white/8">
-        {profilePanelOpen ? (
-          <ProfileSidebarPanel
-            initialProfile={cachedProfile}
-            away={away}
-            onBack={() => setProfilePanelOpen(false)}
-            onSaved={(p, v) => {
-              // Keep the cache fresh, and update the rail footer avatar + global
-              // user data immediately.
-              setCachedProfile(p)
-              setAvatarVersion((n) => Math.max(n, v) + 1)
-              void refresh()
-            }}
-          />
-        ) : companyPanelOpen ? (
-          <CompanySidebarPanel
-            onBack={() => setCompanyPanelOpen(false)}
-            onSaved={(_c, v) => {
-              setLogoVersion((n) => Math.max(n, v) + 1)
-              void refresh()
-            }}
-          />
-        ) : settingsPanelOpen ? (
-          <WorkspaceSettingsPanel onBack={() => setSettingsPanelOpen(false)} />
-        ) : (
-          <>
-        {/* Workspace identity = the entry point to the Inbox / workspace home.
-            Clicking it deselects any chat/request/invite and opens the tools
-            area. The whole row (identity + collapse control) is ONE hover
-            surface, and there's no persistent "selected" tint — the header keeps
-            the sidebar colour at rest. The collapse control sits to its right.
-            (No workspace switcher — actions live in the user menu below.) */}
-        <div className="h-[var(--header-height)] flex items-stretch transition-colors hover:bg-white/8">
-          <button
-            onClick={() => setSelection({ kind: 'inbox' })}
-            title="Workspace home"
-            aria-current={inboxActive ? 'page' : undefined}
-            // Transparent: the unified row hover (parent) provides the highlight,
-            // and there's no persistent active background. Padding/gap mirror the
-            // chat header's identity cluster and the rail's own content edge (the
-            // search field + footer avatar sit at px-3), so the logo lines up with
-            // everything below it instead of being indented on its own.
-            className="flex-1 min-w-0 flex items-center gap-2.5 px-2.5 text-left"
-          >
-            <CompanyLogo size={headerLogoSize} version={logoVersion} className="!rounded-full" />
-            <div className="min-w-0 flex-1">
-              <div
-                className="font-semibold tracking-[-0.2px] leading-tight truncate"
-                style={{ fontSize: 'var(--sidebar-title-font-size)' }}
-              >
-                {workspace.name}
-              </div>
-            </div>
-          </button>
-          {/* Integrated icon action (same treatment as the chat header's
-              Group info button): borderless ~36px hit area, no own background so
-              the unified header hover reads across it too; the icon colour lifts
-              for affordance, with an on-theme focus ring. */}
-          <button
-            onClick={toggleSidebar}
-            title="Collapse sidebar"
-            aria-label="Collapse sidebar"
-            className="self-center mr-1 h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 shrink-0"
-          >
-            <PanelLeftClose size="1.0625rem" strokeWidth={1.8} />
-          </button>
-        </div>
+      {/* Persistent application navigation. Unlike the conversation sidebar,
+          this narrow rail never disappears, so Workspace and the main sections
+          stay reachable from chats and every sidebar drill-in. */}
+      <WorkspaceNavRail
+        collapsed={sidebarCollapsed}
+        workspaceActive={sidebarView === 'list' && inboxActive}
+        settingsActive={sidebarView === 'settings'}
+        onToggleSidebar={toggleSidebar}
+        onOpenWorkspace={() => {
+          setNewMenuOpen(false)
+          setSidebarView('list')
+          setSelection({ kind: 'inbox' })
+        }}
+        onOpenSettings={() => {
+          if (sidebarCollapsed) {
+            setStoredSidebarCollapsed(false)
+            setSidebarCollapsed(false)
+          }
+          openSidebarView('settings')
+        }}
+      />
 
-        {/* Quick search + create */}
-        <div className="px-2.5 pt-2.5 pb-1.5 flex items-center gap-1.5">
+      <div
+        ref={sidebarSlotRef}
+        className="workspace-sidebar-slot min-w-0 overflow-hidden"
+        aria-hidden={sidebarCollapsed}
+      >
+      {/* Left rail — the app's deepest surface: pure black, drawn against the
+          shell by its hairline edge rather than by a tone step, so the chat
+          window beside it reads as the raised panel. Its content is a small
+          navigation stack (see SidebarView): the conversation list, or one
+          drill-in view rendered in its place. */}
+      <aside className="workspace-sidebar-panel relative h-full min-w-0 overflow-hidden bg-sidebar rounded-panel border border-white/8">
+        {/* Keep the conversation list mounted while a sidebar panel covers it.
+            Rows therefore retain their image elements, decoded avatars, action
+            state and scroll position instead of rebuilding on every Back. */}
+        <div
+          aria-hidden={sidebarView !== 'list'}
+          className={`h-full min-h-0 flex flex-col ${
+            sidebarView === 'list' ? '' : 'invisible pointer-events-none'
+          }`}
+        >
+        {/* Top toolbar — ONE compact row: the conversation search takes the
+            flexible width, followed by the fixed circular actions control.
+            This replaced the old workspace-identity header; the company identity
+            now lives in the rail's bottom row, and workspace home is the first
+            item of the persistent navigation rail. */}
+        <div className="px-2.5 pt-2 pb-0 flex items-center gap-1.5 shrink-0">
+          {/* The field is compact VERTICALLY only: its height comes from the
+              (reduced) --sidebar-search-height token and it keeps flex-1, so it
+              still takes all the width the two fixed controls leave. */}
           <label
             htmlFor="rail-search"
-            className="flex-1 h-[var(--sidebar-search-height)] flex items-center gap-2 px-3 rounded-full border border-white/10 bg-surface-2/60 hover:bg-surface-2/80 hover:border-white/16 focus-within:bg-surface-2 focus-within:border-white/20 transition-colors cursor-text"
+            className="flex-1 min-w-0 h-[var(--sidebar-search-height)] flex items-center gap-2 px-3 rounded-full border border-white/10 bg-surface-2/60 hover:bg-surface-2/80 hover:border-white/16 focus-within:bg-surface-2 focus-within:border-white/20 transition-colors cursor-text"
           >
             <Search size="0.875rem" strokeWidth={1.7} className="text-muted shrink-0" />
             <input
               id="rail-search"
+              // The field carries no visible label (the magnifier + placeholder
+              // do the work), so it names itself for assistive tech.
+              aria-label="Search conversations"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
@@ -811,14 +783,28 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               </div>
             )}
           </div>
+
         </div>
 
-        {/* Filters — the TYPE segmented control (everything / vehicle rooms /
-            direct) sits on the left; the Archived STATE is a separate icon toggle
-            on the right, so the two filter axes never read as peers. Opening
-            Archived clears the type selection; picking a type leaves Archived. */}
-        <div className="px-2.5 pb-1.5 flex items-center gap-1.5">
-          <div className="inline-flex items-center gap-1">
+        {/* Filters — Archived leads the segmented control (everything / vehicle
+            rooms / direct / unread) as a compact icon toggle. Opening Archived
+            clears the type selection; picking a type leaves Archived.
+            Fixed, like the toolbar above it — only the list scrolls. The pills
+            wrap rather than overflow at the narrowest rail width. The space
+            above comes from --sidebar-toolbar-gap so the search field and this
+            row keep ONE agreed distance (see index.css). */}
+        <div
+          style={{ paddingTop: 'var(--sidebar-toolbar-gap)' }}
+          className="px-2.5 pb-1.5 flex items-center gap-1.5 shrink-0"
+        >
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <ArchiveToggle
+              active={filter === 'archived'}
+              label={filter === 'archived' ? 'Show conversations' : 'Show archived'}
+              onClick={() => setFilter((f) => (f === 'archived' ? 'all' : 'archived'))}
+            >
+              <Archive size="0.8125rem" strokeWidth={1.8} />
+            </ArchiveToggle>
             <FilterTab active={filter === 'all'} onClick={() => setFilter('all')}>
               All
             </FilterTab>
@@ -828,15 +814,17 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             <FilterTab active={filter === 'dms'} onClick={() => setFilter('dms')}>
               Direct
             </FilterTab>
+            {/* Unread cuts across the three type pills: every conversation with
+                something new, room or DM. Its count is live (socket unread
+                updates), so it empties as you read. */}
+            <FilterTab
+              active={filter === 'unread'}
+              onClick={() => setFilter('unread')}
+              badge={unreadConversationCount || undefined}
+            >
+              Unread
+            </FilterTab>
           </div>
-          <div className="flex-1" />
-          <ArchiveToggle
-            active={filter === 'archived'}
-            label={filter === 'archived' ? 'Show conversations' : 'Show archived'}
-            onClick={() => setFilter((f) => (f === 'archived' ? 'all' : 'archived'))}
-          >
-            <Archive size="0.8125rem" strokeWidth={1.8} />
-          </ArchiveToggle>
         </div>
 
         {/* Rail list. Pending actionable items keep their OWN separated,
@@ -846,7 +834,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             Sections use the larger inter-section gap; the unified list inside its
             wrapper stays tight. */}
         <nav
-          className="flex-1 overflow-y-auto px-1.5 pt-1 pb-1.5 flex flex-col"
+          ref={attachList}
+          className="flex-1 min-h-0 overflow-y-auto px-1.5 pt-1 pb-1.5 flex flex-col"
           style={{ gap: 'var(--sidebar-section-gap)' }}
         >
           {loadingGroups ? (
@@ -930,104 +919,79 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           )}
         </nav>
 
-        {/* User menu */}
-        <div className="relative px-1.5 pb-1.5" ref={userMenuRef}>
-          {userMenuOpen && (
-            <div className={`absolute bottom-full left-2 w-[15rem] max-w-[calc(100%-1rem)] mb-2 ${MENU_CONTAINER}`}>
-              <MenuItem
-                icon={<CircleUser {...MENU_GLYPH} />}
-                onClick={() => {
-                  setUserMenuOpen(false)
-                  setProfilePanelOpen(true)
-                }}
-              >
-                My profile
-              </MenuItem>
-              <MenuItem
-                icon={<Building2 {...MENU_GLYPH} />}
-                onClick={() => {
-                  setUserMenuOpen(false)
-                  setCompanyPanelOpen(true)
-                }}
-              >
-                Company profile
-              </MenuItem>
-              <MenuItem
-                icon={<Settings {...MENU_GLYPH} />}
-                onClick={() => {
-                  setUserMenuOpen(false)
-                  setSettingsPanelOpen(true)
-                }}
-              >
-                Workspace settings
-              </MenuItem>
-              <div className={MENU_SEPARATOR} />
-              <MenuItem
-                icon={<LogOut {...MENU_GLYPH} />}
-                tone="danger"
-                onClick={() => {
-                  setUserMenuOpen(false)
-                  void onSignOut()
-                }}
-              >
-                Sign out
-              </MenuItem>
-            </div>
-          )}
-
-          <button
-            onClick={() => setUserMenuOpen((v) => !v)}
-            className={`w-full flex items-center gap-2 px-2 py-2 rounded-btn transition-colors text-left ${
-              userMenuOpen ? 'bg-white/10' : 'hover:bg-white/8'
-            }`}
-          >
-            <div className="relative shrink-0">
-              <Avatar userId={user.id} name={user.displayName} size={sidebarAvatar} version={avatarVersion} />
-              {/* Live status dot: grey "Away" when idle, else the manual status
-                  colour. Drivers have no availability, so no dot. */}
-              {user.role !== 'driver' && cachedProfile && (
-                <span
-                  title={away ? AWAY.label : statusMeta(cachedProfile.availabilityStatus).label}
-                  className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-sidebar"
-                  style={{
-                    backgroundColor: away
-                      ? AWAY.color
-                      : statusMeta(cachedProfile.availabilityStatus).color,
-                  }}
-                />
-              )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div
-                className="font-medium truncate"
-                style={{ fontSize: 'var(--sidebar-row-font-size)' }}
-              >
-                {user.displayName}
-              </div>
-              <div
-                className="text-muted truncate capitalize"
-                style={{ fontSize: 'var(--sidebar-meta-font-size)' }}
-              >
-                {user.role}
-              </div>
-            </div>
-            <ChevronDown
-              size="0.875rem"
-              strokeWidth={1.6}
-              className={`text-muted shrink-0 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`}
-            />
-          </button>
+        {/* Fixed identity row — me on the left, the company on the right, each
+            half a drill-in trigger into a sidebar view. Sits outside the
+            scroller, so it stays put while the list moves. */}
+        <SidebarIdentityBar
+          user={user}
+          workspace={workspace}
+          profile={cachedProfile}
+          away={away}
+          size={sidebarAvatar}
+          avatarVersion={avatarVersion}
+          logoVersion={logoVersion}
+          onOpenAccount={() => openSidebarView('account')}
+          onOpenCompany={() => openSidebarView('company')}
+        />
         </div>
-          </>
+
+        {/* Drill-in panels occupy the same sidebar surface without replacing
+            the mounted conversation layer underneath. Only the active panel is
+            mounted; its own form state may reset when intentionally left. */}
+        {sidebarView !== 'list' && (
+          <div
+            key={sidebarView}
+            className="panel-fade-in absolute inset-0 z-10 flex min-h-0 flex-col bg-sidebar"
+          >
+            {sidebarView === 'account' ? (
+              <AccountSidebarPanel
+                user={user}
+                profile={cachedProfile}
+                away={away}
+                avatarVersion={avatarVersion}
+                onBack={() => setSidebarView('list')}
+                onOpenProfile={() => setSidebarView('profile')}
+                onOpenSettings={() => setSidebarView('settings')}
+                onSignOut={() => void onSignOut()}
+              />
+            ) : sidebarView === 'profile' ? (
+              <ProfileSidebarPanel
+                initialProfile={cachedProfile}
+                away={away}
+                onBack={() => setSidebarView('account')}
+                backLabel="Back to Account"
+                onSaved={(p, v) => {
+                  setCachedProfile(p)
+                  setAvatarVersion((n) => Math.max(n, v) + 1)
+                  void refresh()
+                }}
+              />
+            ) : sidebarView === 'company' ? (
+              <CompanySidebarPanel
+                onBack={() => setSidebarView('list')}
+                backLabel="Back to conversations"
+                onSaved={(_c, v) => {
+                  setLogoVersion((n) => Math.max(n, v) + 1)
+                  void refresh()
+                }}
+              />
+            ) : (
+              <WorkspaceSettingsPanel
+                onBack={() => setSidebarView('account')}
+                backLabel="Back to Account"
+              />
+            )}
+          </div>
         )}
       </aside>
-      )}
+      </div>
 
-      {/* Main — the raised workspace card, the lightest of the three surfaces.
-          The hairline outline pairs with the rail's: with the palette this close
-          to black, the tone step alone no longer draws the card's edge against
-          the shell gap. */}
-      <main className="workspace-main flex flex-col min-w-0 bg-rail rounded-panel overflow-hidden border border-white/8">
+      {/* Main — the conversation window, one tone above the black rail. Panels,
+          drawers and modals that open over it use `surface`/`rail`, a step
+          lighter again, so they always read as a layer ON the chat. The hairline
+          outline pairs with the rail's: with the palette this close to black, the
+          tone step alone no longer draws the card's edge against the shell gap. */}
+      <main className="workspace-main flex flex-col min-w-0 bg-chat rounded-panel overflow-hidden border border-white/8">
         {selectedGroup ? (
           <ChatView
             key={selectedGroup.id}
@@ -1052,7 +1016,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             onGroupUpdated={patchGroup}
           />
         ) : (
-          <div className="flex-1 flex flex-col min-w-0 bg-rail">
+          <div className="flex-1 flex flex-col min-w-0 bg-chat">
             {selectedRequest ? (
               <ConnectionRequestView
                 key={selectedRequest.id}

@@ -1,5 +1,7 @@
-import { useState, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import type { ChipTone } from '../../lib/vehicleOps'
+import { EditableSelect } from '../forms'
+import { ProfileSection } from '../settings/profileChrome'
 
 // Shared, panel-native controls for the vehicle-room operational tabs. They
 // match the GroupInfoPanel aesthetic (muted label over value, hairline divider,
@@ -102,9 +104,10 @@ export function TripStatusInline({
   )
 }
 
-// A labelled row that edits a value chosen from a fixed option list. Read-only
-// (just the label text) unless `editable`; editing is a styled native <select>
-// that saves on change. Mirrors EditableRow's layout/spacing for a uniform tab.
+// A labelled row that edits a value chosen from a fixed option list. A thin
+// pass-through to the shared EditableSelect so a vehicle/trip status field is
+// the SAME control (and the same read/edit/saving/error states) as every other
+// field in the app — this used to be a bespoke always-visible <select>.
 export function SelectRow<T extends string>({
   label,
   value,
@@ -119,50 +122,27 @@ export function SelectRow<T extends string>({
   // Persist the new value (undefined when cleared back to "Not set").
   onSave: (value: T | undefined) => Promise<void>
 }) {
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState(false)
-  const current = options.find((o) => o.value === value)?.label
-
-  async function change(next: T | undefined) {
-    setSaving(true)
-    setError(false)
-    try {
-      await onSave(next)
-    } catch {
-      setError(true)
-    } finally {
-      setSaving(false)
-    }
-  }
-
   return (
-    <div className="py-2 border-b border-white/4 last:border-0">
-      <label className="block text-xs text-faint mb-1">{label}</label>
-      {editable ? (
-        <select
-          value={value ?? ''}
-          disabled={saving}
-          onChange={(e) => void change((e.target.value || undefined) as T | undefined)}
-          className="h-8 w-full cursor-pointer rounded-card border border-white/6 bg-white/2 px-2 text-base text-text outline-none transition-colors hover:border-white/10 focus:border-white/16 disabled:opacity-50"
-        >
-          <option value="">Not set</option>
-          {options.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      ) : (
-        <div className={`text-base ${current ? 'text-text' : 'text-faint'}`}>{current ?? 'Not set'}</div>
-      )}
-      {error && <div className="text-xs text-alert mt-1">Could not save. Try again.</div>}
-    </div>
+    <EditableSelect
+      label={label}
+      value={value}
+      options={options}
+      editable={editable}
+      onSave={onSave}
+    />
   )
 }
 
 // A small eyebrow sub-heading used to group related rows within a tab (e.g.
 // "Loading" / "Unloading" in the trip tab). Lighter than GroupInfoPanel's
 // Section — no action slot, tighter spacing.
-export function SubHeading({ children }: { children: ReactNode }) {
-  return <div className="eyebrow mb-1 mt-3 first:mt-0">{children}</div>
+// A labelled block inside a Group info tab. Delegates to the app-wide
+// ProfileSection so the vehicle tabs, My profile, Company profile and the User
+// profile card all render an eyebrow over the SAME grouped field card.
+export function SubHeading({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="mt-4 first:mt-0">
+      <ProfileSection label={label}>{children}</ProfileSection>
+    </div>
+  )
 }

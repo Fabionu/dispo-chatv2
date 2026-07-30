@@ -1,4 +1,64 @@
-import { Fragment, useEffect, useRef, type ReactNode } from 'react'
+import { Fragment, forwardRef, useEffect, useRef, type ReactNode } from 'react'
+import { ChevronDown } from 'lucide-react'
+
+// ── The trigger ─────────────────────────────────────────────────────────────
+// ONE affordance for both timeline styles: the bubble variant rides the
+// bubble's outer edge as a small circular control, the inline variant sits in
+// the plain stream's meta row with no chrome of its own. Shared so the two can't
+// drift in size, tone or motion.
+//
+// Motion is deliberately small: it fades in with a slight lift and scale (never
+// a size or position change on the BUBBLE — the button is always mounted and
+// only its opacity/transform move, so revealing it can't reflow the row), and
+// the chevron rotates a controlled half-turn while the actions are open.
+// Reduced motion drops the transitions and the resting transform, so the button
+// simply appears already in place.
+export const MessageActionsTrigger = forwardRef<
+  HTMLButtonElement,
+  {
+    open: boolean
+    onToggle: () => void
+    /** 'bubble' — circular control beside a bubble; 'inline' — bare glyph in
+     *  the plain stream's trailing meta cluster. */
+    variant?: 'bubble' | 'inline'
+  }
+>(function MessageActionsTrigger({ open, onToggle, variant = 'bubble' }, ref) {
+  // Each timeline style names its own hover group, so the reveal condition
+  // differs; everything else about the control is identical.
+  const reveal = open
+    ? 'opacity-100 scale-100 translate-y-0 text-text'
+    : variant === 'bubble'
+      ? 'opacity-0 scale-90 -translate-y-0.5 group-hover:opacity-100 group-hover:scale-100 group-hover:translate-y-0 focus-visible:opacity-100 focus-visible:scale-100 focus-visible:translate-y-0'
+      : 'opacity-0 scale-90 -translate-y-0.5 group-hover/msg:opacity-100 group-hover/msg:scale-100 group-hover/msg:translate-y-0 focus-visible:opacity-100 focus-visible:scale-100 focus-visible:translate-y-0'
+
+  return (
+    <button
+      ref={ref}
+      type="button"
+      onClick={onToggle}
+      aria-label="Message actions"
+      aria-haspopup="menu"
+      aria-expanded={open}
+      className={`shrink-0 flex items-center justify-center text-faint
+        transition-[opacity,transform,color,background-color] duration-200 ease-out
+        motion-reduce:transition-none motion-reduce:transform-none
+        hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+          variant === 'bubble'
+            ? 'h-6 w-6 rounded-full hover:bg-white/4'
+            : 'leading-none pb-[2px]'
+        } ${reveal}`}
+    >
+      <ChevronDown
+        size="0.9375rem"
+        strokeWidth={1.8}
+        aria-hidden
+        className={`transition-transform duration-200 ease-out motion-reduce:transition-none ${
+          open ? 'rotate-180' : ''
+        }`}
+      />
+    </button>
+  )
+})
 
 export type MessageAction = {
   label: string
@@ -44,7 +104,7 @@ export default function MessageActionsPanel({ actions, mine, onClose }: Props) {
       onClick={(e) => e.stopPropagation()}
       // rounded-[1rem] — the bubble's own outer radius (shapeMine/shapeOther),
       // so the strip reads as that bubble's footer, not a foreign card.
-      className={`mt-1 flex w-max items-center gap-0.5 rounded-[1rem] border px-1 py-1 ${
+      className={`mt-1 flex w-max items-center gap-0.5 rounded-[0.875rem] border px-1 py-0.5 ${
         mine ? 'bg-bubble-own border-white/8' : 'bg-surface-2 border-white/6'
       }`}
     >
@@ -52,7 +112,7 @@ export default function MessageActionsPanel({ actions, mine, onClose }: Props) {
         const alert = a.tone === 'alert'
         return (
           <Fragment key={i}>
-            {a.separator && <span aria-hidden className="mx-0.5 h-4 w-px bg-white/8" />}
+            {a.separator && <span aria-hidden className="mx-0.5 h-3.5 w-px bg-white/8" />}
             <button
               type="button"
               role="menuitem"
@@ -66,7 +126,7 @@ export default function MessageActionsPanel({ actions, mine, onClose }: Props) {
                 a.onClick()
                 onClose()
               }}
-              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-btn transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 disabled:opacity-30 disabled:cursor-default disabled:hover:bg-transparent ${
+              className={`flex h-6 w-7 shrink-0 items-center justify-center rounded-btn transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 disabled:opacity-30 disabled:cursor-default disabled:hover:bg-transparent ${
                 alert
                   ? 'text-alert hover:bg-alert/10'
                   : 'text-muted hover:bg-white/6 hover:text-text'

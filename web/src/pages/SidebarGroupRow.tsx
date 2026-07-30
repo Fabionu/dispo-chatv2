@@ -1,23 +1,23 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   Archive,
   ArchiveRestore,
   Bell,
   BellOff,
-  ChevronDown,
   MailOpen,
   Pin,
   PinOff,
   Trash2,
 } from 'lucide-react'
 import type { Group } from '../lib/types'
-import { groupHasUnread, groupLabel, groupPreview } from '../lib/types'
+import { groupLabel, groupPreview, isUnread } from '../lib/types'
 import { useDraft } from '../lib/draftStorage'
 import { getOps, tripSummary } from '../lib/vehicleOps'
 import { TripStatusInline } from '../components/vehicle/opsControls'
 import Avatar from '../components/Avatar'
 import GroupAvatar from '../components/GroupAvatar'
 import IdentitySlot from '../components/IdentitySlot'
+import { RowActionsTrigger, RowStateIcon } from './sidebarBits'
 import { MENU_GLYPH } from '../components/menuStyles'
 import { statusMeta, OFFLINE } from '../lib/availability'
 import { typingStatusText, type TypingUser } from '../lib/typing'
@@ -118,7 +118,7 @@ export default function GroupRow({
   // the API didn't send a count (older server) so the dot never disappears.
   const hasCount = typeof group.unreadCount === 'number'
   const unreadCount = selected ? 0 : group.unreadCount ?? 0
-  const unread = selected ? false : hasCount ? unreadCount > 0 : groupHasUnread(group)
+  const unread = selected ? false : isUnread(group)
   // Unread @-mentions get their own compact badge, separate from the regular
   // unread dot/count, so being mentioned stands out from ordinary traffic.
   const hasUnreadMention = !selected && (group.unreadMentionCount ?? 0) > 0
@@ -133,9 +133,11 @@ export default function GroupRow({
   const preview = groupPreview(group, currentUserId)
   const time = relTime(group.lastMessageAt)
   // Local unsent draft for THIS conversation (this user/device only — never
-  // synced). When present it replaces the last-message preview with a subtle
-  // "Draft: …" line; the timestamp keeps showing the real last message's time.
+  // synced). It is persisted while typing, but only replaces the last-message
+  // preview after the user leaves this conversation. This keeps the active
+  // sidebar row stable while the composer is being used.
   const draft = useDraft(currentUserId, group.id).replace(/\s+/g, ' ').trim()
+  const showDraft = !selected && Boolean(draft)
   const typingText = typingStatusText(typingUsers, group.type === 'direct')
 
   // ── Per-conversation row actions (inline strip under the row) ─────────────
@@ -153,12 +155,21 @@ export default function GroupRow({
     if (!menuOpen) setConfirmDelete(false)
   }, [menuOpen])
   const closeActions = () => onActionsOpenChange(false)
-  // Right-clicking anywhere on the row opens the SAME actions.
-  const openMenuAtCursor = (e: React.MouseEvent) => {
+  const rowWrapperRef = useRef<HTMLDivElement>(null)
+  // Right-clicking anywhere on the row TOGGLES the same actions: once to open,
+  // again to close. Right-clicking a DIFFERENT row moves the strip there (the
+  // list owns the open id, so only one is ever open) — and the outside-press
+  // handler below has already closed this one by the time that row's
+  // contextmenu fires. `preventDefault` keeps the browser menu away, and a
+  // contextmenu is not a click, so the conversation never opens from it.
+  const toggleMenuAtCursor = (e: React.MouseEvent) => {
     e.preventDefault()
-    onActionsOpenChange(true)
+    onActionsOpenChange(!menuOpen)
   }
-  // Escape closes the strip, matching every other dismissible surface.
+  // Escape and a press outside the row both close the strip, matching every
+  // other dismissible surface. `mousedown` (not click) so it also fires for the
+  // right button, which is what makes right-clicking another row hand over
+  // cleanly.
   useEffect(() => {
     if (!menuOpen) return
     function onKey(e: KeyboardEvent) {
@@ -166,8 +177,16 @@ export default function GroupRow({
       e.stopPropagation()
       onActionsOpenChange(false)
     }
+    function onPointerDown(e: MouseEvent) {
+      if (rowWrapperRef.current?.contains(e.target as Node)) return
+      onActionsOpenChange(false)
+    }
     document.addEventListener('keydown', onKey, true)
-    return () => document.removeEventListener('keydown', onKey, true)
+    document.addEventListener('mousedown', onPointerDown, true)
+    return () => {
+      document.removeEventListener('keydown', onKey, true)
+      document.removeEventListener('mousedown', onPointerDown, true)
+    }
   }, [menuOpen, onActionsOpenChange])
   const archived = Boolean(group.archivedAt)
   const pinned = Boolean(group.pinnedAt)
@@ -237,35 +256,21 @@ export default function GroupRow({
         menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
       }`}
     >
-      <button
-        type="button"
-        aria-label={`Conversation actions for ${groupLabel(group)}`}
-        aria-expanded={menuOpen}
-        onClick={(e) => {
-          // Never let the click fall through to the row (which opens the chat).
-          e.stopPropagation()
-          e.preventDefault()
-          onActionsOpenChange(!menuOpen)
-        }}
-        className={`h-5 w-5 flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
-          menuOpen ? 'bg-white/8 text-text' : 'text-muted hover:text-text hover:bg-white/6'
-        }`}
-      >
-        <ChevronDown
-          size="0.75rem"
-          strokeWidth={1.8}
-          className={`transition-transform ${menuOpen ? 'rotate-180' : ''}`}
-        />
-      </button>
+      <RowActionsTrigger
+        open={menuOpen}
+        label={`Conversation actions for ${groupLabel(group)}`}
+        onToggle={() => onActionsOpenChange(!menuOpen)}
+      />
     </div>
   )
-  // Muted indicator — part of the preview-line state cluster.
+  // Muted indicator — part of the preview-line state cluster, same glyph family
+  // and tone as the pin above it.
   const mutedIcon = muted ? (
-    <BellOff size="0.75rem" strokeWidth={1.7} className="shrink-0 text-faint" aria-label="Muted" />
+    <RowStateIcon icon={BellOff} label="Notifications muted" />
   ) : null
 
   return (
-    <div className="relative group/row" onContextMenu={openMenuAtCursor}>
+    <div ref={rowWrapperRef} className="relative group/row" onContextMenu={toggleMenuAtCursor}>
       {/* Anchor the disclosure trigger to the fixed-height conversation row.
           The outer wrapper also contains the expanding action strip. */}
       <div className="relative">
@@ -352,7 +357,7 @@ export default function GroupRow({
             >
               {typingText ? (
                 <span role="status" aria-live="polite">{typingText}</span>
-              ) : draft ? (
+              ) : showDraft ? (
                 // A local unsent draft takes over the preview line, its "Draft:"
                 // tag in the app's accent so it reads as a distinct, personal
                 // state. The line truncates, so a long draft ellipsizes.
@@ -372,14 +377,7 @@ export default function GroupRow({
               )}
             </span>
             <span className={`flex items-center gap-2 shrink-0 ${metaShift}`}>
-              {pinned && (
-                <Pin
-                  size="0.8125rem"
-                  strokeWidth={1.8}
-                  className="shrink-0 text-muted"
-                  aria-label="Pinned"
-                />
-              )}
+              {pinned && <RowStateIcon icon={Pin} label="Pinned" />}
               {hasUnreadMention && (
                 <span
                   aria-label="You were mentioned"

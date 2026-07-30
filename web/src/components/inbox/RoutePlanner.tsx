@@ -42,6 +42,7 @@ import type {
 } from '../../lib/here/types'
 import type { RouteMoney, RouteTollSummary } from '../../lib/here/types'
 import PointRow from './RoutePointRow'
+import { RoleBadge } from './RoutePointCard'
 import { CopyCoordButton, NumberField, PresetSelect, Stat } from './RoutePlannerFields'
 import {
   EMPTY_TRUCK,
@@ -881,23 +882,11 @@ export default function RoutePlanner({ onBack }: Props) {
   // (keeping its role/order), cancelling leaves the old address untouched.
   function editorRow(p: RoutePoint) {
     const stopIndex = p.role === 'stop' ? stops.findIndex((s) => s.id === p.id) + 1 : 0
-    const badge =
-      p.role === 'start' ? (
-        <span className="h-5 w-5 rounded-full border border-done/30 bg-done/10 text-done flex items-center justify-center">
-          <Navigation size="0.6875rem" strokeWidth={2.2} />
-        </span>
-      ) : p.role === 'destination' ? (
-        <span className="h-5 w-5 rounded-full border border-alert/30 bg-alert/10 text-alert flex items-center justify-center">
-          <Flag size="0.6875rem" strokeWidth={2.2} />
-        </span>
-      ) : (
-        <span className="h-5 w-5 rounded-full border border-white/20 bg-white/6 text-2xs font-semibold flex items-center justify-center">
-          {stopIndex}
-        </span>
-      )
     return (
-      <div className="flex items-center gap-2.5">
-        <div className="shrink-0">{badge}</div>
+      // Editing a point keeps the card's badge gutter and gap, so the search
+      // field opens exactly where the address it replaces was.
+      <div className="flex items-center gap-2">
+        <RoleBadge role={p.role} index={stopIndex} />
         <div className="flex-1 min-w-0">
           <PlaceSearchField
             value={null}
@@ -1023,7 +1012,7 @@ export default function RoutePlanner({ onBack }: Props) {
           style={{ transform: panelCollapsed ? 'translateX(calc(-100% - 1rem))' : 'translateX(0)' }}
           aria-hidden={panelCollapsed}
         >
-          <div className="flex items-center justify-between pl-3.5 pr-2 h-11 rounded-[1.25rem] border border-white/8 bg-rail shadow-raised shrink-0">
+          <div className="flex items-center justify-between pl-3.5 pr-2 h-11 rounded-panel border border-white/8 bg-rail shadow-raised shrink-0">
             <div className="min-w-0">
               <div className="text-base font-semibold tracking-[-0.1px]">Route</div>
               <div className="text-2xs text-faint leading-tight">Plan your delivery path</div>
@@ -1050,7 +1039,7 @@ export default function RoutePlanner({ onBack }: Props) {
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2">
-            <section className="rounded-[1.25rem] border border-white/8 bg-rail p-2 flex flex-col gap-1.5">
+            <section className="rounded-panel border border-white/8 bg-rail p-2 flex flex-col gap-1.5">
             {/* Start — draggable so it can be reordered into the route (drop it
                 lower and the next point becomes the new start). */}
             {start ? (
@@ -1073,12 +1062,12 @@ export default function RoutePlanner({ onBack }: Props) {
                 />
               )
             ) : (
-              <div className="flex items-center gap-2.5">
-                <span className="h-5 w-5 shrink-0 rounded-full border border-done/30 bg-done/10 text-done flex items-center justify-center">
-                  <Navigation size="0.6875rem" strokeWidth={2.2} />
-                </span>
+              // Empty slot — the SAME badge gutter and gap as a filled card, so
+              // the search field lines up with the addresses above/below it.
+              <div className="flex items-center gap-2">
+                <RoleBadge role="start" muted />
                 <div className="min-w-0 flex-1">
-                  <PlaceSearchField pill value={null} onChange={(p) => p && setStart(fromSearch(p))} placeholder="Start address or place…" />
+                  <PlaceSearchField value={null} onChange={(p) => p && setStart(fromSearch(p))} placeholder="Start address or place…" />
                 </div>
               </div>
             )}
@@ -1110,13 +1099,10 @@ export default function RoutePlanner({ onBack }: Props) {
             {/* Compact "add stop" — secondary action, not a permanent input. */}
             {stops.length < MAX_STOPS &&
               (addingStop ? (
-                <div className="flex items-center gap-2.5">
-                  <span className="h-5 w-5 shrink-0 rounded-full border border-white/16 bg-white/6 text-muted flex items-center justify-center">
-                    <Plus size="0.6875rem" strokeWidth={2.2} />
-                  </span>
+                <div className="flex items-center gap-2">
+                  <RoleBadge role="add" muted />
                   <div className="flex-1 min-w-0">
                     <PlaceSearchField
-                      pill
                       value={null}
                       onChange={(p) => {
                         if (p) {
@@ -1141,11 +1127,12 @@ export default function RoutePlanner({ onBack }: Props) {
                   </button>
                 </div>
               ) : (
-                // Aligned with the point rows/fields: a quiet dashed "insert
-                // here" slot, not floating text — clear but secondary.
+                // Aligned with the point cards: indented past the badge gutter
+                // (24px badge + 8px gap) so it sits under the addresses, quiet
+                // but clearly the way to add another stop.
                 <button
                   onClick={() => setAddingStop(true)}
-                  className="self-start ml-7 h-7 flex items-center gap-1.5 px-2.5 rounded-full bg-white/4 text-sm text-muted hover:text-text hover:bg-white/8 transition-colors"
+                  className="self-start ml-8 h-7 flex items-center gap-1.5 px-2.5 rounded-full bg-white/4 text-sm text-muted hover:text-text hover:bg-white/8 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
                 >
                   <Plus size="0.8125rem" strokeWidth={2} /> Add stop
                 </button>
@@ -1173,12 +1160,10 @@ export default function RoutePlanner({ onBack }: Props) {
                 />
               )
             ) : (
-              <div className="flex items-center gap-2.5">
-                <span className="h-5 w-5 shrink-0 rounded-full border border-alert/30 bg-alert/10 text-alert flex items-center justify-center">
-                  <Flag size="0.6875rem" strokeWidth={2.2} />
-                </span>
+              <div className="flex items-center gap-2">
+                <RoleBadge role="destination" muted />
                 <div className="min-w-0 flex-1">
-                  <PlaceSearchField pill value={null} onChange={(p) => p && setDestinationPoint(fromSearch(p))} placeholder="End address or place…" />
+                  <PlaceSearchField value={null} onChange={(p) => p && setDestinationPoint(fromSearch(p))} placeholder="End address or place…" />
                 </div>
               </div>
             )}
@@ -1187,12 +1172,12 @@ export default function RoutePlanner({ onBack }: Props) {
             {/* Truck profile (collapsible, with presets) — a circular pill that
                 matches the Create route button while collapsed (no dark frame),
                 morphing into a rounded card once opened to hold the field grid. */}
-            <div className={`bg-rail ${truckOpen ? 'rounded-[1.25rem] p-1.5' : 'rounded-full'}`}>
+            <div className={`bg-rail ${truckOpen ? 'rounded-panel p-1.5' : 'rounded-full'}`}>
               <button
                 onClick={() => setTruckOpen((o) => !o)}
                 aria-expanded={truckOpen}
                 className={`w-full h-10 flex items-center justify-between gap-2 px-2 text-left hover:bg-white/4 transition-colors ${
-                  truckOpen ? 'rounded-[0.875rem]' : 'rounded-full'
+                  truckOpen ? 'rounded-card' : 'rounded-full'
                 }`}
               >
                 {/* Left section is fixed (icon + label never wrap or shrink);
@@ -1316,7 +1301,7 @@ export default function RoutePlanner({ onBack }: Props) {
 
             {/* Summary + notices */}
             {route && !loading && (
-              <div className="flex flex-col gap-2 rounded-[1.25rem] border border-white/8 bg-rail p-2">
+              <div className="flex flex-col gap-2 rounded-panel border border-white/8 bg-rail p-2">
                 <div className="grid grid-cols-4 divide-x divide-white/6">
                   <Stat label="Distance" value={formatDistance(route.summary.length)} />
                   <Stat label="Duration" value={formatDuration(route.summary.duration)} />

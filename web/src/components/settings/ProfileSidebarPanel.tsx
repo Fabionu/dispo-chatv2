@@ -1,14 +1,22 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { ArrowLeft, Check, ChevronDown, Loader2, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Check, ChevronDown, Loader2, Trash2 } from 'lucide-react'
 import type { AvailabilityStatus, Profile, Role } from '../../lib/types'
 import { api, type ProfilePatch } from '../../lib/api'
-import { ICON_ACTION_BASE, ICON_ACTION_IDLE } from '../HeaderIconButton'
+import { PanelHeader } from './panelChrome'
+import {
+  PANEL_BODY,
+  PANEL_SURFACE,
+  PROFILE_HERO_SIZE,
+  ProfileHero,
+  ProfileSection,
+  StatusPill,
+} from './profileChrome'
 import { useAuth } from '../../auth/AuthContext'
 import { avatarUrl, clearAvatarCache } from '../../lib/avatarCache'
 import { AVAILABILITY, AWAY, statusMeta } from '../../lib/availability'
 import Avatar from '../Avatar'
 import AvatarPhotoEditor from '../AvatarPhotoEditor'
-import EditableRow from '../EditableRow'
+import { EditableField } from '../forms'
 import ConfirmDialog from '../ConfirmDialog'
 import AvatarCropModal from './AvatarCropModal'
 import { MENU_CONTAINER, menuItemClass } from '../menuStyles'
@@ -21,6 +29,8 @@ type Props = {
   // without changing the stored value.
   away?: boolean
   onBack: () => void
+  /** Names the back target (this panel is reached from the Account view). */
+  backLabel?: string
   // Bubble saved data up so the sidebar user footer (avatar + name) updates
   // immediately. `version` busts the avatar image cache.
   onSaved: (profile: Profile, avatarVersion: number) => void
@@ -43,7 +53,13 @@ export const ROLE_LABEL: Record<Role, string> = {
 // INDIVIDUALLY — its own pencil → inline input → Save/Cancel — so there's no
 // single all-or-nothing form mode. Role and work email are identity/permission
 // fields: always read-only, never inputs.
-export default function ProfileSidebarPanel({ initialProfile, away = false, onBack, onSaved }: Props) {
+export default function ProfileSidebarPanel({
+  initialProfile,
+  away = false,
+  onBack,
+  backLabel = 'Back',
+  onSaved,
+}: Props) {
   const [profile, setProfile] = useState<Profile | null>(initialProfile ?? null)
   const [availability, setAvailability] = useState<AvailabilityStatus>(
     initialProfile?.availabilityStatus ?? 'available',
@@ -147,75 +163,68 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
 
   return (
     <>
-      <div className="flex flex-col h-full">
-        {/* Header — matches the rail's header height, with a back affordance. */}
-        <div className="h-[var(--header-height)] flex items-center gap-2 px-3 shrink-0">
-          <button
-            onClick={onBack}
-            aria-label="Back to inbox"
-            className={`${ICON_ACTION_BASE} ${ICON_ACTION_IDLE} shrink-0`}
-          >
-            <ArrowLeft size="1.25rem" strokeWidth={1.8} />
-          </button>
-          <span className="text-base font-semibold">Profile</span>
-        </div>
+      <div className={`flex flex-col h-full ${PANEL_SURFACE}`}>
+        <PanelHeader title="Profile" onBack={onBack} backLabel={backLabel} />
 
         {!profile ? (
           <div className="flex-1 flex items-center justify-center text-sm text-faint">
             {error ?? 'Loading…'}
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+          <div className={PANEL_BODY}>
             {/* Identity — the avatar is the hero. Change/remove via the image
                 overlay + the More menu (top-right); no form-style buttons. */}
-            <div className="relative flex flex-col items-center text-center pt-1">
-              <AvatarPhotoEditor
-                size={96}
-                hasImage={profile.hasAvatar}
-                canEdit
-                noun="profile photo"
-                viewSrc={profile.hasAvatar ? avatarUrl('user', profile.id, avatarVersion) : undefined}
-                viewTitle={profile.displayName}
-                onFile={(file) => {
-                  setError(null)
-                  setCropFile(file)
-                }}
-                onRemove={removeAvatar}
-                onError={setError}
-              >
-                <Avatar
-                  userId={profile.id}
-                  name={profile.displayName}
-                  size={96}
-                  version={avatarVersion}
-                />
-              </AvatarPhotoEditor>
-              <div className="mt-3 text-xl font-semibold tracking-[-0.2px]">
-                {profile.displayName}
-              </div>
-              <div className="mt-0.5 text-sm text-muted">
-                {ROLE_LABEL[profile.role]}
-                {profile.jobTitle ? ` · ${profile.jobTitle}` : ''}
-              </div>
-              {!isDriver && <StatusSelect value={availability} away={away} onChange={setStatus} />}
-              {error && <div className="text-sm text-alert mt-2">{error}</div>}
-            </div>
+            <ProfileHero
+              image={
+                <AvatarPhotoEditor
+                  size={PROFILE_HERO_SIZE}
+                  hasImage={profile.hasAvatar}
+                  canEdit
+                  noun="profile photo"
+                  viewSrc={
+                    profile.hasAvatar ? avatarUrl('user', profile.id, avatarVersion) : undefined
+                  }
+                  viewTitle={profile.displayName}
+                  onFile={(file) => {
+                    setError(null)
+                    setCropFile(file)
+                  }}
+                  onRemove={removeAvatar}
+                  onError={setError}
+                >
+                  <Avatar
+                    userId={profile.id}
+                    name={profile.displayName}
+                    size={PROFILE_HERO_SIZE}
+                    version={avatarVersion}
+                  />
+                </AvatarPhotoEditor>
+              }
+              title={profile.displayName}
+              subtitle={`${ROLE_LABEL[profile.role]}${profile.jobTitle ? ` · ${profile.jobTitle}` : ''}`}
+              status={
+                !isDriver && (
+                  <StatusSelect value={availability} away={away} onChange={setStatus} />
+                )
+              }
+              error={error}
+            />
 
             {/* Work details — each editable row changes on its own. */}
-            <Section label="Work details">
+            <ProfileSection label="Work details">
               {/* Display name is identity — captured at signup and locked after
                   creation (identity consistency / anti-abuse). Read-only. */}
-              <EditableRow label="Display name" value={profile.displayName} hint="Set at signup" />
+              <EditableField label="Display name" value={profile.displayName} hint="Set at signup" />
               {/* Role is permission-based — read-only. */}
-              <EditableRow label="Role" value={ROLE_LABEL[profile.role]} hint="Set by an admin" />
-              <EditableRow
+              <EditableField label="Role" value={ROLE_LABEL[profile.role]} hint="Set by an admin" />
+              <EditableField
                 label="Job title / function"
                 value={profile.jobTitle}
                 editable
                 placeholder="e.g. Fleet Manager"
                 onSave={(v) => savePatch({ jobTitle: v || null })}
               />
-              <EditableRow
+              <EditableField
                 label="Work phone"
                 value={profile.workPhone}
                 editable
@@ -223,20 +232,20 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
                 onSave={(v) => savePatch({ workPhone: v || null })}
               />
               {/* Email is identity — read-only. */}
-              <EditableRow label="Work email" value={profile.email} hint="Used to sign in" />
-            </Section>
+              <EditableField label="Work email" value={profile.email} hint="Used to sign in" />
+            </ProfileSection>
 
             {/* Languages (not shown for drivers). */}
             {!isDriver && (
-              <Section label="Languages">
-                <EditableRow
+              <ProfileSection label="Languages">
+                <EditableField
                   label="Native language"
                   value={profile.nativeLanguage}
                   editable
                   placeholder="e.g. Romanian"
                   onSave={(v) => savePatch({ nativeLanguage: v || null })}
                 />
-                <EditableRow
+                <EditableField
                   label="Other spoken languages"
                   value={languagesValue}
                   editable
@@ -252,17 +261,17 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
                     })
                   }
                 />
-              </Section>
+              </ProfileSection>
             )}
 
             {/* Company (read-only context) */}
-            <Section label="Company">
-              <EditableRow label="Workspace" value={profile.company} />
-            </Section>
+            <ProfileSection label="Company">
+              <EditableField label="Workspace" value={profile.company} />
+            </ProfileSection>
 
             {/* Danger zone — account deletion. Anonymizes the account; chat
                 history is preserved but personal details are removed. */}
-            <Section label="Danger zone">
+            <ProfileSection label="Danger zone" bare>
               <div className="rounded-card border border-alert/20 bg-alert/[0.04] px-3.5 py-3">
                 <div className="text-base text-text font-medium leading-tight">
                   Delete account
@@ -284,7 +293,7 @@ export default function ProfileSidebarPanel({ initialProfile, away = false, onBa
                   Delete my account
                 </button>
               </div>
-            </Section>
+            </ProfileSection>
           </div>
         )}
       </div>
@@ -328,18 +337,23 @@ function StatusSelect({
   const display = away ? AWAY : meta
 
   return (
-    <div className="relative mt-2">
+    <div className="relative inline-block">
+      {/* The pill itself is the shared read-only visual (StatusPill); only the
+          trailing chevron marks it as changeable, so the status reads
+          identically in Account / User profile where it can't be edited. */}
       <button
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium transition-opacity hover:opacity-90"
-        style={{ color: display.color, backgroundColor: `${display.color}22` }}
+        aria-label={`Availability: ${display.label}. Change`}
+        className="rounded-full transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
       >
-        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: display.color }} />
-        {display.label}
-        {away && <span className="opacity-70">· auto</span>}
-        <ChevronDown size="0.75rem" strokeWidth={2} className="-mr-0.5 opacity-70" />
+        <StatusPill
+          label={display.label}
+          color={display.color}
+          suffix={away ? <span className="opacity-70">· auto</span> : undefined}
+          trailing={<ChevronDown size="0.75rem" strokeWidth={2} className="-mr-0.5 opacity-70" />}
+        />
       </button>
 
       {open && (
@@ -373,12 +387,3 @@ function StatusSelect({
   )
 }
 
-// ── Compact, sidebar-native bits ────────────────────────────────────────────
-function Section({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div>
-      <div className="eyebrow mb-2">{label}</div>
-      {children}
-    </div>
-  )
-}

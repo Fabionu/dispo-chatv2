@@ -1,4 +1,4 @@
-import EditableRow from '../EditableRow'
+import { EditableField, EditableTextarea } from '../forms'
 import AssignedDrivers from './AssignedDrivers'
 import { SelectRow, SubHeading } from './opsControls'
 import { VEHICLE_STATUSES, type TruckProfile, type VehicleInfo } from '../../lib/vehicleOps'
@@ -69,52 +69,52 @@ export default function VehicleInfoTab({
 
   return (
     <div>
-      <SubHeading>Identity</SubHeading>
-      <EditableRow
+      <SubHeading label="Identity">
+      <EditableField
         label="Room name"
         value={group.name}
         editable={canManage}
         required
         onSave={(v) => onSaveField({ name: v })}
       />
-      <EditableRow
+      <EditableField
         label="Tractor plate"
         value={tractorPlate(group)}
         editable={canManage}
         placeholder="e.g. B-123-ABC"
         onSave={(v) => onSaveField({ tractorPlate: v || null })}
       />
-      <EditableRow
+      <EditableField
         label="Trailer plate"
         value={trailerPlate(group)}
         editable={canManage}
         placeholder="e.g. B-456-XYZ"
         onSave={(v) => onSaveField({ trailerPlate: v || null })}
       />
-      <EditableRow
+      <EditableField
         label="Vehicle type"
         value={vehicle.vehicleType}
         editable={canManage}
         placeholder="e.g. Tractor unit, Van"
         onSave={(v) => onSaveVehicle({ vehicleType: v || undefined })}
       />
-      <EditableRow
+      <EditableField
         label="Trailer type"
         value={vehicle.trailerType}
         editable={canManage}
         placeholder="e.g. Curtainsider, Reefer"
         onSave={(v) => onSaveVehicle({ trailerType: v || undefined })}
       />
-      <EditableRow
+      <EditableTextarea
         label="Description"
         value={group.description}
         editable={canManage}
-        multiline
         placeholder="Optional description of this vehicle room"
         onSave={(v) => onSaveField({ description: v || null })}
       />
 
-      <SubHeading>Status &amp; crew</SubHeading>
+      </SubHeading>
+      <SubHeading label="Status &amp; crew">
       <SelectRow
         label="Current status"
         value={vehicle.status}
@@ -132,13 +132,14 @@ export default function VehicleInfoTab({
         canManage={canManage}
         onSave={onSaveDrivers}
       />
+      </SubHeading>
 
       {/* Truck profile — dimensions/weight the route calc + a future mobile truck
           navigation use. Belongs to the vehicle (one truck per room), entered once
           and reused by every trip. */}
-      <SubHeading>Truck profile</SubHeading>
+      <SubHeading label="Truck profile">
       {TRUCK_FIELDS.map((f) => (
-        <EditableRow
+        <EditableField
           key={f.key}
           label={f.label}
           value={truck[f.key] !== undefined ? String(truck[f.key]) : undefined}
@@ -148,15 +149,16 @@ export default function VehicleInfoTab({
         />
       ))}
 
-      <SubHeading>Notes</SubHeading>
-      <EditableRow
+      </SubHeading>
+      <SubHeading label="Notes">
+      <EditableTextarea
         label="Internal vehicle notes"
         value={vehicle.notes}
         editable={canManage}
-        multiline
         placeholder="Notes about this vehicle (internal)"
         onSave={(v) => onSaveVehicle({ notes: v || undefined })}
       />
+      </SubHeading>
     </div>
   )
 }

@@ -1,20 +1,23 @@
-// Field styling shared across the Add-trip panel + its stop form, matching the
-// in-place editable rows (EditableRow): a soft rounded pill on a subtle dark
-// fill, no heavy border, and a quiet brighten on focus.
-//
-// FIELD_BASE is the pill styling WITHOUT a width, so inline fields (the
-// country/postal/city row) can set their own flex/width. INPUT_CLASS is the
-// full-width variant used by the standalone fields; AREA_CLASS is the textarea
-// variant.
-export const FIELD_BASE =
-  'rounded-full border border-white/6 bg-white/4 px-4 py-2 text-base text-text placeholder:text-faint outline-none transition-colors focus:border-white/10 focus:bg-white/6'
+// Field styling for the Add-trip panel and its stop form. These used to be a
+// SECOND field recipe (pill-shaped, with its own fill / edge / focus values)
+// living alongside the inline editable rows, so the same kind of form looked
+// different depending on which panel opened it. They now delegate to the app's
+// single field recipe (components/forms/fieldStyles) — the names are kept
+// because the trip form imports them in a dozen places, but there is no styling
+// left here, only aliases.
+import { fieldClass, FIELD_SINGLE } from '../forms/fieldStyles'
 
-export const INPUT_CLASS = `w-full ${FIELD_BASE}`
+// The control box. Inline fields (the country/postal/city row) add their own
+// flex/min-width on top.
+export const FIELD_BASE = fieldClass()
 
-// <select> variant: fixed height (selects don't take vertical padding the same
-// way), slightly tighter x-padding for the native chevron.
-export const SELECT_CLASS =
-  'h-9 w-full rounded-full border border-white/6 bg-white/4 px-3.5 text-base text-text outline-none transition-colors focus:border-white/10 focus:bg-white/6'
+export const INPUT_CLASS = fieldClass()
 
-export const AREA_CLASS =
-  'w-full resize-none rounded-soft border border-white/6 bg-white/4 px-4 py-2.5 text-base text-text placeholder:text-faint outline-none transition-colors focus:border-white/10 focus:bg-white/6'
+// <select> variant — same box, pointer cursor for the native chevron.
+export const SELECT_CLASS = `${fieldClass()} cursor-pointer`
+
+export const AREA_CLASS = fieldClass({ multiline: true })
+
+// The single-line height, for controls that must match a field's box without
+// being one (e.g. the map-pick button beside an address input).
+export const FIELD_HEIGHT = FIELD_SINGLE

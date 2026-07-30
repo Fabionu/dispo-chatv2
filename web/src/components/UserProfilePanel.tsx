@@ -1,16 +1,24 @@
 import { useEffect, useState } from 'react'
-import { Clock3, Loader2, MessageCircle, UserCheck, UserPlus, X } from 'lucide-react'
+import { Clock3, Loader2, MessageCircle, UserCheck, UserPlus } from 'lucide-react'
 import type { PublicProfile } from '../lib/types'
-import { api, ApiError } from '../lib/api'
+import { api, ApiError, type ProfilePatch } from '../lib/api'
 import { avatarUrl } from '../lib/avatarCache'
 import { statusMeta, OFFLINE } from '../lib/availability'
 import { usePresence } from '../hooks/usePresence'
 import { ICON_ACTION_BASE, ICON_ACTION_IDLE } from './HeaderIconButton'
 import { ROLE_LABEL } from './settings/ProfileSidebarPanel'
+import { PanelCloseHeader } from './settings/panelChrome'
+import {
+  PANEL_BODY,
+  PANEL_SURFACE,
+  PROFILE_HERO_SIZE,
+  ProfileHero,
+  ProfileSection,
+  StatusPill,
+} from './settings/profileChrome'
 import Avatar from './Avatar'
 import AvatarPhotoEditor from './AvatarPhotoEditor'
-import EditableRow from './EditableRow'
-import PanelSection from './vehicle/PanelSection'
+import { EditableField } from './forms'
 import Spinner from './Spinner'
 
 type Props = {
@@ -170,6 +178,27 @@ export default function UserProfilePanel({
   const languagesValue =
     profile && profile.otherLanguages.length ? profile.otherLanguages.join(', ') : ''
 
+  // Viewing YOUR OWN card: the same fields My profile exposes become editable
+  // here too, through the same endpoint — so the panel is never a dead-end copy
+  // of your profile. Identity fields (name, role, work email) stay locked
+  // everywhere, and someone else's card is always read-only.
+  const isSelf = userId === currentUserId
+  async function saveOwnField(patch: ProfilePatch) {
+    const { profile: saved } = await api.profile.update(patch)
+    // Mirror the saved values onto the public shape this panel renders.
+    setProfile((current) =>
+      current
+        ? {
+            ...current,
+            jobTitle: saved.jobTitle,
+            workPhone: saved.workPhone,
+            nativeLanguage: saved.nativeLanguage,
+            otherLanguages: saved.otherLanguages,
+          }
+        : current,
+    )
+  }
+
   async function openDirectMessage() {
     if (!profile || actionBusy) return
     setActionBusy(true)
@@ -238,29 +267,19 @@ export default function UserProfilePanel({
         // in-flow right column beside the chat — same rail background, width,
         // and panel radius as the Group info column, so it reads as the same
         // card surface with the standard gap from the chat (the row's xl:gap-3).
-        className={
+        className={`panel-fade-in ${
           sidePanel
-            ? `fixed top-0 right-0 bottom-0 z-40 flex w-full max-w-[25rem] flex-col overflow-hidden bg-rail
+            ? `fixed top-0 right-0 bottom-0 z-40 flex w-full max-w-[25rem] flex-col overflow-hidden ${PANEL_SURFACE}
                shadow-drawer
                xl:static xl:z-auto xl:w-[clamp(22.5rem,26vw,26.25rem)] xl:max-w-none xl:shrink-0
-               xl:rounded-panel xl:shadow-none`
+               xl:rounded-panel xl:shadow-none xl:border xl:border-white/8`
             : `fixed left-1/2 top-1/2 z-50 h-[calc(100dvh-1.5rem)] max-h-[44rem]
                w-[calc(100%-1.5rem)] max-w-[30rem] -translate-x-1/2 -translate-y-1/2
-               rounded-modal border border-white/8 bg-rail
+               rounded-modal border border-white/8 ${PANEL_SURFACE}
                shadow-modal flex flex-col overflow-hidden`
-        }
+        }`}
       >
-        {/* Header — same seam as the other right/side panels. */}
-        <div className="h-[var(--header-height)] flex items-center justify-between px-4 shrink-0">
-          <span className="text-base font-semibold">Profile</span>
-          <button
-            onClick={onClose}
-            aria-label="Close profile"
-            className={`${ICON_ACTION_BASE} ${ICON_ACTION_IDLE} shrink-0`}
-          >
-            <X size="1.125rem" strokeWidth={1.8} />
-          </button>
-        </div>
+        <PanelCloseHeader title="Profile" onClose={onClose} closeLabel="Close profile" />
 
         {failed ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-2 px-6 text-center">
@@ -278,52 +297,46 @@ export default function UserProfilePanel({
             <Spinner variant="md" />
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
-            {/* Identity hero — mirrors My profile: avatar, name, role · job
-                title, status pill. Viewing the photo (lightbox) only; no
-                photo-management controls for someone else's account. */}
-            <div className="flex flex-col items-center text-center pt-1">
-              <AvatarPhotoEditor
-                size={96}
-                hasImage={profile.hasAvatar}
-                canEdit={false}
-                noun="profile photo"
-                viewSrc={profile.hasAvatar ? avatarUrl('user', profile.id) : undefined}
-                viewTitle={displayName}
-                onFile={() => {}}
-                onRemove={() => {}}
-              >
-                <Avatar userId={profile.id} name={displayName} size={96} />
-              </AvatarPhotoEditor>
-              <div className="mt-3 text-xl font-semibold tracking-[-0.2px]">
-                {displayName}
-              </div>
-              {profile.deleted ? (
-                <div className="mt-0.5 text-sm text-muted">Deleted account</div>
-              ) : (
-                (roleLabel || profile.jobTitle) && (
-                  <div className="mt-0.5 text-sm text-muted">
-                    {roleLabel}
-                    {profile.jobTitle ? `${roleLabel ? ' · ' : ''}${profile.jobTitle}` : ''}
-                  </div>
-                )
-              )}
-              {/* Availability — the same pill as My profile, minus the menu
-                  (read-only). Drivers carry no availability. */}
-              {!profile.deleted && !isDriver && status && (
-                <span
-                  className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium"
-                  style={{ color: status.color, backgroundColor: `${status.color}22` }}
+          <div className={PANEL_BODY}>
+            {/* Identity hero — the shared one, so this card and My profile are
+                the same object at the same size. Viewing the photo (lightbox)
+                only; no photo-management controls for someone else's account. */}
+            <ProfileHero
+              image={
+                <AvatarPhotoEditor
+                  size={PROFILE_HERO_SIZE}
+                  hasImage={profile.hasAvatar}
+                  canEdit={false}
+                  noun="profile photo"
+                  viewSrc={profile.hasAvatar ? avatarUrl('user', profile.id) : undefined}
+                  viewTitle={displayName}
+                  onFile={() => {}}
+                  onRemove={() => {}}
                 >
-                  <span
-                    className="h-2 w-2 rounded-full"
-                    style={{ backgroundColor: status.color }}
-                  />
-                  {status.label}
-                </span>
-              )}
-              {!profile.deleted && relationship.kind !== 'self' && (
-                <div className="mt-3 flex items-center justify-center gap-1">
+                  <Avatar userId={profile.id} name={displayName} size={PROFILE_HERO_SIZE} />
+                </AvatarPhotoEditor>
+              }
+              title={displayName}
+              subtitle={
+                profile.deleted
+                  ? 'Deleted account'
+                  : roleLabel || profile.jobTitle
+                    ? `${roleLabel ?? ''}${
+                        profile.jobTitle ? `${roleLabel ? ' · ' : ''}${profile.jobTitle}` : ''
+                      }`
+                    : undefined
+              }
+              // Availability — the same pill as My profile, minus the menu
+              // (read-only). Drivers carry no availability.
+              status={
+                !profile.deleted && !isDriver && status ? (
+                  <StatusPill label={status.label} color={status.color} />
+                ) : undefined
+              }
+              error={actionError}
+              actions={
+                !profile.deleted && relationship.kind !== 'self' ? (
+                  <>
                   {actionBusy ? (
                     <span className={`${ICON_ACTION_BASE} text-muted`} aria-label="Working">
                       <Loader2 size="1rem" strokeWidth={1.8} className="animate-spin" />
@@ -373,12 +386,10 @@ export default function UserProfilePanel({
                       <Loader2 size="1rem" strokeWidth={1.8} className="animate-spin" />
                     </span>
                   )}
-                </div>
-              )}
-              {actionError && (
-                <p className="mt-1.5 text-xs leading-[1.4] text-alert">{actionError}</p>
-              )}
-            </div>
+                  </>
+                ) : undefined
+              }
+            />
 
             {profile.deleted ? (
               // Anonymized account: name only — every personal detail was
@@ -389,31 +400,72 @@ export default function UserProfilePanel({
               </p>
             ) : (
               <>
-                <PanelSection label="Work details">
-                  <EditableRow label="Role" value={roleLabel} />
+                {/* Identity + permission fields (name, role, work email) are
+                    read-only for everyone. The rest is editable ONLY on your own
+                    card, through the same endpoint My profile uses. */}
+                <ProfileSection label="Work details">
+                  <EditableField label="Role" value={roleLabel} hint="Set by an admin" />
                   {groupRole && (
-                    <EditableRow
+                    <EditableField
                       label="Group role"
                       value={groupRole === 'admin' ? 'Admin' : 'Member'}
                       hint="In this group"
                     />
                   )}
-                  <EditableRow label="Job title / function" value={profile.jobTitle} />
-                  <EditableRow label="Work phone" value={profile.workPhone} />
-                  <EditableRow label="Work email" value={profile.email} />
-                </PanelSection>
+                  <EditableField
+                    label="Job title / function"
+                    value={profile.jobTitle}
+                    editable={isSelf}
+                    placeholder="e.g. Fleet Manager"
+                    onSave={isSelf ? (v) => saveOwnField({ jobTitle: v || null }) : undefined}
+                  />
+                  <EditableField
+                    label="Work phone"
+                    value={profile.workPhone}
+                    editable={isSelf}
+                    placeholder="+40…"
+                    onSave={isSelf ? (v) => saveOwnField({ workPhone: v || null }) : undefined}
+                  />
+                  <EditableField label="Work email" value={profile.email} />
+                </ProfileSection>
 
                 {!isDriver && (
-                  <PanelSection label="Languages">
-                    <EditableRow label="Native language" value={profile.nativeLanguage} />
-                    <EditableRow label="Other spoken languages" value={languagesValue} />
-                  </PanelSection>
+                  <ProfileSection label="Languages">
+                    <EditableField
+                      label="Native language"
+                      value={profile.nativeLanguage}
+                      editable={isSelf}
+                      placeholder="e.g. Romanian"
+                      onSave={
+                        isSelf ? (v) => saveOwnField({ nativeLanguage: v || null }) : undefined
+                      }
+                    />
+                    <EditableField
+                      label="Other spoken languages"
+                      value={languagesValue}
+                      editable={isSelf}
+                      hint={isSelf ? 'Comma-separated' : undefined}
+                      placeholder="e.g. English, German"
+                      onSave={
+                        isSelf
+                          ? (v) =>
+                              saveOwnField({
+                                otherLanguages: v
+                                  .split(',')
+                                  .map((s) => s.trim())
+                                  .filter(Boolean)
+                                  .slice(0, 15),
+                              })
+                          : undefined
+                      }
+                    />
+                  </ProfileSection>
                 )}
 
-                <PanelSection label="Company">
-                  <EditableRow label="Workspace" value={profile.company} />
-                  <EditableRow label="Member since" value={memberSince} />
-                </PanelSection>
+                <ProfileSection label="Company">
+                  <EditableField label="Workspace" value={profile.company} />
+                  <EditableField label="Member since" value={memberSince} />
+                </ProfileSection>
               </>
             )}
           </div>

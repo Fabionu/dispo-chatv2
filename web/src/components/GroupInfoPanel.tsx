@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react'
-import { X } from 'lucide-react'
 import type { Group, GroupMember, GroupPendingInvitee } from '../lib/types'
 import { groupLabel, tractorPlate, trailerPlate } from '../lib/types'
 import {
@@ -20,7 +19,12 @@ import { avatarUrl, clearAvatarCache } from '../lib/avatarCache'
 import { usePresence } from '../hooks/usePresence'
 import GroupAvatar from './GroupAvatar'
 import AvatarPhotoEditor from './AvatarPhotoEditor'
-import { ICON_ACTION_BASE, ICON_ACTION_IDLE } from './HeaderIconButton'
+import { PanelCloseHeader } from './settings/panelChrome'
+import {
+  PANEL_SURFACE,
+  PROFILE_HERO_SIZE,
+  ProfileHero,
+} from './settings/profileChrome'
 import AvatarCropModal from './settings/AvatarCropModal'
 import { StatusChip } from './vehicle/opsControls'
 import VehicleInfoTab from './vehicle/VehicleInfoTab'
@@ -359,71 +363,57 @@ export default function GroupInfoPanel({
         // own borderless surface — same rail bg + radius as the sidebar/chat
         // cards, with a gap from the chat (the row's xl:gap-3) — so the chat
         // reflows narrower and the panel matches the app's flat card shell.
-        className="fixed top-0 right-0 bottom-0 z-40 w-full max-w-[25rem] shadow-drawer bg-rail flex flex-col
+        className={`panel-fade-in fixed top-0 right-0 bottom-0 z-40 w-full max-w-[25rem] shadow-drawer ${PANEL_SURFACE} flex flex-col
                    xl:static xl:z-auto xl:w-[clamp(22.5rem,26vw,26.25rem)] xl:max-w-none xl:shrink-0 xl:shadow-none
-                   xl:rounded-panel xl:overflow-hidden"
+                   xl:rounded-panel xl:overflow-hidden xl:border xl:border-white/8`}
       >
-        {/* Header — same height as the chat header so the two line up. */}
-        <div className="h-[var(--header-height)] flex items-center justify-between px-4 shrink-0">
-          <span className="text-base font-semibold">Group info</span>
-          <button
-            onClick={onClose}
-            aria-label="Close group info"
-            className={`${ICON_ACTION_BASE} ${ICON_ACTION_IDLE} shrink-0`}
-          >
-            <X size="1.125rem" strokeWidth={1.8} />
-          </button>
-        </div>
+        <PanelCloseHeader title="Group info" onClose={onClose} closeLabel="Close group info" />
 
-        <div className="flex-1 overflow-y-auto px-4 py-4">
+        <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 py-4">
           {/* Identity — the vehicle image is the hero (uploaded photo, or the
-              generated multi-user glyph as a fallback), in the same circular slot
-              as the header/sidebar. Managers change/remove it via the image
-              overlay + the "More" menu (top-right); no form-style buttons. The
-              manual vehicle status (when set) shows as a chip below. */}
-          <div className="relative flex flex-col items-center text-center pt-1">
-            <AvatarPhotoEditor
-              size={120}
-              hasImage={Boolean(group.hasAvatar)}
-              canEdit={canManage}
-              noun="vehicle photo"
-              shape="card"
-              viewSrc={group.hasAvatar ? avatarUrl('group', group.id, avatarVersion) : undefined}
-              viewTitle={groupLabel(group)}
-              onFile={(file) => {
-                setError(null)
-                setCropFile(file)
-              }}
-              onRemove={removeGroupAvatar}
-              onError={setError}
-            >
-              <GroupAvatar
-                groupId={group.id}
-                hasAvatar={Boolean(group.hasAvatar)}
-                version={avatarVersion}
-                shape="rounded"
-                size={120}
-              />
-            </AvatarPhotoEditor>
-            <div className="mt-3 text-xl font-semibold tracking-[-0.2px]">
-              {groupLabel(group)}
-            </div>
-            <div className="mt-0.5 text-sm text-muted">
-              {members.length} member{members.length === 1 ? '' : 's'}
-            </div>
-            {vehicleMeta && (
-              <div className="mt-1 text-sm text-faint">{vehicleMeta}</div>
-            )}
-            {ops.vehicle.status && (
-              <div className="mt-2">
+              generated multi-user glyph as a fallback), at the SAME size as every
+              profile surface, keeping the vehicle's squircle shape. Managers
+              change/remove it via the image overlay + the "More" menu; no
+              form-style buttons. The manual vehicle status shows as a chip. */}
+          <ProfileHero
+            image={
+              <AvatarPhotoEditor
+                size={PROFILE_HERO_SIZE}
+                hasImage={Boolean(group.hasAvatar)}
+                canEdit={canManage}
+                noun="vehicle photo"
+                shape="card"
+                viewSrc={group.hasAvatar ? avatarUrl('group', group.id, avatarVersion) : undefined}
+                viewTitle={groupLabel(group)}
+                onFile={(file) => {
+                  setError(null)
+                  setCropFile(file)
+                }}
+                onRemove={removeGroupAvatar}
+                onError={setError}
+              >
+                <GroupAvatar
+                  groupId={group.id}
+                  hasAvatar={Boolean(group.hasAvatar)}
+                  version={avatarVersion}
+                  shape="rounded"
+                  size={PROFILE_HERO_SIZE}
+                />
+              </AvatarPhotoEditor>
+            }
+            title={groupLabel(group)}
+            subtitle={`${members.length} member${members.length === 1 ? '' : 's'}`}
+            meta={vehicleMeta || undefined}
+            status={
+              ops.vehicle.status ? (
                 <StatusChip
                   tone={vehicleStatusTone(ops.vehicle.status)}
                   label={labelOf(VEHICLE_STATUSES, ops.vehicle.status)}
                 />
-              </div>
-            )}
-            {error && <div className="text-sm text-alert mt-2">{error}</div>}
-          </div>
+              ) : undefined
+            }
+            error={error}
+          />
 
           {/* Tab bar — compact segmented control for the operational sections. */}
           <div className="mt-4 flex items-center gap-0.5 rounded-card bg-white/4 p-0.5">

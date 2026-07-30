@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  ArrowLeft,
   Bell,
   Check,
   ChevronDown,
-  ChevronRight,
   Copy,
   Info,
   Link2,
@@ -33,6 +31,7 @@ import { setTheme, useTheme, type Theme } from '../../lib/theme'
 import { api, ApiError } from '../../lib/api'
 import type { Role, WorkspaceInvite, WorkspaceInviteCreated } from '../../lib/types'
 import { ROLE_LABEL } from './ProfileSidebarPanel'
+import { PanelHeader, CategoryRow, PANEL_GROUP_CARD } from './panelChrome'
 import { ICON_ACTION_BASE, ICON_ACTION_IDLE } from '../HeaderIconButton'
 import { MENU_CONTAINER, menuItemClass } from '../menuStyles'
 import {
@@ -62,7 +61,11 @@ const INVITE_ROLE_HINT: Record<Role, string> = {
 // doesn't touch the picker gets the previous behaviour.
 const DEFAULT_INVITE_ROLE: Role = 'dispatcher'
 
-type Props = { onBack: () => void }
+type Props = {
+  onBack: () => void
+  /** Names the back target of the FIRST level (the category list). */
+  backLabel?: string
+}
 
 // The settings categories. New ones (Notifications, Integrations …) drop in as
 // another CategoryRow + detail view.
@@ -82,7 +85,7 @@ const APP_VERSION: string = import.meta.env.VITE_APP_VERSION ?? '0.3.2'
 // profile fields (those live in "My profile"). Each appearance setting is a
 // device-local pref persisted in localStorage by its lib module — changing it
 // in a detail view applies live.
-export default function WorkspaceSettingsPanel({ onBack }: Props) {
+export default function WorkspaceSettingsPanel({ onBack, backLabel = 'Back' }: Props) {
   // Which category's detail is open (null = the category list). Local UI state;
   // no routing needed — the drawer is a self-contained master/detail.
   const [category, setCategory] = useState<Category | null>(null)
@@ -113,7 +116,7 @@ export default function WorkspaceSettingsPanel({ onBack }: Props) {
           onBack={() => setCategory(null)}
           backLabel="Back to Workspace settings"
         />
-        <div className="flex-1 overflow-y-auto px-4 py-5">
+        <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 py-5">
           {category === 'appearance' ? (
             <AppearanceSettings />
           ) : category === 'notifications' ? (
@@ -135,9 +138,9 @@ export default function WorkspaceSettingsPanel({ onBack }: Props) {
 
   return (
     <div className="flex flex-col h-full">
-      <PanelHeader title="Workspace settings" onBack={onBack} backLabel="Back to inbox" />
-      <div className="flex-1 overflow-y-auto px-4 py-4">
-        <div className="rounded-card border border-white/6 bg-white/2 divide-y divide-white/6 overflow-hidden">
+      <PanelHeader title="Workspace settings" onBack={onBack} backLabel={backLabel} />
+      <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 py-4">
+        <div className={PANEL_GROUP_CARD}>
           <CategoryRow
             icon={<Palette size="1rem" strokeWidth={1.8} />}
             title="Appearance"
@@ -175,40 +178,6 @@ export default function WorkspaceSettingsPanel({ onBack }: Props) {
         </p>
       </div>
     </div>
-  )
-}
-
-// A settings CATEGORY entry: one row of the grouped list card — leading glyph
-// chip, title over its live current value, trailing chevron. Rows share the
-// card's border and are separated by hairlines; hover brightens the row only,
-// so the group reads as one calm menu.
-function CategoryRow({
-  icon,
-  title,
-  value,
-  onClick,
-}: {
-  icon: ReactNode
-  title: string
-  value: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="w-full flex items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-white/4"
-    >
-      <span className="h-8 w-8 shrink-0 flex items-center justify-center rounded-btn border border-white/6 bg-white/2 text-muted">
-        {icon}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-base font-medium text-text leading-tight">{title}</span>
-        <span className="block text-sm text-faint mt-0.5 leading-[1.4] truncate">
-          {value}
-        </span>
-      </span>
-      <ChevronRight size="1rem" strokeWidth={1.8} className="shrink-0 text-faint" />
-    </button>
   )
 }
 
@@ -372,32 +341,6 @@ function ThemeSetting() {
         onChange={(value) => setTheme(value as Theme)}
       />
     </SettingBlock>
-  )
-}
-
-// Drawer header — matches the rail's header height, with a back affordance. The
-// back target differs per level (list → inbox, detail → list), so it's passed
-// in along with an accessible label.
-function PanelHeader({
-  title,
-  onBack,
-  backLabel,
-}: {
-  title: string
-  onBack: () => void
-  backLabel: string
-}) {
-  return (
-    <div className="h-[var(--header-height)] flex items-center gap-2 px-3 shrink-0">
-      <button
-        onClick={onBack}
-        aria-label={backLabel}
-        className={`${ICON_ACTION_BASE} ${ICON_ACTION_IDLE} shrink-0`}
-      >
-        <ArrowLeft size="1.25rem" strokeWidth={1.8} />
-      </button>
-      <span className="text-base font-semibold">{title}</span>
-    </div>
   )
 }
 
@@ -838,7 +781,7 @@ function InviteListRow({
         {active && (
           <span
             title="Active"
-            className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border border-rail bg-done"
+            className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border border-sidebar bg-done"
           />
         )}
       </div>

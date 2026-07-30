@@ -31,43 +31,61 @@ type Props = {
 // 404s usually fire onError well before this; this only catches stalls.
 const LOAD_TIMEOUT_MS = 6000
 
-// Desktop thumbnail bounds. Every image attachment renders inside a bounded
-// preview that is large enough to inspect in the conversation without opening
-// the lightbox, while still keeping very tall screenshots under control. The box
-// is computed from the image's aspect ratio, clamped into [MIN, MAX] in both
-// axes; the <img> fills it with object-cover, cropping only the extreme aspect
-// ratios (very wide screenshots / very tall portraits) so they never turn into
-// thin slivers. The full image is always one tap away in the lightbox.
+// ── Thumbnail bounds ────────────────────────────────────────────────────────
+// An image attachment NEVER renders at its natural size. It is fitted into a
+// bounded box that is big enough to read in the conversation and small enough
+// that a 1170×2532 phone screenshot doesn't take over the chat window.
+//
+// The box is a pure CONTAIN fit: scale the image down until it fits both maxes,
+// never scale it up, never crop. The previous version also lifted each axis to a
+// minimum and covered the box, which is exactly what turned tall screenshots
+// into a cropped column — the middle of the shot with the top and bottom gone.
+// Now a tall image simply becomes short and narrow, whole, centred in whatever
+// width the bubble gives it.
 //
 // Two profiles:
 //   • plain   — image sent on its own: a readable desktop preview.
-//   • caption — image sent WITH a text body: larger maxes so the picture widens
-//     to sit visually with the caption below it (no narrow-image / wide-text
-//     mismatch). Still aspect-preserving and bounded — never full-width, and
-//     portraits stay reined in by the height cap.
+//   • caption — image sent WITH a text body: a wider max so the picture sits
+//     visually with the caption below it instead of floating narrow above wide
+//     text. The HEIGHT cap is what keeps portraits in check, and it is the same
+//     in both profiles.
+//
+// The height caps are deliberately below the ~440px the old code allowed: at
+// --chat-max-width 860 the message column is ~830px tall on a 1080p display, so
+// 340px is well under half the visible thread — a tall screenshot leaves room
+// for the messages around it.
 const BOUNDS = {
-  plain: { maxW: 420, maxH: 440, minW: 220, minH: 160 },
-  caption: { maxW: 560, maxH: 460, minW: 260, minH: 180 },
+  plain: { maxW: 380, maxH: 340 },
+  caption: { maxW: 520, maxH: 340 },
 } as const
+
+// Below this width:height ratio an image counts as a "very tall" screenshot: it
+// gets the tighter height cap AND is centred on its own backdrop, because the
+// contain fit leaves visible letterboxing either side. 0.6 ≈ 3:5; a normal
+// phone photo (3:4 = 0.75) stays on the regular path.
+const VERY_TALL_RATIO = 0.6
+const VERY_TALL_MAX_H = 300
 
 // Box reserved before we know the image's dimensions (just-sent blobs, GIFs,
-// and legacy images without stored width/height). Recomputed on load. Wider in
-// caption mode so a just-sent captioned image reflows less when it decodes.
+// and legacy images without stored width/height). Recomputed on load. A 4:3
+// landscape guess — the most common case — so the usual image barely reflows.
 const FALLBACK = {
   plain: { w: 320, h: 240 },
-  caption: { w: 440, h: 300 },
+  caption: { w: 400, h: 300 },
 } as const
 
-// Fit (w,h) into the max box preserving aspect ratio, then lift each axis to its
-// minimum so extreme aspect ratios become a sensible cropped box instead of a
-// sliver. Returns the px box the bubble reserves and the <img> covers.
+// Fit (w,h) inside the max box, preserving aspect ratio and never enlarging.
+// Returns the px box the bubble reserves and the <img> is contained in.
 function thumbBox(w: number, h: number, captioned: boolean): { w: number; h: number } | null {
   if (!w || !h) return null
   const b = captioned ? BOUNDS.caption : BOUNDS.plain
-  const scale = Math.min(b.maxW / w, b.maxH / h, 1)
-  const dw = Math.min(Math.max(w * scale, b.minW), b.maxW)
-  const dh = Math.min(Math.max(h * scale, b.minH), b.maxH)
-  return { w: Math.round(dw), h: Math.round(dh) }
+  // WIDTH ÷ height: a 1170×2532 phone screenshot is 0.46 and gets the tighter
+  // cap; a 3:4 portrait photo is 0.75 and keeps the normal one.
+  const maxH = w / h < VERY_TALL_RATIO ? Math.min(b.maxH, VERY_TALL_MAX_H) : b.maxH
+  // `1` in the min() is what stops a small image from being blown up: a 90×90
+  // avatar-sized attachment stays 90×90 instead of stretching to the max box.
+  const scale = Math.min(b.maxW / w, maxH / h, 1)
+  return { w: Math.round(w * scale), h: Math.round(h * scale) }
 }
 
 // In-bubble attachment renderer. Every attachment is a themed button — the
@@ -214,16 +232,18 @@ export default function AttachmentBlock({
         >
           {/* Fixed-bounds thumbnail frame. The box is reserved from the image's
               aspect ratio (known dims → zero reflow; unknown → a fallback box
-              that settles on load), capped to WhatsApp-style bounds. aspect-
-              ratio keeps it proportional when the bubble cap shrinks it on
-              narrow screens, so it never exceeds its column. */}
+              that settles on load) and capped by BOUNDS. Expressed as
+              max-width/max-height + aspect-ratio rather than fixed w/h, so the
+              frame also shrinks with the bubble on a narrow pane and never
+              overflows its column. */}
           <div
             ref={frameRef}
             className="relative overflow-hidden rounded-card border border-white/6 bg-bg"
             style={{
               width: box ? box.w : fallback.w,
-              aspectRatio: box ? `${box.w} / ${box.h}` : `${fallback.w} / ${fallback.h}`,
               maxWidth: '100%',
+              maxHeight: box ? box.h : fallback.h,
+              aspectRatio: box ? `${box.w} / ${box.h}` : `${fallback.w} / ${fallback.h}`,
             }}
           >
             <img
@@ -256,7 +276,11 @@ export default function AttachmentBlock({
                   setImgFailed(true)
                 }
               }}
-              className={`w-full h-full object-cover block bg-bg transition-opacity duration-300 ${
+              // `contain`, never `cover`: the frame is already the image's own
+              // aspect ratio, so contain simply fills it — but if the bubble cap
+              // squeezes the frame on a narrow pane, contain letterboxes instead
+              // of cropping. Screenshots and documents must never lose an edge.
+              className={`w-full h-full object-contain block bg-bg transition-opacity duration-300 motion-reduce:transition-none ${
                 loaded ? 'opacity-100' : 'opacity-0'
               }`}
             />

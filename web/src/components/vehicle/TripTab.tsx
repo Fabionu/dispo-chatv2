@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ChevronDown, MapPin, Plus, RefreshCw, Trash2 } from 'lucide-react'
-import EditableRow from '../EditableRow'
+import { EditableField, EditableTextarea } from '../forms'
 import StopCard from './StopCard'
 import StopEditor from './StopEditor'
 import { SelectRow, StatusChip, SubHeading } from './opsControls'
@@ -247,6 +247,7 @@ export default function TripTab({
       {/* Full editable detail — only when expanded. */}
       {expanded && (
         <div className="mt-3">
+          <SubHeading label="Status">
           <SelectRow
             label="Trip status"
             value={trip.status}
@@ -254,16 +255,17 @@ export default function TripTab({
             editable={canManage}
             onSave={(v) => onSaveTrip({ status: v })}
           />
+          </SubHeading>
 
-          <SubHeading>Order</SubHeading>
-          <EditableRow
+          <SubHeading label="Order">
+          <EditableField
             label="Trip reference / order no."
             value={trip.reference}
             editable={canManage}
             placeholder="e.g. ORD-10482"
             onSave={(v) => onSaveTrip({ reference: v || undefined })}
           />
-          <EditableRow
+          <EditableField
             label="Client / customer"
             value={trip.client}
             editable={canManage}
@@ -271,6 +273,7 @@ export default function TripTab({
             onSave={(v) => onSaveTrip({ client: v || undefined })}
           />
 
+          </SubHeading>
           {/* Stops — the trip's full stop list (the source of truth for addresses
               and times), using the shared card style. Adding, editing or removing
               a stop persists immediately; when coordinates change the route below
@@ -320,7 +323,7 @@ export default function TripTab({
             )}
           </div>
 
-          <SubHeading>Route</SubHeading>
+          <SubHeading label="Route">
           {route?.status === 'ok' ? (
             <div className="py-2 border-b border-white/4">
               <div className="flex items-stretch gap-6">
@@ -384,22 +387,23 @@ export default function TripTab({
             </div>
           )}
 
-          <SubHeading>Cargo</SubHeading>
-          <EditableRow
+          </SubHeading>
+          <SubHeading label="Cargo">
+          <EditableField
             label="Cargo description"
             value={trip.cargo}
             editable={canManage}
             placeholder="What is being transported"
             onSave={(v) => onSaveTrip({ cargo: v || undefined })}
           />
-          <EditableRow
+          <EditableField
             label="Weight"
             value={trip.weight}
             editable={canManage}
             placeholder="e.g. 22 t"
             onSave={(v) => onSaveTrip({ weight: v || undefined })}
           />
-          <EditableRow
+          <EditableField
             label="Pallets"
             value={trip.pallets}
             editable={canManage}
@@ -407,8 +411,9 @@ export default function TripTab({
             onSave={(v) => onSaveTrip({ pallets: v || undefined })}
           />
 
-          <SubHeading>Planning</SubHeading>
-          <EditableRow
+          </SubHeading>
+          <SubHeading label="Planning">
+          <EditableField
             label="ETA"
             value={trip.eta}
             editable={canManage}
@@ -416,14 +421,14 @@ export default function TripTab({
             placeholder="e.g. 19/06/2025 13:30"
             onSave={(v) => onSaveTrip({ eta: v || undefined })}
           />
-          <EditableRow
+          <EditableTextarea
             label="Internal trip notes"
             value={trip.notes}
             editable={canManage}
-            multiline
             placeholder="Notes about this trip (internal)"
             onSave={(v) => onSaveTrip({ notes: v || undefined })}
           />
+          </SubHeading>
         </div>
       )}
     </div>

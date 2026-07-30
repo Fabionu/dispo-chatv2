@@ -348,7 +348,7 @@ export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
         role="dialog"
         aria-modal="true"
         aria-label="Crop photo"
-        className="relative w-full max-w-[28.75rem] rounded-modal border border-white/8 bg-surface overflow-hidden"
+        className="relative w-full max-w-[28.75rem] rounded-modal border border-white/8 bg-panel overflow-hidden"
         style={{ boxShadow: '0 32px 80px rgba(0,0,0,0.65)' }}
       >
         {/* Header: close (left) · helper title (centre) · replace + rotate

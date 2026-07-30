@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { Calendar, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
 import { MENU_SURFACE } from './menuStyles'
+import { FIELD_BASE } from './vehicle/tripFormStyles'
 
-// Custom, theme-native date & time fields used by the stop forms. Each is a pill
+// Custom, theme-native date & time fields used by the stop forms. Each is a
 // input (typeable) with an icon button that opens a compact custom picker — a
 // month calendar for the date (DD/MM/YYYY) and an hour/minute list for the time
 // (HH:MM, 24h). No native <input type="date/time"> (those can't be themed); the
@@ -30,12 +31,16 @@ export function joinPlannedAt(date: string, time: string): string {
 }
 
 // ── Shared styling (matches the Add-trip pill fields) ───────────────────────
+// The date / time field is a composite (text input + a picker button sharing one
+// box), so it can't just BE a field — but it wears the app's field recipe: the
+// wrapper takes the box, edge and focus states, and the inner input is
+// transparent inside it. Same height, radius and states as every other control.
 const FIELD_WRAP =
-  'flex items-center rounded-full border border-white/6 bg-white/4 pr-1 transition-colors focus-within:border-white/10 focus-within:bg-white/6'
+  `${FIELD_BASE} flex items-center gap-0.5 pr-0.5 focus-within:border-white/20 focus-within:bg-white/6`
 const FIELD_INPUT =
-  'flex-1 min-w-0 bg-transparent pl-4 pr-1 py-2 text-base text-text placeholder:text-faint outline-none'
+  'flex-1 min-w-0 h-full bg-transparent text-base text-text placeholder:text-faint/70 outline-none'
 const FIELD_BTN =
-  'h-7 w-7 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 transition-colors'
+  'h-6 w-6 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20'
 const POPOVER = `absolute z-30 mt-1.5 ${MENU_SURFACE} p-2`
 
 // Close a popover on outside-click or Escape.

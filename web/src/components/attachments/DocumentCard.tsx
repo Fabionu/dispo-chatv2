@@ -1,4 +1,8 @@
-import { DocIcon, formatBytes } from './attachmentUtils'
+import {
+  AttachmentGlyphStage,
+  AttachmentIdentity,
+  AttachmentPreviewFrame,
+} from './AttachmentPreviewFrame'
 
 type Props = {
   name: string
@@ -6,45 +10,18 @@ type Props = {
   byteSize: number
 }
 
-// Derive a short, human type label from the filename extension / mime type.
-function typeLabel(name: string, mime: string): string {
-  const ext = name.includes('.') ? name.split('.').pop()!.toUpperCase() : ''
-  if (ext) return ext
-  if (mime === 'application/pdf') return 'PDF'
-  if (mime.startsWith('text/')) return 'TXT'
-  return 'FILE'
-}
-
-// Large, polished, fully-themed document card used by the pre-send preview and
-// the in-app document modal — a deliberate, branded surface rather than an
-// iframe or the browser's default file chrome. A tall preview band carries the
-// type glyph (and a corner type badge); a footer holds the filename and
-// type · size. No first-page render (PDF rasterisation is deferred to avoid a
-// heavy pdf.js dependency).
+// The themed stand-in for a document that has no rendered page — used by the
+// in-app document modal and as the PDF renderer's fallback. It is the SAME
+// frame + identity pair the send preview uses, so a document looks identical
+// wherever it appears: a bounded stage carrying the type glyph, with the
+// filename and type · size underneath.
 export default function DocumentCard({ name, mimeType, byteSize }: Props) {
-  const label = typeLabel(name, mimeType)
-  const isPdf = mimeType === 'application/pdf'
-
   return (
-    <div className="w-full max-w-[20rem] rounded-card border border-white/10 bg-surface overflow-hidden">
-      {/* Preview band — a themed stand-in for the document page. */}
-      <div className="relative h-[12.5rem] bg-bg flex items-center justify-center border-b border-white/6">
-        {/* Subtle paper-sheet motif so it reads as a document, not an empty box. */}
-        <div className="absolute inset-0 opacity-[0.04] bg-gradient-to-b from-white to-transparent pointer-events-none" />
-        <div className="h-20 w-20 rounded-card border border-white/10 bg-white/4 flex items-center justify-center">
-          <DocIcon mime={mimeType} size={38} className="text-muted" />
-        </div>
-        <span className="absolute top-2.5 left-2.5 rounded-chip border border-pure-white/10 bg-black/40 px-2 py-0.5 text-2xs font-semibold tracking-wide text-pure-white/80">
-          {isPdf ? 'PDF' : label}
-        </span>
-      </div>
-      {/* Footer — filename + type · size. */}
-      <div className="px-4 py-3">
-        <div className="text-base text-text font-medium truncate">{name}</div>
-        <div className="text-sm text-muted mt-0.5">
-          {label} · {formatBytes(byteSize)}
-        </div>
-      </div>
+    <div className="flex w-full max-w-[22rem] flex-col gap-3">
+      <AttachmentPreviewFrame>
+        <AttachmentGlyphStage mimeType={mimeType} />
+      </AttachmentPreviewFrame>
+      <AttachmentIdentity name={name} mimeType={mimeType} byteSize={byteSize} />
     </div>
   )
 }

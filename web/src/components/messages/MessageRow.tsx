@@ -1,8 +1,8 @@
 import { memo, useEffect, useRef, useState, type MouseEvent } from 'react'
-import { ChevronDown, Pin } from 'lucide-react'
+import { Pin } from 'lucide-react'
 import type { Attachment, GroupType } from '../../lib/types'
 import AttachmentBlock from '../attachments/AttachmentBlock'
-import MessageActionsPanel from './MessageActionsPanel'
+import MessageActionsPanel, { MessageActionsTrigger } from './MessageActionsPanel'
 import ReadReceipts, { type Reader } from './ReadReceipts'
 import ReplyQuote from './ReplyQuote'
 import { DELETE_WINDOW_MS, formatTime } from './messageUtils'
@@ -234,12 +234,13 @@ function MessageRow({
     startNewGroup ? 'rounded-tl-[1rem]' : 'rounded-tl-[0.3125rem]'
   } ${endGroup ? 'rounded-bl-[1rem]' : 'rounded-bl-[0.3125rem]'}`
   const deletedSkin = `bg-white/2 text-muted italic ${mine ? shapeMine : shapeOther}`
-  // Bubble skins sit on the raised chat card (`chat` #202020). Incoming uses
-  // the next neutral surface step (`surface-2` #303030), which separates it
-  // through colour alone — no border or shadow. My own messages use the darker
-  // near-black bubble tone (`bubble-own` #101010), relying on right alignment
-  // and their tail shape for ownership. The bubble itself never changes on
-  // hover; only the actions affordance reveals.
+  // Bubble skins sit on the near-black chat window (`chat` #0C0C0C). Incoming
+  // uses the top neutral surface step (`surface-2` #2D2D2D); my own messages use
+  // the quieter `bubble-own` tone (#1A1A1A, shared with the composer). Both are
+  // LIGHTER than the conversation surface and separated from each other by a
+  // clear step, so colour alone tells the two sides apart — no border or shadow
+  // — while right alignment and the tail shape carry ownership. The bubble
+  // itself never changes on hover; only the actions affordance reveals.
   // (Failed sends keep an alert border as their error cue.)
   const bubbleSkin = deleted
     ? deletedSkin
@@ -350,21 +351,12 @@ function MessageRow({
     // right-click on the row opens the same menu. Null for rows that don't
     // expose actions (pending / failed / deleted) — they show no chevron.
     const actionsTrigger = canShowActions ? (
-      <button
+      <MessageActionsTrigger
         ref={triggerRef}
-        type="button"
-        onClick={() => setMenuOpen((open) => !open)}
-        aria-label="Message actions"
-        aria-haspopup="menu"
-        aria-expanded={menuOpen}
-        className={`shrink-0 flex items-center justify-center text-faint transition hover:text-text leading-none pb-[2px] ${
-          menuOpen
-            ? 'opacity-100 text-text'
-            : 'opacity-0 group-hover/msg:opacity-100 focus-visible:opacity-100'
-        }`}
-      >
-        <ChevronDown size="0.9375rem" strokeWidth={1.8} />
-      </button>
+        variant="inline"
+        open={menuOpen}
+        onToggle={() => setMenuOpen((open) => !open)}
+      />
     ) : null
 
     return (
@@ -379,7 +371,11 @@ function MessageRow({
           onContextMenu={(e) => {
             if (!canShowActions) return
             e.preventDefault()
-            setMenuOpen(true)
+            // Toggle, so a second right-click on the same message closes the
+            // strip. Right-clicking ANOTHER message closes this one first (the
+            // outside-mousedown handler above fires before that row's
+            // contextmenu), then opens there — one strip open at a time.
+            setMenuOpen((open) => !open)
           }}
           className={`relative pl-1.5 pr-2 ${startNewGroup ? 'mt-4' : 'mt-0.5'}`}
         >
@@ -653,7 +649,13 @@ function MessageRow({
             onContextMenu={(e) => {
               if (!canShowActions) return
               e.preventDefault()
-              setMenuOpen(true)
+              // Toggle: a second right-click on the SAME bubble closes the
+              // strip. Right-clicking another message closes this one first
+              // (its outside-mousedown handler runs before that bubble's
+              // contextmenu), so only one strip is ever open. Covers text,
+              // replies, images and documents alike — the handler sits on the
+              // whole bubble, so anything inside it bubbles up here.
+              setMenuOpen((open) => !open)
             }}
           >
             <div className={`relative min-w-0 ${bubbleBase} ${bubbleSkin} ${highlightSkin}`}>
@@ -756,21 +758,11 @@ function MessageRow({
                 affordance for text AND media bubbles: it never sits over the
                 content, so no translucent patch is needed. */}
             {canShowActions && (
-              <button
+              <MessageActionsTrigger
                 ref={triggerRef}
-                type="button"
-                onClick={() => setMenuOpen((open) => !open)}
-                aria-label="Message actions"
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                className={`shrink-0 flex h-6 w-6 items-center justify-center rounded-full text-faint transition duration-200 hover:text-text hover:bg-white/4 ${
-                  menuOpen
-                    ? 'opacity-100 text-text'
-                    : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
-                }`}
-              >
-                <ChevronDown size="0.9375rem" strokeWidth={1.8} />
-              </button>
+                open={menuOpen}
+                onToggle={() => setMenuOpen((open) => !open)}
+              />
             )}
 
           </div>

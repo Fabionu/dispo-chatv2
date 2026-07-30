@@ -3,7 +3,7 @@ import type { GroupMember, GroupPendingInvitee } from '../../lib/types'
 import Avatar from '../Avatar'
 import Spinner from '../Spinner'
 import MemberRow from './MemberRow'
-import PanelSection from './PanelSection'
+import { ProfileSection } from '../settings/profileChrome'
 
 // The group-info panel's "Members" tab: the roster (each row with its manage
 // menu) plus the pending-invites list for manage-capable viewers. Purely
@@ -51,7 +51,8 @@ export default function MembersTab({
     <div className="space-y-5">
       {/* Members — count already shown in the hero, so the section
           title stays plain (no duplicate "· N"). */}
-      <PanelSection
+      <ProfileSection
+        bare
         label="Members"
         action={
           canManage ? (
@@ -90,11 +91,11 @@ export default function MembersTab({
           </div>
         )}
         {error && <div className="text-sm text-alert px-2 pt-1">{error}</div>}
-      </PanelSection>
+      </ProfileSection>
 
       {/* Pending invites (manage-capable only) */}
       {canManage && (pendingLoading || pending.length > 0) && (
-        <PanelSection label={`Pending invites${pending.length ? ` · ${pending.length}` : ''}`}>
+        <ProfileSection bare label={`Pending invites${pending.length ? ` · ${pending.length}` : ''}`}>
           {pendingLoading ? (
             <div className="flex justify-center py-4">
               <Spinner size={16} />
@@ -121,7 +122,7 @@ export default function MembersTab({
               ))}
             </div>
           )}
-        </PanelSection>
+        </ProfileSection>
       )}
     </div>
   )

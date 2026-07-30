@@ -357,11 +357,11 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
     ? !text.trim() || text.trim() === editContext.originalBody
     : !text.trim()
 
-  // Floating input bar: a wide near-black capsule, subtly lifted from the
-  // project's pure-black base without returning to the old grey surface.
-  // It sits inside ChatView's transparent overlay (which lets messages scroll
-  // behind); its rounded shape defines it against the lighter chat card without
-  // adding a border or shadow. `relative` anchors the mention picker.
+  // Floating input bar: a wide capsule one calm step above the near-black chat
+  // window — the same tone as my own bubbles, so the input and my messages read
+  // as one family. It sits inside ChatView's transparent overlay (which lets
+  // messages scroll behind); the tone step plus its rounded shape define it
+  // without a border or shadow. `relative` anchors the mention picker.
   return (
     <div
       className={`relative bg-composer ${replyContext || editContext ? 'rounded-[1.75rem]' : 'rounded-full'}`}

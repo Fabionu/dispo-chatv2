@@ -147,7 +147,7 @@ export default function AddTripPanel({ ops, onClose, onCreate, onPickLocation }:
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3.5">
+        <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 py-4 space-y-3.5">
           <p className="text-sm text-muted leading-[1.45]">
             {replacing
               ? 'Creating a new trip will replace the current active trip.'

@@ -5,30 +5,38 @@ export default {
     extend: {
       colors: {
         // ── Dark surface hierarchy (darkest → lightest) ──────────────────────
-        // bg    — the chat / message area and the workspace void behind the
-        //         cards: pure black (the darkest primary surface).
-        //         Also the dark foreground placed on accent chips/buttons
-        //         (`text-bg`).
-        // rail / surface — Group Info, modals, settings panels and elevated
-        //         chrome (menus, popovers, footers): the same #161616 tone as the
-        //         chat card, so every large panel and action layer belongs to one
-        //         consistent surface family. Selected/hover/
-        //         search use white-alpha overlays (base-independent), which read
-        //         as subtly lighter on top of this surface. Kept equal so sidebar
-        //         + chrome share one tone.
-        // composer — a near-black secondary tone for the chat input field. It
-        //         softens the transition from the pure-black shell to the raised
-        //         chat card without looking like another grey panel.
-        // surface-2 — the extra lift for focus / hover states.
+        // Values live in index.css (:root) — that file is the source of truth and
+        // carries the full ladder comment; these are just the names.
+        // bg    — the workspace void behind the two panels: pure black. Also the
+        //         dark foreground placed on accent chips/buttons (`text-bg`).
+        // panel / rail — Group Info, modals, settings panels and every other
+        //         large surface opened in the workspace: the SAME tone as the
+        //         chat window (see `panel` below).
+        // surface — small floating chrome only (menus, dropdowns, popovers):
+        //         #161616, one step up, because a popover must lift off
+        //         whatever it covers. Selected/hover/search use white-alpha
+        //         overlays (base-independent), which read as subtly lighter on
+        //         any of these surfaces.
+        // composer — the chat input capsule and my own message bubbles: one calm
+        //         step above the chat window, so the capsule stays legible now
+        //         that the conversation surface is near-black.
+        // surface-2 — incoming bubbles + the extra lift for focus / hover states.
         // All surfaces are pure neutral greys (R=G=B) — no warm/brown undertone.
         bg: 'rgb(var(--color-bg) / <alpha-value>)',
-        // The left rail's panel surface — one step above the shell, one step
-        // below the chat card, so the two panels stay legibly apart now that the
-        // whole surface family sits closer to black.
+        // The left rail — pure black, the app's deepest surface. It reads as one
+        // field with the shell and is drawn by its hairline edge, not by a tone
+        // step, which is what lets the chat window sit visibly above it.
         sidebar: 'rgb(var(--color-sidebar) / <alpha-value>)',
-        // Main conversation card: the midpoint between the near-black outgoing
-        // surfaces (#080808) and incoming bubbles (#262626).
+        // The conversation window (main pane + message area): one step above the
+        // black rail.
         chat: 'rgb(var(--color-chat) / <alpha-value>)',
+        // Every large surface that opens IN the workspace — Group info, User
+        // preview, My/User profile, Company profile, Account, settings drawers
+        // and modal dialogs. Aliased to `chat` in index.css so all of them share
+        // ONE base tone; they read apart from the conversation by edge +
+        // elevation, and their content is separated by inner white/2 cards and
+        // hairlines. `rail` is the legacy name for this same tone.
+        panel: 'rgb(var(--color-panel) / <alpha-value>)',
         surface: 'rgb(var(--color-surface) / <alpha-value>)',
         'surface-2': 'rgb(var(--color-surface-2) / <alpha-value>)',
         rail: 'rgb(var(--color-rail) / <alpha-value>)',
@@ -41,8 +49,10 @@ export default {
         //   faint — timestamps, hints, placeholders: subtle but NOT invisible.
         muted: 'rgb(var(--color-muted) / <alpha-value>)',
         faint: 'rgb(var(--color-faint) / <alpha-value>)',
-        // Own-message bubble: near-black rather than pure black, softening its
-        // weight on the raised chat card while right alignment carries ownership.
+        // Own-message bubble: shares the composer's tone (my input and my
+        // messages are one family), a calm step above the chat window while
+        // right alignment and the tail shape carry ownership. It stays DARKER
+        // than incoming (`surface-2`), so the two sides never trade places.
         'bubble-own': 'rgb(var(--color-bubble-own) / <alpha-value>)',
         done: 'rgb(var(--color-done) / <alpha-value>)',
         active: 'rgb(var(--color-active) / <alpha-value>)',

@@ -53,6 +53,19 @@ export function downloadAttachment(a: { url: string; originalName: string }) {
   link.remove()
 }
 
+// Short, human type label from the filename extension, falling back to the mime
+// type. Shared by every surface that names a file (send preview, document card,
+// in-bubble attachment) so one file is never called "PDF" in one place and
+// "application/pdf" in another.
+export function typeLabel(name: string, mime: string): string {
+  const ext = name.includes('.') ? name.split('.').pop()!.toUpperCase() : ''
+  if (ext) return ext
+  if (mime === 'application/pdf') return 'PDF'
+  if (mime.startsWith('image/')) return mime.slice(6).toUpperCase()
+  if (mime.startsWith('text/')) return 'TXT'
+  return 'FILE'
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`

@@ -28,7 +28,10 @@ export default function Modal({ title, subtitle, onClose, children, footer }: Pr
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="relative w-full max-w-[26.25rem] rounded-modal border border-white/8 bg-surface"
+        // `panel` — the one base tone every modal and workspace panel shares.
+        // The dialog is told apart from what it covers by its edge, its shadow
+        // and the dimmed backdrop, never by a different fill.
+        className="relative w-full max-w-[26.25rem] rounded-modal border border-white/8 bg-panel"
         style={{ boxShadow: '0 32px 80px rgba(0,0,0,0.65)' }}
       >
         <header className="flex items-start justify-between px-5 pt-4 pb-3 border-b border-white/6">

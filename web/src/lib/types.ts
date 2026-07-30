@@ -195,6 +195,14 @@ export function groupHasUnread(g: Group): boolean {
   return new Date(g.lastMessageAt) > new Date(g.lastReadAt)
 }
 
+// THE unread rule, shared by the conversation row's badge and the rail's Unread
+// filter so a row can never show a badge the filter disagrees with. Prefers the
+// precise server count; falls back to the timestamp comparison when an older
+// API response omitted it.
+export function isUnread(g: Group): boolean {
+  return typeof g.unreadCount === 'number' ? g.unreadCount > 0 : groupHasUnread(g)
+}
+
 export type Attachment = {
   id: string
   originalName: string
