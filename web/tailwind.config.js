@@ -9,9 +9,8 @@ export default {
         // carries the full ladder comment; these are just the names.
         // bg    — the workspace void behind the two panels: pure black. Also the
         //         dark foreground placed on accent chips/buttons (`text-bg`).
-        // panel / rail — Group Info, modals, settings panels and every other
-        //         large surface opened in the workspace: the SAME tone as the
-        //         chat window (see `panel` below).
+        // panel / rail — Group Info, User preview and modals opened beside or
+        //         over the chat: the SAME tone as the chat window.
         // surface — small floating chrome only (menus, dropdowns, popovers):
         //         #161616, one step up, because a popover must lift off
         //         whatever it covers. Selected/hover/search use white-alpha
@@ -30,12 +29,10 @@ export default {
         // The conversation window (main pane + message area): one step above the
         // black rail.
         chat: 'rgb(var(--color-chat) / <alpha-value>)',
-        // Every large surface that opens IN the workspace — Group info, User
-        // preview, My/User profile, Company profile, Account, settings drawers
-        // and modal dialogs. Aliased to `chat` in index.css so all of them share
-        // ONE base tone; they read apart from the conversation by edge +
-        // elevation, and their content is separated by inner white/2 cards and
-        // hairlines. `rail` is the legacy name for this same tone.
+        // Surfaces opened beside or over the chat — Group info, User preview,
+        // drawers and modal dialogs. Sidebar drill-ins (Account, My profile,
+        // Company profile and Workspace settings) use `sidebar` instead, keeping
+        // the complete left rail pure black. `rail` is the legacy panel alias.
         panel: 'rgb(var(--color-panel) / <alpha-value>)',
         surface: 'rgb(var(--color-surface) / <alpha-value>)',
         'surface-2': 'rgb(var(--color-surface-2) / <alpha-value>)',

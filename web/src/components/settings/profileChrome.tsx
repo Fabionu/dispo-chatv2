@@ -58,10 +58,12 @@ export function ProfileAvatarSlot({ children }: { children: ReactNode }) {
 export const PANEL_BODY =
   'flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 py-4 space-y-5'
 
-// Every large surface opened in the workspace shares the chat window's base
-// tone (`--color-panel`); this is the class that says so. Panels that are also
-// drawers add their own shadow/edge on top.
+// Right-hand panels opened beside the conversation share the chat window's base
+// tone. Panels that replace the conversation list in the LEFT sidebar use the
+// pure-black sidebar token instead, so drilling into Account / Profile /
+// Company / Settings never changes the rail's background colour.
 export const PANEL_SURFACE = 'bg-panel'
+export const SIDEBAR_PANEL_SURFACE = 'bg-sidebar'
 
 // A grouped card of rows — the same recipe as Account's settings groups. Rows
 // inside carry their own hairline (EditableRow), so this only draws the box.

@@ -5,10 +5,10 @@ import { api, type ProfilePatch } from '../../lib/api'
 import { PanelHeader } from './panelChrome'
 import {
   PANEL_BODY,
-  PANEL_SURFACE,
   PROFILE_HERO_SIZE,
   ProfileHero,
   ProfileSection,
+  SIDEBAR_PANEL_SURFACE,
   StatusPill,
 } from './profileChrome'
 import { useAuth } from '../../auth/AuthContext'
@@ -163,7 +163,7 @@ export default function ProfileSidebarPanel({
 
   return (
     <>
-      <div className={`flex flex-col h-full ${PANEL_SURFACE}`}>
+      <div className={`flex flex-col h-full ${SIDEBAR_PANEL_SURFACE}`}>
         <PanelHeader title="Profile" onBack={onBack} backLabel={backLabel} />
 
         {!profile ? (
@@ -386,4 +386,3 @@ function StatusSelect({
     </div>
   )
 }
-

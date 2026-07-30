@@ -6,9 +6,9 @@ import Avatar from '../Avatar'
 import { PanelHeader, CategoryRow, PANEL_GROUP_CARD } from './panelChrome'
 import {
   PANEL_BODY,
-  PANEL_SURFACE,
   PROFILE_HERO_SIZE,
   ProfileHero,
+  SIDEBAR_PANEL_SURFACE,
   StatusPill,
 } from './profileChrome'
 import { ROLE_LABEL } from './ProfileSidebarPanel'
@@ -50,7 +50,7 @@ export default function AccountSidebarPanel({
   const status = user.role === 'driver' ? null : away ? AWAY : profile ? statusMeta(profile.availabilityStatus) : null
 
   return (
-    <div className={`flex flex-col h-full ${PANEL_SURFACE}`}>
+    <div className={`flex flex-col h-full ${SIDEBAR_PANEL_SURFACE}`}>
       <PanelHeader title="Account" onBack={onBack} backLabel="Back to conversations" />
 
       <div className={PANEL_BODY}>

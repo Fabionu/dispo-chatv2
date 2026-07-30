@@ -65,19 +65,17 @@ html[data-density='comfortable'] {
 
        sidebar   #000000  the left rail — pure black, one field with the shell
        chat /
-       panel     #0C0C0C  the conversation window AND every panel or modal that
-                          opens in the workspace — ONE base tone
+       panel     #0C0C0C  the conversation window and right-hand panels/modals
+       sidebar   #000000  conversation list and every drill-in that replaces it
        composer  #1A1A1A  the input capsule + my own bubbles, raised on it
        surface   #161616  small floating chrome ONLY (menus, dropdowns,
                           popovers) — they must lift off whatever they cover
        surface-2 #2D2D2D  incoming bubbles + every hover/focus lift
 
-     `panel` is the single token every large surface shares — Group info, User
-     preview, My profile, Company profile, Account, settings, drawers and modal
-     dialogs. They are told apart from the chat by their edge and elevation, and
-     their CONTENT is separated by inner surfaces (white/2 cards), hairlines and
-     small contrast steps — never by re-tinting the panel itself. Aliased rather
-     than repeated so the value can never drift between the two.
+     `panel` remains the shared tone for surfaces opened beside or over the chat:
+     Group info, User preview, drawers and modal dialogs. Account, My profile,
+     Company profile and Workspace settings replace the conversation list, so
+     they deliberately use `sidebar` and keep that entire rail pure black.
 
      The rail keeps its hairline (border-white/8) rather than a fill step: at
      pure black the panel edge is what separates it from the shell gap. */

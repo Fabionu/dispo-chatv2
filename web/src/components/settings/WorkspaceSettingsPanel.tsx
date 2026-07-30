@@ -32,6 +32,7 @@ import { api, ApiError } from '../../lib/api'
 import type { Role, WorkspaceInvite, WorkspaceInviteCreated } from '../../lib/types'
 import { ROLE_LABEL } from './ProfileSidebarPanel'
 import { PanelHeader, CategoryRow, PANEL_GROUP_CARD } from './panelChrome'
+import { SIDEBAR_PANEL_SURFACE } from './profileChrome'
 import { ICON_ACTION_BASE, ICON_ACTION_IDLE } from '../HeaderIconButton'
 import { MENU_CONTAINER, menuItemClass } from '../menuStyles'
 import {
@@ -110,7 +111,7 @@ export default function WorkspaceSettingsPanel({ onBack, backLabel = 'Back' }: P
       about: 'About',
     }[category]
     return (
-      <div className="flex flex-col h-full">
+      <div className={`flex flex-col h-full ${SIDEBAR_PANEL_SURFACE}`}>
         <PanelHeader
           title={title}
           onBack={() => setCategory(null)}
@@ -137,7 +138,7 @@ export default function WorkspaceSettingsPanel({ onBack, backLabel = 'Back' }: P
   } · ${densityOverride ? DENSITY_LABEL[densityOverride] : 'Auto'} density`
 
   return (
-    <div className="flex flex-col h-full">
+    <div className={`flex flex-col h-full ${SIDEBAR_PANEL_SURFACE}`}>
       <PanelHeader title="Workspace settings" onBack={onBack} backLabel={backLabel} />
       <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 py-4">
         <div className={PANEL_GROUP_CARD}>
