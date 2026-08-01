@@ -186,6 +186,9 @@ function MessageRow({
   // and land in the same place either way: inline under this bubble. No anchor
   // maths, so one boolean covers both.
   const [menuOpen, setMenuOpen] = useState(false)
+  // Keep the strip mounted briefly after close so its fade/lift can finish.
+  // Opening still mounts on demand, so closed rows do not retain action DOM.
+  const [menuRendered, setMenuRendered] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const rowRef = useRef<HTMLDivElement>(null)
 
@@ -210,6 +213,16 @@ function MessageRow({
       document.removeEventListener('keydown', onKey)
     }
   }, [menuOpen])
+
+  useEffect(() => {
+    if (menuOpen) {
+      setMenuRendered(true)
+      return
+    }
+    if (!menuRendered) return
+    const timer = window.setTimeout(() => setMenuRendered(false), 130)
+    return () => window.clearTimeout(timer)
+  }, [menuOpen, menuRendered])
 
   // 82% keeps bubbles comfortably inset on small screens; the wider absolute
   // cap lets conversations occupy more of the enlarged desktop chat column on
@@ -582,10 +595,11 @@ function MessageRow({
                     </button>
                   )}
 
-                  {menuOpen && (
+                  {menuRendered && (
                     <MessageActionsPanel
                       actions={actions}
                       mine={mine}
+                      open={menuOpen}
                       onClose={() => setMenuOpen(false)}
                     />
                   )}
@@ -766,8 +780,13 @@ function MessageRow({
             )}
 
           </div>
-          {menuOpen && (
-            <MessageActionsPanel actions={actions} mine={mine} onClose={() => setMenuOpen(false)} />
+          {menuRendered && (
+            <MessageActionsPanel
+              actions={actions}
+              mine={mine}
+              open={menuOpen}
+              onClose={() => setMenuOpen(false)}
+            />
           )}
           {failed && mine && message.localId && (
             <button

@@ -170,6 +170,10 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // navigates there and asks the newly-mounted ChatView to open its existing
   // Add Trip panel immediately.
   const [pendingAddTripGroupId, setPendingAddTripGroupId] = useState<string | null>(null)
+  // Same one-shot handshake for the sidebar row action "View user profile" /
+  // "View group info": select the conversation, then let its ChatView open the
+  // details surface that matches the conversation's type.
+  const [pendingDetailsGroupId, setPendingDetailsGroupId] = useState<string | null>(null)
   // Shared chat-window attachment tabs. ChatView remounts per conversation, but
   // a PDF/image tab should remain available until the user explicitly closes it.
   const [attachmentTabs, setAttachmentTabs] = useState<AttachmentWorkspaceTab[]>([])
@@ -900,6 +904,11 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                         onMarkRead={handleMarkRead}
                         onMarkUnread={handleMarkUnread}
                         onDelete={handleDeleteConversation}
+                        onViewDetails={(g) => {
+                          setRowActionsId(null)
+                          setSelection({ kind: 'group', id: g.id })
+                          setPendingDetailsGroupId(g.id)
+                        }}
                       />
                     ) : (
                       <ContactRow
@@ -1005,6 +1014,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             onConsumeInitialReply={() => setPendingReply(null)}
             initialAddTripOpen={pendingAddTripGroupId === selectedGroup.id}
             onConsumeInitialAddTrip={() => setPendingAddTripGroupId(null)}
+            initialDetailsOpen={pendingDetailsGroupId === selectedGroup.id}
+            onConsumeInitialDetails={() => setPendingDetailsGroupId(null)}
             vehicleRooms={availableVehicleRooms}
             onAddTripInGroup={addTripFromWorkspace}
             attachmentTabs={attachmentTabs}

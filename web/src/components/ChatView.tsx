@@ -17,7 +17,14 @@ import {
   Route,
   Upload,
 } from 'lucide-react'
-import type { Attachment, Group, GroupMember, IncomingMessage, ReplyToPreview } from '../lib/types'
+import type {
+  Attachment,
+  Group,
+  GroupMember,
+  IncomingMessage,
+  ReplyToPreview,
+  ScheduledMessage,
+} from '../lib/types'
 import { groupLabel, trailerPlate } from '../lib/types'
 import { fileError } from './attachments/attachmentUtils'
 import { resolveMentionIds } from '../lib/mentions'
@@ -49,6 +56,7 @@ import UserProfilePanel from './UserProfilePanel'
 import MessageRow from './messages/MessageRow'
 import ReadReceiptsPanel from './messages/ReadReceiptsPanel'
 import SystemMessageRow from './messages/SystemMessageRow'
+import ScheduledMessageRow from './messages/ScheduledMessageRow'
 import PinnedBar from './messages/PinnedBar'
 import TypingIndicator from './messages/TypingIndicator'
 import { typingStatusText } from '../lib/typing'
@@ -59,6 +67,7 @@ import { useFileDrop } from '../hooks/useFileDrop'
 import { useMessageActions } from '../hooks/useMessageActions'
 import { useSendMessage } from '../hooks/useSendMessage'
 import { useMessageDrafts } from '../hooks/useMessageDrafts'
+import { useScheduledMessages } from '../hooks/useScheduledMessages'
 import { getDraft } from '../lib/draftStorage'
 import { devlog } from '../lib/devlog'
 import { useMessageCache } from '../hooks/useMessageCache'
@@ -72,6 +81,9 @@ import { usePinnedMessages } from '../hooks/usePinnedMessages'
 // Stable empty list so a group with no cached thread doesn't hand a fresh
 // array to useChatScroll on every render.
 const NO_MESSAGES: LocalMessage[] = []
+// Stable empty array — a fresh literal here would give the render a new
+// identity every pass and defeat the memoized rows below it.
+const NO_SCHEDULED: ScheduledMessage[] = []
 
 // How many of the newest messages get their images treated as "recent": loaded
 // eagerly in-bubble and warmed in the browser cache when the thread opens.
@@ -108,6 +120,12 @@ type Props = {
   // panel already open, then let the parent clear the one-shot request.
   initialAddTripOpen?: boolean
   onConsumeInitialAddTrip?: () => void
+  // Sidebar row-action shortcut ("View user profile" / "View group info"):
+  // mount this conversation with its details surface already open. Which
+  // surface that is depends on the conversation type, so the row only asks and
+  // the chat decides. Same one-shot handshake as Add trip above.
+  initialDetailsOpen?: boolean
+  onConsumeInitialDetails?: () => void
   // Used when Add trip is opened from a conversation that is not itself a
   // vehicle room. Workspace owns the room list and the cross-chat navigation.
   vehicleRooms: Group[]
@@ -137,6 +155,8 @@ export default function ChatView({
   onConsumeInitialReply,
   initialAddTripOpen = false,
   onConsumeInitialAddTrip,
+  initialDetailsOpen = false,
+  onConsumeInitialDetails,
   vehicleRooms,
   onAddTripInGroup,
   attachmentTabs,
@@ -230,6 +250,26 @@ export default function ChatView({
   useEffect(() => {
     if (initialAddTripOpen) onConsumeInitialAddTrip?.()
   }, [initialAddTripOpen, onConsumeInitialAddTrip])
+  // Resolve the sidebar's "show me this conversation's details" request. A DM
+  // opens the peer's profile overlay; a vehicle room opens Group info on its
+  // Info tab. Consumed immediately so re-selecting the room later doesn't
+  // re-open the panel.
+  useEffect(() => {
+    if (!initialDetailsOpen) return
+    onConsumeInitialDetails?.()
+    const peer = group.type === 'direct' ? group.directPeer : null
+    if (peer) {
+      // `name` is nullable on the peer; groupLabel already resolves the same
+      // fallback the sidebar row displays, so the hero can't render blank.
+      openProfile(peer.id, peer.name ?? groupLabel(group))
+      return
+    }
+    // A DM whose peer failed to load has no profile to show — fall through to
+    // Group info rather than opening an empty overlay.
+    setReceiptTarget(null)
+    setGroupInfoTab('info')
+    setGroupInfoOpen(true)
+  }, [initialDetailsOpen, onConsumeInitialDetails, group.type, group.directPeer, openProfile])
   // Chat-window tool tabs. Today there's one tool — the stop-location Map, a
   // request from the Add-trip panel to pick a stop's coordinates on a HERE map.
   // `mapPick` carries the seed query + the write-back callback (null = closed);
@@ -293,6 +333,11 @@ export default function ChatView({
     targetId: string
   } | null>(null)
   const visibleMessages = searchContext?.messages ?? messages
+  // My own queued-but-undelivered messages, parked at the foot of the thread.
+  // Hidden while a search context is showing a slice of history — a row pinned
+  // to "now" has no meaning inside a jumped-to window of older messages.
+  const { scheduled: scheduledQueue, cancel: cancelScheduled } = useScheduledMessages(group.id)
+  const pendingSends = searchContext ? NO_SCHEDULED : scheduledQueue
   const searchInputRef = useRef<HTMLInputElement>(null)
   const closeSearch = useCallback(() => {
     setSearchOpen(false)
@@ -796,6 +841,19 @@ export default function ChatView({
     setText('')
   }
 
+  // Cancel a queued send from its bubble in the thread. The body is handed back
+  // to the composer when there's nothing there to overwrite, so a stray click
+  // on the hover control can't silently destroy a written message — and
+  // "cancel this, I'll send it now instead" is the common reason anyway. If the
+  // user has already typed something, theirs wins and this only cancels.
+  function cancelScheduledSend(item: ScheduledMessage) {
+    if (!text.trim() && !editContext) {
+      setText(item.body)
+      requestAnimationFrame(() => composerHandleRef.current?.focus())
+    }
+    void cancelScheduled(item.id)
+  }
+
   // The menu actions open a confirmation first; the actual delete runs only
   // once the user confirms.
   function confirmPendingDelete() {
@@ -1215,7 +1273,16 @@ export default function ChatView({
               // is applied to the list itself — the only fade is at the window's
               // bottom edge, below the composer (see the chat surface).
               className="flex-1 overflow-y-auto pt-4 [scrollbar-gutter:stable] flex flex-col"
-              style={{ paddingBottom: composerHeight + 8 }}
+              // --composer-reserve publishes that same height to descendants.
+              // The composer OVERLAYS the bottom of this scroller, so anything
+              // inside it that wants to scroll itself into view has to clear the
+              // composer too: the scroller's own bottom edge sits well below the
+              // last actually-visible pixel. MessageActionsPanel reads this as a
+              // scroll margin so `scrollIntoView` stops short of the overlay.
+              style={{
+                paddingBottom: composerHeight + 8,
+                ['--composer-reserve' as string]: `${composerHeight + 8}px`,
+              }}
             >
               {loading ? (
                 // Centre the loader in the FULL chat pane (the scroller has a
@@ -1226,10 +1293,15 @@ export default function ChatView({
               ) : (
                 <div
                   className={`chat-column flex flex-col ${
-                    visibleMessages.length === 0 ? 'flex-1' : 'shrink-0 mt-auto'
+                    visibleMessages.length === 0 && pendingSends.length === 0
+                      ? 'flex-1'
+                      : 'shrink-0 mt-auto'
                   }`}
                 >
-                {visibleMessages.length === 0 ? (
+                {/* A queued message counts as content: a thread whose only
+                    entry is a pending send must show that bubble, not the
+                    "say something" empty state. */}
+                {visibleMessages.length === 0 && pendingSends.length === 0 ? (
                   <div className="flex-1 flex items-center justify-center">
                     <p className="text-base text-faint">No messages yet. Say something.</p>
                   </div>
@@ -1325,6 +1397,18 @@ export default function ChatView({
                         />
                       )
                     })}
+                    {/* Always last. Rendering after the map is what pins these
+                        below the newest real message — including one that
+                        arrives while they wait. Soonest first (the API orders
+                        by scheduled_for), so the queue reads top-to-bottom in
+                        the order it will actually send. */}
+                    {pendingSends.map((item) => (
+                      <ScheduledMessageRow
+                        key={item.id}
+                        item={item}
+                        onCancel={cancelScheduledSend}
+                      />
+                    ))}
                   </div>
                 )}
                 </div>

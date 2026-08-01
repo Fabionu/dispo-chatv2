@@ -77,6 +77,7 @@ type Props = {
   // Own messages align right and take the own-bubble fill; incoming ones align
   // left with the incoming fill, so the strip reads as part of its own message.
   mine: boolean
+  open: boolean
   onClose: () => void
 }
 
@@ -86,12 +87,17 @@ type Props = {
 // (or focus) names the action — so the strip stays narrow enough to sit under
 // even a short bubble. Styled as a small sibling of the bubble: same fill, same
 // corner family, so it reads as chat furniture rather than a system menu.
-export default function MessageActionsPanel({ actions, mine, onClose }: Props) {
+export default function MessageActionsPanel({ actions, mine, open, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null)
 
-  // Opening on the newest message pushes the strip under the composer, which
-  // sits below the thread's scroll area. `nearest` scrolls the minimum needed —
-  // and nothing at all when the strip is already fully in view.
+  // Opening on the newest message puts the strip behind the composer, which
+  // OVERLAYS the bottom of the thread's scroll area. `nearest` alone can't see
+  // that: the strip is inside the scrollport, so the browser considers it in
+  // view and scrolls nothing — it just happens to be under the input. The
+  // scroll margin (--composer-reserve, published by ChatView's scroller) makes
+  // scrollIntoView aim for the last VISIBLE pixel instead of the scroller's
+  // edge, so the strip clears the composer. Still `nearest`, so a strip already
+  // in the clear doesn't move the thread at all.
   useEffect(() => {
     ref.current?.scrollIntoView({ block: 'nearest' })
   }, [])
@@ -101,10 +107,16 @@ export default function MessageActionsPanel({ actions, mine, onClose }: Props) {
       ref={ref}
       role="menu"
       aria-label="Message actions"
+      aria-hidden={!open}
       onClick={(e) => e.stopPropagation()}
+      // Keeps the strip clear of the overlaid composer when it scrolls itself
+      // into view (see the effect above). Falls back to 0 outside that scroller.
+      style={{ scrollMarginBottom: 'var(--composer-reserve, 0px)' }}
       // rounded-[1rem] — the bubble's own outer radius (shapeMine/shapeOther),
       // so the strip reads as that bubble's footer, not a foreign card.
-      className={`mt-1 flex w-max items-center gap-0.5 rounded-[0.875rem] border px-1 py-0.5 ${
+      className={`${open ? 'action-strip-enter' : 'action-strip-exit pointer-events-none'} mt-1 flex w-max origin-top items-center gap-0.5 rounded-[0.875rem] border px-1 py-0.5 ${
+        mine ? 'origin-top-right' : 'origin-top-left'
+      } ${
         mine ? 'bg-bubble-own border-white/8' : 'bg-surface-2 border-white/6'
       }`}
     >

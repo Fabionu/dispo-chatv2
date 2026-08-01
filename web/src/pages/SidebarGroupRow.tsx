@@ -4,6 +4,7 @@ import {
   ArchiveRestore,
   Bell,
   BellOff,
+  Info,
   MailOpen,
   Pin,
   PinOff,
@@ -18,6 +19,7 @@ import Avatar from '../components/Avatar'
 import GroupAvatar from '../components/GroupAvatar'
 import IdentitySlot from '../components/IdentitySlot'
 import { RowActionsTrigger, RowStateIcon } from './sidebarBits'
+import { initials } from '../components/messages/messageUtils'
 import { MENU_GLYPH } from '../components/menuStyles'
 import { statusMeta, OFFLINE } from '../lib/availability'
 import { typingStatusText, type TypingUser } from '../lib/typing'
@@ -80,6 +82,7 @@ export default function GroupRow({
   onMarkRead,
   onMarkUnread,
   onDelete,
+  onViewDetails,
 }: {
   group: Group
   typingUsers: TypingUser[]
@@ -103,6 +106,10 @@ export default function GroupRow({
   onMarkRead: (group: Group) => void
   onMarkUnread: (group: Group) => void
   onDelete: (group: Group) => void
+  // Opens the conversation's details surface: the peer's profile for a direct
+  // message, Group info for a vehicle room. The row only signals intent — the
+  // workspace selects the conversation and the chat opens the right panel.
+  onViewDetails: (group: Group) => void
 }) {
   // A DM peer's dot: their declared status colour when online, dim grey when
   // offline (signed out / app closed). Live via socket presence.
@@ -201,9 +208,37 @@ export default function GroupRow({
   // selected→0 view used for the badge.
   const actuallyUnread = (group.unreadCount ?? 0) > 0
   const ICON = MENU_GLYPH
-  // Labels stay SHORT: five cells share the rail's width, so "Mark as read"
+  const isDirect = group.type === 'direct'
+  // Labels stay SHORT: the cells share the rail's width, so "Mark as read"
   // becomes "Read". The aria-label carries the full wording.
   const rowMenuActions: RowAction[] = [
+    // Leads the strip: the one purely informational action, and the reason most
+    // people open this menu. Its meaning follows the conversation type — a DM
+    // has a person behind it, a vehicle room has a truck.
+    //
+    // A DM's cell carries the peer's INITIALS rather than a contact glyph. This
+    // is not the Avatar rule being broken (Avatar deliberately never falls back
+    // to initials, so a photo-less person still reads as a person): that glyph
+    // depicts someone, whereas this one names WHICH someone the action targets
+    // — and every DM row would otherwise show the identical person icon. Sized
+    // to the same 14px box as the lucide glyphs beside it, and inheriting
+    // currentColor, so the strip's rhythm and hover states are unchanged.
+    {
+      key: 'details',
+      label: isDirect ? 'Profile' : 'Info',
+      title: isDirect ? 'View user profile' : 'View group info',
+      icon: isDirect ? (
+        <span
+          aria-hidden
+          className="flex h-3.5 items-center justify-center text-base font-semibold leading-none tracking-tight"
+        >
+          {initials(peer?.name ?? groupLabel(group))}
+        </span>
+      ) : (
+        <Info {...ICON} />
+      ),
+      onSelect: () => onViewDetails(group),
+    },
     {
       key: 'pin',
       label: pinned ? 'Unpin' : 'Pin',
@@ -428,8 +463,10 @@ export default function GroupRow({
           <div
             role="group"
             aria-label={`Actions for ${groupLabel(group)}`}
-            className={`mb-1 flex w-full items-stretch transition-opacity duration-150 ${
-              menuOpen ? 'opacity-100' : 'opacity-0'
+            className={`mb-1 flex w-full origin-top items-stretch transition-[opacity,transform] duration-150 ease-out ${
+              menuOpen
+                ? 'action-strip-enter opacity-100 translate-y-0 scale-100'
+                : 'opacity-0 -translate-y-1 scale-[0.98]'
             }`}
           >
             {rowMenuActions.map((a) => {

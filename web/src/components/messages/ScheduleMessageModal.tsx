@@ -4,6 +4,7 @@ import Modal from '../Modal'
 import { DateField, TimeField } from '../DateTimeField'
 import { api, ApiError } from '../../lib/api'
 import { getSocket } from '../../lib/socket'
+import { absoluteLabel, relativeLabel } from '../../lib/scheduleTime'
 import type { ScheduledMessage } from '../../lib/types'
 
 type Props = {
@@ -71,45 +72,6 @@ function parseLocalDateTime(date: string, time: string): Date | null {
     return null
   }
   return value
-}
-
-// h23 so the readout speaks the same clock as TimeField, which is 24h — on an
-// en-US locale the default would render "01:55 PM" beside a field reading 13:55.
-const HM = new Intl.DateTimeFormat(undefined, {
-  hour: '2-digit',
-  minute: '2-digit',
-  hourCycle: 'h23',
-})
-const DAY = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
-const DAY_YEAR = new Intl.DateTimeFormat(undefined, {
-  weekday: 'short',
-  day: 'numeric',
-  month: 'short',
-  year: 'numeric',
-})
-// `always` (not `auto`) so this never renders "tomorrow" — the absolute half of
-// the readout already says which day; this half only ever answers "how long".
-const RELATIVE = new Intl.RelativeTimeFormat(undefined, { numeric: 'always' })
-
-// "today at 09:30" / "tomorrow at 08:00" / "Sat, 2 Aug at 08:00", with the year
-// added only when it differs from now (messages can be scheduled a year out).
-function absoluteLabel(value: Date): string {
-  const now = new Date()
-  const tomorrow = new Date(now)
-  tomorrow.setDate(now.getDate() + 1)
-  const time = HM.format(value)
-  if (value.toDateString() === now.toDateString()) return `today at ${time}`
-  if (value.toDateString() === tomorrow.toDateString()) return `tomorrow at ${time}`
-  const day = value.getFullYear() === now.getFullYear() ? DAY.format(value) : DAY_YEAR.format(value)
-  return `${day} at ${time}`
-}
-
-function relativeLabel(value: Date): string {
-  const minutes = Math.round((value.getTime() - Date.now()) / 60_000)
-  if (Math.abs(minutes) < 60) return RELATIVE.format(minutes, 'minute')
-  const hours = Math.round(minutes / 60)
-  if (Math.abs(hours) < 24) return RELATIVE.format(hours, 'hour')
-  return RELATIVE.format(Math.round(hours / 24), 'day')
 }
 
 const CHIP_BASE =
