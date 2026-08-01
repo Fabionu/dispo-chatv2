@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { MapPin, X } from 'lucide-react'
 import { api } from '../../lib/api'
 import { looksLikeCoordPair, parseLatLng } from '../../lib/here/geo'
@@ -35,6 +36,14 @@ type Props = {
   pill?: boolean
 }
 
+type PopupPosition = {
+  left: number
+  top: number
+  width: number
+  maxHeight: number
+  above: boolean
+}
+
 // Address/location autocomplete backed by HERE Discover (via /api/here/search).
 // Debounced; selecting a result locks the field to that place's label, with a
 // clear (×) button to pick again. Stays deliberately simple — no keyboard
@@ -44,8 +53,67 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
   const [items, setItems] = useState<HerePlace[]>([])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [popup, setPopup] = useState<PopupPosition | null>(null)
   const listboxId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const dropdownRef = useRef<HTMLUListElement>(null)
+
+  // Coordinate-input state for the current query: whether it looks like a "lat,
+  // lng" pair, and the parsed/validated point (null when out of range).
+  const trimmed = query.trim()
+  const coordShape = !value && looksLikeCoordPair(trimmed)
+  const coord = coordShape ? parseLatLng(trimmed) : null
+  const resultsVisible = open && !value && !coordShape && (items.length > 0 || loading)
+  const dropdownVisible = coordShape || resultsVisible
+
+  // The planner's itinerary lives inside an overflow-y-auto region. Rendering
+  // the autocomplete as an absolute child clips it to that scroller and forces
+  // the user to scroll the panel to see results. Measure the input and render
+  // the list in document.body instead. `fixed` positioning keeps it above the
+  // planner/map layers; when there is less room below, the list flips upward.
+  const updatePopupPosition = useCallback(() => {
+    const input = inputRef.current
+    if (!input) return
+    const rect = input.getBoundingClientRect()
+    const gap = 4
+    const viewportPadding = 8
+    const spaceBelow = window.innerHeight - rect.bottom - gap - viewportPadding
+    const spaceAbove = rect.top - gap - viewportPadding
+    const above = spaceBelow < 160 && spaceAbove > spaceBelow
+    const available = above ? spaceAbove : spaceBelow
+    const next: PopupPosition = {
+      left: Math.max(viewportPadding, Math.min(rect.left, window.innerWidth - rect.width - viewportPadding)),
+      top: above ? rect.top - gap : rect.bottom + gap,
+      width: rect.width,
+      maxHeight: Math.max(80, Math.min(288, available)),
+      above,
+    }
+    setPopup((current) =>
+      current &&
+      current.left === next.left &&
+      current.top === next.top &&
+      current.width === next.width &&
+      current.maxHeight === next.maxHeight &&
+      current.above === next.above
+        ? current
+        : next,
+    )
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!dropdownVisible) {
+      setPopup(null)
+      return
+    }
+    updatePopupPosition()
+    window.addEventListener('resize', updatePopupPosition)
+    window.addEventListener('scroll', updatePopupPosition, true)
+    return () => {
+      window.removeEventListener('resize', updatePopupPosition)
+      window.removeEventListener('scroll', updatePopupPosition, true)
+    }
+  }, [dropdownVisible, updatePopupPosition])
 
   // Debounced search. A selected value short-circuits searching (the field shows
   // the chosen label, not a query).
@@ -91,7 +159,14 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
   useEffect(() => {
     if (!open) return
     function onDoc(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
+      const target = e.target as Node
+      if (
+        rootRef.current &&
+        !rootRef.current.contains(target) &&
+        !dropdownRef.current?.contains(target)
+      ) {
+        setOpen(false)
+      }
     }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
@@ -110,12 +185,70 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
     setItems([])
   }
 
-  // Coordinate-input state for the current query: whether it looks like a "lat,
-  // lng" pair, and the parsed/validated point (null when out of range).
-  const trimmed = query.trim()
-  const coordShape = !value && looksLikeCoordPair(trimmed)
-  const coord = coordShape ? parseLatLng(trimmed) : null
   const fieldSurface = `${FIELD_SURFACE} ${pill ? 'rounded-full' : 'rounded-card'}`
+
+  const dropdown = popup && dropdownVisible && (
+    <ul
+      ref={dropdownRef}
+      id={listboxId}
+      role="listbox"
+      className={`fixed z-[100] ${MENU_SURFACE} overflow-y-auto`}
+      style={{
+        left: popup.left,
+        top: popup.top,
+        width: popup.width,
+        maxHeight: popup.maxHeight,
+        transform: popup.above ? 'translateY(-100%)' : undefined,
+      }}
+    >
+      {coordShape ? (
+        coord ? (
+          <li role="option" aria-selected={false}>
+            <button
+              type="button"
+              onClick={() => select(coordPlace(coord))}
+              className="w-full text-left px-3 py-2 hover:bg-white/6 transition-colors flex items-start gap-2"
+            >
+              <MapPin size="0.875rem" className="mt-0.5 shrink-0 text-active" strokeWidth={1.8} />
+              <span className="min-w-0">
+                <span className="block text-base">Go to coordinates</span>
+                <span className="block text-xs text-muted tabular-nums">
+                  {coord.lat.toFixed(5)}, {coord.lng.toFixed(5)}
+                </span>
+              </span>
+            </button>
+          </li>
+        ) : (
+          <li className="px-3 py-2.5 text-sm text-amber-200/80">
+            Invalid coordinates — latitude −90 to 90, longitude −180 to 180.
+          </li>
+        )
+      ) : (
+        <>
+          {loading && items.length === 0 && (
+            <li className="px-3 py-2.5 text-sm text-muted">Searching…</li>
+          )}
+          {items.map((item) => (
+            <li key={item.id} role="option" aria-selected={false}>
+              <button
+                type="button"
+                onClick={() => select(item)}
+                className="w-full text-left px-3 py-2 hover:bg-white/6 transition-colors flex items-start gap-2"
+              >
+                <MapPin size="0.875rem" className="mt-0.5 shrink-0 text-muted" strokeWidth={1.8} />
+                <span className="min-w-0">
+                  <span className="block text-base truncate">{item.title}</span>
+                  {item.label && item.label !== item.title && (
+                    <span className="block text-xs text-muted truncate">{item.label}</span>
+                  )}
+                </span>
+              </button>
+            </li>
+          ))}
+        </>
+      )}
+    </ul>
+  )
 
   return (
     <div ref={rootRef} className="relative flex flex-col gap-1.5">
@@ -139,6 +272,7 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
         </div>
       ) : (
         <input
+          ref={inputRef}
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -160,67 +294,9 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
         />
       )}
 
-      {/* Coordinate input: a direct "Go to coordinates" option, or an invalid
-          hint. Never runs an address search, so the map only moves on selection
-          of a valid, in-range coordinate. */}
-      {coordShape && (
-        <ul
-          id={listboxId}
-          role="listbox"
-          className={`absolute z-20 top-full mt-1 w-full ${MENU_SURFACE} overflow-hidden`}
-        >
-          {coord ? (
-            <li role="option" aria-selected={false}>
-              <button
-                type="button"
-                onClick={() => select(coordPlace(coord))}
-                className="w-full text-left px-3 py-2 hover:bg-white/6 transition-colors flex items-start gap-2"
-              >
-                <MapPin size="0.875rem" className="mt-0.5 shrink-0 text-active" strokeWidth={1.8} />
-                <span className="min-w-0">
-                  <span className="block text-base">Go to coordinates</span>
-                  <span className="block text-xs text-muted tabular-nums">
-                    {coord.lat.toFixed(5)}, {coord.lng.toFixed(5)}
-                  </span>
-                </span>
-              </button>
-            </li>
-          ) : (
-            <li className="px-3 py-2.5 text-sm text-amber-200/80">
-              Invalid coordinates — latitude −90 to 90, longitude −180 to 180.
-            </li>
-          )}
-        </ul>
-      )}
-
-      {open && !value && !coordShape && (items.length > 0 || loading) && (
-        <ul
-          id={listboxId}
-          role="listbox"
-          className={`absolute z-20 top-full mt-1 w-full max-h-72 overflow-y-auto ${MENU_SURFACE}`}
-        >
-          {loading && items.length === 0 && (
-            <li className="px-3 py-2.5 text-sm text-muted">Searching…</li>
-          )}
-          {items.map((item) => (
-            <li key={item.id} role="option" aria-selected={false}>
-              <button
-                type="button"
-                onClick={() => select(item)}
-                className="w-full text-left px-3 py-2 hover:bg-white/6 transition-colors flex items-start gap-2"
-              >
-                <MapPin size="0.875rem" className="mt-0.5 shrink-0 text-muted" strokeWidth={1.8} />
-                <span className="min-w-0">
-                  <span className="block text-base truncate">{item.title}</span>
-                  {item.label && item.label !== item.title && (
-                    <span className="block text-xs text-muted truncate">{item.label}</span>
-                  )}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      {/* The list is portalled outside the planner's overflow scroller, so it
+          can cover the panel/map instead of increasing the panel scroll range. */}
+      {dropdown && createPortal(dropdown, document.body)}
     </div>
   )
 }
