@@ -1,8 +1,8 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { Fragment, lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Activity, ChevronRight, Plus, Route, Truck, UserPlus } from 'lucide-react'
 import type { Group } from '../../lib/types'
 import { groupLabel, tractorPlate } from '../../lib/types'
-import { getOps } from '../../lib/vehicleOps'
+import { getOps, isTripActive } from '../../lib/vehicleOps'
 import { loadHere } from '../../lib/here/loadHere'
 import { PaneLoader } from '../LazyFallback'
 import GroupAvatar from '../GroupAvatar'
@@ -25,9 +25,20 @@ type Props = {
 }
 
 // The Inbox / workspace home — reached by clicking the sidebar company header.
-// It's an operational tools area: a grid of large tool cards. Selecting a tool
-// opens its dedicated workspace in place (replacing the chat area), with a back
-// action returning here. Today the only tool is the HERE "Route planner".
+// It's an operational tools area, split into two tiers because the entries are
+// not the same KIND of thing:
+//
+//   Tools          — Route planner, Fleet status. They open a dedicated
+//                    workspace in place (replacing the chat area) with a back
+//                    action returning here, so they read as destinations: large
+//                    cards, accent glyph, a chevron, and a meta line at the
+//                    foot carrying live signal (fleet counts) or what the tool
+//                    covers.
+//   Quick actions  — Create vehicle room, Add trip, Add connection. They open a
+//                    dialog and leave you where you are, so they stay compact,
+//                    neutral-glyphed and chevron-free.
+//
+// Both grids are auto-fit so future entries flow in alongside.
 export default function InboxView({
   workspaceName,
   vehicleRooms,
@@ -39,6 +50,27 @@ export default function InboxView({
 }: Props) {
   const [tool, setTool] = useState<'route' | 'fleet' | null>(null)
   const [tripPickerOpen, setTripPickerOpen] = useState(false)
+
+  // Live counts for the Fleet status card's meta line. Deliberately the SAME
+  // buckets as FleetStatus's filter pills — service wins over an attached trip
+  // there too — so the number on the card and the number behind it agree.
+  const fleetMeta = useMemo<MetaPart[]>(() => {
+    let onTrip = 0
+    let service = 0
+    for (const room of vehicleRooms) {
+      const ops = getOps(room)
+      if (ops.vehicle.status === 'service' || ops.trip?.status === 'service') service += 1
+      else if (ops.trip && isTripActive(ops.trip.status)) onTrip += 1
+    }
+    if (vehicleRooms.length === 0) return [{ label: 'No vehicle rooms yet' }]
+    const parts: MetaPart[] = [
+      { label: vehicleRooms.length === 1 ? '1 vehicle' : `${vehicleRooms.length} vehicles` },
+    ]
+    if (onTrip > 0) parts.push({ label: `${onTrip} on a trip` })
+    if (service > 0) parts.push({ label: `${service} in service`, alert: true })
+    if (onTrip === 0 && service === 0) parts.push({ label: 'all available' })
+    return parts
+  }, [vehicleRooms])
 
   // Warm the HERE SDK while the workspace home sits idle, so the first map open
   // (Route planner here, or a vehicle room's Trip route) skips the script
@@ -85,42 +117,52 @@ export default function InboxView({
         <div className="text-sm text-muted leading-tight mt-0.5">Operational tools for {workspaceName}.</div>
       </header>
       <div className="flex-1 overflow-y-auto px-5 py-5">
-        <div className="max-w-[57.5rem] mx-auto flex flex-col gap-4">
-          {/* Auto-fill grid leaves room for future tools to flow in alongside. */}
-          <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(16.25rem,1fr))]">
-            <ToolCard
-              icon={<Route size="1.625rem" strokeWidth={1.5} />}
-              title="Route planner"
-              subtitle="Truck routing, distance and ETA"
-              onClick={() => setTool('route')}
-            />
-            <ToolCard
-              icon={<Activity size="1.625rem" strokeWidth={1.5} />}
-              title="Fleet status"
-              subtitle="View vehicles, trips and availability"
-              onClick={() => setTool('fleet')}
-            />
-            <ToolCard
-              icon={<Truck size="1.625rem" strokeWidth={1.5} />}
-              title="Create vehicle room"
-              subtitle="Set up a permanent room for a truck"
-              onClick={onCreateVehicleRoom}
-            />
-            {canAddTrip && (
+        <div className="max-w-[57.5rem] mx-auto flex flex-col gap-6">
+          <section>
+            <div className="eyebrow mb-2">Tools</div>
+            <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(17.5rem,1fr))]">
               <ToolCard
-                icon={<Plus size="1.625rem" strokeWidth={1.6} />}
-                title="Add trip"
-                subtitle="Choose a vehicle room and create a trip"
-                onClick={() => setTripPickerOpen(true)}
+                icon={<Route size="1.25rem" strokeWidth={1.6} />}
+                title="Route planner"
+                subtitle="Plan a truck route with distance, tolls and ETA."
+                meta={ROUTE_META}
+                onClick={() => setTool('route')}
               />
-            )}
-            <ToolCard
-              icon={<UserPlus size="1.625rem" strokeWidth={1.5} />}
-              title="Add connection"
-              subtitle="Find people and connect across companies"
-              onClick={onAddConnection}
-            />
-          </div>
+              <ToolCard
+                icon={<Activity size="1.25rem" strokeWidth={1.6} />}
+                title="Fleet status"
+                subtitle="Vehicles, their current trips and availability."
+                meta={fleetMeta}
+                onClick={() => setTool('fleet')}
+              />
+            </div>
+          </section>
+
+          <section>
+            <div className="eyebrow mb-2">Quick actions</div>
+            <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))]">
+              <ActionCard
+                icon={<Truck size="1.0625rem" strokeWidth={1.6} />}
+                title="Create vehicle room"
+                subtitle="A permanent room per truck"
+                onClick={onCreateVehicleRoom}
+              />
+              {canAddTrip && (
+                <ActionCard
+                  icon={<Plus size="1.0625rem" strokeWidth={1.7} />}
+                  title="Add trip"
+                  subtitle="Choose a vehicle room"
+                  onClick={() => setTripPickerOpen(true)}
+                />
+              )}
+              <ActionCard
+                icon={<UserPlus size="1.0625rem" strokeWidth={1.6} />}
+                title="Add connection"
+                subtitle="Connect across companies"
+                onClick={onAddConnection}
+              />
+            </div>
+          </section>
         </div>
       </div>
       {tripPickerOpen && (
@@ -203,7 +245,68 @@ export function VehicleRoomPicker({
   )
 }
 
+// One segment of a tool card's foot line. `alert` marks the one count that
+// wants attention (vehicles in service) so it reads without a chip.
+type MetaPart = { label: string; alert?: boolean }
+
+// The Route planner has nothing live to report, so its foot line names what the
+// tool covers instead — the same shape as the fleet counts, so the two cards
+// stay symmetrical.
+const ROUTE_META: MetaPart[] = [
+  { label: 'HGV profiles' },
+  { label: 'Tolls' },
+  { label: 'Saved places' },
+]
+
+// A destination: opens its own workspace in place. Stacked so the accent glyph,
+// the name and the foot line each get their own line — the foot line is pushed
+// down by `mt-auto` so it sits on the same baseline across the row even when
+// one subtitle wraps and another doesn't.
 function ToolCard({
+  icon,
+  title,
+  subtitle,
+  meta,
+  onClick,
+}: {
+  icon: React.ReactNode
+  title: string
+  subtitle: string
+  meta: MetaPart[]
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="group flex flex-col rounded-soft border border-white/6 bg-white/2 p-4 text-left transition-colors hover:border-white/10 hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+    >
+      <span className="flex items-center gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-card border border-active/20 bg-active/10 text-active">
+          {icon}
+        </span>
+        <ChevronRight
+          size="1rem"
+          strokeWidth={1.7}
+          className="ml-auto shrink-0 text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-muted"
+        />
+      </span>
+      <span className="mt-3 block text-lg font-semibold tracking-[-0.2px]">{title}</span>
+      <span className="mt-1 mb-3.5 block text-base leading-[1.5] text-muted">{subtitle}</span>
+      <span className="mt-auto flex flex-wrap items-center gap-1.5 border-t border-white/6 pt-2.5 text-xs text-faint">
+        {meta.map((part, index) => (
+          <Fragment key={part.label}>
+            {index > 0 && <span aria-hidden className="text-white/16">·</span>}
+            <span className={part.alert ? 'text-alert' : undefined}>{part.label}</span>
+          </Fragment>
+        ))}
+      </span>
+    </button>
+  )
+}
+
+// An action: opens a dialog and returns you here. Compact, neutral glyph and no
+// chevron, so it never competes with the tool cards above it.
+function ActionCard({
   icon,
   title,
   subtitle,
@@ -217,20 +320,17 @@ function ToolCard({
   return (
     <button
       onClick={onClick}
-      className="group flex items-center gap-3 rounded-panel border border-white/6 bg-white/2 px-4 py-3.5 text-left transition-colors hover:border-white/10 hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+      className="group flex items-center gap-3 rounded-soft border border-white/6 bg-white/2 px-3.5 py-3 text-left transition-colors hover:border-white/10 hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center text-active">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-card border border-white/6 bg-white/4 text-muted transition-colors group-hover:text-text">
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-lg font-semibold tracking-[-0.2px]">{title}</span>
-        <span className="mt-0.5 block text-sm leading-[1.5] text-muted">{subtitle}</span>
+        <span className="block truncate text-base font-medium tracking-[-0.1px]">{title}</span>
+        {/* Wraps rather than truncates: the pane can get narrow when the rail is
+            wide, and a clipped half-sentence reads worse than a second line. */}
+        <span className="mt-0.5 block text-xs leading-tight text-faint">{subtitle}</span>
       </span>
-      <ChevronRight
-        size="1rem"
-        strokeWidth={1.7}
-        className="shrink-0 text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-muted"
-      />
     </button>
   )
 }
