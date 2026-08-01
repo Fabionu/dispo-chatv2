@@ -7,7 +7,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ChevronUp,
   Copy,
   Flag,
   MapPin,
@@ -42,7 +41,7 @@ import type {
 } from '../../lib/here/types'
 import type { RouteMoney, RouteTollSummary } from '../../lib/here/types'
 import PointRow from './RoutePointRow'
-import { RoleBadge } from './RoutePointCard'
+import { RoleBadge, RouteRow } from './RoutePointCard'
 import { CopyCoordButton, NumberField, PresetSelect, Stat } from './RoutePlannerFields'
 import {
   EMPTY_TRUCK,
@@ -877,16 +876,14 @@ export default function RoutePlanner({ onBack }: Props) {
           : 'Route up to date'
   const routeButtonDisabled = !hasEndpoints || loading || routeUpToDate
 
-  // Inline address editor shown in place of a committed row while editing. Seeds
+  // Inline address editor shown in place of a committed card while editing. Seeds
   // the search box with the current address; picking a result replaces the point
-  // (keeping its role/order), cancelling leaves the old address untouched.
-  function editorRow(p: RoutePoint) {
-    const stopIndex = p.role === 'stop' ? stops.findIndex((s) => s.id === p.id) + 1 : 0
+  // (keeping its role/order), cancelling leaves the old address untouched. The
+  // caller wraps this in the same RouteRow the card used, so the field opens
+  // exactly where the address it replaces was, still on the spine.
+  function editorContent(p: RoutePoint) {
     return (
-      // Editing a point keeps the card's badge gutter and gap, so the search
-      // field opens exactly where the address it replaces was.
-      <div className="flex items-center gap-2">
-        <RoleBadge role={p.role} index={stopIndex} />
+      <div className="flex items-center gap-1">
         <div className="flex-1 min-w-0">
           <PlaceSearchField
             value={null}
@@ -912,6 +909,33 @@ export default function RoutePlanner({ onBack }: Props) {
       </div>
     )
   }
+
+  // ── The point list as ONE ordered sequence ────────────────────────────────
+  // Start → stops → add-stop → destination, filled cards and empty slots alike.
+  // Building it as a single array (rather than four separate JSX blocks) is what
+  // lets every row draw the connector down to the NEXT one — the last row, and
+  // only the last row, ends the spine — and makes it impossible for the rendered
+  // order to drift from the routing order.
+  type PlannerRow =
+    | { kind: 'point'; key: string; point: RoutePoint; role: RoutePointRole; index?: number }
+    | { kind: 'slot'; key: string; role: 'start' | 'destination' }
+    | { kind: 'add'; key: string }
+
+  const plannerRows: PlannerRow[] = []
+  plannerRows.push(
+    start
+      ? { kind: 'point', key: start.id, point: start, role: 'start' }
+      : { kind: 'slot', key: 'slot-start', role: 'start' },
+  )
+  stops.forEach((s, i) =>
+    plannerRows.push({ kind: 'point', key: s.id, point: s, role: 'stop', index: i + 1 }),
+  )
+  if (stops.length < MAX_STOPS) plannerRows.push({ kind: 'add', key: 'add-stop' })
+  plannerRows.push(
+    destination
+      ? { kind: 'point', key: destination.id, point: destination, role: 'destination' }
+      : { kind: 'slot', key: 'slot-destination', role: 'destination' },
+  )
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -1006,15 +1030,31 @@ export default function RoutePlanner({ onBack }: Props) {
           Route
         </button>
 
-        {/* Floating route panel — compact; collapses horizontally to the left. */}
+        {/* ── The floating tool: the route card, plus the truck profile ───────
+            The route itself — header, itinerary, summary and the action — is ONE
+            card: one surface, one border, one elevation, with the internal
+            grouping carried by dividers the way every other grouped surface in
+            the app is built (PANEL_GROUP_CARD). It used to be four separate
+            plates, which read as a pile of chrome rather than one instrument.
+            Pinning the action inside it also fixed a real problem: with a full
+            stop list the Create route button used to scroll out of reach.
+
+            The truck profile is deliberately NOT in that card. It is a vehicle
+            setting rather than a step of the route, and its field grid is tall
+            enough that folding it in meant opening it pushed the itinerary into
+            a scrollbar — you had to scroll the route away to read the truck
+            specs. As its own card below, it grows downward and both stay whole.
+            The route card carries the shrink (its list is the thing that SHOULD
+            scroll when space runs out); the truck card never does. */}
         <div
-          className="absolute z-20 top-3 left-3 w-[18.75rem] max-w-[calc(100%-1.5rem)] max-h-[calc(100%-1.5rem)] flex flex-col gap-2 transition-transform duration-300 ease-out"
+          className="absolute z-20 top-3 left-3 flex w-[18.75rem] max-w-[calc(100%-1.5rem)] max-h-[calc(100%-1.5rem)] flex-col gap-2 transition-transform duration-300 ease-out"
           style={{ transform: panelCollapsed ? 'translateX(calc(-100% - 1rem))' : 'translateX(0)' }}
           aria-hidden={panelCollapsed}
         >
-          <div className="flex items-center justify-between pl-3.5 pr-2 h-11 rounded-panel border border-white/8 bg-rail shadow-raised shrink-0">
+        <div className="flex min-h-0 flex-col rounded-panel border border-white/8 bg-rail shadow-raised">
+          <div className="flex h-11 shrink-0 items-center justify-between gap-2 pl-3.5 pr-2">
             <div className="min-w-0">
-              <div className="text-base font-semibold tracking-[-0.1px]">Route</div>
+              <div className="text-base font-semibold leading-tight tracking-[-0.1px]">Route</div>
               <div className="text-2xs text-faint leading-tight">Plan your delivery path</div>
             </div>
             <div className="flex items-center gap-0.5">
@@ -1038,275 +1078,130 @@ export default function RoutePlanner({ onBack }: Props) {
             </div>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2">
-            <section className="rounded-panel border border-white/8 bg-rail p-2 flex flex-col gap-1.5">
-            {/* Start — draggable so it can be reordered into the route (drop it
-                lower and the next point becomes the new start). */}
-            {start ? (
-              editingId === start.id ? (
-                editorRow(start)
-              ) : (
-                <PointRow
-                  role="start"
-                  point={start}
-                  coord={displayCoord(start)}
-                  draggable={canReorder}
-                  dragging={dragId === start.id}
-                  onDragStartRow={() => setDragId(start.id)}
-                  onDragEnterRow={() => {
-                    if (dragId && dragId !== start.id) reorder(dragId, start.id)
-                  }}
-                  onDragEndRow={() => setDragId(null)}
-                  onEdit={() => setEditingId(start.id)}
-                  onClear={() => removePoint(start.id)}
-                />
-              )
-            ) : (
-              // Empty slot — the SAME badge gutter and gap as a filled card, so
-              // the search field lines up with the addresses above/below it.
-              <div className="flex items-center gap-2">
-                <RoleBadge role="start" muted />
-                <div className="min-w-0 flex-1">
-                  <PlaceSearchField value={null} onChange={(p) => p && setStart(fromSearch(p))} placeholder="Start address or place…" />
-                </div>
-              </div>
-            )}
+          {/* The card's ONLY scroll region. `divide-y` draws the section seams,
+              so a section that isn't rendered (the summary before a route
+              exists) leaves no orphaned hairline behind. */}
+          <div className="min-h-0 flex-1 overflow-y-auto border-t border-white/6 divide-y divide-white/6">
+            {/* The itinerary. Every row hangs off the same connector spine, so
+                the list reads as one route rather than a stack of boxes; the
+                cards themselves are borderless and the badges carry the roles.
+                Points are draggable anywhere in the sequence — drop the start
+                lower and the next point becomes the new start, drag the finish
+                up and it demotes to a stop (roles are re-derived by `reorder`). */}
+            <section className="flex flex-col gap-1 p-2">
+              {plannerRows.map((row, i) => {
+                const connect = i < plannerRows.length - 1
 
-            {/* Stops — draggable to reorder anywhere in the route. */}
-            {stops.map((s, i) =>
-              editingId === s.id ? (
-                <div key={s.id}>{editorRow(s)}</div>
-              ) : (
-                <PointRow
-                  key={s.id}
-                  role="stop"
-                  index={i + 1}
-                  point={s}
-                  coord={displayCoord(s)}
-                  draggable={canReorder}
-                  dragging={dragId === s.id}
-                  onDragStartRow={() => setDragId(s.id)}
-                  onDragEnterRow={() => {
-                    if (dragId && dragId !== s.id) reorder(dragId, s.id)
-                  }}
-                  onDragEndRow={() => setDragId(null)}
-                  onEdit={() => setEditingId(s.id)}
-                  onClear={() => removePoint(s.id)}
-                />
-              ),
-            )}
+                if (row.kind === 'slot')
+                  return (
+                    <RouteRow key={row.key} connect={connect} badge={<RoleBadge role={row.role} muted />}>
+                      <PlaceSearchField
+                        value={null}
+                        pill
+                        onChange={(p) => {
+                          if (!p) return
+                          if (row.role === 'start') setStart(fromSearch(p))
+                          else setDestinationPoint(fromSearch(p))
+                        }}
+                        placeholder={row.role === 'start' ? 'Start address or place…' : 'End address or place…'}
+                      />
+                    </RouteRow>
+                  )
 
-            {/* Compact "add stop" — secondary action, not a permanent input. */}
-            {stops.length < MAX_STOPS &&
-              (addingStop ? (
-                <div className="flex items-center gap-2">
-                  <RoleBadge role="add" muted />
-                  <div className="flex-1 min-w-0">
-                    <PlaceSearchField
-                      value={null}
-                      onChange={(p) => {
-                        if (p) {
-                          // Panel "Add stop" appends the new stop in the current
-                          // destination slot (pushing the destination down so it
-                          // stays last) and does NOT auto-sort — the user placed it
-                          // here deliberately, Google-Maps-style. Only map/route
-                          // adds slot into the nearest leg (addStop with an index).
-                          addStop(fromSearch(p))
-                          setAddingStop(false)
-                        }
-                      }}
-                      placeholder="Stop address or place…"
-                    />
-                  </div>
-                  <button
-                    onClick={() => setAddingStop(false)}
-                    aria-label="Cancel add stop"
-                    className="h-8 w-8 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 transition-colors"
-                  >
-                    <X size="0.9375rem" strokeWidth={2} />
-                  </button>
-                </div>
-              ) : (
-                // Aligned with the point cards: indented past the badge gutter
-                // (24px badge + 8px gap) so it sits under the addresses, quiet
-                // but clearly the way to add another stop.
-                <button
-                  onClick={() => setAddingStop(true)}
-                  className="self-start ml-8 h-7 flex items-center gap-1.5 px-2.5 rounded-full bg-white/4 text-sm text-muted hover:text-text hover:bg-white/8 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
-                >
-                  <Plus size="0.8125rem" strokeWidth={2} /> Add stop
-                </button>
-              ))}
+                if (row.kind === 'add')
+                  return (
+                    <RouteRow key={row.key} connect={connect} badge={<RoleBadge role="add" muted />}>
+                      {addingStop ? (
+                        <div className="flex items-center gap-1">
+                          <div className="flex-1 min-w-0">
+                            <PlaceSearchField
+                              value={null}
+                              autoFocus
+                              pill
+                              onChange={(p) => {
+                                if (p) {
+                                  // Panel "Add stop" appends the new stop in the current
+                                  // destination slot (pushing the destination down so it
+                                  // stays last) and does NOT auto-sort — the user placed it
+                                  // here deliberately, Google-Maps-style. Only map/route
+                                  // adds slot into the nearest leg (addStop with an index).
+                                  addStop(fromSearch(p))
+                                  setAddingStop(false)
+                                }
+                              }}
+                              placeholder="Stop address or place…"
+                            />
+                          </div>
+                          <button
+                            onClick={() => setAddingStop(false)}
+                            aria-label="Cancel add stop"
+                            className="h-8 w-8 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 transition-colors"
+                          >
+                            <X size="0.9375rem" strokeWidth={2} />
+                          </button>
+                        </div>
+                      ) : (
+                        // A full-width ghost of a card, sitting exactly where the
+                        // new stop will appear — dashed, so it reads as an empty
+                        // slot to fill rather than another committed point.
+                        <button
+                          onClick={() => setAddingStop(true)}
+                          className="h-9 w-full flex items-center gap-1.5 px-2.5 rounded-soft border border-dashed border-white/8 text-base text-muted transition-colors hover:border-white/16 hover:bg-white/4 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                        >
+                          <Plus size="0.8125rem" strokeWidth={2} /> Add stop
+                        </button>
+                      )}
+                    </RouteRow>
+                  )
 
-            {/* Destination — draggable too; drop it higher and it becomes a stop
-                while the last remaining point becomes the new finish. */}
-            {destination ? (
-              editingId === destination.id ? (
-                editorRow(destination)
-              ) : (
-                <PointRow
-                  role="destination"
-                  point={destination}
-                  coord={displayCoord(destination)}
-                  draggable={canReorder}
-                  dragging={dragId === destination.id}
-                  onDragStartRow={() => setDragId(destination.id)}
-                  onDragEnterRow={() => {
-                    if (dragId && dragId !== destination.id) reorder(dragId, destination.id)
-                  }}
-                  onDragEndRow={() => setDragId(null)}
-                  onEdit={() => setEditingId(destination.id)}
-                  onClear={() => removePoint(destination.id)}
-                />
-              )
-            ) : (
-              <div className="flex items-center gap-2">
-                <RoleBadge role="destination" muted />
-                <div className="min-w-0 flex-1">
-                  <PlaceSearchField value={null} onChange={(p) => p && setDestinationPoint(fromSearch(p))} placeholder="End address or place…" />
-                </div>
-              </div>
-            )}
+                const { point, role, index } = row
+                if (editingId === point.id)
+                  return (
+                    <RouteRow key={row.key} connect={connect} badge={<RoleBadge role={role} index={index} />}>
+                      {editorContent(point)}
+                    </RouteRow>
+                  )
+
+                return (
+                  <PointRow
+                    key={row.key}
+                    role={role}
+                    index={index}
+                    point={point}
+                    coord={displayCoord(point)}
+                    connect={connect}
+                    draggable={canReorder}
+                    dragging={dragId === point.id}
+                    onDragStartRow={() => setDragId(point.id)}
+                    onDragEnterRow={() => {
+                      if (dragId && dragId !== point.id) reorder(dragId, point.id)
+                    }}
+                    onDragEndRow={() => setDragId(null)}
+                    onEdit={() => setEditingId(point.id)}
+                    onClear={() => removePoint(point.id)}
+                  />
+                )
+              })}
             </section>
 
-            {/* Truck profile (collapsible, with presets) — a circular pill that
-                matches the Create route button while collapsed (no dark frame),
-                morphing into a rounded card once opened to hold the field grid. */}
-            <div className={`bg-rail ${truckOpen ? 'rounded-panel p-1.5' : 'rounded-full'}`}>
-              <button
-                onClick={() => setTruckOpen((o) => !o)}
-                aria-expanded={truckOpen}
-                className={`w-full h-10 flex items-center justify-between gap-2 px-2 text-left hover:bg-white/4 transition-colors ${
-                  truckOpen ? 'rounded-card' : 'rounded-full'
-                }`}
-              >
-                {/* Left section is fixed (icon + label never wrap or shrink);
-                    the collapsed value takes the leftover width and truncates,
-                    with the chevron pinned on the far right. */}
-                <span className="flex items-center gap-2.5 text-sm font-medium shrink-0 whitespace-nowrap">
-                  <span className="h-7 w-7 rounded-full bg-white/6 text-muted flex items-center justify-center shrink-0">
-                    <Truck size="0.875rem" strokeWidth={1.8} />
-                  </span>
-                  Truck profile
-                </span>
-                <span className="flex-1 min-w-0 flex items-center justify-end gap-1.5 text-xs text-muted">
-                  {!truckOpen && (
-                    <span className="truncate" title={collapsedTruckLabel}>
-                      {collapsedTruckLabel}
-                    </span>
-                  )}
-                  {truckOpen ? <ChevronUp size="0.9375rem" strokeWidth={2} className="shrink-0" /> : <ChevronDown size="0.9375rem" strokeWidth={2} className="shrink-0" />}
-                </span>
-              </button>
-
-              {truckOpen && (
-                <div className="flex flex-col gap-2.5 px-1.5 pt-2 pb-1.5 border-t border-white/6">
-                  {/* Presets */}
-                  <div className="flex items-center gap-1.5">
-                    <PresetSelect
-                      builtIn={builtInPresets()}
-                      saved={userPresets}
-                      activeId={activePresetId}
-                      onSelect={(id) => (id ? applyPreset(id) : setActivePresetId(null))}
-                    />
-                    <button
-                      onClick={() => setSavingPreset((s) => !s)}
-                      title="Save current profile as a preset"
-                      aria-label="Save preset"
-                      className="h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 transition-colors"
-                    >
-                      <Bookmark size="0.875rem" strokeWidth={1.8} />
-                    </button>
-                    {activePreset && !activePreset.builtIn && (
-                      <button
-                        onClick={() => removePreset(activePreset.id)}
-                        title="Delete this preset"
-                        aria-label="Delete preset"
-                        className="h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-alert hover:bg-white/6 transition-colors"
-                      >
-                        <Trash2 size="0.875rem" strokeWidth={1.8} />
-                      </button>
-                    )}
-                  </div>
-
-                  {savingPreset && (
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        value={presetName}
-                        onChange={(e) => setPresetName(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && commitSavePreset()}
-                        placeholder="Preset name"
-                        autoFocus
-                        className="h-8 flex-1 min-w-0 rounded-full border border-white/6 bg-white/4 px-2.5 text-sm outline-none transition-colors focus:border-white/16 focus:bg-white/6 placeholder:text-faint"
-                      />
-                      <button
-                        onClick={commitSavePreset}
-                        disabled={!presetName.trim()}
-                        className="h-8 px-2.5 flex items-center gap-1 rounded-btn bg-active text-bg text-sm font-semibold hover:bg-active/90 disabled:opacity-40 transition-colors"
-                      >
-                        <Check size="0.8125rem" strokeWidth={2.4} /> Save
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <NumberField label="Height (cm)" value={truck.heightCm} onChange={(v) => updateTruck({ heightCm: v })} placeholder="400" />
-                    <NumberField label="Width (cm)" value={truck.widthCm} onChange={(v) => updateTruck({ widthCm: v })} placeholder="255" />
-                    <NumberField label="Length (cm)" value={truck.lengthCm} onChange={(v) => updateTruck({ lengthCm: v })} placeholder="1650" />
-                    <NumberField label="Gross weight (kg)" value={truck.grossWeightKg} onChange={(v) => updateTruck({ grossWeightKg: v })} placeholder="40000" />
-                    <NumberField label="Axle count" value={truck.axleCount} onChange={(v) => updateTruck({ axleCount: v })} placeholder="5" />
-                    <NumberField label="Trailer count" value={truck.trailerCount} onChange={(v) => updateTruck({ trailerCount: v })} placeholder="1" />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Create / update route — the explicit action that draws it. A
-                standalone pill, not wrapped in a card, so no dark frame rings it.
-                Loud accent fill while there's something to do; a quiet solid
-                neutral (matching the other cards' fill) when disabled / loading /
-                up to date, so it always reads on its own over the map. */}
-            <div className="flex flex-col gap-1">
-              <button
-                onClick={() => void calculate(true)}
-                disabled={routeButtonDisabled}
-                title={!hasEndpoints ? 'Set a start and destination first' : undefined}
-                className={`w-full h-10 rounded-full border-2 border-rail font-semibold text-base flex items-center justify-center gap-2 transition-colors ${
-                  routeButtonDisabled
-                    ? 'bg-rail text-muted cursor-default'
-                    : 'bg-text text-bg hover:bg-white'
-                }`}
-              >
-                {loading ? (
-                  <Spinner size={14} />
-                ) : routeUpToDate ? (
-                  <Check size="1rem" strokeWidth={2.4} className="text-done" />
-                ) : (
-                  <RouteIcon size="1rem" strokeWidth={2} />
-                )}
-                {routeButtonLabel}
-              </button>
-              {route && dirty && !loading && (
-                <div className="px-2 pt-0.5 text-xs text-amber-200/80">
-                  Route is outdated — press “Update route”.
-                </div>
-              )}
-            </div>
-
-            {/* Status */}
-            {error && (
-              <div className="text-sm leading-snug text-alert bg-alert/10 border border-alert/20 rounded-card px-2.5 py-2">{error}</div>
-            )}
-            {snapNote && <div className="text-xs text-amber-200/80">{snapNote}</div>}
-
-            {/* Summary + notices */}
+            {/* Summary + notices — the result, sitting directly above the control
+                that produced it. */}
             {route && !loading && (
-              <div className="flex flex-col gap-2 rounded-panel border border-white/8 bg-rail p-2">
-                <div className="grid grid-cols-4 divide-x divide-white/6">
-                  <Stat label="Distance" value={formatDistance(route.summary.length)} />
-                  <Stat label="Duration" value={formatDuration(route.summary.duration)} />
-                  <Stat label="ETA" value={formatEta(route.summary.duration)} />
-                  <Stat label="Tolls" value={tollSummaryValue(route.tolls, dirty)} />
+              <section className="flex flex-col gap-2 p-2">
+                {/* 2×2, NOT a single row of four. At 270px wide, four columns
+                    left each value ~47px of usable width, which truncated every
+                    duration ("4 h 40 min"), every toll status ("Not calculated")
+                    and even a five-digit distance. Two columns give ~110px —
+                    more than the longest string any of these four can produce. */}
+                <div className="divide-y divide-white/6">
+                  <div className="grid grid-cols-2 divide-x divide-white/6">
+                    <Stat label="Distance" value={formatDistance(route.summary.length)} />
+                    <Stat label="Duration" value={formatDuration(route.summary.duration)} />
+                  </div>
+                  <div className="grid grid-cols-2 divide-x divide-white/6">
+                    <Stat label="ETA" value={formatEta(route.summary.duration)} />
+                    <Stat label="Tolls" value={tollSummaryValue(route.tolls, dirty)} />
+                  </div>
                 </div>
                 {!dirty && route.tolls && (
                   <div className="border-t border-white/6 pt-2">
@@ -1363,7 +1258,7 @@ export default function RoutePlanner({ onBack }: Props) {
                 )}
                 {notices.length > 0 && (
                   <div className="flex flex-col gap-1.5">
-                    <div className="text-2xs font-semibold text-faint uppercase tracking-badge">Notices</div>
+                    <div className="eyebrow">Notices</div>
                     {notices.map((n, i) => (
                       <div key={`${n.code}-${i}`} className="flex items-start gap-2 text-sm leading-snug text-amber-200/90">
                         <TriangleAlert size="0.8125rem" className="mt-0.5 shrink-0" strokeWidth={1.8} />
@@ -1372,9 +1267,140 @@ export default function RoutePlanner({ onBack }: Props) {
                     ))}
                   </div>
                 )}
-              </div>
+              </section>
             )}
           </div>
+
+          {/* Footer — everything the user needs to act on, pinned below the
+              scroll region: what went wrong, what is stale, and the one button
+              that draws the route. `bg-white/6` (not `bg-rail`) for the inert
+              states, because a rail-on-rail button would vanish into the card. */}
+          <div className="flex shrink-0 flex-col gap-1.5 border-t border-white/6 p-2">
+            {error && (
+              <div className="rounded-card border border-alert/20 bg-alert/10 px-2.5 py-2 text-sm leading-snug text-alert">
+                {error}
+              </div>
+            )}
+            {snapNote && <div className="px-1 text-xs leading-snug text-amber-200/80">{snapNote}</div>}
+            {route && dirty && !loading && (
+              <div className="px-1 text-xs leading-snug text-amber-200/80">
+                Route is outdated — press “Update route”.
+              </div>
+            )}
+            <button
+              onClick={() => void calculate(true)}
+              disabled={routeButtonDisabled}
+              title={!hasEndpoints ? 'Set a start and destination first' : undefined}
+              className={`flex h-10 w-full items-center justify-center gap-2 rounded-full text-base font-semibold transition-colors ${
+                routeButtonDisabled
+                  ? 'bg-white/6 text-muted cursor-default'
+                  : 'bg-text text-bg hover:bg-text/90'
+              }`}
+            >
+              {loading ? (
+                <Spinner size={14} />
+              ) : routeUpToDate ? (
+                <Check size="1rem" strokeWidth={2.4} className="text-done" />
+              ) : (
+                <RouteIcon size="1rem" strokeWidth={2} />
+              )}
+              {routeButtonLabel}
+            </button>
+          </div>
+        </div>
+
+        {/* Truck profile — its own card, and `shrink-0` so the field grid is
+            never the thing that gets squeezed. The row itself is the app's
+            standard grouped-row recipe (CategoryRow): glyph chip, label over its
+            live current value, chevron. The value stays visible while open, so
+            opening the fields never hides what they currently add up to. */}
+        <div className="shrink-0 rounded-panel border border-white/8 bg-rail shadow-raised">
+          <button
+            onClick={() => setTruckOpen((o) => !o)}
+            aria-expanded={truckOpen}
+            className={`flex w-full items-center gap-2.5 px-2.5 py-2.5 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20 ${
+              truckOpen ? 'rounded-t-panel' : 'rounded-panel'
+            }`}
+          >
+            <span className="h-8 w-8 shrink-0 flex items-center justify-center rounded-btn border border-white/6 bg-white/2 text-muted">
+              <Truck size="0.9375rem" strokeWidth={1.8} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-base font-medium leading-tight text-text">Truck profile</span>
+              <span className="mt-0.5 block truncate text-xs leading-[1.4] text-faint" title={collapsedTruckLabel}>
+                {collapsedTruckLabel}
+              </span>
+            </span>
+            <ChevronDown
+              size="1rem"
+              strokeWidth={1.8}
+              className={`shrink-0 text-faint transition-transform motion-reduce:transition-none ${
+                truckOpen ? 'rotate-180' : ''
+              }`}
+            />
+          </button>
+
+          {truckOpen && (
+            <div className="flex flex-col gap-2.5 border-t border-white/6 p-2.5">
+              {/* Presets */}
+              <div className="flex items-center gap-1.5">
+                <PresetSelect
+                  builtIn={builtInPresets()}
+                  saved={userPresets}
+                  activeId={activePresetId}
+                  onSelect={(id) => (id ? applyPreset(id) : setActivePresetId(null))}
+                />
+                <button
+                  onClick={() => setSavingPreset((s) => !s)}
+                  title="Save current profile as a preset"
+                  aria-label="Save preset"
+                  className="h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 transition-colors"
+                >
+                  <Bookmark size="0.875rem" strokeWidth={1.8} />
+                </button>
+                {activePreset && !activePreset.builtIn && (
+                  <button
+                    onClick={() => removePreset(activePreset.id)}
+                    title="Delete this preset"
+                    aria-label="Delete preset"
+                    className="h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-alert hover:bg-white/6 transition-colors"
+                  >
+                    <Trash2 size="0.875rem" strokeWidth={1.8} />
+                  </button>
+                )}
+              </div>
+
+              {savingPreset && (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    value={presetName}
+                    onChange={(e) => setPresetName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && commitSavePreset()}
+                    placeholder="Preset name"
+                    autoFocus
+                    className="h-8 flex-1 min-w-0 rounded-full border border-white/6 bg-white/4 px-2.5 text-sm outline-none transition-colors focus:border-white/16 focus:bg-white/6 placeholder:text-faint"
+                  />
+                  <button
+                    onClick={commitSavePreset}
+                    disabled={!presetName.trim()}
+                    className="h-8 px-2.5 flex items-center gap-1 rounded-btn bg-active text-bg text-sm font-semibold hover:bg-active/90 disabled:opacity-40 transition-colors"
+                  >
+                    <Check size="0.8125rem" strokeWidth={2.4} /> Save
+                  </button>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2">
+                <NumberField label="Height (cm)" value={truck.heightCm} onChange={(v) => updateTruck({ heightCm: v })} placeholder="400" />
+                <NumberField label="Width (cm)" value={truck.widthCm} onChange={(v) => updateTruck({ widthCm: v })} placeholder="255" />
+                <NumberField label="Length (cm)" value={truck.lengthCm} onChange={(v) => updateTruck({ lengthCm: v })} placeholder="1650" />
+                <NumberField label="Gross weight (kg)" value={truck.grossWeightKg} onChange={(v) => updateTruck({ grossWeightKg: v })} placeholder="40000" />
+                <NumberField label="Axle count" value={truck.axleCount} onChange={(v) => updateTruck({ axleCount: v })} placeholder="5" />
+                <NumberField label="Trailer count" value={truck.trailerCount} onChange={(v) => updateTruck({ trailerCount: v })} placeholder="1" />
+              </div>
+            </div>
+          )}
+        </div>
         </div>
 
         {/* Right-click context menu */}

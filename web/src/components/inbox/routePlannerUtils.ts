@@ -22,6 +22,25 @@ export const uid = () =>
 
 export const fmtCoord = (c: LatLng) => `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}`
 
+// A coordinate-shaped label — "44.94012, 26.03110" — as produced by fmtCoord for
+// a map drop that could not be reverse-geocoded. Its comma separates lat from
+// lng, so splitLabel must never treat it as an address.
+const COORD_LABEL = /^-?\d{1,3}(\.\d+)?\s*,\s*-?\d{1,3}(\.\d+)?$/
+
+// Split a HERE label ("Bulevardul Republicii 12, Ploiești 100066, Romania") into
+// the part a route point is identified BY and the part that says WHERE it is.
+// The planner column is only 300px wide: showing the whole string on one line
+// truncates it to the street and hides the town, while two tiers read
+// "which address" first and "which town" second in the same space.
+export function splitLabel(label: string): { head: string; rest: string | null } {
+  const text = label.trim()
+  const i = text.indexOf(',')
+  if (i < 0 || COORD_LABEL.test(text)) return { head: text, rest: null }
+  const head = text.slice(0, i).trim()
+  const rest = text.slice(i + 1).trim()
+  return head ? { head, rest: rest || null } : { head: text, rest: null }
+}
+
 // A point only routes when it carries finite coordinates. Guards the route
 // request so a stop without valid coordinates is never submitted as an empty
 // address (the request would otherwise fail asking for it).

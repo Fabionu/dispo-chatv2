@@ -50,21 +50,24 @@ const LOAD_TIMEOUT_MS = 6000
 //     text. The HEIGHT cap is what keeps portraits in check, and it is the same
 //     in both profiles.
 //
-// The height caps are deliberately below the ~440px the old code allowed: at
-// --chat-max-width 860 the message column is ~830px tall on a 1080p display, so
-// 340px is well under half the visible thread — a tall screenshot leaves room
-// for the messages around it.
+// The height caps are set against the SHORTEST window the app supports, not the
+// roomiest: on a 1366×768 laptop the chat pane is roughly 680px tall, so 300px
+// is ~44% of the thread — a picture, not a takeover. On a 1080p display it's
+// ~33%. (The old code allowed 440px, which on that laptop was two thirds of the
+// visible conversation.) Deliberately plain numbers rather than viewport units:
+// `vh` measures the window, not the chat pane, so it would be wrong whenever the
+// pane isn't full height.
 const BOUNDS = {
-  plain: { maxW: 380, maxH: 340 },
-  caption: { maxW: 520, maxH: 340 },
+  plain: { maxW: 380, maxH: 300 },
+  caption: { maxW: 520, maxH: 300 },
 } as const
 
-// Below this width:height ratio an image counts as a "very tall" screenshot: it
-// gets the tighter height cap AND is centred on its own backdrop, because the
-// contain fit leaves visible letterboxing either side. 0.6 ≈ 3:5; a normal
-// phone photo (3:4 = 0.75) stays on the regular path.
+// Below this width:height ratio an image counts as a "very tall" screenshot and
+// gets an even tighter height cap — a 1:2.2 phone capture scaled to the normal
+// cap is still a tall column in the thread. 0.6 ≈ 3:5; a normal phone photo
+// (3:4 = 0.75) stays on the regular path.
 const VERY_TALL_RATIO = 0.6
-const VERY_TALL_MAX_H = 300
+const VERY_TALL_MAX_H = 260
 
 // Box reserved before we know the image's dimensions (just-sent blobs, GIFs,
 // and legacy images without stored width/height). Recomputed on load. A 4:3

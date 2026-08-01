@@ -243,13 +243,21 @@ export function PresetSelect({
   )
 }
 
-// Compact route-summary metric. The parent row supplies dividers, keeping these
-// values flat inside the route panel instead of nesting three extra cards.
+// Compact route-summary metric. The parent grid supplies the dividers, keeping
+// these values flat inside the route panel instead of nesting extra cards.
+//
+// The value line is the panel's readout, so it gets the largest type in the
+// card and is laid out to be READ, not squeezed: the caller puts these two
+// across (never four), which is what makes "4 h 40 min" and "Not calculated"
+// fit whole. `truncate` stays as a backstop for a value nobody predicted, with
+// the full string on hover so it is never simply lost.
 export function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 flex flex-col gap-0.5 px-2 py-1">
+    <div className="min-w-0 flex flex-col gap-0.5 px-2.5 py-1.5">
       <span className="text-2xs uppercase tracking-badge text-faint">{label}</span>
-      <span className="text-base font-semibold tracking-[-0.2px] tabular-nums truncate">{value}</span>
+      <span className="text-lg font-semibold tracking-[-0.2px] tabular-nums truncate" title={value}>
+        {value}
+      </span>
     </div>
   )
 }

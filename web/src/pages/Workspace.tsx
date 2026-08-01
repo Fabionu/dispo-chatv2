@@ -551,11 +551,10 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         // Unread cuts ACROSS the type filters: rooms and DMs alike, whatever is
         // still unread. `groups` carries live unread counts (socket-updated in
         // useWorkspaceGroups), so a conversation leaves this list the moment it
-        // is read and re-enters when a new message lands — no refetch.
-        // The conversation you are READING stays put: opening it from here marks
-        // it read, and dropping the row out from under the click would move the
-        // whole list while you are still in it.
-        if (filter === 'unread' && !isUnread(g) && openGroupId !== g.id) continue
+        // is read and re-enters when a new message lands — no refetch. This also
+        // applies to the currently open conversation: the chat remains open in
+        // the main pane, but its row no longer appears in an unread-only list.
+        if (filter === 'unread' && !isUnread(g)) continue
       }
       if (!matchesQuery(g)) continue
       matched.push(g)
@@ -573,7 +572,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
       }
     }
     return items
-  }, [groups, filter, matchesQuery, filteredContacts, openGroupId])
+  }, [groups, filter, matchesQuery, filteredContacts])
 
   // How many ACTIVE conversations are still unread — the Unread pill's live
   // count. Derived from the same `groups` state the rows read, so it moves the

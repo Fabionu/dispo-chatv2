@@ -469,6 +469,7 @@ export default function GroupInfoPanel({
                 roleBusyId={roleBusyId}
                 online={online}
                 error={error}
+                assignedDriverIds={vehicleDriverIds(ops)}
                 pending={pending}
                 pendingLoading={pendingLoading}
                 onInvite={onInvite}

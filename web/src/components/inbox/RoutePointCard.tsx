@@ -1,25 +1,35 @@
 import type { ReactNode } from 'react'
-import { Flag, GripVertical, Navigation } from 'lucide-react'
+import { Flag, Navigation } from 'lucide-react'
 import type { RoutePointRole } from '../../lib/here/types'
 
-// ── The Route planner's card ────────────────────────────────────────────────
-// ONE card behind every point in the planner: a committed start / stop /
-// destination, an empty slot waiting for a search field, and the "add stop"
-// affordance. Before this each of those was assembled inline with its own
-// badge markup and spacing, so a filled row and an empty row didn't line up.
+// ── The Route planner's itinerary list ──────────────────────────────────────
+// Every row of the planner's point list — a committed start / stop /
+// destination, an empty slot waiting for a search field, the inline address
+// editor, and the "add stop" affordance — is built from the same two pieces:
 //
-// Anatomy (the planner column is only 300px wide, so every part earns its
-// space):
+//   RouteRow        the shared gutter: the role badge, plus the connector
+//                   hairline that runs down to the NEXT row's badge.
+//   RoutePointCard  the surface a committed point sits on inside that row.
 //
-//   [role]  primary line — the address, truncated, one line
-//           meta line    — coordinates / postcode / source, quieter
-//                                                          [actions]
+// The connector is what makes the list read as one itinerary instead of a stack
+// of unrelated boxes — a route is a sequence, and every row (including the empty
+// slots and "add stop") hangs off the same spine:
 //
-// The role marker is the only colour on the card: green for the start, coral
-// for the destination, and a plain numbered chip for a stop — the number is
-// legible but never louder than the address. `--` states are expressed on the
-// card itself (hover / selected / dragging / error / disabled) so a caller
-// never re-invents them.
+//   ⬤   Bulevardul Republicii 12                       ✎  ✕
+//   │    Ploiești 100066 · Romania                        ⧉
+//   │
+//   ②   Depozit Nord                                    ✎  ✕
+//   │    Buftea 070000 · Romania                          ⧉
+//   │
+//   ⚑   Cluj-Napoca                                     ✎  ✕
+//
+// The role marker is the only colour on a row: green for the start, coral for
+// the destination, a plain numbered chip for a stop — legible, never louder than
+// the address. Cards carry no resting border: the spine and the badges give the
+// list its structure, and a 300px column can't afford six hairline boxes. Every
+// `--` state (hover / selected / dragging / invalid / disabled) is expressed on
+// the card, drawn with RINGS rather than borders so nothing shifts by a pixel
+// between them, and a caller never re-invents one.
 
 export type RoutePointCardState = {
   /** Row is being dragged (the source row, not the drop target). */
@@ -80,59 +90,97 @@ export function RoleBadge({
   )
 }
 
-// The card shell: badge gutter + body + trailing actions, with the shared
-// surface/border/radius tokens and every interaction state in one place.
-export default function RoutePointCard({
+// ── Row shell ───────────────────────────────────────────────────────────────
+// Gutter metrics, in one place because three separate row shapes have to land on
+// the same axis: the 24px badge is dropped 6px (`pt-1.5`) so it centres against
+// BOTH a card's first text line and a 36px search field, and the connector's
+// −10px bottom margin is exactly the list gap (4px) plus that 6px, so the
+// hairline stops on the next badge instead of near it.
+export function RouteRow({
   badge,
   children,
-  actions,
-  handle,
-  state = {},
+  connect = false,
+  draggable = false,
+  dragging = false,
   dragProps,
 }: {
   badge: ReactNode
+  /** The row's content: a RoutePointCard, a search field, an add button. */
   children: ReactNode
-  /** Trailing controls (edit / remove). Vertically centred, never wrapping. */
-  actions?: ReactNode
-  /** Drag handle — rendered ONLY when the caller passes one, so a row that
-   *  can't be reordered shows no affordance for it. */
-  handle?: boolean
-  state?: RoutePointCardState
+  /** Draw the connector down to the next row. False on the last row only. */
+  connect?: boolean
+  /** Row can be dragged to reorder — the whole row is the handle. */
+  draggable?: boolean
+  dragging?: boolean
   /** Native DnD handlers, spread onto the outer row by the planner. */
   dragProps?: React.HTMLAttributes<HTMLDivElement> & { draggable?: boolean }
 }) {
-  const { dragging, selected, invalid, disabled } = state
-  const edge = invalid
-    ? 'border-alert/50 bg-alert/[0.06]'
-    : dragging
-      ? 'border-white/20 bg-white/8'
-      : selected
-        ? 'border-white/16 bg-white/6'
-        : 'border-white/6 bg-white/4 hover:border-white/12 hover:bg-white/6'
-
   return (
     <div
       {...dragProps}
-      className={`flex items-start gap-2 transition-opacity motion-reduce:transition-none ${
-        dragging ? 'opacity-60' : ''
-      } ${disabled ? 'opacity-50 pointer-events-none' : ''}`}
+      // The hint sits on the row, not on the badge: the badge, the address and
+      // every action already carry their own title, and a nested one would never
+      // surface. The whole row is the drag surface anyway.
+      title={draggable ? 'Drag to reorder' : undefined}
+      className={`group/row flex gap-2.5 transition-opacity motion-reduce:transition-none ${
+        draggable ? 'cursor-grab active:cursor-grabbing' : ''
+      } ${dragging ? 'opacity-60' : ''}`}
     >
-      <div className="pt-1.5">{badge}</div>
-      <div
-        className={`min-w-0 flex-1 flex items-start gap-1 rounded-card border px-1.5 py-1.5 transition-colors motion-reduce:transition-none ${edge}`}
-      >
-        {handle && (
-          <span
-            aria-hidden
-            title="Drag to reorder"
-            className="shrink-0 self-center text-faint hover:text-muted cursor-grab active:cursor-grabbing"
-          >
-            <GripVertical size="0.8125rem" strokeWidth={1.8} />
-          </span>
-        )}
-        <div className="min-w-0 flex-1">{children}</div>
-        {actions && <div className="shrink-0 flex items-center gap-0.5 self-center">{actions}</div>}
+      <div className="flex w-6 shrink-0 flex-col items-center pt-1.5">
+        {/* The badge doubles as the drag affordance: the whole row is
+            draggable, so rather than spending ~17px of a 300px column on a grip
+            glyph, the marker itself picks up the grab cursor and a hover ring. */}
+        <span
+          className={`rounded-full transition-shadow motion-reduce:transition-none ${
+            draggable ? 'group-hover/row:ring-1 group-hover/row:ring-white/16' : ''
+          }`}
+        >
+          {badge}
+        </span>
+        {connect && <span aria-hidden className="mt-1 -mb-2.5 w-px flex-1 bg-white/8" />}
       </div>
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
+  )
+}
+
+// ── The card a committed point sits on ──────────────────────────────────────
+// Two tiers, and the actions beside the FIRST one only — so the meta line runs
+// the full width of the card rather than stopping short at the buttons.
+export default function RoutePointCard({
+  headline,
+  meta,
+  actions,
+  state = {},
+}: {
+  /** Primary line — the address. Truncated, one line. */
+  headline: ReactNode
+  /** Second tier — locality / coordinates. Full card width. */
+  meta?: ReactNode
+  /** Trailing controls (edit / remove), aligned to the headline. */
+  actions?: ReactNode
+  state?: RoutePointCardState
+}) {
+  const { dragging, selected, invalid, disabled } = state
+  const surface = invalid
+    ? 'bg-alert/10 ring-1 ring-alert/30'
+    : dragging
+      ? 'bg-white/10 ring-1 ring-white/16'
+      : selected
+        ? 'bg-white/10'
+        : 'bg-white/4 group-hover/row:bg-white/6'
+
+  return (
+    <div
+      className={`rounded-soft px-2.5 py-2 transition-colors motion-reduce:transition-none ${surface} ${
+        disabled ? 'pointer-events-none opacity-50' : ''
+      }`}
+    >
+      <div className="flex items-start gap-1">
+        <div className="min-w-0 flex-1">{headline}</div>
+        {actions && <div className="-mr-1 -mt-0.5 shrink-0 flex items-center gap-0.5">{actions}</div>}
+      </div>
+      {meta && <div className="mt-0.5">{meta}</div>}
     </div>
   )
 }
