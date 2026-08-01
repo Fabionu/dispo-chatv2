@@ -83,10 +83,12 @@ export function DateField({
   value,
   onChange,
   className,
+  ariaLabel = 'Planned date',
 }: {
   value: string
   onChange: (v: string) => void
   className?: string
+  ariaLabel?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
@@ -145,7 +147,7 @@ export function DateField({
           placeholder="DD/MM/YYYY"
           inputMode="numeric"
           maxLength={10}
-          aria-label="Planned date"
+          aria-label={ariaLabel}
           className={FIELD_INPUT}
         />
         <button
@@ -235,10 +237,12 @@ export function TimeField({
   value,
   onChange,
   className,
+  ariaLabel = 'Planned time',
 }: {
   value: string
   onChange: (v: string) => void
   className?: string
+  ariaLabel?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
@@ -265,7 +269,7 @@ export function TimeField({
           placeholder="HH:MM"
           inputMode="numeric"
           maxLength={5}
-          aria-label="Planned time"
+          aria-label={ariaLabel}
           className={FIELD_INPUT}
         />
         <button

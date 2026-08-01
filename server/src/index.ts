@@ -27,6 +27,7 @@ import { initPreviewQueue } from './jobs/previewQueue.js'
 import { initRateLimiters } from './middleware/rateLimit.js'
 import { errorHandler } from './http.js'
 import { requestLog } from './middleware/requestLog.js'
+import { initScheduledMessageWorker } from './jobs/scheduledMessages.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -131,6 +132,9 @@ initPreviewQueue()
 // Wrap Express in a Node HTTP server so Socket.IO can attach to the same port.
 const httpServer = createServer(app)
 await initRealtime(httpServer)
+// Poll Postgres for due scheduled messages only after realtime is ready, so a
+// delivered message can follow the exact same socket path as an immediate send.
+initScheduledMessageWorker()
 
 httpServer.listen(env.PORT, () => {
   console.log(`api + ws listening on http://localhost:${env.PORT}`)

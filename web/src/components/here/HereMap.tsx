@@ -34,9 +34,10 @@ import { createHereMapZoomControl, type HereMapZoomControlHandle } from './HereM
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 // HERE route sections can contain tens of thousands of road-shape vertices.
-// Keep the route data intact, but cap the geometry sent to the renderer: first
-// preserve meaningful bends with Douglas-Peucker, then sample only in the rare
-// case where an exceptionally detailed section still exceeds the budget.
+// This helper is deliberately reserved for INVISIBLE interaction geometry
+// (drag hit-targets and hover lookup). The visible route must use the complete
+// decoded HERE polyline: even a small metre-based tolerance is noticeable at
+// street-level zoom and can draw straight chords across curbs or tight bends.
 function simplifyPathForMap(path: LatLng[], toleranceMeters: number, maxPoints: number): LatLng[] {
   if (path.length <= maxPoints) return path
 
@@ -926,9 +927,9 @@ export default function HereMap({
     // the distance badge at the line's distance-weighted midpoint.
     const routePath: LatLng[] = []
     const sectionCount = Math.max(routePolylines.length, 1)
-    // Share bounded vertex budgets across route legs. Short legs remain at full
-    // fidelity; only long, dense legs are reduced.
-    const renderBudgetPerSection = Math.max(160, Math.floor(4000 / sectionCount))
+    // Share a bounded budget only across the invisible interaction lines. The
+    // two visible strokes below retain every HERE vertex so zooming in always
+    // follows the road geometry exactly.
     const interactionBudgetPerSection = Math.max(80, Math.floor(1200 / sectionCount))
 
     // Route line: a thin coral stroke over a subtle dark casing so it stays
@@ -950,9 +951,8 @@ export default function HereMap({
         allPoints.push(point)
         routePath.push(point)
       }
-      const renderPath = simplifyPathForMap(sectionPath, 3, renderBudgetPerSection)
       const line = new H.geo.LineString()
-      for (const point of renderPath) line.pushPoint(point)
+      for (const point of sectionPath) line.pushPoint(point)
       const casing = new H.map.Polyline(line, {
         style: { lineWidth: 5, strokeColor: 'rgba(0,0,0,0.35)', lineJoin: 'round', lineCap: 'round' },
       })

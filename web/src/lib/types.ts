@@ -301,6 +301,20 @@ export type Message = {
   mentions?: Mention[]
 }
 
+// A sender-private message waiting for server-side delivery. It becomes a
+// normal Message only at `scheduledFor`; failed items remain visible to their
+// sender so they can be reviewed and removed.
+export type ScheduledMessage = {
+  id: string
+  groupId: string
+  body: string
+  replyToMessageId: string | null
+  scheduledFor: string
+  status: 'pending' | 'failed'
+  lastError: string | null
+  createdAt: string
+}
+
 // One @-mention inside a message: the user id (for "is this me?" highlighting
 // and future notifications) plus the display name (the literal text rendered).
 export type Mention = { userId: string; displayName: string }

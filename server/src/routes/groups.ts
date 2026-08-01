@@ -9,6 +9,7 @@ import { avatarRouter } from './groups/avatar.js'
 import { messagesRouter } from './groups/messages.js'
 import { messageActionsRouter } from './groups/messageActions.js'
 import { readStateRouter } from './groups/readState.js'
+import { scheduledMessagesRouter } from './groups/scheduledMessages.js'
 
 // The `/api/groups` surface. Historically a single 2,200-line file; it's now
 // split by domain into focused sub-routers under ./groups/*, mounted here in
@@ -30,5 +31,6 @@ groupsRouter.use(invitesRouter) //        GET/POST /:id/invites
 groupsRouter.use(updateRouter) //         PATCH  /:id
 groupsRouter.use(avatarRouter) //         GET/POST/DELETE /:id/avatar
 groupsRouter.use(messagesRouter) //       GET/POST/PATCH /:id/messages[...]
+groupsRouter.use(scheduledMessagesRouter) // GET/POST/DELETE /:id/scheduled-messages[/:scheduledMessageId]
 groupsRouter.use(messageActionsRouter) // POST   /:id/messages/:messageId/{delete,pin,unpin,forward}
 groupsRouter.use(readStateRouter) //      POST /:id/read, /:id/unread, PATCH /:id/prefs

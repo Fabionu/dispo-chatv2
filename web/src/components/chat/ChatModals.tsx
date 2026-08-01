@@ -8,6 +8,7 @@ import { ModalLoader } from '../LazyFallback'
 import ForwardModal from '../messages/ForwardModal'
 import InviteMembersModal from '../invites/InviteMembersModal'
 import ConfirmDialog from '../ConfirmDialog'
+import ScheduleMessageModal from '../messages/ScheduleMessageModal'
 
 // Lazy modals — these carry the pdf.js / heavy preview code, so they load only
 // when actually opened (same code-splitting as before the extraction).
@@ -49,6 +50,13 @@ type Props = {
   pendingDelete: { message: LocalMessage; scope: 'me' | 'everyone' } | null
   onConfirmDelete: () => void
   onCancelDelete: () => void
+  // Sender-private scheduled-message form + list.
+  scheduleOpen: boolean
+  scheduledDraftBody: string
+  scheduledReplyToMessageId: string | null
+  scheduledMentionUserIds: string[]
+  onScheduled: () => void
+  onCloseSchedule: () => void
 }
 
 export default function ChatModals({
@@ -74,6 +82,12 @@ export default function ChatModals({
   pendingDelete,
   onConfirmDelete,
   onCancelDelete,
+  scheduleOpen,
+  scheduledDraftBody,
+  scheduledReplyToMessageId,
+  scheduledMentionUserIds,
+  onScheduled,
+  onCloseSchedule,
 }: Props) {
   return (
     <>
@@ -147,6 +161,18 @@ export default function ChatModals({
           tone="alert"
           onConfirm={onConfirmDelete}
           onCancel={onCancelDelete}
+        />
+      )}
+
+      {scheduleOpen && (
+        <ScheduleMessageModal
+          groupId={group.id}
+          groupName={groupLabel(group)}
+          draftBody={scheduledDraftBody}
+          replyToMessageId={scheduledReplyToMessageId}
+          mentionUserIds={scheduledMentionUserIds}
+          onScheduled={onScheduled}
+          onClose={onCloseSchedule}
         />
       )}
     </>

@@ -345,6 +345,7 @@ export default function ChatView({
     message: LocalMessage
     scope: 'me' | 'everyone'
   } | null>(null)
+  const [scheduleOpen, setScheduleOpen] = useState(false)
   // Transient confirmation after a successful forward.
   const [notice, setNotice] = useState<string | null>(null)
   // Row to briefly pulse after a jump-to-original; cleared on a timer.
@@ -725,6 +726,16 @@ export default function ChatView({
     void sendBody(body, null, reply, mentionIds)
   }
 
+  // Once the server accepts a scheduled message it owns that copy. Clear the
+  // local composer exactly like an immediate send, while keeping the modal open
+  // so the sender can see the new item in their private schedule.
+  function scheduledFromComposer() {
+    setText('')
+    clearDraftForConversation()
+    setReplyContext(null)
+    setError(null)
+  }
+
   // Confirm from the pre-send preview: send the staged file + caption, close
   // the overlay, and clear the composer text (the caption supersedes it). The
   // optimistic bubble appears immediately; a failure leaves the retryable
@@ -970,6 +981,7 @@ export default function ChatView({
       inviteOpen ||
       groupInfoOpen ||
       pendingDelete ||
+      scheduleOpen ||
       tripPickerOpen ||
       editContext,
   )
@@ -1400,6 +1412,7 @@ export default function ChatView({
                   editContext={editContext}
                   onCancelEdit={cancelEdit}
                   onSend={send}
+                  onSchedule={() => setScheduleOpen(true)}
                   onFileError={setError}
                   onClearError={() => setError(null)}
                 />
@@ -1451,6 +1464,12 @@ export default function ChatView({
         pendingDelete={pendingDelete}
         onConfirmDelete={confirmPendingDelete}
         onCancelDelete={() => setPendingDelete(null)}
+        scheduleOpen={scheduleOpen}
+        scheduledDraftBody={text.trim()}
+        scheduledReplyToMessageId={replyContext?.id ?? null}
+        scheduledMentionUserIds={resolveMentionIds(text.trim(), members)}
+        onScheduled={scheduledFromComposer}
+        onCloseSchedule={() => setScheduleOpen(false)}
       />
 
       {tripPickerOpen && (

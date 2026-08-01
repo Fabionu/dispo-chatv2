@@ -59,10 +59,10 @@ export function distancePointToSegmentMeters(p: LatLng, a: LatLng, b: LatLng): n
   return Math.sqrt(ex * ex + ey * ey) * EARTH_RADIUS_M
 }
 
-// Douglas-Peucker simplification in metres. Route rendering keeps the original
-// geometry; this reduced copy is for invisible hit targets and hover lookup,
-// where sub-pixel detail only adds per-frame transform/scan work. Endpoints are
-// always preserved and short paths are returned unchanged.
+// Douglas-Peucker simplification in metres. Visible route rendering keeps the
+// original HERE geometry; this reduced copy is for invisible hit targets and
+// hover lookup, where sub-pixel detail only adds transform/scan work. Endpoints
+// are always preserved and short paths are returned unchanged.
 export function simplifyPath(path: LatLng[], toleranceMeters: number): LatLng[] {
   if (path.length <= 2 || toleranceMeters <= 0) return path
 

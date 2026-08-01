@@ -12,6 +12,7 @@ import type {
   Profile,
   PublicProfile,
   Role,
+  ScheduledMessage,
   WorkspaceInvite,
   WorkspaceInviteCreated,
   WorkspaceMember,
@@ -162,6 +163,32 @@ export const api = {
         },
       )
     },
+
+    // Sender-private queue. A scheduled item is not a chat message until the
+    // server delivers it at the requested instant.
+    scheduledMessages: (groupId: string) =>
+      request<{ scheduledMessages: ScheduledMessage[] }>(
+        `/groups/${groupId}/scheduled-messages`,
+      ),
+
+    scheduleMessage: (
+      groupId: string,
+      input: {
+        body: string
+        scheduledFor: string
+        replyToMessageId?: string | null
+        mentionUserIds?: string[]
+      },
+    ) =>
+      request<{ scheduledMessage: ScheduledMessage }>(
+        `/groups/${groupId}/scheduled-messages`,
+        { method: 'POST', body: JSON.stringify(input) },
+      ),
+
+    deleteScheduledMessage: (groupId: string, scheduledMessageId: string) =>
+      request<void>(`/groups/${groupId}/scheduled-messages/${scheduledMessageId}`, {
+        method: 'DELETE',
+      }),
 
     // Members of one conversation — the source for the @-mention picker and the
     // group-info members list.

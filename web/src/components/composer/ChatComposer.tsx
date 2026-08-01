@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { ArrowUp, Bold, Italic } from 'lucide-react'
+import { ArrowUp, Bold, Clock3, Italic } from 'lucide-react'
 import type { GroupMember, ReplyToPreview } from '../../lib/types'
 import { DOC_ACCEPT, IMAGE_ACCEPT, fileError } from '../attachments/attachmentUtils'
 import ComposerContextRow from '../messages/ComposerContextRow'
@@ -51,6 +51,7 @@ type Props = {
   onCancelEdit: () => void
 
   onSend: () => void
+  onSchedule: () => void
 
   // Surfaces a per-file validation error to the parent (e.g. "Image too
   // large"). Kept here so the composer owns the size policy.
@@ -100,6 +101,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
     editContext,
     onCancelEdit,
     onSend,
+    onSchedule,
     onFileError,
     onClearError,
   },
@@ -449,6 +451,18 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           className="flex-1 min-w-0 bg-transparent text-[length:var(--chat-msg-font-size)] leading-[1.5] outline-none resize-none placeholder:text-faint overflow-y-auto max-h-[9em] px-2 py-1.5"
         />
         <button
+          type="button"
+          onClick={onSchedule}
+          aria-label="Schedule message"
+          title="Schedule message"
+          className={`h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 items-center justify-center rounded-full text-muted hover:bg-white/6 hover:text-text transition-colors ${
+            editContext ? 'hidden' : 'flex'
+          }`}
+        >
+          <Clock3 size="1rem" strokeWidth={1.9} />
+        </button>
+        <button
+          type="button"
           onClick={onSend}
           disabled={disabled}
           aria-label={editContext ? 'Save edit' : 'Send message'}
