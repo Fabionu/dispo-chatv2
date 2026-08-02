@@ -1,21 +1,28 @@
 import { useState } from 'react'
-import {
-  ArrowRight,
-  Building2,
-  Eye,
-  EyeOff,
-  Loader2,
-  LockKeyhole,
-  Mail,
-  ShieldCheck,
-  User,
-} from 'lucide-react'
+import { ArrowRight, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import AppMark from '../components/AppMark'
 import VerificationNotice from '../components/auth/VerificationNotice'
+import { FIELD_EDGE } from '../components/forms/fieldStyles'
 
 type Tab = 'signin' | 'signup'
 
+// ── Sign in / Create workspace ──────────────────────────────────────────────
+// One centred column standing directly on the black canvas — no card, no
+// segmented tab strip. The page has exactly one job, so it doesn't need chrome
+// to say where to look: brand, heading, fields, action, and a single quiet line
+// at the bottom to switch flows.
+//
+// The card was doing nothing the canvas wasn't already doing (a `rail`-toned
+// panel on black is a tone step nobody reads as a container here), and the tab
+// strip DUPLICATED the bottom switch link — two controls, same job, at opposite
+// ends of the same surface. The bottom line is the survivor: it sits where you
+// end up after reading the form, which is when "I don't have a workspace"
+// actually occurs to you.
+//
+// Everything is on the shared token scales — the radius scale, the wash scale
+// for fill/edge, the type scale, and the app's own field state progression
+// (`FIELD_EDGE`), so this page can't drift away from the rest of the app.
 export default function SignIn() {
   const { refresh } = useAuth()
   const [tab, setTab] = useState<Tab>('signin')
@@ -99,6 +106,9 @@ export default function SignIn() {
       setError('Network error. Check your connection and try again.')
     } finally {
       setSubmitting(false)
+      // TODO: `keep` is collected but not yet sent — the session cookie's
+      // lifetime is fixed server-side. Left wired to the checkbox so the
+      // control keeps working the day the API accepts it.
       void keep
     }
   }
@@ -123,245 +133,189 @@ export default function SignIn() {
     <div className="relative min-h-screen w-full overflow-hidden bg-bg text-text">
       <AuthBackdrop />
 
-      <div className="relative z-10 flex min-h-screen flex-col">
-        <header className="mx-auto flex w-full max-w-[72rem] items-center justify-between px-5 py-4 sm:px-8 sm:py-5">
-          <Brand />
-          <span className="hidden text-xs font-medium uppercase tracking-eyebrow text-faint sm:block">
-            Transport operations
-          </span>
-        </header>
+      {/* One centred column. `py` rather than a fixed viewport height so the
+          taller signup form scrolls on short screens instead of clipping. */}
+      <div className="relative z-10 flex min-h-screen items-center justify-center px-6 py-12">
+        <main className="w-full max-w-[26rem]">
+          <div className="mb-9 flex items-center gap-2.5">
+            <AppMark size={30} />
+            <span className="text-2xl font-semibold tracking-[-0.01em]">Dispo-chat</span>
+          </div>
 
-        <main className="flex flex-1 items-center justify-center px-4 py-4 sm:px-6 sm:py-5 lg:py-3">
-          <section className="relative w-full max-w-[28rem] overflow-hidden rounded-panel border border-white/10 bg-rail shadow-modal">
-            <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/55 to-transparent" />
+          <h1 className="text-4xl font-semibold leading-tight tracking-[-0.03em]">
+            {isSignIn ? 'Welcome back' : 'Create your workspace'}
+          </h1>
+          <p className="mt-2 text-lg leading-normal text-muted">
+            {isSignIn
+              ? 'Sign in to continue to your workspace.'
+              : 'Set up your company workspace and the first administrator account.'}
+          </p>
 
-            <div className="p-4 sm:p-5">
-              <div className="mb-5 grid grid-cols-2 gap-1 rounded-card border border-white/6 bg-bg/80 p-1">
-                <FlowTab active={isSignIn} onClick={() => switchTab('signin')}>
-                  Sign in
-                </FlowTab>
-                <FlowTab active={!isSignIn} onClick={() => switchTab('signup')}>
-                  Create workspace
-                </FlowTab>
-              </div>
-
-              <div className="mb-5">
-                <div className="eyebrow mb-2 text-muted">
-                  {isSignIn ? 'Workspace access' : 'New workspace'}
-                </div>
-                <h1 className="text-4xl font-semibold leading-tight tracking-[-0.035em] sm:text-4xl">
-                  {isSignIn ? 'Welcome back' : 'Create your workspace'}
-                </h1>
-                <p className="mt-1.5 text-base leading-[1.125rem] text-muted">
-                  {isSignIn
-                    ? 'Sign in with your company account to continue to Dispo-chat.'
-                    : 'Set up your company workspace and create the first administrator account.'}
-                </p>
-              </div>
-
-              <form onSubmit={onSubmit} className="space-y-3">
-                {!isSignIn && (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field
-                      id="companyName"
-                      label="Company name"
-                      value={companyName}
-                      onChange={setCompanyName}
-                      placeholder="Your company"
-                      autoComplete="organization"
-                      icon={Building2}
-                      required
-                    />
-                    <Field
-                      id="displayName"
-                      label="Your name"
-                      value={displayName}
-                      onChange={setDisplayName}
-                      placeholder="Full name"
-                      autoComplete="name"
-                      icon={User}
-                      required
-                    />
-                  </div>
-                )}
-
+          <form onSubmit={onSubmit} className="mt-7 space-y-4">
+            {!isSignIn && (
+              <div className="grid gap-4 sm:grid-cols-2">
                 <Field
-                  id="email"
-                  label="Work email"
-                  type="email"
-                  value={email}
-                  onChange={setEmail}
-                  placeholder="name@company.com"
-                  autoComplete="email"
-                  icon={Mail}
+                  id="companyName"
+                  label="Company name"
+                  value={companyName}
+                  onChange={setCompanyName}
+                  placeholder="Your company"
+                  autoComplete="organization"
                   required
                 />
+                <Field
+                  id="displayName"
+                  label="Your name"
+                  value={displayName}
+                  onChange={setDisplayName}
+                  placeholder="Full name"
+                  autoComplete="name"
+                  required
+                />
+              </div>
+            )}
 
-                <div>
-                  <label className={LABEL_CLASS} htmlFor="password">
-                    Password
-                  </label>
-                  <div className="group relative">
-                    <LockKeyhole
-                      size="0.9375rem"
-                      strokeWidth={1.7}
-                      className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint transition-colors group-focus-within:text-text"
-                    />
-                    <input
-                      id="password"
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder={isSignIn ? 'Enter your password' : 'At least 8 characters'}
-                      autoComplete={isSignIn ? 'current-password' : 'new-password'}
-                      required
-                      className={`${FIELD_CLASS} pl-10 pr-11`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((visible) => !visible)}
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                      aria-pressed={showPassword}
-                      className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-faint transition-colors hover:text-text focus-visible:outline-none focus-visible:text-text"
-                    >
-                      {showPassword ? (
-                        <EyeOff size="0.9375rem" strokeWidth={1.7} />
-                      ) : (
-                        <Eye size="0.9375rem" strokeWidth={1.7} />
-                      )}
-                    </button>
-                  </div>
-                  {!isSignIn && password.length > 0 && <StrengthMeter password={password} />}
-                </div>
+            <Field
+              id="email"
+              label="Work email"
+              type="email"
+              value={email}
+              onChange={setEmail}
+              placeholder="name@company.com"
+              autoComplete="email"
+              autoFocus
+              required
+            />
 
-                {isSignIn && (
-                  <label className="flex cursor-pointer select-none items-center gap-2.5 pt-0.5 text-sm text-muted">
-                    <input
-                      type="checkbox"
-                      className="checkbox"
-                      checked={keep}
-                      onChange={(e) => setKeep(e.target.checked)}
-                    />
-                    Keep me signed in on this device
-                  </label>
-                )}
-
-                {error && (
-                  <div
-                    role="alert"
-                    aria-live="polite"
-                    className="rounded-card border border-alert/30 bg-alert/[0.07] px-3.5 py-2.5 text-base text-alert"
-                  >
-                    {error}
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="group flex w-full items-center justify-center gap-2 rounded-btn bg-text px-4 py-2.5 text-base font-semibold text-bg transition-colors hover:bg-text/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 focus-visible:ring-offset-2 focus-visible:ring-offset-rail disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {submitting ? (
-                    <Loader2 size="0.9375rem" strokeWidth={2.2} className="animate-spin" />
-                  ) : (
-                    <ArrowRight
-                      size="0.9375rem"
-                      strokeWidth={2.2}
-                      className="transition-transform group-hover:translate-x-0.5"
-                    />
-                  )}
-                  {submitting
-                    ? isSignIn
-                      ? 'Signing in…'
-                      : 'Creating workspace…'
-                    : isSignIn
-                      ? 'Sign in'
-                      : 'Create workspace'}
-                </button>
-              </form>
-
-              <p className="mt-5 text-center text-sm text-muted">
-                {isSignIn ? 'Need a workspace?' : 'Already have an account?'}{' '}
+            <div>
+              <label className={LABEL_CLASS} htmlFor="password">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={isSignIn ? 'Enter your password' : 'At least 8 characters'}
+                  autoComplete={isSignIn ? 'current-password' : 'new-password'}
+                  required
+                  className={`${FIELD_CLASS} pr-11`}
+                />
                 <button
                   type="button"
-                  onClick={() => switchTab(isSignIn ? 'signup' : 'signin')}
-                  className="font-semibold text-text underline-offset-4 transition-opacity hover:opacity-80 hover:underline"
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                  className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-card text-faint transition-colors hover:text-text focus-visible:text-text focus-visible:outline-none"
                 >
-                  {isSignIn ? 'Create one' : 'Sign in'}
+                  {showPassword ? (
+                    <EyeOff size="0.9375rem" strokeWidth={1.7} />
+                  ) : (
+                    <Eye size="0.9375rem" strokeWidth={1.7} />
+                  )}
                 </button>
-              </p>
+              </div>
+              {!isSignIn && password.length > 0 && <StrengthMeter password={password} />}
             </div>
-          </section>
-        </main>
 
-        <footer className="flex items-center justify-center gap-2 px-5 py-3 text-xs text-faint">
-          <ShieldCheck size="0.8125rem" strokeWidth={1.6} />
-          <span>Secure workspace access</span>
-        </footer>
+            {isSignIn && (
+              <label className="flex w-fit cursor-pointer select-none items-center gap-2.5 text-base text-muted">
+                <input
+                  type="checkbox"
+                  className="checkbox"
+                  checked={keep}
+                  onChange={(e) => setKeep(e.target.checked)}
+                />
+                Keep me signed in on this device
+              </label>
+            )}
+
+            {error && (
+              <div
+                role="alert"
+                aria-live="polite"
+                className="rounded-card border border-alert/30 bg-alert/6 px-3 py-2.5 text-base text-alert"
+              >
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="group flex h-10 w-full items-center justify-center gap-2 rounded-btn bg-text text-lg font-semibold text-bg transition-colors hover:bg-text/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {submitting
+                ? isSignIn
+                  ? 'Signing in…'
+                  : 'Creating workspace…'
+                : isSignIn
+                  ? 'Sign in'
+                  : 'Create workspace'}
+              {submitting ? (
+                <Loader2 size="0.9375rem" strokeWidth={2.2} className="animate-spin" />
+              ) : (
+                <ArrowRight
+                  size="0.9375rem"
+                  strokeWidth={2.2}
+                  className="transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none"
+                />
+              )}
+            </button>
+          </form>
+
+          {/* The ONLY flow switch on the page (the old tab strip did the same
+              job at the top). A hairline separates it from the form so it reads
+              as an aside, not a third form control. */}
+          <p className="mt-8 border-t border-white/6 pt-5 text-base text-muted">
+            {isSignIn ? 'Need a workspace?' : 'Already have an account?'}{' '}
+            <button
+              type="button"
+              onClick={() => switchTab(isSignIn ? 'signup' : 'signin')}
+              className="font-semibold text-text underline-offset-4 transition-opacity hover:underline hover:opacity-80 focus-visible:outline-none focus-visible:underline"
+            >
+              {isSignIn ? 'Create one' : 'Sign in'}
+            </button>
+          </p>
+        </main>
       </div>
     </div>
   )
 }
 
+// Faint operational texture: a fine grid fading out toward the edges, with one
+// soft pool of light behind the column. Calmer than it needs to be on purpose —
+// with the card gone, this is the only thing keeping the canvas from reading as
+// an empty black rectangle, and anything louder would compete with the form.
 function AuthBackdrop() {
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0">
       <div
-        className="absolute inset-0 opacity-40"
+        className="absolute inset-0 opacity-30"
         style={{
           backgroundImage:
             'linear-gradient(rgb(var(--color-wash) / 0.025) 1px, transparent 1px), linear-gradient(90deg, rgb(var(--color-wash) / 0.025) 1px, transparent 1px)',
           backgroundSize: '48px 48px',
-          maskImage: 'radial-gradient(circle at center, black, transparent 75%)',
+          maskImage: 'radial-gradient(circle at center, black, transparent 72%)',
         }}
       />
-      <div className="absolute left-1/2 top-1/2 h-[30rem] w-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/2 blur-[110px]" />
+      <div className="absolute left-1/2 top-1/2 h-[34rem] w-[34rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/2 blur-[120px]" />
     </div>
   )
 }
 
-function Brand() {
-  return (
-    <div className="flex items-center gap-3">
-      <AppMark size={30} />
-      <div>
-        <div className="text-lg font-semibold leading-none tracking-[-0.01em]">
-          Dispo-chat
-        </div>
-        <div className="mt-1 text-2xs uppercase tracking-eyebrow text-faint sm:hidden">
-          Transport operations
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function FlowTab({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`rounded-btn px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20 ${
-        active ? 'bg-white/10 text-text' : 'text-faint hover:text-muted'
-      }`}
-    >
-      {children}
-    </button>
-  )
-}
-
-const LABEL_CLASS = 'mb-1.5 block text-sm font-medium text-muted'
+const LABEL_CLASS = 'mb-1.5 block text-base font-medium text-muted'
+// The app's field recipe (components/forms/fieldStyles) one size step up: same
+// radius, same sunken fill, same hairline, and the SAME hover/focus progression
+// imported directly — only the control height and text size change, because an
+// auth field on a bare canvas is doing more work than a row in a dense panel.
 const FIELD_CLASS =
-  'w-full rounded-card border border-white/8 bg-bg/75 px-3 py-2.5 text-base text-text outline-none transition-colors placeholder:text-faint hover:border-white/16 focus:border-white/20 focus:bg-bg'
+  'w-full min-w-0 h-10 px-3 rounded-card border bg-white/4 text-lg text-text ' +
+  'placeholder:text-faint/70 outline-none ' +
+  'transition-[border-color,background-color,box-shadow] duration-150 ' +
+  'motion-reduce:transition-none ' +
+  FIELD_EDGE
 
 function Field({
   id,
@@ -369,9 +323,9 @@ function Field({
   value,
   onChange,
   placeholder,
-  icon: Icon,
   type = 'text',
   autoComplete,
+  autoFocus,
   required,
 }: {
   id: string
@@ -379,9 +333,9 @@ function Field({
   value: string
   onChange: (value: string) => void
   placeholder?: string
-  icon: typeof Mail
   type?: string
   autoComplete?: string
+  autoFocus?: boolean
   required?: boolean
 }) {
   return (
@@ -389,23 +343,17 @@ function Field({
       <label className={LABEL_CLASS} htmlFor={id}>
         {label}
       </label>
-      <div className="group relative">
-        <Icon
-          size="0.9375rem"
-          strokeWidth={1.7}
-          className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint transition-colors group-focus-within:text-text"
-        />
-        <input
-          id={id}
-          type={type}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          autoComplete={autoComplete}
-          required={required}
-          className={`${FIELD_CLASS} pl-10`}
-        />
-      </div>
+      <input
+        id={id}
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+        autoFocus={autoFocus}
+        required={required}
+        className={FIELD_CLASS}
+      />
     </div>
   )
 }
@@ -447,7 +395,7 @@ function StrengthMeter({ password }: { password: string }) {
         {[0, 1, 2, 3].map((index) => (
           <div
             key={index}
-            className={`h-1 flex-1 rounded-full transition-colors ${
+            className={`h-1 flex-1 rounded-full transition-colors motion-reduce:transition-none ${
               index < filled ? fillClass : 'bg-white/8'
             }`}
           />

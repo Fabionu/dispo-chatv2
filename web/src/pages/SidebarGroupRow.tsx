@@ -62,7 +62,9 @@ function relTime(iso: string | null): string {
 // identity slot reads a conversation's TYPE by shape, not colour: a circular
 // Avatar for a direct message (with a live presence dot), a `card`-radius
 // GroupAvatar squircle for a vehicle room (its uploaded photo, or the generated
-// glyph). The name is primary; a vehicle room's active-trip status trails it as
+// glyph). A photo-less DM falls back to the peer's INITIALS here rather than the
+// contact glyph — in a LIST, a column of identical silhouettes distinguishes
+// nobody, so the disc names who instead. The name is primary; a vehicle room's active-trip status trails it as
 // quiet tone-coloured text, followed by the last-activity timestamp. The preview
 // line carries pin/mute/mention/unread state; those indicators slide left on
 // hover to expose the downward actions arrow without covering the preview.
@@ -216,13 +218,12 @@ export default function GroupRow({
     // people open this menu. Its meaning follows the conversation type — a DM
     // has a person behind it, a vehicle room has a truck.
     //
-    // A DM's cell carries the peer's INITIALS rather than a contact glyph. This
-    // is not the Avatar rule being broken (Avatar deliberately never falls back
-    // to initials, so a photo-less person still reads as a person): that glyph
-    // depicts someone, whereas this one names WHICH someone the action targets
-    // — and every DM row would otherwise show the identical person icon. Sized
-    // to the same 14px box as the lucide glyphs beside it, and inheriting
-    // currentColor, so the strip's rhythm and hover states are unchanged.
+    // A DM's cell carries the peer's INITIALS rather than a contact glyph, for
+    // the same reason the row's own avatar does (Avatar's `fallback="initials"`
+    // above): a glyph depicts someone, whereas initials name WHICH someone the
+    // action targets. Sized to the same 14px box as the lucide glyphs beside it,
+    // and inheriting currentColor, so the strip's rhythm and hover states are
+    // unchanged.
     {
       key: 'details',
       label: isDirect ? 'Profile' : 'Info',
@@ -330,7 +331,12 @@ export default function GroupRow({
             height IdentitySlot keeps the larger avatar from adding row height. */}
         <IdentitySlot>
           {group.type === 'direct' ? (
-            <Avatar userId={peer?.id ?? ''} name={peer?.name ?? groupLabel(group)} size={size} />
+            <Avatar
+              userId={peer?.id ?? ''}
+              name={peer?.name ?? groupLabel(group)}
+              size={size}
+              fallback="initials"
+            />
           ) : (
             <GroupAvatar
               groupId={group.id}

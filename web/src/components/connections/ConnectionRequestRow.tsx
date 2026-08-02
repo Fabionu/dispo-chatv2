@@ -34,7 +34,7 @@ export default function ConnectionRequestRow({ connection, selected, size, onCli
       }`}
     >
       <IdentitySlot>
-        <Avatar userId={peer.id} name={peer.displayName} size={size} />
+        <Avatar userId={peer.id} name={peer.displayName} size={size} fallback="initials" />
       </IdentitySlot>
       <span className="flex-1 min-w-0 flex flex-col gap-px">
         <span

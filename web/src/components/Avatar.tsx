@@ -9,6 +9,7 @@ import {
   preloadAvatar,
 } from '../lib/avatarCache'
 import { rem } from '../lib/density'
+import { initials } from './messages/messageUtils'
 
 type Props = {
   userId: string
@@ -17,18 +18,27 @@ type Props = {
   size?: number
   /** Bump to bust the browser cache after the current user changes their image. */
   version?: number | string
+  /**
+   * What to draw when there's no photo. 'glyph' (default) is the generic contact
+   * silhouette — a photo-less person still reads as a person. 'initials' names
+   * WHICH person instead, and is opt-in for LISTS of people, where a column of
+   * identical silhouettes tells the eye nothing.
+   */
+  fallback?: 'glyph' | 'initials'
   className?: string
 }
 
-// User avatar: the stored image when one exists, otherwise a generic white
-// contact glyph on a neutral dark disc — never initials. The image URL 404s when
-// the user has no avatar, which flips us to the fallback, so callers don't need
-// to know in advance whether an avatar exists.
+// User avatar: the stored image when one exists, otherwise a fallback on a
+// neutral dark disc — the generic contact glyph, or the person's initials where
+// the caller opts in (see `fallback`). The image URL 404s when the user has no
+// avatar, which flips us to the fallback, so callers don't need to know in
+// advance whether an avatar exists.
 export default function Avatar({
   userId,
   name,
   size = 28,
   version,
+  fallback = 'glyph',
   className = '',
 }: Props) {
   const [failed, setFailed] = useState(() => !userId || isAvatarFailed('user', userId, version))
@@ -56,12 +66,31 @@ export default function Avatar({
   // person and a room are one family differing only in headcount. Lucide draws
   // every icon on a shared 24 grid with matched optical sizing, so both render at
   // the SAME fraction — per-icon scale fudging is what makes icon sets drift.
+  //
+  // `fallback="initials"` swaps the glyph for the person's initials in the SAME
+  // disc — same fill, same hairline, same diameter — so an opted-in list keeps
+  // the identity column's geometry and only changes what fills it. The letters
+  // sit one step brighter than the glyph because they carry information rather
+  // than merely marking a slot, and they're aria-hidden: every call site already
+  // renders the name as text beside them.
   const fallbackNode = (
     <span
       style={style}
-      className={`rounded-full bg-surface-2 border border-white/10 flex items-center justify-center shrink-0 text-muted ${className}`}
+      className={`rounded-full bg-surface-2 border border-white/10 flex items-center justify-center shrink-0 ${
+        fallback === 'initials' ? 'text-text/75' : 'text-muted'
+      } ${className}`}
     >
-      <User size={rem(Math.max(13, Math.round(size * 0.52)))} strokeWidth={1.7} />
+      {fallback === 'initials' ? (
+        <span
+          aria-hidden
+          style={{ fontSize: rem(Math.max(11, Math.round(size * 0.36))) }}
+          className="font-semibold leading-none tracking-tight select-none"
+        >
+          {initials(name)}
+        </span>
+      ) : (
+        <User size={rem(Math.max(13, Math.round(size * 0.52)))} strokeWidth={1.7} />
+      )}
     </span>
   )
 

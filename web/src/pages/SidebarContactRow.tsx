@@ -35,7 +35,7 @@ export default function ContactRow({
       className="w-full flex items-center rounded-btn text-left text-muted hover:bg-white/8 hover:text-text transition-colors"
     >
       <IdentitySlot>
-        <Avatar userId={member.id} name={member.displayName} size={size} />
+        <Avatar userId={member.id} name={member.displayName} size={size} fallback="initials" />
       </IdentitySlot>
       <span className="min-w-0 flex-1 flex flex-col gap-px">
         <span
