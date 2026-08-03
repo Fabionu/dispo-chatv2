@@ -1305,6 +1305,30 @@ button {
   color: #a3a3a3;
 }
 
+/* Direction of travel along the breadcrumb trail. Same arrowhead language as
+   the heading marker, one size down and unfilled by a casing — these repeat
+   along the path, so they have to stay quiet enough not to compete with the
+   truck's current position. Positioned and rotated inline from screen-space
+   geometry (see HereMap), so the untransformed state must point UP. */
+.trail-chevron {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 13; /* above the map canvases, below the driver marker (14) */
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  border-left: 0.25rem solid transparent;
+  border-right: 0.25rem solid transparent;
+  border-bottom: 0.375rem solid rgba(79, 179, 167, 0.95);
+  /* A hairline of shadow instead of a second triangle: enough to hold the shape
+     against a light basemap without doubling the element count. */
+  filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.8));
+}
+.trail-chevron--stale {
+  border-bottom-color: rgba(138, 147, 166, 0.9);
+}
+
 /* Shared modal text field. Kept in CSS (rather than the Tailwind recipe in
    components/forms/fieldStyles) only because a couple of modals style raw
    inputs; the VALUES mirror that recipe exactly — same fill, same hairline,

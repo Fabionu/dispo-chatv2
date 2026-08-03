@@ -37,6 +37,27 @@ import { createHereMapZoomControl, type HereMapZoomControlHandle } from './HereM
 // HERE route sections can contain tens of thousands of road-shape vertices.
 // This helper is deliberately reserved for INVISIBLE interaction geometry
 // (drag hit-targets and hover lookup). The visible route must use the complete
+// ── Trail chevron budget ─────────────────────────────────────────────────────
+// Every pan frame projects up to MAX_TRAIL_CANDIDATES × 2 points per trail, so
+// the sampling cap is a frame-cost ceiling, not a cosmetic one. The chevron
+// pool is far smaller: only what can fit on screen at the minimum gap ever gets
+// placed, and the rest of the candidates exist purely so that whichever part of
+// the trail is in view has segments to choose from.
+const MAX_TRAIL_CANDIDATES = 240
+const MAX_TRAIL_CHEVRONS = 60
+/** Minimum on-screen spacing between chevrons, in px. */
+const TRAIL_CHEVRON_GAP_PX = 52
+
+/** Forward azimuth from `a` to `b`, degrees clockwise from north. */
+function bearingBetween(a: LatLng, b: LatLng): number {
+  const lat1 = (a.lat * Math.PI) / 180
+  const lat2 = (b.lat * Math.PI) / 180
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180
+  const y = Math.sin(dLng) * Math.cos(lat2)
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng)
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360
+}
+
 // decoded HERE polyline: even a small metre-based tolerance is noticeable at
 // street-level zoom and can draw straight chords across curbs or tight bends.
 function simplifyPathForMap(path: LatLng[], toleranceMeters: number, maxPoints: number): LatLng[] {
@@ -759,6 +780,10 @@ export default function HereMap({
         mapRef.current = null
         groupRef.current = null
         trailGroupRef.current = null
+        // Chevrons are container children, not map objects — disposing the map
+        // does not take them with it.
+        for (const el of trailChevronsRef.current) el.remove()
+        trailChevronsRef.current = []
         baseMapLayersRef.current = { map: null, satellite: null }
         trafficLayerRef.current = null
         draggableObjectsRef.current = []
@@ -920,6 +945,104 @@ export default function HereMap({
       // clear it rather than leaving a stale path behind on the next render.
       trailGroupRef.current?.removeAll()
     }
+  }, [ready, driverTrails])
+
+  // ── Trail direction chevrons ──────────────────────────────────────────────
+  // Which WAY the truck drove each leg, not just where it went. Drawn as DOM
+  // overlays for the same two reasons the driver marker is: HARP renders no DOM
+  // markers of its own, and a chevron built from map geometry would scale with
+  // zoom — huge when zoomed out, invisible when zoomed in. As screen-space
+  // elements they stay one size, and spacing is decided in screen space too, so
+  // their density stays even at every zoom instead of bunching up.
+  const trailChevronsRef = useRef<HTMLDivElement[]>([])
+  useEffect(() => {
+    const map = mapRef.current
+    const container = containerRef.current
+    if (!ready || !map || !container) return
+
+    // One candidate per sampled trail segment. Direction is a GEO bearing
+    // computed once here, not an angle measured between two projected points:
+    // consecutive trail points land a pixel or two apart on screen, so a
+    // screen-space vector is far too short to derive an angle from — and any
+    // "segment long enough?" threshold would reject every candidate at low zoom
+    // and draw no chevrons at all. A bearing is zoom-independent, and it costs
+    // one projection per candidate at paint time instead of two.
+    type Candidate = { at: LatLng; bearing: number; stale: boolean }
+    const candidates: Candidate[] = []
+    for (const trail of driverTrails ?? []) {
+      // A day-long trail can hold 1500 points; projecting every segment on every
+      // pan frame would cost more than it shows. Sample down — far more
+      // candidates than can ever be placed is already plenty of choice.
+      const step = Math.max(1, Math.ceil((trail.points.length - 1) / MAX_TRAIL_CANDIDATES))
+      for (let i = step; i < trail.points.length; i += step) {
+        const from = trail.points[i - step]
+        const to = trail.points[i]
+        // A stationary pair has no direction to point in.
+        if (from.lat === to.lat && from.lng === to.lng) continue
+        candidates.push({ at: to, bearing: bearingBetween(from, to), stale: trail.stale })
+      }
+    }
+
+    const pool = trailChevronsRef.current
+    const wanted = Math.min(candidates.length, MAX_TRAIL_CHEVRONS)
+    while (pool.length < wanted) {
+      const el = document.createElement('div')
+      el.className = 'trail-chevron'
+      container.appendChild(el)
+      pool.push(el)
+    }
+    while (pool.length > wanted) pool.pop()?.remove()
+    if (!pool.length) return
+
+    const position = () => {
+      const w = container.clientWidth
+      const h = container.clientHeight
+      // A bearing is relative to north; if the camera is rotated, screen-up is
+      // no longer north and the chevrons have to turn with it.
+      const mapBearing = Number(map.getViewModel?.()?.getLookAtData?.()?.bearing) || 0
+      let used = 0
+      let lastX = 0
+      let lastY = 0
+      for (const c of candidates) {
+        if (used >= pool.length) break
+        const b = map.geoToScreen(c.at)
+        if (!b) continue
+        // Off-screen segments must not consume pool slots, or zooming into the
+        // end of a long trail would spend every chevron on invisible legs.
+        if (b.x < -40 || b.y < -40 || b.x > w + 40 || b.y > h + 40) continue
+        if (used > 0 && Math.hypot(b.x - lastX, b.y - lastY) < TRAIL_CHEVRON_GAP_PX) continue
+        const el = pool[used]
+        el.className = c.stale ? 'trail-chevron trail-chevron--stale' : 'trail-chevron'
+        el.style.display = ''
+        el.style.left = `${b.x}px`
+        el.style.top = `${b.y}px`
+        // The CSS triangle points UP, i.e. at bearing 0 — so the bearing is the
+        // rotation directly, with no offset to get wrong.
+        el.style.transform = `translate(-50%, -50%) rotate(${c.bearing - mapBearing}deg)`
+        lastX = b.x
+        lastY = b.y
+        used++
+      }
+      for (let i = used; i < pool.length; i++) pool[i].style.display = 'none'
+    }
+    position()
+
+    let raf = 0
+    const onView = () => {
+      if (!raf)
+        raf = requestAnimationFrame(() => {
+          raf = 0
+          position()
+        })
+    }
+    map.addEventListener('mapviewchange', onView)
+    map.addEventListener('mapviewchangeend', onView)
+    return () => {
+      map.removeEventListener('mapviewchange', onView)
+      map.removeEventListener('mapviewchangeend', onView)
+      if (raf) cancelAnimationFrame(raf)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, driverTrails])
 
   // ── Toggle the HGV / logistics overlay (no route recalculation) ───────────
