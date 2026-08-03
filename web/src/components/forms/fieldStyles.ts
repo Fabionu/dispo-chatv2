@@ -21,7 +21,7 @@
 
 // The control box shared by input / textarea / select.
 export const FIELD_BASE =
-  'w-full min-w-0 rounded-card border bg-white/4 text-base text-text ' +
+  'min-w-0 rounded-card border bg-white/4 text-base text-text ' +
   'placeholder:text-faint/70 outline-none ' +
   'transition-[border-color,background-color,box-shadow] duration-150 ' +
   'motion-reduce:transition-none ' +
@@ -43,8 +43,17 @@ export const FIELD_EDGE_INVALID =
 export const FIELD_SINGLE = 'h-8 px-2.5'
 export const FIELD_MULTI = 'px-2.5 py-1.5 resize-none leading-[1.45]'
 
-export function fieldClass(opts?: { invalid?: boolean; multiline?: boolean }): string {
+export function fieldClass(opts?: {
+  invalid?: boolean
+  multiline?: boolean
+  /**
+   * Most standalone controls fill their container. Compact controls that live
+   * together in a flex row provide their own width/flex-basis instead.
+   */
+  fullWidth?: boolean
+}): string {
   return [
+    opts?.fullWidth === false ? '' : 'w-full',
     FIELD_BASE,
     opts?.invalid ? FIELD_EDGE_INVALID : FIELD_EDGE,
     opts?.multiline ? FIELD_MULTI : FIELD_SINGLE,

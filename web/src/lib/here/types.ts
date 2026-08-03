@@ -115,6 +115,18 @@ export type DriverMapMarker = {
   position: LatLng
   stale: boolean
   detail?: string
+  /** Compass bearing the vehicle is facing, degrees clockwise from north.
+   *  Omitted when the device reported no bearing (typically stationary), in
+   *  which case the marker draws as a plain dot with no direction claimed. */
+  headingDeg?: number
+}
+
+/** One driver's travelled path for the active trip, oldest point first. */
+export type DriverMapTrail = {
+  id: string
+  points: LatLng[]
+  /** Drawn muted when the driver's last position is stale, matching the marker. */
+  stale: boolean
 }
 
 // The single shared structure for every route point — start, intermediate

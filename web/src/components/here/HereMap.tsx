@@ -9,6 +9,7 @@ import {
 } from '../../lib/here/geo'
 import type {
   DriverMapMarker,
+  DriverMapTrail,
   LatLng,
   RouteMarker,
   RouteMarkerKind,
@@ -64,6 +65,10 @@ type Props = {
   // (and never replacing) the waypoint markers. Deliberately EXCLUDED from the
   // auto-fit, so a position update never re-centers the user's view.
   driverMarkers?: DriverMapMarker[]
+  // The path each driver has actually driven this trip, drawn beneath the
+  // planned route. Excluded from the auto-fit for the same reason as the
+  // markers above — the trail grows every minute and must not pan the map.
+  driverTrails?: DriverMapTrail[]
   // Shared workspace places. Static/cached and excluded from route auto-fit so
   // showing a depot or parking layer never moves the user's map.
   savedPlaces?: WorkspacePlace[]
@@ -133,6 +138,7 @@ type Props = {
 export default function HereMap({
   markers,
   driverMarkers,
+  driverTrails,
   savedPlaces,
   routePolylines,
   routeDistanceLabel,
@@ -202,6 +208,7 @@ export default function HereMap({
   // A single group holding every marker + line, so a redraw is "clear group,
   // add fresh objects" rather than tracking individual handles.
   const groupRef = useRef<any>(null)
+  const trailGroupRef = useRef<any>(null)
   // The standard basemap + the logistics (HGV) basemap, captured at init so the
   // overlay toggle can swap between them without rebuilding the map.
   const baseLayerRef = useRef<any>(null)
@@ -293,12 +300,20 @@ export default function HereMap({
         ui.removeControl('mapsettings')
         ui.removeControl('zoom')
 
+        // Driver trails live in their OWN group, added before the route group so
+        // the travelled path draws underneath the planned one. It also has its
+        // own lifecycle: a trail grows every minute, and redrawing it must not
+        // drag the whole route/marker rebuild along with it.
+        const trailGroup = new H.map.Group()
+        map.addObject(trailGroup)
+
         const group = new H.map.Group()
         map.addObject(group)
 
         HRef.current = H
         mapRef.current = map
         groupRef.current = group
+        trailGroupRef.current = trailGroup
 
         mapStyleControlRef.current = createHereMapStyleControl({
           container: controlsHostRef.current,
@@ -743,6 +758,7 @@ export default function HereMap({
         mapRef.current.dispose()
         mapRef.current = null
         groupRef.current = null
+        trailGroupRef.current = null
         baseMapLayersRef.current = { map: null, satellite: null }
         trafficLayerRef.current = null
         draggableObjectsRef.current = []
@@ -785,18 +801,32 @@ export default function HereMap({
       let el = els.get(d.id)
       if (!el) {
         el = document.createElement('div')
+        // Arrow first so it paints UNDER the dot — the dot is the position, the
+        // arrowhead only orbits it.
+        const arrow = document.createElement('div')
+        arrow.className = 'driver-marker-arrow'
         const dot = document.createElement('div')
         dot.className = 'driver-marker-dot'
         const name = document.createElement('div')
         name.className = 'driver-marker-name'
+        el.appendChild(arrow)
         el.appendChild(dot)
         el.appendChild(name)
         container.appendChild(el)
         els.set(d.id, el)
       }
       el.className = d.stale ? 'driver-marker driver-marker--stale' : 'driver-marker'
-      ;(el.children[0] as HTMLElement).title = d.detail ? `${d.name} — ${d.detail}` : d.name
-      ;(el.children[1] as HTMLElement).textContent = d.name
+      // Heading is optional: a stationary phone reports no bearing, and an arrow
+      // pointing in an arbitrary direction would be a claim the data can't make.
+      const arrow = el.children[0] as HTMLElement
+      if (d.headingDeg === undefined) {
+        arrow.style.display = 'none'
+      } else {
+        arrow.style.display = ''
+        arrow.style.transform = `translate(-50%, -50%) rotate(${d.headingDeg}deg)`
+      }
+      ;(el.children[1] as HTMLElement).title = d.detail ? `${d.name} — ${d.detail}` : d.name
+      ;(el.children[2] as HTMLElement).textContent = d.name
     }
     for (const [id, el] of els) {
       if (!seen.has(id)) {
@@ -843,6 +873,54 @@ export default function HereMap({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, driverMarkers])
+
+  // ── Driver breadcrumb trails ──────────────────────────────────────────────
+  // The path the truck actually drove, drawn under the planned route so the two
+  // read as "intended" vs "actual" rather than competing for the same line. Its
+  // own group and effect: this redraws every time a point lands (once a minute)
+  // and must not trigger the route/marker rebuild, which is far heavier.
+  //
+  // Never contributes to the viewport fit — like the driver marker, a position
+  // update must not move the camera under the dispatcher.
+  useEffect(() => {
+    const H = HRef.current
+    const group = trailGroupRef.current
+    if (!ready || !H || !group) return
+    group.removeAll()
+    for (const trail of driverTrails ?? []) {
+      if (trail.points.length < 2) continue
+      const line = new H.geo.LineString()
+      for (const p of trail.points) line.pushPoint(p)
+      // Casing keeps the trail legible over the basemap; the trail itself is the
+      // driver's teal, dashed so it never reads as a second planned route.
+      group.addObject(
+        new H.map.Polyline(line, {
+          style: {
+            lineWidth: 6,
+            strokeColor: 'rgba(0,0,0,0.30)',
+            lineJoin: 'round',
+            lineCap: 'round',
+          },
+        }),
+      )
+      group.addObject(
+        new H.map.Polyline(line, {
+          style: {
+            lineWidth: 3,
+            strokeColor: trail.stale ? 'rgba(138,147,166,0.75)' : 'rgba(79,179,167,0.95)',
+            lineJoin: 'round',
+            lineCap: 'round',
+            lineDash: [4, 3],
+          },
+        }),
+      )
+    }
+    return () => {
+      // The group can outlive this effect (the map disposes separately), so
+      // clear it rather than leaving a stale path behind on the next render.
+      trailGroupRef.current?.removeAll()
+    }
+  }, [ready, driverTrails])
 
   // ── Toggle the HGV / logistics overlay (no route recalculation) ───────────
   useEffect(() => {

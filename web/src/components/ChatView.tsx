@@ -1209,6 +1209,7 @@ export default function ChatView({
           groupId={group.id}
           tripId={ops?.trip ? (ops.trip.id ?? group.id) : undefined}
           driverLocationsSeed={group.meta.driverLocations}
+          driverTrailsSeed={group.meta.driverTrails}
           // Editing the route is a "manage this group" action — the same boundary
           // the server enforces on the PATCH, so a non-manager never sees a save
           // that would 403. Requires an active trip to attach the route to.

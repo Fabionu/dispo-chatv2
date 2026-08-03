@@ -11,12 +11,16 @@ import {
   DRIVER_EXPIRE_MS,
   DRIVER_STALE_MS,
   driverLocationAgo,
+  extendTrail,
   parseDriverLocationEvent,
   parseDriverLocations,
+  parseDriverTrails,
   type DriverLocation,
+  type DriverTrailPoint,
 } from '../../lib/driverLocation'
 import type {
   DriverMapMarker,
+  DriverMapTrail,
   LatLng,
   RouteMarker,
   RouteMarkerKind,
@@ -39,6 +43,10 @@ type Props = {
   groupId?: string
   tripId?: string
   driverLocationsSeed?: unknown
+  // The room's raw `meta.driverTrails` blob — the path already driven, so a
+  // dispatcher opening the room mid-trip sees the whole route so far rather
+  // than only what arrives while they watch.
+  driverTrailsSeed?: unknown
   // Whether the current user may edit the route. Gated by the caller on the same
   // "manage this group" permission the server enforces on save; false hides the
   // Edit button entirely (read-only map).
@@ -93,6 +101,15 @@ function mapStop(pos: LatLng, label: string): VehicleStop {
   }
 }
 
+// A GPS bearing → the compass point a dispatcher would say out loud. 16 points
+// is as fine as "which way is it facing" ever needs to be read at a glance, and
+// finer would overstate what a phone's bearing is worth.
+const COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
+function compassPoint(headingDeg: number): string {
+  const i = Math.round((((headingDeg % 360) + 360) % 360) / 22.5) % 16
+  return COMPASS[i]
+}
+
 // Right-click context menu (add a stop) + clicked-marker popover (remove a stop),
 // positioned within the map region.
 type MenuState = { x: number; y: number; lat: number; lng: number; zoom: number; candidates: ScreenGeoCandidate[] }
@@ -117,6 +134,7 @@ export default function TripRouteMap({
   groupId,
   tripId,
   driverLocationsSeed,
+  driverTrailsSeed,
 }: Props) {
   const [editing, setEditing] = useState(false)
   // Working copy of ALL stops while editing (so non-routable stops are preserved
@@ -176,12 +194,27 @@ export default function TripRouteMap({
   const [driverLocs, setDriverLocs] = useState<Record<string, DriverLocation>>(() =>
     tripId ? parseDriverLocations(driverLocationsSeed, tripId) : {},
   )
+  // The travelled path, seeded from the stored trail so a dispatcher opening the
+  // room mid-trip sees everywhere the truck has been — not just from the moment
+  // they looked. Live points come off the SAME socket events as the position
+  // above; extendTrail applies the server's own "has it actually moved" rule and
+  // returns the previous array unchanged when it hasn't, so an idle truck causes
+  // no re-render.
+  const [driverTrailPoints, setDriverTrailPoints] = useState<Record<string, DriverTrailPoint[]>>(
+    () => (tripId ? parseDriverTrails(driverTrailsSeed, tripId) : {}),
+  )
   useEffect(() => {
     if (!groupId || !tripId) return
     const socket = getSocket()
     const onLocation = (payload: unknown) => {
       const entry = parseDriverLocationEvent(payload, groupId, tripId)
-      if (entry) setDriverLocs((cur) => ({ ...cur, [entry.userId]: entry }))
+      if (!entry) return
+      setDriverLocs((cur) => ({ ...cur, [entry.userId]: entry }))
+      setDriverTrailPoints((cur) => {
+        const points = cur[entry.userId] ?? []
+        const next = extendTrail(points, entry)
+        return next === points ? cur : { ...cur, [entry.userId]: next }
+      })
     }
     socket.on('driver:location', onLocation)
     return () => {
@@ -212,11 +245,34 @@ export default function TripRouteMap({
         name: loc.name,
         position: { lat: loc.lat, lng: loc.lng },
         stale,
-        detail: `Updated ${driverLocationAgo(loc.recordedAt, now).toLowerCase()}${stale ? ' (last known)' : ''}${speedKmh}`,
+        detail: `Updated ${driverLocationAgo(loc.recordedAt, now).toLowerCase()}${stale ? ' (last known)' : ''}${speedKmh}${
+          loc.headingDeg !== undefined ? ` · heading ${compassPoint(loc.headingDeg)}` : ''
+        }`,
+        ...(loc.headingDeg !== undefined ? { headingDeg: loc.headingDeg } : {}),
       })
     }
     return out
   }, [driverLocs, now])
+
+  // Trails follow the marker's own visibility rules: a driver whose last
+  // position has expired shows no path either, and a stale driver's path is
+  // drawn muted so "this is where it went" never looks live when it isn't.
+  const driverTrails = useMemo<DriverMapTrail[]>(() => {
+    const out: DriverMapTrail[] = []
+    for (const [userId, points] of Object.entries(driverTrailPoints)) {
+      if (points.length < 2) continue
+      const loc = driverLocs[userId]
+      if (!loc) continue
+      const age = now - Date.parse(loc.recordedAt)
+      if (age > DRIVER_EXPIRE_MS) continue
+      out.push({
+        id: userId,
+        points: points.map((p) => ({ lat: p.lat, lng: p.lng })),
+        stale: age > DRIVER_STALE_MS,
+      })
+    }
+    return out
+  }, [driverTrailPoints, driverLocs, now])
 
   const markers = useMemo<RouteMarker[]>(
     () =>
@@ -422,6 +478,7 @@ export default function TripRouteMap({
           className="absolute inset-0"
           markers={markers}
           driverMarkers={driverMarkers}
+          driverTrails={driverTrails}
           routePolylines={polylines}
           routeDistanceLabel={ok ? (data?.distanceText ?? null) : null}
           truckOverlay={false}

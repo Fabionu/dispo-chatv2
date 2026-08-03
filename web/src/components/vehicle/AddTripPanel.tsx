@@ -253,14 +253,14 @@ export default function AddTripPanel({ ops, onClose, onCreate, onPickLocation }:
           <button
             onClick={onClose}
             disabled={submitting}
-            className="text-base text-muted hover:text-text border border-white/10 rounded-btn px-3 py-1.5 transition-colors disabled:opacity-60"
+            className="text-base text-muted hover:text-text border border-white/10 rounded-full px-3 py-1.5 transition-colors disabled:opacity-60"
           >
             Cancel
           </button>
           <button
             onClick={() => void submit()}
             disabled={submitting}
-            className="text-base font-semibold bg-text text-bg rounded-btn px-3.5 py-1.5 hover:bg-text/90 transition-colors disabled:opacity-60"
+            className="text-base font-semibold bg-text text-bg rounded-full px-3.5 py-1.5 hover:bg-text/90 transition-colors disabled:opacity-60"
           >
             {submitting ? 'Creating…' : 'Create trip'}
           </button>

@@ -1247,9 +1247,59 @@ button {
   line-height: 1.55;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
 }
+/* Direction the vehicle is facing: a solid arrowhead orbiting the dot.
+
+   This box is centred on the dot and rotated inline by headingDeg (0 = north),
+   which swings the arrowhead — pinned to the box's top edge — around the
+   position. So the untransformed state must point UP, and no `rotate` belongs
+   in this rule. Hidden entirely when the device reported no bearing.
+
+   The head is drawn twice, a white casing under a teal fill, because a single
+   flat triangle disappears over a light basemap or a motorway ribbon. */
+.driver-marker-arrow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  /* Box size IS the orbit radius (the head is pinned to the top edge, so it
+     sits height/2 from the dot). 2.5rem clears the dot and its ring at every
+     bearing — at 2.25rem the head crowded the dot on the diagonals. */
+  width: 2.5rem;
+  height: 2.5rem;
+  /* The rotate() is appended inline; this centring half must match there. */
+  transform: translate(-50%, -50%);
+  transform-origin: 50% 50%;
+  pointer-events: none;
+}
+.driver-marker-arrow::before,
+.driver-marker-arrow::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 0;
+  height: 0;
+  transform: translateX(-50%);
+}
+.driver-marker-arrow::before {
+  top: 0;
+  border-left: 0.4375rem solid transparent;
+  border-right: 0.4375rem solid transparent;
+  border-bottom: 0.5625rem solid #ffffff;
+}
+.driver-marker-arrow::after {
+  top: 0.125rem;
+  border-left: 0.3125rem solid transparent;
+  border-right: 0.3125rem solid transparent;
+  border-bottom: 0.40625rem solid #4fb3a7;
+}
 .driver-marker--stale .driver-marker-dot {
   background: #8a93a6;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+.driver-marker--stale .driver-marker-arrow::before {
+  border-bottom-color: rgba(255, 255, 255, 0.75);
+}
+.driver-marker--stale .driver-marker-arrow::after {
+  border-bottom-color: #8a93a6;
 }
 .driver-marker--stale .driver-marker-name {
   color: #a3a3a3;

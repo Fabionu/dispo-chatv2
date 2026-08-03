@@ -78,7 +78,10 @@ export default function StopForm({
   // chosen "lat, lng" back into the coordinates field; the form stays open.
   function pickOnMap() {
     const locParts = [street, postalCode, city, country].map((v) => v.trim()).filter(Boolean)
-    const query = (locParts.length ? locParts : [company.trim()].filter(Boolean)).join(', ')
+    const addressQuery = (locParts.length ? locParts : [company.trim()].filter(Boolean)).join(', ')
+    // Valid coordinates already typed by the user are more precise than the
+    // address. Pass them in canonical form so the map opens on that exact pin.
+    const query = coordParsed ? `${coordParsed.lat}, ${coordParsed.lng}` : addressQuery
     onPickLocation?.({ query, onConfirm: (coords) => setCoordinates(coords) })
   }
 

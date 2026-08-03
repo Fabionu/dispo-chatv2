@@ -317,6 +317,76 @@ type DriverLocationEntry = {
   recordedAt: string
 }
 
+// ── Breadcrumb trail ─────────────────────────────────────────────────────────
+// `driverLocations` answers "where is the truck now"; this answers "where has it
+// been". Stored beside it under `meta.driverTrails[userId]`, scoped to a trip so
+// a new trip starts a clean path.
+//
+// Points are compact tuples rather than objects — [lat, lng, epochMs, heading?]
+// — because this is the one structure in `meta` that grows all day.
+
+type TrailPoint = [number, number, number, number?]
+type DriverTrail = { tripId: string; points: TrailPoint[] }
+
+/**
+ * Minimum ground distance from the last kept point before a new one is stored.
+ *
+ * Without it a truck parked at a loading dock for three hours would bank ~180
+ * identical points. 25 m is below one minute of movement at any speed that
+ * counts as driving (1.5 km/h), so nothing real is dropped — it only absorbs
+ * GPS jitter and standing still. The client applies the same rule when it
+ * appends live points (web/src/lib/driverLocation.ts — keep the two in step).
+ */
+const TRAIL_MIN_MOVE_M = 25
+
+/** Hard cap. At 1/min with the filter above this is over a day of driving. */
+const TRAIL_MAX_POINTS = 1500
+
+function metersBetween(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const R = 6_371_000
+  const dLat = ((bLat - aLat) * Math.PI) / 180
+  const dLng = ((bLng - aLng) * Math.PI) / 180
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((aLat * Math.PI) / 180) * Math.cos((bLat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)))
+}
+
+/** The stored blob → a trail for THIS trip, or a fresh one. Defensive: `meta` is
+ *  JSONB and nothing downstream should trust its shape. */
+function parseTrail(raw: unknown, tripId: string): DriverTrail {
+  if (typeof raw !== 'object' || raw === null) return { tripId, points: [] }
+  const t = raw as Record<string, unknown>
+  // A trail from a previous trip is not this trip's path — start over.
+  if (t.tripId !== tripId || !Array.isArray(t.points)) return { tripId, points: [] }
+  const points: TrailPoint[] = []
+  for (const p of t.points) {
+    if (!Array.isArray(p) || p.length < 3) continue
+    const [lat, lng, at, heading] = p as unknown[]
+    if (typeof lat !== 'number' || typeof lng !== 'number' || typeof at !== 'number') continue
+    points.push(typeof heading === 'number' ? [lat, lng, at, heading] : [lat, lng, at])
+  }
+  return { tripId, points }
+}
+
+/** Append unless the truck hasn't meaningfully moved, then trim to the cap. */
+function extendTrail(trail: DriverTrail, entry: DriverLocationEntry): DriverTrail {
+  const last = trail.points[trail.points.length - 1]
+  if (last && metersBetween(last[0], last[1], entry.lat, entry.lng) < TRAIL_MIN_MOVE_M) {
+    return trail
+  }
+  const at = Date.parse(entry.recordedAt)
+  const point: TrailPoint =
+    entry.headingDeg !== undefined
+      ? [entry.lat, entry.lng, at, entry.headingDeg]
+      : [entry.lat, entry.lng, at]
+  const points = [...trail.points, point]
+  return {
+    tripId: trail.tripId,
+    points: points.length > TRAIL_MAX_POINTS ? points.slice(-TRAIL_MAX_POINTS) : points,
+  }
+}
+
 driverRouter.post(
   '/location',
   asyncHandler(async (req, res) => {
@@ -359,26 +429,46 @@ driverRouter.post(
       recordedAt,
     }
 
-    // Latest-only upsert of THIS driver's entry: ensure `driverLocations`
-    // exists (preserving other drivers' entries), then set ours — a single
-    // atomic UPDATE, no read-modify-write race between concurrent drivers.
+    // Read THIS driver's trail to extend it. Reading only our own key keeps the
+    // write below safe: the UPDATE jsonb_sets exactly two leaf paths, both
+    // namespaced by userId, so a concurrent driver's ping cannot be clobbered
+    // and neither can the dispatcher's wholesale `meta.ops` saves.
+    const trailRow = await pool.query<{ trail: unknown }>(
+      `select meta->'driverTrails'->$2 as trail from groups where id = $1`,
+      [groupId, userId],
+    )
+    const trail = extendTrail(parseTrail(trailRow.rows[0]?.trail, entry.tripId), entry)
+
+    // Latest position + breadcrumb trail in one atomic UPDATE: ensure both
+    // containers exist (preserving other drivers' entries), then set ours.
     await pool.query(
       `update groups
           set meta = jsonb_set(
-            coalesce(meta, '{}'::jsonb)
-              || jsonb_build_object(
-                   'driverLocations',
-                   coalesce(meta->'driverLocations', '{}'::jsonb)
-                 ),
-            array['driverLocations', $2],
-            $3::jsonb,
+            jsonb_set(
+              coalesce(meta, '{}'::jsonb)
+                || jsonb_build_object(
+                     'driverLocations',
+                     coalesce(meta->'driverLocations', '{}'::jsonb),
+                     'driverTrails',
+                     coalesce(meta->'driverTrails', '{}'::jsonb)
+                   ),
+              array['driverLocations', $2],
+              $3::jsonb,
+              true
+            ),
+            array['driverTrails', $2],
+            $4::jsonb,
             true
           )
         where id = $1`,
-      [groupId, userId, JSON.stringify(entry)],
+      [groupId, userId, JSON.stringify(entry), JSON.stringify(trail)],
     )
 
-    // Live fan-out to the vehicle room's members (and only them).
+    // Live fan-out to the vehicle room's members (and only them). The trail is
+    // NOT sent — every member already receives each position and extends its
+    // own copy with the same rule, so re-sending the whole path each minute
+    // would be pure duplication. The stored trail is what a late joiner seeds
+    // from.
     getIOIfReady()
       ?.to(roomForGroup(groupId))
       .emit('driver:location', { groupId, ...entry })

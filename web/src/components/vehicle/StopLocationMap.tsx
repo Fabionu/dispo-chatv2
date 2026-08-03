@@ -34,7 +34,12 @@ export default function StopLocationMap({ initialQuery, onConfirm, onCancel }: P
   const [query, setQuery] = useState(initialQuery)
   const [items, setItems] = useState<HerePlace[]>([])
   const [loading, setLoading] = useState(false)
-  const [selected, setSelected] = useState<HerePlace | null>(null)
+  // Coordinates entered in Add Trip are already an unambiguous location.
+  // Select them immediately so the map centers the pin there on open.
+  const [selected, setSelected] = useState<HerePlace | null>(() => {
+    const initialCoord = parseLatLng(initialQuery.trim())
+    return initialCoord ? coordPlace(initialCoord) : null
+  })
 
   // Debounced address search. A coordinate pair is parsed locally and never sent
   // to address search; a selected value short-circuits searching.

@@ -7,9 +7,11 @@
 // left here, only aliases.
 import { fieldClass, FIELD_SINGLE } from '../forms/fieldStyles'
 
-// The control box. Inline fields (the country/postal/city row) add their own
-// flex/min-width on top.
-export const FIELD_BASE = fieldClass()
+// The control box without a forced width. Inline fields (the
+// country/postal/city row and the coordinate + map-button row) provide their
+// own fixed width or flex-basis, so `w-full` here would make the compact country
+// field consume the entire row and push the other controls out of view.
+export const FIELD_BASE = fieldClass({ fullWidth: false })
 
 export const INPUT_CLASS = fieldClass()
 
