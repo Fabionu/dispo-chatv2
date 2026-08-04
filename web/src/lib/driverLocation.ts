@@ -18,6 +18,20 @@ export type DriverLocation = {
   speedMps?: number
   /** ISO-8601 capture time (server-validated). */
   recordedAt: string
+  /**
+   * Metres driven so far on this trip by this driver, as computed by the SERVER
+   * from validated fixes. Never re-derive this on the client: a browser only
+   * ever sees the points that arrived while it was watching, so a page opened
+   * mid-trip would report a shorter drive than one left open all day. Absent on
+   * entries stored before tracking existed.
+   */
+  distanceM?: number
+  /**
+   * Which drawn run this position belongs to. A change of segment means a signal
+   * gap preceded this fix, so the live path must start a new line here instead
+   * of joining back to the previous point.
+   */
+  segment?: number
 }
 
 /** Older than this → the marker renders muted/stale ("last known location"). */
@@ -53,6 +67,8 @@ function parseEntry(raw: unknown, tripId: string): DriverLocation | null {
     ...(typeof e.headingDeg === 'number' ? { headingDeg: e.headingDeg } : {}),
     ...(typeof e.speedMps === 'number' ? { speedMps: e.speedMps } : {}),
     recordedAt: e.recordedAt,
+    ...(typeof e.distanceM === 'number' ? { distanceM: e.distanceM } : {}),
+    ...(typeof e.segment === 'number' ? { segment: e.segment } : {}),
   }
 }
 
@@ -91,7 +107,16 @@ export function parseDriverLocationEvent(
 // extends its copy from the same `driver:location` events it already receives,
 // so the live path costs no extra traffic.
 
-export type DriverTrailPoint = { lat: number; lng: number; at: number; headingDeg?: number }
+export type DriverTrailPoint = {
+  lat: number
+  lng: number
+  at: number
+  headingDeg?: number
+  speedMps?: number
+  /** Run this point belongs to. Points sharing a segment may be joined by a
+   *  line; a change of segment marks a stretch with no coverage. */
+  segment?: number
+}
 
 /**
  * Minimum movement before a point joins the trail. MUST match
@@ -126,9 +151,81 @@ function parseTrailEntry(raw: unknown, tripId: string): DriverTrailPoint[] {
     if (!Array.isArray(p) || p.length < 3) continue
     const [lat, lng, at, heading] = p as unknown[]
     if (typeof lat !== 'number' || typeof lng !== 'number' || typeof at !== 'number') continue
+    // No segment id: these tuples predate tracking. trailSegments() infers the
+    // breaks from time and distance instead.
     out.push({ lat, lng, at, ...(typeof heading === 'number' ? { headingDeg: heading } : {}) })
   }
   return out
+}
+
+// ── Recorded history (server-side track) ─────────────────────────────────────
+// The durable record behind GET /api/trips/:tripId/track. Unlike the meta trail
+// above, this survives trip completion and the vehicle starting its next job,
+// and it carries the server's own distance total rather than anything the
+// browser derived from the points it happened to receive.
+
+export type TripTrackDriver = {
+  driverId: string
+  name: string
+  distanceM: number
+  pointCount: number
+  firstAt: string | null
+  lastAt: string | null
+  /** Drawable runs; the boundary between two is a stretch with no coverage. */
+  segments: Array<Array<{ lat: number; lng: number; at: string; speedMps?: number; headingDeg?: number }>>
+  /** Periods with no signal, derived from the run boundaries. */
+  gaps: Array<{ from: string; to: string }>
+  downsampled: boolean
+}
+
+export type TripTrack = {
+  tripId: string
+  groupId: string
+  totals: {
+    distanceM: number
+    pointCount: number
+    firstAt: string | null
+    lastAt: string | null
+    durationMs: number
+  }
+  drivers: TripTrackDriver[]
+}
+
+/** One recorded driver's runs → the flat point list the map state uses. */
+export function trackToTrailPoints(driver: TripTrackDriver): DriverTrailPoint[] {
+  const out: DriverTrailPoint[] = []
+  driver.segments.forEach((segment, index) => {
+    for (const p of segment) {
+      const at = Date.parse(p.at)
+      if (!Number.isFinite(at)) continue
+      out.push({
+        lat: p.lat,
+        lng: p.lng,
+        at,
+        segment: index,
+        ...(p.headingDeg !== undefined ? { headingDeg: p.headingDeg } : {}),
+        ...(p.speedMps !== undefined ? { speedMps: p.speedMps } : {}),
+      })
+    }
+  })
+  return out
+}
+
+/** "142 km" / "840 m" — the driven/planned readouts. */
+export function formatDistance(meters: number): string {
+  if (!Number.isFinite(meters) || meters < 0) return '—'
+  if (meters < 1_000) return `${Math.round(meters)} m`
+  return `${(meters / 1_000).toFixed(meters < 10_000 ? 1 : 0)} km`
+}
+
+/** "4 h 12 min" / "38 min" — trip duration and gap lengths. */
+export function formatDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return '—'
+  const minutes = Math.round(ms / 60_000)
+  if (minutes < 60) return `${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return rest ? `${hours} h ${rest} min` : `${hours} h`
 }
 
 /** The stored `meta.driverTrails` blob → this trip's paths, keyed by driver. */
@@ -149,14 +246,60 @@ export function extendTrail(points: DriverTrailPoint[], loc: DriverLocation): Dr
   const at = Date.parse(loc.recordedAt)
   if (!Number.isFinite(at)) return points
   const last = points[points.length - 1]
-  if (last && metersBetween(last, loc) < TRAIL_MIN_MOVE_M) return points
+  // The server's segment id is authoritative. When it advances, the truck was
+  // out of contact in between, so the point must join the path even if it landed
+  // near the last one — and it must NOT be joined to it by a line.
+  const segment = loc.segment ?? last?.segment ?? 0
+  const continues = !last || segment === (last.segment ?? 0)
+  if (last && continues && metersBetween(last, loc) < TRAIL_MIN_MOVE_M) return points
   // A ping can arrive out of order after a reconnect; keep the path monotonic.
   if (last && at < last.at) return points
   const next = [
     ...points,
-    { lat: loc.lat, lng: loc.lng, at, ...(loc.headingDeg !== undefined ? { headingDeg: loc.headingDeg } : {}) },
+    {
+      lat: loc.lat,
+      lng: loc.lng,
+      at,
+      segment,
+      ...(loc.headingDeg !== undefined ? { headingDeg: loc.headingDeg } : {}),
+      ...(loc.speedMps !== undefined ? { speedMps: loc.speedMps } : {}),
+    },
   ]
   return next.length > TRAIL_MAX_POINTS ? next.slice(-TRAIL_MAX_POINTS) : next
+}
+
+/**
+ * Split a flat point list into drawable runs.
+ *
+ * Points carrying a server segment id are grouped by it. Legacy points from
+ * `meta.driverTrails` (stored before tracking had segments) carry none, so the
+ * gap is inferred from the same time/distance rules the server applies —
+ * otherwise a trail seeded from the old blob would still draw one long line
+ * across every hole in it.
+ */
+export const TRAIL_GAP_MS = 4 * 60_000
+export const TRAIL_GAP_M = 1_500
+
+export function trailSegments(points: DriverTrailPoint[]): DriverTrailPoint[][] {
+  const runs: DriverTrailPoint[][] = []
+  let current: DriverTrailPoint[] = []
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i]
+    const previous = points[i - 1]
+    if (previous) {
+      const broke =
+        p.segment !== undefined && previous.segment !== undefined
+          ? p.segment !== previous.segment
+          : p.at - previous.at > TRAIL_GAP_MS || metersBetween(previous, p) > TRAIL_GAP_M
+      if (broke) {
+        if (current.length) runs.push(current)
+        current = []
+      }
+    }
+    current.push(p)
+  }
+  if (current.length) runs.push(current)
+  return runs
 }
 
 /** "Just now" / "3 min ago" / "2 h ago" — the marker tooltip's age line. */

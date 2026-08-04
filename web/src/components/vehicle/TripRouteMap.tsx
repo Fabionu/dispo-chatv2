@@ -13,11 +13,16 @@ import {
   DRIVER_STALE_MS,
   driverLocationAgo,
   extendTrail,
+  formatDistance,
+  formatDuration,
   parseDriverLocationEvent,
   parseDriverLocations,
   parseDriverTrails,
+  trackToTrailPoints,
+  trailSegments,
   type DriverLocation,
   type DriverTrailPoint,
+  type TripTrack,
 } from '../../lib/driverLocation'
 import type {
   DriverMapMarker,
@@ -86,40 +91,98 @@ function coordSig(stops: VehicleStop[]): string {
     .join('|')
 }
 
-// Match sparse driver pings onto the already-calculated HERE route and fill the
-// road geometry between them. Without this, two minute-spaced GPS points are
-// joined by a straight chord across fields even though the planned route is
-// correctly road-snapped. Points too far from the route are deliberately not
-// forced onto it: the live marker still shows the raw position, while the
-// breadcrumb only claims road-matched history we can support.
-function roadMatchedTrail(points: DriverTrailPoint[], routePath: LatLng[]): LatLng[] {
-  if (routePath.length < 2) return points.map((p) => ({ lat: p.lat, lng: p.lng }))
+/** A ping further than this from the planned route is a genuine detour, not a
+ *  sampling artefact, and must not be dragged onto a road it never used. */
+const ROUTE_MATCH_MAX_M = 180
+
+/** Two consecutive pings that cannot be road-matched may still be joined
+ *  directly while they are this close — over a short hop a straight line is
+ *  honest. Beyond it we have no idea which way the truck went, so the line
+ *  breaks instead of cutting across country. */
+const DIRECT_JOIN_MAX_M = 400
+
+// Turn one continuous run of driver pings into drawable geometry.
+//
+// Three cases per consecutive pair, in order of how much we know:
+//   1. both ends match the planned route and the second is further along it →
+//      emit the ROAD geometry between them, so minute-spaced pings follow the
+//      carriageway instead of chording across its bends;
+//   2. no usable match (a detour, a service area, a road the plan never used)
+//      but the two pings are close together → join them directly; over a few
+//      hundred metres a straight line claims nothing untrue;
+//   3. anything else → break. This is the case that matters: it is where the
+//      old code drew a diagonal across fields, and where the honest answer is
+//      to draw nothing at all.
+function roadMatchedRun(points: DriverTrailPoint[], routePath: LatLng[]): LatLng[][] {
+  if (points.length < 2) return []
 
   const cumulative = new Array<number>(routePath.length)
-  cumulative[0] = 0
-  for (let i = 1; i < routePath.length; i++) {
-    cumulative[i] = cumulative[i - 1] + haversineMeters(routePath[i - 1], routePath[i])
-  }
-
-  const matches = points
-    .map((point) => nearestPointOnPath(point, routePath, cumulative))
-    .filter((match): match is NonNullable<typeof match> => Boolean(match && match.meters <= 180))
-  if (matches.length < 2) return []
-
-  const out: LatLng[] = [matches[0].at]
-  let previousAlong = matches[0].along
-  for (let m = 1; m < matches.length; m++) {
-    const match = matches[m]
-    // Ignore a noisy fix that appears materially behind the last matched ping.
-    if (match.along + 50 < previousAlong) continue
+  if (routePath.length >= 2) {
+    cumulative[0] = 0
     for (let i = 1; i < routePath.length; i++) {
-      if (cumulative[i] > previousAlong && cumulative[i] < match.along) out.push(routePath[i])
+      cumulative[i] = cumulative[i - 1] + haversineMeters(routePath[i - 1], routePath[i])
     }
-    const last = out[out.length - 1]
-    if (!last || haversineMeters(last, match.at) >= 1) out.push(match.at)
-    previousAlong = Math.max(previousAlong, match.along)
   }
-  return out
+
+  const matched = points.map((point) => {
+    if (routePath.length < 2) return null
+    const match = nearestPointOnPath(point, routePath, cumulative)
+    return match && match.meters <= ROUTE_MATCH_MAX_M ? match : null
+  })
+
+  const runs: LatLng[][] = []
+  let current: LatLng[] = [positionOf(points[0], matched[0])]
+
+  for (let i = 1; i < points.length; i++) {
+    const previousMatch = matched[i - 1]
+    const match = matched[i]
+
+    // Case 1 — both on the planned route, and moving forward along it.
+    if (previousMatch && match && match.along >= previousMatch.along - 50) {
+      for (let v = 1; v < routePath.length; v++) {
+        if (cumulative[v] > previousMatch.along && cumulative[v] < match.along) {
+          current.push(routePath[v])
+        }
+      }
+      pushDistinct(current, match.at)
+      continue
+    }
+
+    // Case 2 — a short hop we can join directly.
+    if (haversineMeters(points[i - 1], points[i]) <= DIRECT_JOIN_MAX_M) {
+      pushDistinct(current, positionOf(points[i], match))
+      continue
+    }
+
+    // Case 3 — the truck went somewhere we cannot account for. End the line.
+    if (current.length >= 2) runs.push(current)
+    current = [positionOf(points[i], match)]
+  }
+
+  if (current.length >= 2) runs.push(current)
+  return runs
+}
+
+/** The drawn position of a ping: its road-matched point when it has one, its
+ *  raw coordinate otherwise. */
+function positionOf(
+  point: DriverTrailPoint,
+  match: { at: LatLng } | null,
+): LatLng {
+  return match ? match.at : { lat: point.lat, lng: point.lng }
+}
+
+function pushDistinct(path: LatLng[], point: LatLng) {
+  const last = path[path.length - 1]
+  if (!last || haversineMeters(last, point) >= 1) path.push(point)
+}
+
+/** Every recorded run of one driver → the polylines to draw for them. The
+ *  server's own segmentation is honoured first (each run is already a stretch
+ *  with continuous coverage), then each run is matched and may break further
+ *  where the geometry cannot support a line. */
+function roadMatchedTrail(points: DriverTrailPoint[], routePath: LatLng[]): LatLng[][] {
+  return trailSegments(points).flatMap((run) => roadMatchedRun(run, routePath))
 }
 
 // A fresh intermediate stop created by dropping a point on the map. Carries only
@@ -258,6 +321,42 @@ export default function TripRouteMap({
   const [driverTrailPoints, setDriverTrailPoints] = useState<Record<string, DriverTrailPoint[]>>(
     () => (tripId ? parseDriverTrails(driverTrailsSeed, tripId) : {}),
   )
+  // The durable history. The meta seeds above render instantly (no request) but
+  // are capped and reset by the next trip; this is the authoritative record and
+  // replaces them as soon as it arrives. It is also what makes a COMPLETED trip
+  // viewable at all — its meta trail is long gone by then.
+  const [track, setTrack] = useState<TripTrack | null>(null)
+  useEffect(() => {
+    if (!tripId) return
+    let cancelled = false
+    api.trips
+      .track(tripId)
+      .then((result) => {
+        if (cancelled) return
+        setTrack(result)
+        // Adopt the recorded path wholesale: it carries the server's segments,
+        // so the drawn line breaks exactly where coverage did.
+        const recorded: Record<string, DriverTrailPoint[]> = {}
+        for (const driver of result.drivers) {
+          const points = trackToTrailPoints(driver)
+          if (points.length) recorded[driver.driverId] = points
+        }
+        if (Object.keys(recorded).length) setDriverTrailPoints(recorded)
+      })
+      .catch(() => {
+        // A trip that never recorded a point 404s — normal for a freshly planned
+        // trip. Keep whatever the meta seed gave us and say nothing.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [tripId])
+
+  // Distance is SERVER-computed and arrives on each ping. The browser must not
+  // derive it from the points it happens to hold: a dispatcher opening the room
+  // at noon would otherwise see a shorter drive than one who left it open.
+  const [liveDistanceM, setLiveDistanceM] = useState<Record<string, number>>({})
+
   useEffect(() => {
     if (!groupId || !tripId) return
     const socket = getSocket()
@@ -265,6 +364,13 @@ export default function TripRouteMap({
       const entry = parseDriverLocationEvent(payload, groupId, tripId)
       if (!entry) return
       setDriverLocs((cur) => ({ ...cur, [entry.userId]: entry }))
+      if (entry.distanceM !== undefined) {
+        setLiveDistanceM((cur) =>
+          cur[entry.userId] === entry.distanceM
+            ? cur
+            : { ...cur, [entry.userId]: entry.distanceM as number },
+        )
+      }
       setDriverTrailPoints((cur) => {
         const points = cur[entry.userId] ?? []
         const next = extendTrail(points, entry)
@@ -317,19 +423,79 @@ export default function TripRouteMap({
     for (const [userId, points] of Object.entries(driverTrailPoints)) {
       if (points.length < 2) continue
       const loc = driverLocs[userId]
-      if (!loc) continue
-      const age = now - Date.parse(loc.recordedAt)
-      if (age > DRIVER_EXPIRE_MS) continue
-      const matched = roadMatchedTrail(points, routePath)
-      if (matched.length < 2) continue
+      // A driver with no live position may still have a recorded path — that is
+      // exactly the completed-trip case, where history must stay visible long
+      // after the last ping expired.
+      const age = loc ? now - Date.parse(loc.recordedAt) : Number.POSITIVE_INFINITY
+      const recorded = track?.drivers.some((d) => d.driverId === userId)
+      if (!recorded && age > DRIVER_EXPIRE_MS) continue
+      const segments = roadMatchedTrail(points, routePath)
+      if (!segments.length) continue
       out.push({
         id: userId,
-        points: matched,
+        segments,
         stale: age > DRIVER_STALE_MS,
       })
     }
     return out
-  }, [driverTrailPoints, driverLocs, now, routePath])
+  }, [driverTrailPoints, driverLocs, now, routePath, track])
+
+  // ── Distance, progress and timing ─────────────────────────────────────────
+  // Driven kilometres come from the server (the recorded total, then whatever
+  // later pings reported), never from measuring the drawn line — a downsampled
+  // or partially-loaded path would under-report. Planned kilometres come from
+  // the freshly computed route.
+  const drivenM = useMemo(() => {
+    const perDriver = new Map<string, number>()
+    for (const driver of track?.drivers ?? []) perDriver.set(driver.driverId, driver.distanceM)
+    // A live ping supersedes the snapshot for that driver — it is the same
+    // running total, just newer.
+    for (const [userId, meters] of Object.entries(liveDistanceM)) {
+      perDriver.set(userId, Math.max(meters, perDriver.get(userId) ?? 0))
+    }
+    let total = 0
+    for (const meters of perDriver.values()) total += meters
+    return total
+  }, [track, liveDistanceM])
+
+  const plannedM = useMemo(() => {
+    if (routePath.length < 2) return 0
+    let total = 0
+    for (let i = 1; i < routePath.length; i++) total += haversineMeters(routePath[i - 1], routePath[i])
+    return total
+  }, [routePath])
+
+  // The freshest driver, which drives the "last update / speed / heading" line.
+  const latestDriver = useMemo(() => {
+    let best: DriverLocation | null = null
+    for (const loc of Object.values(driverLocs)) {
+      if (!best || Date.parse(loc.recordedAt) > Date.parse(best.recordedAt)) best = loc
+    }
+    return best
+  }, [driverLocs])
+
+  // Recording window: how long the trip has been tracked. Open-ended while the
+  // truck is still pinging, so it keeps counting rather than freezing at the
+  // last stored point.
+  const trackedMs = useMemo(() => {
+    const first = track?.totals.firstAt ? Date.parse(track.totals.firstAt) : null
+    if (!first) return 0
+    const lastRecorded = track?.totals.lastAt ? Date.parse(track.totals.lastAt) : first
+    const lastLive = latestDriver ? Date.parse(latestDriver.recordedAt) : 0
+    return Math.max(lastRecorded, lastLive) - first
+  }, [track, latestDriver])
+
+  const gaps = useMemo(
+    () => (track?.drivers ?? []).flatMap((d) => d.gaps),
+    [track],
+  )
+
+  // Only meaningful once BOTH numbers exist; a planned route of zero would make
+  // any driven distance read as 100%.
+  const progressPct =
+    plannedM > 0 && drivenM > 0 ? Math.min(100, Math.round((drivenM / plannedM) * 100)) : null
+
+  const hasHistory = drivenM > 0 || driverTrails.length > 0
 
   const markers = useMemo<RouteMarker[]>(
     () =>
@@ -554,7 +720,7 @@ export default function TripRouteMap({
 
         {/* Compact route summary overlay — distance + driving time, or a quiet
             calculating state. Gains a subtle "Editing" tag while in edit mode. */}
-        <div className="absolute top-2 left-2 rounded-full bg-bg/80 backdrop-blur-sm border border-white/8 px-3 py-1.5 text-sm flex items-center gap-2 shadow-raised">
+        <div className="absolute top-2 left-2 rounded-full bg-bg/95 backdrop-blur-md border border-white/16 px-3 py-1.5 text-sm flex items-center gap-2 shadow-raised">
           {editing && (
             <span className="flex items-center gap-1.5 text-active font-medium">
               <span className="h-1.5 w-1.5 rounded-full bg-active" />
@@ -574,6 +740,91 @@ export default function TripRouteMap({
             <span className="text-muted">Route unavailable — showing stops only.</span>
           )}
         </div>
+
+        {/* Legend + the trip's real numbers. Bottom-left, and only outside edit
+            mode — the edit helper owns that corner while editing. The legend is
+            what makes the two lines readable at all, so it stays visible
+            whenever a driven path is on the map. */}
+        {hasHistory && !editing && (
+          // Near-opaque on purpose. This floats over map tiles whose brightness
+          // is not ours to control — a light basemap, snow, a motorway, satellite
+          // imagery — and at 85% those tiles bleed through and wash the text out.
+          // A readout of the trip's actual numbers has to stay readable over
+          // anything the map happens to draw underneath it.
+          <div className="absolute z-20 bottom-2 left-2 max-w-[calc(100%-1rem)] rounded-card bg-bg/95 backdrop-blur-md border border-white/16 px-3 py-2 text-xs text-text shadow-raised">
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1.5">
+                <span className="block h-[5px] w-5 rounded-full bg-[#c89572] ring-1 ring-black/35" />
+                Planned
+              </span>
+              <span className="flex items-center gap-1.5">
+                {/* Both swatches keep the map's literal colours — they exist to
+                    identify the two lines, so they must not be re-toned per
+                    theme the way the readout below is. The ring is what keeps
+                    them visible on a light panel. */}
+                <span
+                  className="block h-[5px] w-5 rounded-full ring-1 ring-black/35"
+                  style={{
+                    background:
+                      'repeating-linear-gradient(90deg, #00b8a9 0 7px, transparent 7px 11px)',
+                  }}
+                />
+                Driven
+              </span>
+            </div>
+
+            {/* Driven vs planned, side by side — the comparison is the point, so
+                neither number is shown without the other. */}
+            <div className="mt-1.5 pt-1.5 border-t border-white/16 flex items-center gap-1.5 tabular-nums">
+              {/* The two figures are the panel's reason to exist, so they carry
+                  the weight; their units and labels stay quiet beside them. */}
+              <span className="text-driven font-semibold text-sm">{formatDistance(drivenM)}</span>
+              <span className="text-muted">driven</span>
+              {plannedM > 0 && (
+                <>
+                  <span className="text-muted">/</span>
+                  <span className="text-text font-semibold text-sm">{formatDistance(plannedM)}</span>
+                  <span className="text-muted">planned</span>
+                </>
+              )}
+              {progressPct !== null && (
+                <span className="text-muted">· ~{progressPct}%</span>
+              )}
+            </div>
+
+            {trackedMs > 0 && (
+              <div className="mt-0.5 text-muted tabular-nums">
+                Tracked for {formatDuration(trackedMs)}
+                {track?.totals.pointCount ? ` · ${track.totals.pointCount} fixes` : ''}
+              </div>
+            )}
+
+            {/* The live line: how fresh, how fast, which way. */}
+            {latestDriver && (
+              <div className="mt-0.5 text-muted tabular-nums">
+                {driverLocationAgo(latestDriver.recordedAt, now)}
+                {latestDriver.speedMps !== undefined &&
+                  ` · ${Math.round(latestDriver.speedMps * 3.6)} km/h`}
+                {latestDriver.headingDeg !== undefined &&
+                  ` · ${compassPoint(latestDriver.headingDeg)}`}
+              </div>
+            )}
+
+            {/* Named explicitly, because a break in the teal line otherwise looks
+                like the truck stopped rather than the signal did. */}
+            {gaps.length > 0 && (
+              <div className="mt-0.5 text-muted">
+                {gaps.length} {gaps.length === 1 ? 'period' : 'periods'} without signal
+              </div>
+            )}
+
+            {track && track.drivers.length > 1 && (
+              <div className="mt-0.5 text-muted">
+                {track.drivers.map((d) => d.name).join(' · ')}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Edit route — compact pill matching the map's overlay chrome. */}
         {showEditButton && (

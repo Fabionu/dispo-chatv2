@@ -86,8 +86,8 @@ type Props = {
   // (and never replacing) the waypoint markers. Deliberately EXCLUDED from the
   // auto-fit, so a position update never re-centers the user's view.
   driverMarkers?: DriverMapMarker[]
-  // The path each driver has actually driven this trip, drawn beneath the
-  // planned route. Excluded from the auto-fit for the same reason as the
+  // The path each driver has actually driven this trip, drawn as a contrasting
+  // dashed overlay above the planned route. Excluded from auto-fit because the
   // markers above — the trail grows every minute and must not pan the map.
   driverTrails?: DriverMapTrail[]
   // Shared workspace places. Static/cached and excluded from route auto-fit so
@@ -226,10 +226,13 @@ export default function HereMap({
   // marker, so retain the small set of icons across draw() calls rather than
   // rebuilding and reparsing identical SVGs each time.
   const markerIconCacheRef = useRef<Map<string, any>>(new Map())
-  // A single group holding every marker + line, so a redraw is "clear group,
-  // add fresh objects" rather than tracking individual handles.
+  // Three stacked groups rather than one, because the paint order carries
+  // meaning (see the addObject calls in init): planned route at the bottom, the
+  // driven path over it, and every marker on top of both. A redraw is "clear the
+  // group, add fresh objects" rather than tracking individual handles.
   const groupRef = useRef<any>(null)
   const trailGroupRef = useRef<any>(null)
+  const markerGroupRef = useRef<any>(null)
   // The standard basemap + the logistics (HGV) basemap, captured at init so the
   // overlay toggle can swap between them without rebuilding the map.
   const baseLayerRef = useRef<any>(null)
@@ -321,20 +324,27 @@ export default function HereMap({
         ui.removeControl('mapsettings')
         ui.removeControl('zoom')
 
-        // Driver trails live in their OWN group, added before the route group so
-        // the travelled path draws underneath the planned one. It also has its
-        // own lifecycle: a trail grows every minute, and redrawing it must not
-        // drag the whole route/marker rebuild along with it.
-        const trailGroup = new H.map.Group()
-        map.addObject(trailGroup)
-
+        // Paint order, bottom to top. HERE draws groups in the order they were
+        // added, so this IS the layering:
+        //   1. the planned route — the intent, the widest line, the base layer;
+        //   2. the driven path over it, so the teal dashes stay visible where the
+        //      truck followed the plan (they'd be buried underneath otherwise);
+        //   3. every marker above both, so a day's worth of breadcrumbs can never
+        //      hide the stop it was driving to.
+        // The live driver puck and the direction chevrons sit higher still — they
+        // are DOM overlays on the container, above the whole canvas.
         const group = new H.map.Group()
         map.addObject(group)
+        const trailGroup = new H.map.Group()
+        map.addObject(trailGroup)
+        const markerGroup = new H.map.Group()
+        map.addObject(markerGroup)
 
         HRef.current = H
         mapRef.current = map
         groupRef.current = group
         trailGroupRef.current = trailGroup
+        markerGroupRef.current = markerGroup
 
         mapStyleControlRef.current = createHereMapStyleControl({
           container: controlsHostRef.current,
@@ -780,6 +790,7 @@ export default function HereMap({
         mapRef.current = null
         groupRef.current = null
         trailGroupRef.current = null
+        markerGroupRef.current = null
         // Chevrons are container children, not map objects — disposing the map
         // does not take them with it.
         for (const el of trailChevronsRef.current) el.remove()
@@ -913,32 +924,38 @@ export default function HereMap({
     if (!ready || !H || !group) return
     group.removeAll()
     for (const trail of driverTrails ?? []) {
-      if (trail.points.length < 2) continue
-      const line = new H.geo.LineString()
-      for (const p of trail.points) line.pushPoint(p)
-      // Casing keeps the trail legible over the basemap; the trail itself is the
-      // driver's teal, dashed so it never reads as a second planned route.
-      group.addObject(
-        new H.map.Polyline(line, {
-          style: {
-            lineWidth: 6,
-            strokeColor: 'rgba(0,0,0,0.30)',
-            lineJoin: 'round',
-            lineCap: 'round',
-          },
-        }),
-      )
-      group.addObject(
-        new H.map.Polyline(line, {
-          style: {
-            lineWidth: 3,
-            strokeColor: trail.stale ? 'rgba(138,147,166,0.75)' : 'rgba(79,179,167,0.95)',
-            lineJoin: 'round',
-            lineCap: 'round',
-            lineDash: [4, 3],
-          },
-        }),
-      )
+      // One polyline PER RUN. Concatenating them would draw a straight line
+      // across every stretch where the signal was lost — the exact false claim
+      // the segmentation exists to prevent.
+      for (const segment of trail.segments) {
+        if (segment.length < 2) continue
+        const line = new H.geo.LineString()
+        for (const p of segment) line.pushPoint(p)
+        // Both strokes are dashed. The pale casing separates the travelled path
+        // from the wider brown planned route; gaps still expose that route below.
+        group.addObject(
+          new H.map.Polyline(line, {
+            style: {
+              lineWidth: 7,
+              strokeColor: trail.stale ? 'rgba(255,255,255,0.62)' : 'rgba(255,255,255,0.92)',
+              lineJoin: 'round',
+              lineCap: 'round',
+              lineDash: [12, 8],
+            },
+          }),
+        )
+        group.addObject(
+          new H.map.Polyline(line, {
+            style: {
+              lineWidth: 4.5,
+              strokeColor: trail.stale ? 'rgba(13,148,136,0.72)' : 'rgba(0,184,169,1)',
+              lineJoin: 'round',
+              lineCap: 'round',
+              lineDash: [12, 8],
+            },
+          }),
+        )
+      }
     }
     return () => {
       // The group can outlive this effect (the map disposes separately), so
@@ -970,16 +987,23 @@ export default function HereMap({
     type Candidate = { at: LatLng; bearing: number; stale: boolean }
     const candidates: Candidate[] = []
     for (const trail of driverTrails ?? []) {
-      // A day-long trail can hold 1500 points; projecting every segment on every
-      // pan frame would cost more than it shows. Sample down — far more
-      // candidates than can ever be placed is already plenty of choice.
-      const step = Math.max(1, Math.ceil((trail.points.length - 1) / MAX_TRAIL_CANDIDATES))
-      for (let i = step; i < trail.points.length; i += step) {
-        const from = trail.points[i - step]
-        const to = trail.points[i]
-        // A stationary pair has no direction to point in.
-        if (from.lat === to.lat && from.lng === to.lng) continue
-        candidates.push({ at: to, bearing: bearingBetween(from, to), stale: trail.stale })
+      // Per run, so a chevron never straddles a gap and claims a direction of
+      // travel through a stretch that was never observed.
+      const total = trail.segments.reduce((sum, s) => sum + s.length, 0)
+      for (const segment of trail.segments) {
+        // A day-long trail can hold 1500 points; projecting every segment on
+        // every pan frame would cost more than it shows. Sample down — far more
+        // candidates than can ever be placed is already plenty of choice. The
+        // budget is shared across runs in proportion to their length.
+        const budget = Math.max(2, Math.round((segment.length / Math.max(1, total)) * MAX_TRAIL_CANDIDATES))
+        const step = Math.max(1, Math.ceil((segment.length - 1) / budget))
+        for (let i = step; i < segment.length; i += step) {
+          const from = segment[i - step]
+          const to = segment[i]
+          // A stationary pair has no direction to point in.
+          if (from.lat === to.lat && from.lng === to.lng) continue
+          candidates.push({ at: to, bearing: bearingBetween(from, to), stale: trail.stale })
+        }
       }
     }
 
@@ -1115,9 +1139,11 @@ export default function HereMap({
     const H = HRef.current
     const map = mapRef.current
     const group = groupRef.current
-    if (!H || !map || !group) return
+    const markerGroup = markerGroupRef.current
+    if (!H || !map || !group || !markerGroup) return
 
     group.removeAll()
+    markerGroup.removeAll()
     draggableObjectsRef.current = []
     routeDragTargetsRef.current = []
     routeDecorationsRef.current = []
@@ -1155,10 +1181,10 @@ export default function HereMap({
       const line = new H.geo.LineString()
       for (const point of sectionPath) line.pushPoint(point)
       const casing = new H.map.Polyline(line, {
-        style: { lineWidth: 5, strokeColor: 'rgba(0,0,0,0.35)', lineJoin: 'round', lineCap: 'round' },
+        style: { lineWidth: 10, strokeColor: 'rgba(0,0,0,0.38)', lineJoin: 'round', lineCap: 'round' },
       })
       const main = new H.map.Polyline(line, {
-        style: { lineWidth: 3.5, strokeColor: ROUTE_COLOR, lineJoin: 'round', lineCap: 'round' },
+        style: { lineWidth: 7, strokeColor: ROUTE_COLOR, lineJoin: 'round', lineCap: 'round' },
       })
       casing.setVisibility?.(!viewChangingRef.current)
       group.addObject(casing)
@@ -1231,8 +1257,9 @@ export default function HereMap({
       m.setData({ id: marker.id, kind: marker.kind })
       // No hover cursor change — markers keep the default arrow cursor; they are
       // still draggable (the .here-map-surface CSS keeps the cursor as default,
-      // never grab/pointer).
-      group.addObject(m)
+      // never grab/pointer). Into the TOP group so a long breadcrumb trail can
+      // never bury the stop it leads to.
+      markerGroup.addObject(m)
       if (objectsDraggable) draggableObjectsRef.current.push(m)
       allPoints.push(marker.position)
     }
@@ -1252,7 +1279,7 @@ export default function HereMap({
       )
       marker.draggable = false
       marker.setData({ placeId: place.id })
-      group.addObject(marker)
+      markerGroup.addObject(marker)
     }
 
     // Distance badge — a small Google-Maps-style pill near the route midpoint.
@@ -1269,7 +1296,7 @@ export default function HereMap({
         pill.textContent = routeDistanceLabel
         outer.appendChild(pill)
         const badge = new H.map.DomMarker(mid, { icon: new H.map.DomIcon(outer) })
-        group.addObject(badge)
+        markerGroup.addObject(badge)
       }
     }
 

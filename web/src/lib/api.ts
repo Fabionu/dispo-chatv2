@@ -21,6 +21,7 @@ import type {
 } from './types'
 import type { HerePlace, LatLng, RouteWaypoint, ScreenGeoCandidate, TruckProfile, TruckRoute } from './here/types'
 import type { VehicleOps } from './vehicleOps'
+import type { TripTrack } from './driverLocation'
 
 // Editable subsets sent to PATCH endpoints (all fields optional).
 // NOTE: identity fields locked after creation (display name, email, company
@@ -345,6 +346,53 @@ export const api = {
 
   workspace: {
     members: () => request<{ members: WorkspaceMember[] }>('/workspace/members'),
+  },
+
+  // Recorded GPS history for a vehicle room's trips. Gated server-side on
+  // membership of the room that owns the trip — so unlike /driver/*, a
+  // dispatcher who never drove it can read it, and it stays readable after the
+  // trip completes and the vehicle takes its next job.
+  trips: {
+    /** The recorded path, split into runs with the no-signal gaps named.
+     *  `max` caps how many points come back (downsampled per run, never across
+     *  a gap) — the default is already browser-safe for a multi-day trip. */
+    track: (tripId: string, options?: { max?: number; driverId?: string }) => {
+      const query = new URLSearchParams()
+      if (options?.max) query.set('max', String(options.max))
+      if (options?.driverId) query.set('driverId', options.driverId)
+      const suffix = query.size ? `?${query}` : ''
+      return request<TripTrack>(`/trips/${encodeURIComponent(tripId)}/track${suffix}`)
+    },
+    /** Just the numbers — distance, window, who drove. */
+    summary: (tripId: string) =>
+      request<{
+        tripId: string
+        groupId: string
+        distanceM: number
+        pointCount: number
+        firstAt: string | null
+        lastAt: string | null
+        durationMs: number
+        drivers: Array<{
+          driverId: string
+          name: string
+          distanceM: number
+          firstAt: string | null
+          lastAt: string | null
+        }>
+      }>(`/trips/${encodeURIComponent(tripId)}/summary`),
+    /** Every trip this room has recorded a path for, newest first. */
+    list: (groupId: string, limit?: number) =>
+      request<{
+        trips: Array<{
+          tripId: string
+          distanceM: number
+          pointCount: number
+          firstAt: string | null
+          lastAt: string | null
+          driverIds: string[]
+        }>
+      }>(`/trips?groupId=${encodeURIComponent(groupId)}${limit ? `&limit=${limit}` : ''}`),
   },
 
   places: {

@@ -3,7 +3,7 @@ import { createReadStream } from 'node:fs'
 import { unlink } from 'node:fs/promises'
 import { Router } from 'express'
 import { z } from 'zod'
-import { pool } from '../db/pool.js'
+import { pool, type DbClient } from '../db/pool.js'
 import { requireAuth } from '../auth.js'
 import { asyncHandler, withTransaction, HttpError } from '../http.js'
 import { getIOIfReady, roomForGroup } from '../realtime.js'
@@ -14,7 +14,20 @@ import {
   uploadAttachment,
 } from '../middleware/upload.js'
 import { deleteFile, saveStream } from '../storage.js'
-import { opsSchema } from './groups/ops.js'
+import {
+  assertAssignedTrip,
+  assignedDriverIds,
+  isActiveStatus,
+  parseOps,
+  type Ops,
+  type Trip,
+} from './driverAuthz.js'
+import {
+  evaluateFix,
+  metersBetween,
+  type TrackCursor,
+  type TrackDecision,
+} from '../util/tripTrack.js'
 
 // ── Driver-facing trip API ────────────────────────────────────────────────
 // Read-only-ish surface the FUTURE mobile driver app calls to fetch and progress
@@ -31,29 +44,10 @@ import { opsSchema } from './groups/ops.js'
 //
 // The trip lives inside `groups.meta.ops` (see server/src/routes/groups/ops.ts),
 // so we reuse `opsSchema` to parse + normalise the stored blob into a typed shape.
+// The permission boundary itself (assertAssignedTrip and friends) lives in
+// ./driverAuthz.ts so it can be tested without a database.
 export const driverRouter = Router()
 driverRouter.use(requireAuth)
-
-type Ops = z.infer<typeof opsSchema>
-type Trip = NonNullable<Ops['trip']>
-
-function assignedDriverIds(ops: Ops, trip: Trip): string[] {
-  return ops.vehicle.assignedDriverIds ?? trip.assignedDriverIds ?? []
-}
-
-// A trip is drivable ("active") for the mobile list unless it's finished. A
-// missing status means a freshly-planned trip, which is active.
-function isActiveStatus(status: Trip['status']): boolean {
-  return status !== 'completed' && status !== 'cancelled'
-}
-
-// Parse the stored ops blob for a group. Returns null when the group has never
-// stored ops or the blob doesn't validate (the driver API then treats it as
-// "no trip" rather than erroring the whole request).
-function parseOps(meta: Record<string, unknown> | null): Ops | null {
-  const parsed = opsSchema.safeParse(meta?.ops ?? {})
-  return parsed.success ? parsed.data : null
-}
 
 // Resolve assigned-driver ids → display names in one query, for the payload's
 // `assignedDrivers`. Order-independent (callers map back by id).
@@ -153,23 +147,6 @@ function buildDriverTrip(
           }
         : null,
   }
-}
-
-// Apply the full permission boundary to a fetched room row: parse its ops, assert
-// there's a trip and the caller is one of its assigned drivers. Throws 404 when
-// there's no trip (never reveal a room the caller can't see) and 403 when the
-// caller is a member but not the assigned driver. Shared by the reads and the
-// locking write so the rule lives in exactly one place.
-function assertAssignedTrip(
-  userId: string,
-  row: { id: string; meta: Record<string, unknown> | null } | undefined,
-): { groupId: string; ops: Ops; trip: Trip } {
-  if (!row) throw new HttpError(404, 'trip_not_found')
-  const ops = parseOps(row.meta)
-  if (!ops?.trip) throw new HttpError(404, 'trip_not_found')
-  const trip = ops.trip
-  if (!assignedDriverIds(ops, trip).includes(userId)) throw new HttpError(403, 'forbidden')
-  return { groupId: row.id, ops, trip }
 }
 
 // The SQL that finds a room the caller belongs to by trip id OR room id. The
@@ -342,15 +319,8 @@ const TRAIL_MIN_MOVE_M = 25
 /** Hard cap. At 1/min with the filter above this is over a day of driving. */
 const TRAIL_MAX_POINTS = 1500
 
-function metersBetween(aLat: number, aLng: number, bLat: number, bLng: number): number {
-  const R = 6_371_000
-  const dLat = ((bLat - aLat) * Math.PI) / 180
-  const dLng = ((bLng - aLng) * Math.PI) / 180
-  const s =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((aLat * Math.PI) / 180) * Math.cos((bLat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2
-  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)))
-}
+// Ground distance comes from the shared ingest rules, so the legacy meta trail
+// and the durable history measure movement identically.
 
 /** The stored blob → a trail for THIS trip, or a fresh one. Defensive: `meta` is
  *  JSONB and nothing downstream should trust its shape. */
@@ -367,6 +337,174 @@ function parseTrail(raw: unknown, tripId: string): DriverTrail {
     points.push(typeof heading === 'number' ? [lat, lng, at, heading] : [lat, lng, at])
   }
   return { tripId, points }
+}
+
+// ── Durable history ingest ───────────────────────────────────────────────────
+// The trail above is the LIVE convenience copy: capped, room-scoped, and reset
+// by the next trip. This is the permanent record — one validated row per fix in
+// `trip_track_points`, plus an incrementally maintained rollup in `trip_tracks`
+// so "kilometres driven" is a single-row read.
+//
+// Idempotency has two independent guards, because a driver's phone retries on
+// every flaky-network ping:
+//   1. the validator refuses anything not strictly newer than the stored cursor,
+//      so a replay adds no distance to the rollup, and
+//   2. the unique index (trip_id, driver_id, recorded_at) refuses the row itself.
+// Both run inside one transaction that locks the rollup row, so two pings racing
+// from the same phone cannot interleave and count the same metres twice.
+
+type TrackTotals = { distanceM: number; pointCount: number; segment: number; gap: boolean }
+
+async function ingestTrackPoint(
+  client: DbClient,
+  params: {
+    groupId: string
+    tripId: string
+    driverId: string
+    lat: number
+    lng: number
+    recordedAtMs: number
+    accuracyM?: number
+    headingDeg?: number
+    speedMps?: number
+  },
+): Promise<{ decision: TrackDecision; totals: TrackTotals }> {
+  const { rows } = await client.query<{
+    last_lat: number | null
+    last_lng: number | null
+    last_recorded_at: Date | null
+    last_seen_at: Date | null
+    segment: number
+    distance_m: string | number
+    point_count: number
+  }>(
+    `select last_lat, last_lng, last_recorded_at, last_seen_at, segment, distance_m, point_count
+       from trip_tracks
+      where trip_id = $1 and driver_id = $2
+        for update`,
+    [params.tripId, params.driverId],
+  )
+
+  const existing = rows[0]
+  const cursor: TrackCursor =
+    existing && existing.last_lat !== null && existing.last_lng !== null && existing.last_recorded_at
+      ? {
+          lat: existing.last_lat,
+          lng: existing.last_lng,
+          recordedAtMs: existing.last_recorded_at.getTime(),
+          segment: existing.segment,
+          lastSeenAtMs: (existing.last_seen_at ?? existing.last_recorded_at).getTime(),
+        }
+      : null
+
+  const bankedDistance = existing ? Number(existing.distance_m) : 0
+  const bankedCount = existing ? existing.point_count : 0
+  const decision = evaluateFix(cursor, {
+    lat: params.lat,
+    lng: params.lng,
+    recordedAtMs: params.recordedAtMs,
+    ...(params.accuracyM !== undefined ? { accuracyM: params.accuracyM } : {}),
+  })
+
+  if (!decision.accept) {
+    // A stationary fix is still the phone reporting in. Record that we heard
+    // from it — without moving the distance anchor or storing a point — so the
+    // silence that defines a signal gap is measured correctly. Without this a
+    // truck parked at a dock accrues invented "no signal" periods.
+    if (decision.reason === 'stationary' && existing) {
+      await client.query(
+        `update trip_tracks set last_seen_at = $3, updated_at = now()
+          where trip_id = $1 and driver_id = $2`,
+        [params.tripId, params.driverId, new Date(params.recordedAtMs).toISOString()],
+      )
+    }
+    return {
+      decision,
+      totals: {
+        distanceM: bankedDistance,
+        pointCount: bankedCount,
+        segment: cursor?.segment ?? 0,
+        gap: false,
+      },
+    }
+  }
+
+  const recordedAt = new Date(params.recordedAtMs).toISOString()
+  const inserted = await client.query(
+    `insert into trip_track_points (
+       trip_id, driver_id, group_id, lat, lng, recorded_at,
+       accuracy_m, heading_deg, speed_mps, distance_m, segment
+     ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+     on conflict (trip_id, driver_id, recorded_at) do nothing`,
+    [
+      params.tripId,
+      params.driverId,
+      params.groupId,
+      params.lat,
+      params.lng,
+      recordedAt,
+      params.accuracyM ?? null,
+      params.headingDeg ?? null,
+      params.speedMps ?? null,
+      decision.distanceM,
+      decision.segment,
+    ],
+  )
+
+  // The unique index caught a replay the cursor test could not (possible only if
+  // the rollup were ever rebuilt behind the points). Bank nothing.
+  if (inserted.rowCount === 0) {
+    return {
+      decision: { accept: false, reason: 'duplicate' },
+      totals: {
+        distanceM: bankedDistance,
+        pointCount: bankedCount,
+        segment: cursor?.segment ?? 0,
+        gap: false,
+      },
+    }
+  }
+
+  const { rows: updated } = await client.query<{ distance_m: string | number; point_count: number }>(
+    `insert into trip_tracks (
+       trip_id, driver_id, group_id, distance_m, point_count,
+       last_lat, last_lng, last_recorded_at, first_recorded_at, segment, last_seen_at
+     ) values ($1, $2, $3, $4, 1, $5, $6, $7, $7, $8, $7)
+     on conflict (trip_id, driver_id) do update
+        set distance_m  = trip_tracks.distance_m + excluded.distance_m,
+            point_count = trip_tracks.point_count + 1,
+            last_lat    = excluded.last_lat,
+            last_lng    = excluded.last_lng,
+            last_recorded_at = excluded.last_recorded_at,
+            first_recorded_at = least(
+              coalesce(trip_tracks.first_recorded_at, excluded.first_recorded_at),
+              excluded.first_recorded_at
+            ),
+            segment     = excluded.segment,
+            last_seen_at = excluded.last_seen_at,
+            updated_at  = now()
+      returning distance_m, point_count`,
+    [
+      params.tripId,
+      params.driverId,
+      params.groupId,
+      decision.distanceM,
+      params.lat,
+      params.lng,
+      recordedAt,
+      decision.segment,
+    ],
+  )
+
+  return {
+    decision,
+    totals: {
+      distanceM: Number(updated[0]?.distance_m ?? bankedDistance + decision.distanceM),
+      pointCount: updated[0]?.point_count ?? bankedCount + 1,
+      segment: decision.segment,
+      gap: decision.gap,
+    },
+  }
 }
 
 /** Append unless the truck hasn't meaningfully moved, then trim to the cap. */
@@ -415,11 +553,12 @@ driverRouter.post(
     }
 
     const names = await driverNameMap([userId])
+    const canonicalId = trip.id ?? groupId
     const entry: DriverLocationEntry = {
       userId,
       // Store the CANONICAL trip id (falls back to the room id exactly like
       // buildDriverTrip), not the raw lookup key the phone sent.
-      tripId: trip.id ?? groupId,
+      tripId: canonicalId,
       name: names.get(userId) ?? 'Driver',
       lat: body.lat,
       lng: body.lng,
@@ -427,6 +566,35 @@ driverRouter.post(
       ...(body.headingDeg !== undefined ? { headingDeg: body.headingDeg } : {}),
       ...(body.speedMps !== undefined ? { speedMps: body.speedMps } : {}),
       recordedAt,
+    }
+
+    // Durable history first, in its own locked transaction. Its verdict also
+    // decides whether the live marker may move: a fix the history refuses as
+    // untrustworthy (bad accuracy, teleport, arrived out of order) must not be
+    // shown as the truck's position either. A merely STATIONARY fix is trusted —
+    // it is the truck genuinely parked, and the marker's "updated 30s ago" has
+    // to keep ticking or a stopped truck looks like a dead phone.
+    const { decision, totals } = await withTransaction((client) =>
+      ingestTrackPoint(client, {
+        groupId,
+        tripId: canonicalId,
+        driverId: userId,
+        lat: body.lat,
+        lng: body.lng,
+        recordedAtMs: Date.parse(recordedAt),
+        ...(body.accuracyM !== undefined ? { accuracyM: body.accuracyM } : {}),
+        ...(body.headingDeg !== undefined ? { headingDeg: body.headingDeg } : {}),
+        ...(body.speedMps !== undefined ? { speedMps: body.speedMps } : {}),
+      }),
+    )
+    const trusted = decision.accept || decision.reason === 'stationary'
+    if (!trusted) {
+      return res.json({
+        ok: true,
+        accepted: false,
+        reason: decision.reason,
+        distanceM: totals.distanceM,
+      })
     }
 
     // Read THIS driver's trail to extend it. Reading only our own key keeps the
@@ -464,16 +632,24 @@ driverRouter.post(
       [groupId, userId, JSON.stringify(entry), JSON.stringify(trail)],
     )
 
-    // Live fan-out to the vehicle room's members (and only them). The trail is
-    // NOT sent — every member already receives each position and extends its
-    // own copy with the same rule, so re-sending the whole path each minute
-    // would be pure duplication. The stored trail is what a late joiner seeds
-    // from.
+    // Live fan-out to the vehicle room's members (and only them). The path is
+    // NOT re-sent — every member already receives each position and extends its
+    // own copy with the same rule, so re-sending it each minute would be pure
+    // duplication. What IS sent alongside is the server-computed running
+    // distance (the client must never re-derive kilometres from the points it
+    // happens to have seen) and the segment id, which tells the map whether this
+    // point continues the drawn line or starts a new one after a signal gap.
     getIOIfReady()
       ?.to(roomForGroup(groupId))
-      .emit('driver:location', { groupId, ...entry })
+      .emit('driver:location', {
+        groupId,
+        ...entry,
+        distanceM: totals.distanceM,
+        segment: totals.segment,
+        ...(totals.gap ? { gap: true } : {}),
+      })
 
-    res.json({ ok: true })
+    res.json({ ok: true, accepted: decision.accept, distanceM: totals.distanceM })
   }),
 )
 

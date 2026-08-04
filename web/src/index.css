@@ -90,6 +90,9 @@ html[data-density='comfortable'] {
   --color-composer: 26 26 26;
   --color-text: 245 245 245;
   --color-muted: 163 163 163;
+  /* Driven-path teal as text. Matches the colour the map draws the travelled
+     path in, which reads cleanly on the dark panels. */
+  --color-driven: 0 184 169;
   --color-faint: 118 118 118;
   --color-bubble-own: 26 26 26;
   --color-done: 125 138 120;
@@ -195,6 +198,9 @@ html[data-theme='light'] {
   --color-text: 28 28 28;
   --color-muted: 88 88 88;
   --color-faint: 112 112 112;
+  /* Same teal hue, darkened. The map's own teal is ~2.4:1 on a light panel —
+     unreadable at text size — while this clears 5:1. */
+  --color-driven: 0 109 100;
   --color-bubble-own: 218 218 218;
   --color-done: 92 109 86;
   --color-active: 154 90 50;
@@ -1326,7 +1332,7 @@ button {
   filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.8));
 }
 .trail-chevron--stale {
-  border-bottom-color: rgba(138, 147, 166, 0.9);
+  border-bottom-color: rgba(13, 148, 136, 0.82);
 }
 
 /* Shared modal text field. Kept in CSS (rather than the Tailwind recipe in

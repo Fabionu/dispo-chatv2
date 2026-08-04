@@ -54,6 +54,13 @@ export default {
         done: 'rgb(var(--color-done) / <alpha-value>)',
         active: 'rgb(var(--color-active) / <alpha-value>)',
         alert: 'rgb(var(--color-alert) / <alpha-value>)',
+        // The travelled-path teal, as TEXT. The map draws that path in a fixed
+        // teal (hereMapIcons ROUTE/trail colours) which the legend swatch must
+        // match exactly to identify the line — but that same value is far too
+        // light to read as small text on a light panel, so the text token is
+        // the same hue darkened for the light theme. Swatch and readout
+        // therefore agree in hue while each stays legible on its own surface.
+        driven: 'rgb(var(--color-driven) / <alpha-value>)',
         // `white` is the adaptive contrast wash used by translucent borders,
         // hovers and selected rows: white in dark mode, black in light mode.
         // Media/PDF surfaces that must remain literally white use pure-white.

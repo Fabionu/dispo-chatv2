@@ -121,10 +121,19 @@ export type DriverMapMarker = {
   headingDeg?: number
 }
 
-/** One driver's travelled path for the active trip, oldest point first. */
+/**
+ * One driver's travelled path, oldest point first.
+ *
+ * Split into RUNS, not one flat list, because the two are not interchangeable:
+ * the points inside a run were observed continuously and may be joined by a
+ * line, while the boundary between two runs is a stretch we have no data for
+ * (signal lost, phone off, app killed). Drawing across that boundary would
+ * assert a straight-line drive through whatever lies between — so each run is
+ * drawn as its own polyline and the gaps simply stay empty.
+ */
 export type DriverMapTrail = {
   id: string
-  points: LatLng[]
+  segments: LatLng[][]
   /** Drawn muted when the driver's last position is stale, matching the marker. */
   stale: boolean
 }
