@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { decode } from '@here/flexpolyline'
 import { Check, Copy, MapPin, Pencil, Trash2, X } from 'lucide-react'
 import Spinner from '../Spinner'
 import HereMap from '../here/HereMap'
 import { api } from '../../lib/api'
 import { getSocket } from '../../lib/socket'
-import { bestInsertionIndex } from '../../lib/here/geo'
+import { bestInsertionIndex, haversineMeters, nearestPointOnPath } from '../../lib/here/geo'
 import { computeTripRoute, type TripRoute } from '../../lib/tripRoute'
 import { parseCoordinates, stopId, type VehicleStop } from '../../lib/vehicleOps'
 import {
@@ -83,6 +84,42 @@ function coordSig(stops: VehicleStop[]): string {
   return routableStops(stops)
     .map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`)
     .join('|')
+}
+
+// Match sparse driver pings onto the already-calculated HERE route and fill the
+// road geometry between them. Without this, two minute-spaced GPS points are
+// joined by a straight chord across fields even though the planned route is
+// correctly road-snapped. Points too far from the route are deliberately not
+// forced onto it: the live marker still shows the raw position, while the
+// breadcrumb only claims road-matched history we can support.
+function roadMatchedTrail(points: DriverTrailPoint[], routePath: LatLng[]): LatLng[] {
+  if (routePath.length < 2) return points.map((p) => ({ lat: p.lat, lng: p.lng }))
+
+  const cumulative = new Array<number>(routePath.length)
+  cumulative[0] = 0
+  for (let i = 1; i < routePath.length; i++) {
+    cumulative[i] = cumulative[i - 1] + haversineMeters(routePath[i - 1], routePath[i])
+  }
+
+  const matches = points
+    .map((point) => nearestPointOnPath(point, routePath, cumulative))
+    .filter((match): match is NonNullable<typeof match> => Boolean(match && match.meters <= 180))
+  if (matches.length < 2) return []
+
+  const out: LatLng[] = [matches[0].at]
+  let previousAlong = matches[0].along
+  for (let m = 1; m < matches.length; m++) {
+    const match = matches[m]
+    // Ignore a noisy fix that appears materially behind the last matched ping.
+    if (match.along + 50 < previousAlong) continue
+    for (let i = 1; i < routePath.length; i++) {
+      if (cumulative[i] > previousAlong && cumulative[i] < match.along) out.push(routePath[i])
+    }
+    const last = out[out.length - 1]
+    if (!last || haversineMeters(last, match.at) >= 1) out.push(match.at)
+    previousAlong = Math.max(previousAlong, match.along)
+  }
+  return out
 }
 
 // A fresh intermediate stop created by dropping a point on the map. Carries only
@@ -164,6 +201,24 @@ export default function TripRouteMap({
 
   const [data, setData] = useState<TripRoute | null>(route?.status === 'ok' ? route : null)
   const [loading, setLoading] = useState(false)
+
+  // Prefer freshly-computed geometry. While editing, never show the saved route
+  // because it may disagree with the draft stops.
+  const polylines = data?.polylines ?? (editing ? [] : route?.polylines) ?? []
+  const routePath = useMemo<LatLng[]>(() => {
+    const out: LatLng[] = []
+    for (const encoded of polylines) {
+      try {
+        for (const [lat, lng] of decode(encoded).polyline) {
+          const previous = out[out.length - 1]
+          if (!previous || previous.lat !== lat || previous.lng !== lng) out.push({ lat, lng })
+        }
+      } catch {
+        // One malformed saved section must not hide the other usable sections.
+      }
+    }
+    return out
+  }, [polylines])
 
   // Recompute whenever the coordinate signature changes (and on first open). In
   // edit mode this is the live preview as the user drags / adds / removes stops.
@@ -265,14 +320,16 @@ export default function TripRouteMap({
       if (!loc) continue
       const age = now - Date.parse(loc.recordedAt)
       if (age > DRIVER_EXPIRE_MS) continue
+      const matched = roadMatchedTrail(points, routePath)
+      if (matched.length < 2) continue
       out.push({
         id: userId,
-        points: points.map((p) => ({ lat: p.lat, lng: p.lng })),
+        points: matched,
         stale: age > DRIVER_STALE_MS,
       })
     }
     return out
-  }, [driverTrailPoints, driverLocs, now])
+  }, [driverTrailPoints, driverLocs, now, routePath])
 
   const markers = useMemo<RouteMarker[]>(
     () =>
@@ -285,10 +342,6 @@ export default function TripRouteMap({
     [routable],
   )
 
-  // Prefer freshly-computed geometry. When editing, never fall back to the SAVED
-  // polylines (they'd disagree with the edited draft); read-only can, so the line
-  // shows instantly on open.
-  const polylines = data?.polylines ?? (editing ? [] : route?.polylines) ?? []
   const center = !polylines.length && routable[0] ? { lat: routable[0].lat, lng: routable[0].lng } : null
   const ok = data?.status === 'ok'
 
