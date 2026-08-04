@@ -958,6 +958,7 @@ export default function RoutePlanner({ onBack }: Props) {
           markers={markers}
           savedPlaces={placesOpen ? places : []}
           routePolylines={polylines}
+          scaleRouteWidthWithZoom
           // Total route distance, mid-line badge — same value as the panel stat.
           routeDistanceLabel={route ? formatDistance(route.summary.length) : null}
           truckOverlay={truckOverlay}

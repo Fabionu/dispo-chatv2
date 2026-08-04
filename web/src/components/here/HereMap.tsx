@@ -48,6 +48,15 @@ const MAX_TRAIL_CHEVRONS = 60
 /** Minimum on-screen spacing between chevrons, in px. */
 const TRAIL_CHEVRON_GAP_PX = 52
 
+// Route Planner overview zooms cover far more ground than the street-level
+// editor. A fixed seven-pixel route dominates the basemap at that scale, so the
+// planner can opt into a smooth zoom-dependent width while read-only trip maps
+// retain their deliberately prominent route/trail comparison.
+function routeStrokeWidths(zoom: number): { main: number; casing: number } {
+  const main = Math.min(7, Math.max(2.75, 2.75 + (zoom - 8) * 0.7))
+  return { main, casing: main + 2.5 }
+}
+
 /** Forward azimuth from `a` to `b`, degrees clockwise from north. */
 function bearingBetween(a: LatLng, b: LatLng): number {
   const lat1 = (a.lat * Math.PI) / 180
@@ -95,6 +104,9 @@ type Props = {
   savedPlaces?: WorkspacePlace[]
   // Encoded HERE flexible polylines, one per route section. Empty = no route.
   routePolylines: string[]
+  // Scale the visible route stroke down at overview zooms. Enabled by Route
+  // Planner only; trip tracking keeps its stronger planned-vs-driven styling.
+  scaleRouteWidthWithZoom?: boolean
   // Pre-formatted total route distance (e.g. "84 km"), shown as a small badge at
   // the route's midpoint. Null/undefined = no badge. Reuses the same value the
   // side panel displays so the two never disagree.
@@ -162,6 +174,7 @@ export default function HereMap({
   driverTrails,
   savedPlaces,
   routePolylines,
+  scaleRouteWidthWithZoom = false,
   routeDistanceLabel,
   truckOverlay,
   onTruckOverlayAvailabilityChange,
@@ -218,10 +231,15 @@ export default function HereMap({
   // during pan/zoom instead of asking HARP to keep transforming invisible
   // geometry on every frame.
   const routeDragTargetsRef = useRef<any[]>([])
+  // Visible casing/main pairs whose width can be updated after a zoom without
+  // decoding or rebuilding the route geometry.
+  const routeStrokePairsRef = useRef<Array<{ casing: any; main: any }>>([])
   // The casing improves contrast while idle, but duplicates the visible route
   // geometry. Hide only this decorative layer while the camera is moving; the
   // coral route itself remains visible throughout navigation.
   const routeDecorationsRef = useRef<any[]>([])
+  const scaleRouteWidthRef = useRef(scaleRouteWidthWithZoom)
+  scaleRouteWidthRef.current = scaleRouteWidthWithZoom
   // HERE recommends reusing marker icons. Route recalculation redraws every
   // marker, so retain the small set of icons across draw() calls rather than
   // rebuilding and reparsing identical SVGs each time.
@@ -521,6 +539,24 @@ export default function HereMap({
         const setRouteDecorationsVisible = (visible: boolean) => {
           for (const decoration of routeDecorationsRef.current) decoration.setVisibility?.(visible)
         }
+        const updateRouteWidths = () => {
+          if (!scaleRouteWidthRef.current) return
+          const widths = routeStrokeWidths(map.getZoom?.() ?? DEFAULT_ZOOM)
+          for (const pair of routeStrokePairsRef.current) {
+            pair.casing.setStyle?.({
+              lineWidth: widths.casing,
+              strokeColor: 'rgba(0,0,0,0.38)',
+              lineJoin: 'round',
+              lineCap: 'round',
+            })
+            pair.main.setStyle?.({
+              lineWidth: widths.main,
+              strokeColor: ROUTE_COLOR,
+              lineJoin: 'round',
+              lineCap: 'round',
+            })
+          }
+        }
         const suspendEditObjectsForNavigation = () => {
           viewChangingRef.current = true
           hoverPx = null
@@ -546,6 +582,7 @@ export default function HereMap({
         }
         const onViewChangeEnd = () => {
           viewChangingRef.current = false
+          updateRouteWidths()
           // Let HERE finish the camera's final frame before returning interaction
           // objects to its live render path.
           if (!interactiveDragRef.current) {
@@ -799,6 +836,7 @@ export default function HereMap({
         trafficLayerRef.current = null
         draggableObjectsRef.current = []
         routeDragTargetsRef.current = []
+        routeStrokePairsRef.current = []
         routeDecorationsRef.current = []
         markerIconCacheRef.current.clear()
       }
@@ -1146,6 +1184,7 @@ export default function HereMap({
     markerGroup.removeAll()
     draggableObjectsRef.current = []
     routeDragTargetsRef.current = []
+    routeStrokePairsRef.current = []
     routeDecorationsRef.current = []
 
     // Accumulate every drawn point so we can frame them all at the end.
@@ -1180,15 +1219,19 @@ export default function HereMap({
       }
       const line = new H.geo.LineString()
       for (const point of sectionPath) line.pushPoint(point)
+      const widths = scaleRouteWidthRef.current
+        ? routeStrokeWidths(map.getZoom?.() ?? DEFAULT_ZOOM)
+        : { main: 7, casing: 10 }
       const casing = new H.map.Polyline(line, {
-        style: { lineWidth: 10, strokeColor: 'rgba(0,0,0,0.38)', lineJoin: 'round', lineCap: 'round' },
+        style: { lineWidth: widths.casing, strokeColor: 'rgba(0,0,0,0.38)', lineJoin: 'round', lineCap: 'round' },
       })
       const main = new H.map.Polyline(line, {
-        style: { lineWidth: 7, strokeColor: ROUTE_COLOR, lineJoin: 'round', lineCap: 'round' },
+        style: { lineWidth: widths.main, strokeColor: ROUTE_COLOR, lineJoin: 'round', lineCap: 'round' },
       })
       casing.setVisibility?.(!viewChangingRef.current)
       group.addObject(casing)
       group.addObject(main)
+      routeStrokePairsRef.current.push({ casing, main })
       routeDecorationsRef.current.push(casing)
       if (objectsDraggable) {
         // HERE requires volatile objects for reliable drag delivery. Keeping that
