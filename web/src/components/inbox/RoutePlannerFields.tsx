@@ -29,7 +29,7 @@ export function NumberField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="h-8 rounded-full border border-line bg-white/4 px-2.5 text-base outline-none transition-colors focus:border-line-2 focus:bg-white/6 placeholder:text-faint"
+        className="h-8 border border-line bg-transparent px-2.5 text-base outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4 placeholder:text-faint"
       />
     </label>
   )
@@ -66,7 +66,7 @@ export function CopyCoordButton({ text }: { text: string }) {
       onClick={copy}
       aria-label="Copy coordinates"
       title={state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : 'Copy coordinates'}
-      className="h-5 w-5 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+      className="h-5 w-5 shrink-0 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
     >
       {state === 'copied' ? (
         <Check size="0.75rem" strokeWidth={2.4} className="text-done" />
@@ -188,7 +188,7 @@ export function PresetSelect({
         onClick={() => (open ? setOpen(false) : openMenu())}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="h-8 w-full min-w-0 flex items-center justify-between gap-1.5 rounded-full border border-line bg-white/4 px-2.5 text-sm outline-none transition-colors focus:border-line-2 focus:bg-white/6"
+        className="h-8 w-full min-w-0 flex items-center justify-between gap-1.5 border border-line bg-transparent px-2.5 text-sm outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4"
       >
         <span className={`truncate ${active ? 'text-text' : 'text-faint'}`} title={active?.name}>
           {active ? active.name : 'Preset…'}

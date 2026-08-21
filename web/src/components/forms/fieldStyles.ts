@@ -25,8 +25,23 @@
 //   saved      a brief check on the Save control, then back to rest
 
 // The control box shared by input / textarea / select.
+// `bg-transparent` is load-bearing and NOT redundant with "no fill" above.
+// Tailwind's preflight zeroes background-color for BUTTONS only; a text input
+// keeps the user agent's, and this app runs `color-scheme: dark`, so Chrome
+// paints an undeclared field a solid rgb(59,59,59) — several steps louder than
+// the #2C2C2C hairline that is supposed to be its only mark. Without this line
+// "a field is drawn, not filled" is true of the CSS and false of the pixels.
+// Every hand-rolled input in the app (ChatComposer, ChatHeader, the search and
+// picker modals, DateTimeField) already writes it; the shared recipe was the
+// one place that didn't — so the fields built from THIS file were the only
+// filled ones in the app, which is the exact opposite of what it documents.
+//
+// It stays in BASE rather than EDGE so the resting fill is stated once for
+// every variant, invalid included. `focus:bg-white/4` still wins on focus:
+// Tailwind emits variant utilities after their plain counterparts, so the
+// focus rule is later in the stylesheet regardless of class order here.
 export const FIELD_BASE =
-  'min-w-0 rounded-card border text-base text-text ' +
+  'min-w-0 rounded-card border bg-transparent text-base text-text ' +
   'placeholder:text-faint/70 outline-none ' +
   'transition-[border-color,background-color,box-shadow] duration-150 ' +
   'motion-reduce:transition-none ' +

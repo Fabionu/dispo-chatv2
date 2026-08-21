@@ -1,28 +1,38 @@
 import { useState } from 'react'
-import { ArrowRight, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { ArrowRight, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
-import AppMark from '../components/AppMark'
 import VerificationNotice from '../components/auth/VerificationNotice'
-import { FIELD_EDGE } from '../components/forms/fieldStyles'
+import {
+  AUTH_FIELD,
+  AUTH_LABEL,
+  AUTH_LINK,
+  AuthAside,
+  AuthButton,
+  AuthField,
+  AuthHeading,
+  AuthNotice,
+  AuthShell,
+} from '../components/auth/authChrome'
 
 type Tab = 'signin' | 'signup'
 
 // ── Sign in / Create workspace ──────────────────────────────────────────────
-// One centred column standing directly on the black canvas — no card, no
-// segmented tab strip. The page has exactly one job, so it doesn't need chrome
-// to say where to look: brand, heading, fields, action, and a single quiet line
-// at the bottom to switch flows.
+// The signed-out page, drawn in the app's own geometry: an identity column and
+// a form column split by one hairline, which is the rail↔thread seam you land
+// on the moment you get in. The shell, the field recipe and the rest of the
+// vocabulary live in components/auth/authChrome so this file is only the flow.
 //
-// The card was doing nothing the canvas wasn't already doing (a `rail`-toned
-// panel on black is a tone step nobody reads as a container here), and the tab
-// strip DUPLICATED the bottom switch link — two controls, same job, at opposite
-// ends of the same surface. The bottom line is the survivor: it sits where you
-// end up after reading the form, which is when "I don't have a workspace"
-// actually occurs to you.
+// Two decisions carried over from the previous pass, both still right:
 //
-// Everything is on the shared token scales — the radius scale, the wash scale
-// for fill/edge, the type scale, and the app's own field state progression
-// (`FIELD_EDGE`), so this page can't drift away from the rest of the app.
+//   No card. A `rail`-toned panel on black was never a container anybody read
+//   as one, and the rework has no tone steps left to build it from anyway.
+//
+//   ONE flow switch, at the bottom. The old segmented tab strip duplicated the
+//   bottom link — two controls, same job, opposite ends of the same surface.
+//   The bottom line is the survivor: it sits where you end up after reading the
+//   form, which is when "I don't have a workspace" actually occurs to you. What
+//   the tab strip was also doing — saying which flow you are in — is now the
+//   mono eyebrow above the heading, at the cost of one line and no control.
 export default function SignIn() {
   const { refresh } = useAuth()
   const [tab, setTab] = useState<Tab>('signin')
@@ -130,231 +140,124 @@ export default function SignIn() {
   }
 
   return (
-    <div className="relative min-h-screen w-full overflow-hidden bg-bg text-text">
-      <AuthBackdrop />
+    <AuthShell>
+      <AuthHeading
+        eyebrow={isSignIn ? 'Sign in' : 'New workspace'}
+        title={isSignIn ? 'Welcome back' : 'Create your workspace'}
+      >
+        {isSignIn
+          ? 'Sign in to continue to your workspace.'
+          : 'Set up your company workspace and the first administrator account.'}
+      </AuthHeading>
 
-      {/* One centred column. `py` rather than a fixed viewport height so the
-          taller signup form scrolls on short screens instead of clipping. */}
-      <div className="relative z-10 flex min-h-screen items-center justify-center px-6 py-12">
-        <main className="w-full max-w-[26rem]">
-          <div className="mb-9 flex items-center gap-2.5">
-            <AppMark size={30} />
-            <span className="text-2xl font-semibold tracking-[-0.01em]">Dispo-chat</span>
-          </div>
-
-          <h1 className="text-4xl font-semibold leading-tight tracking-[-0.03em]">
-            {isSignIn ? 'Welcome back' : 'Create your workspace'}
-          </h1>
-          <p className="mt-2 text-lg leading-normal text-muted">
-            {isSignIn
-              ? 'Sign in to continue to your workspace.'
-              : 'Set up your company workspace and the first administrator account.'}
-          </p>
-
-          <form onSubmit={onSubmit} className="mt-7 space-y-4">
-            {!isSignIn && (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field
-                  id="companyName"
-                  label="Company name"
-                  value={companyName}
-                  onChange={setCompanyName}
-                  placeholder="Your company"
-                  autoComplete="organization"
-                  required
-                />
-                <Field
-                  id="displayName"
-                  label="Your name"
-                  value={displayName}
-                  onChange={setDisplayName}
-                  placeholder="Full name"
-                  autoComplete="name"
-                  required
-                />
-              </div>
-            )}
-
-            <Field
-              id="email"
-              label="Work email"
-              type="email"
-              value={email}
-              onChange={setEmail}
-              placeholder="name@company.com"
-              autoComplete="email"
-              autoFocus
+      <form onSubmit={onSubmit} className="mt-7 space-y-4">
+        {!isSignIn && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <AuthField
+              id="companyName"
+              label="Company name"
+              value={companyName}
+              onChange={setCompanyName}
+              placeholder="Your company"
+              autoComplete="organization"
               required
             />
+            <AuthField
+              id="displayName"
+              label="Your name"
+              value={displayName}
+              onChange={setDisplayName}
+              placeholder="Full name"
+              autoComplete="name"
+              required
+            />
+          </div>
+        )}
 
-            <div>
-              <label className={LABEL_CLASS} htmlFor="password">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder={isSignIn ? 'Enter your password' : 'At least 8 characters'}
-                  autoComplete={isSignIn ? 'current-password' : 'new-password'}
-                  required
-                  className={`${FIELD_CLASS} pr-11`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((visible) => !visible)}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  aria-pressed={showPassword}
-                  className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-card text-faint transition-colors hover:text-text focus-visible:text-text focus-visible:outline-none"
-                >
-                  {showPassword ? (
-                    <EyeOff size="0.9375rem" strokeWidth={1.7} />
-                  ) : (
-                    <Eye size="0.9375rem" strokeWidth={1.7} />
-                  )}
-                </button>
-              </div>
-              {!isSignIn && password.length > 0 && <StrengthMeter password={password} />}
-            </div>
+        <AuthField
+          id="email"
+          label="Work email"
+          type="email"
+          value={email}
+          onChange={setEmail}
+          placeholder="name@company.com"
+          autoComplete="email"
+          autoFocus
+          required
+        />
 
-            {isSignIn && (
-              <label className="flex w-fit cursor-pointer select-none items-center gap-2.5 text-base text-muted">
-                <input
-                  type="checkbox"
-                  className="checkbox"
-                  checked={keep}
-                  onChange={(e) => setKeep(e.target.checked)}
-                />
-                Keep me signed in on this device
-              </label>
-            )}
-
-            {error && (
-              <div
-                role="alert"
-                aria-live="polite"
-                className="rounded-card border border-alert/30 bg-alert/6 px-3 py-2.5 text-base text-alert"
-              >
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="group flex h-10 w-full items-center justify-center gap-2 rounded-btn bg-text text-lg font-semibold text-bg transition-colors hover:bg-text/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {submitting
-                ? isSignIn
-                  ? 'Signing in…'
-                  : 'Creating workspace…'
-                : isSignIn
-                  ? 'Sign in'
-                  : 'Create workspace'}
-              {submitting ? (
-                <Loader2 size="0.9375rem" strokeWidth={2.2} className="animate-spin" />
-              ) : (
-                <ArrowRight
-                  size="0.9375rem"
-                  strokeWidth={2.2}
-                  className="transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none"
-                />
-              )}
-            </button>
-          </form>
-
-          {/* The ONLY flow switch on the page (the old tab strip did the same
-              job at the top). A hairline separates it from the form so it reads
-              as an aside, not a third form control. */}
-          <p className="mt-8 border-t border-line pt-5 text-base text-muted">
-            {isSignIn ? 'Need a workspace?' : 'Already have an account?'}{' '}
+        <div>
+          <label className={AUTH_LABEL} htmlFor="password">
+            Password
+          </label>
+          <div className="relative">
+            <input
+              id="password"
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={isSignIn ? 'Enter your password' : 'At least 8 characters'}
+              autoComplete={isSignIn ? 'current-password' : 'new-password'}
+              required
+              className={`${AUTH_FIELD} pr-11`}
+            />
             <button
               type="button"
-              onClick={() => switchTab(isSignIn ? 'signup' : 'signin')}
-              className="font-semibold text-text underline-offset-4 transition-opacity hover:underline hover:opacity-80 focus-visible:outline-none focus-visible:underline"
+              onClick={() => setShowPassword((visible) => !visible)}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              aria-pressed={showPassword}
+              className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-faint transition-colors hover:text-text focus-visible:text-text focus-visible:outline-none"
             >
-              {isSignIn ? 'Create one' : 'Sign in'}
+              {showPassword ? (
+                <EyeOff size="0.9375rem" strokeWidth={1.7} />
+              ) : (
+                <Eye size="0.9375rem" strokeWidth={1.7} />
+              )}
             </button>
-          </p>
-        </main>
-      </div>
-    </div>
-  )
-}
+          </div>
+          {!isSignIn && password.length > 0 && <StrengthMeter password={password} />}
+        </div>
 
-// Faint operational texture: a fine grid fading out toward the edges, with one
-// soft pool of light behind the column. Calmer than it needs to be on purpose —
-// with the card gone, this is the only thing keeping the canvas from reading as
-// an empty black rectangle, and anything louder would compete with the form.
-function AuthBackdrop() {
-  return (
-    <div aria-hidden className="pointer-events-none absolute inset-0">
-      <div
-        className="absolute inset-0 opacity-30"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgb(var(--color-wash) / 0.025) 1px, transparent 1px), linear-gradient(90deg, rgb(var(--color-wash) / 0.025) 1px, transparent 1px)',
-          backgroundSize: '48px 48px',
-          maskImage: 'radial-gradient(circle at center, black, transparent 72%)',
-        }}
-      />
-      <div className="absolute left-1/2 top-1/2 h-[34rem] w-[34rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/2 blur-[120px]" />
-    </div>
-  )
-}
+        {isSignIn && (
+          <label className="flex w-fit cursor-pointer select-none items-center gap-2.5 text-base text-muted">
+            <input
+              type="checkbox"
+              className="checkbox"
+              checked={keep}
+              onChange={(e) => setKeep(e.target.checked)}
+            />
+            Keep me signed in on this device
+          </label>
+        )}
 
-const LABEL_CLASS = 'eyebrow mb-2 block'
-// The app's field recipe (components/forms/fieldStyles) one size step up: same
-// radius, same sunken fill, same hairline, and the SAME hover/focus progression
-// imported directly — only the control height and text size change, because an
-// auth field on a bare canvas is doing more work than a row in a dense panel.
-const FIELD_CLASS =
-  'w-full min-w-0 h-10 px-3 rounded-card border text-lg text-text ' +
-  'placeholder:text-faint/70 outline-none ' +
-  'transition-[border-color,background-color,box-shadow] duration-150 ' +
-  'motion-reduce:transition-none ' +
-  FIELD_EDGE
+        {error && <AuthNotice live>{error}</AuthNotice>}
 
-function Field({
-  id,
-  label,
-  value,
-  onChange,
-  placeholder,
-  type = 'text',
-  autoComplete,
-  autoFocus,
-  required,
-}: {
-  id: string
-  label: string
-  value: string
-  onChange: (value: string) => void
-  placeholder?: string
-  type?: string
-  autoComplete?: string
-  autoFocus?: boolean
-  required?: boolean
-}) {
-  return (
-    <div>
-      <label className={LABEL_CLASS} htmlFor={id}>
-        {label}
-      </label>
-      <input
-        id={id}
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        autoComplete={autoComplete}
-        autoFocus={autoFocus}
-        required={required}
-        className={FIELD_CLASS}
-      />
-    </div>
+        <AuthButton
+          busy={submitting}
+          busyLabel={isSignIn ? 'Signing in…' : 'Creating workspace…'}
+          trailing={
+            <ArrowRight
+              size="0.9375rem"
+              strokeWidth={2.2}
+              className="transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none"
+            />
+          }
+        >
+          {isSignIn ? 'Sign in' : 'Create workspace'}
+        </AuthButton>
+      </form>
+
+      <AuthAside>
+        {isSignIn ? 'Need a workspace?' : 'Already have an account?'}{' '}
+        <button
+          type="button"
+          onClick={() => switchTab(isSignIn ? 'signup' : 'signin')}
+          className={AUTH_LINK}
+        >
+          {isSignIn ? 'Create one' : 'Sign in'}
+        </button>
+      </AuthAside>
+    </AuthShell>
   )
 }
 
@@ -370,6 +273,16 @@ function passwordStrength(password: string): { score: number; label: string } {
   return { score, label }
 }
 
+// Four square segments and one mono readout. The segments used to be pills on a
+// `white/8` wash; they are squared like every other corner in the app now, and
+// the empty ones are drawn in `line` — the same hairline colour as the field
+// they sit under, so an unfilled segment reads as the track rather than as a
+// fifth tone.
+//
+// The readout is written out in mono rather than given `.eyebrow`: that class
+// sets a colour of its own, and at equal specificity a `text-alert` utility
+// beside it wins or loses on file order (see the `.filter-tab-active` note in
+// index.css). Spelling the recipe out keeps the state colour unambiguous.
 function StrengthMeter({ password }: { password: string }) {
   const tooShort = password.length < 8
   const { score, label } = passwordStrength(password)
@@ -395,13 +308,17 @@ function StrengthMeter({ password }: { password: string }) {
         {[0, 1, 2, 3].map((index) => (
           <div
             key={index}
-            className={`h-1 flex-1 rounded-full transition-colors motion-reduce:transition-none ${
-              index < filled ? fillClass : 'bg-white/8'
+            className={`h-1 flex-1 transition-colors motion-reduce:transition-none ${
+              index < filled ? fillClass : 'bg-line'
             }`}
           />
         ))}
       </div>
-      <div className={`mt-1.5 text-xs ${textClass}`}>Password strength: {label}</div>
+      <div
+        className={`mt-2 font-mono text-[length:var(--msg-label-size)] font-medium uppercase tracking-eyebrow ${textClass}`}
+      >
+        Strength · {label}
+      </div>
     </div>
   )
 }

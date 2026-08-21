@@ -46,24 +46,24 @@ export default function SavedPlacesPanel({ places, loading, error, onClose, onSe
   }, [places, query, category])
 
   return (
-    <section className="absolute z-20 top-[3.25rem] right-3 flex max-h-[calc(100%-4rem)] w-[18rem] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-panel border border-line bg-rail shadow-overlay">
+    <section className="absolute z-20 top-[3.25rem] right-3 flex max-h-[calc(100%-4rem)] w-[18rem] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden border border-line bg-surface shadow-overlay">
       <header className="flex items-center justify-between px-3.5 py-2.5">
         <div>
-          <div className="text-base font-semibold">Saved places</div>
-          <div className="mt-0.5 text-2xs text-faint">Right-click the map to add one</div>
+          <div className="eyebrow">Saved places</div>
+          <div className="mt-1 text-xs text-faint">Right-click the map to add one</div>
         </div>
         <button
           type="button"
           onClick={onClose}
           aria-label="Close saved places"
-          className="flex h-7 w-7 items-center justify-center rounded-full text-muted transition-colors hover:bg-white/6 hover:text-text"
+          className="flex h-7 w-7 items-center justify-center text-muted transition-colors hover:bg-white/6 hover:text-text"
         >
           <X size="0.9375rem" strokeWidth={1.9} />
         </button>
       </header>
 
       <div className="grid grid-cols-[1fr_auto] gap-1.5 border-y border-line px-2.5 py-2">
-        <label className="flex h-8 min-w-0 items-center gap-2 rounded-full bg-white/4 px-3 focus-within:ring-1 focus-within:ring-white/20">
+        <label className="flex h-8 min-w-0 items-center gap-2 border border-line px-2.5 transition-colors focus-within:border-line-2">
           <Search size="0.8125rem" className="shrink-0 text-faint" />
           <input
             value={query}
@@ -76,7 +76,7 @@ export default function SavedPlacesPanel({ places, loading, error, onClose, onSe
           aria-label="Filter saved places"
           value={category}
           onChange={(event) => setCategory(event.target.value as WorkspacePlaceCategory | 'all')}
-          className="h-8 max-w-[6.5rem] rounded-full border border-line bg-surface px-2.5 text-xs text-muted outline-none focus:border-line-2"
+          className="h-8 max-w-[6.5rem] border border-line bg-transparent px-2.5 text-xs text-muted outline-none transition-colors hover:border-line-2 focus:border-line-2"
         >
           <option value="all">All</option>
           {PLACE_CATEGORIES.map((item) => (
@@ -112,7 +112,7 @@ export default function SavedPlacesPanel({ places, loading, error, onClose, onSe
                 className="group flex w-full items-center gap-2.5 rounded-card px-2.5 py-2 text-left transition-colors hover:bg-white/6 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20"
               >
                 <span
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center border border-line"
                   style={{ color: PLACE_CATEGORY_COLOR[place.category], backgroundColor: `${PLACE_CATEGORY_COLOR[place.category]}16` }}
                 >
                   <SavedPlaceIcon category={place.category} />

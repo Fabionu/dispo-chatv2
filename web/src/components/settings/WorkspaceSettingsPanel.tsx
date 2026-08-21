@@ -274,11 +274,18 @@ function NotificationSettings() {
                 onClick={() => setNotificationSound(sound.value)}
                 aria-pressed={active}
                 className={`min-w-0 flex-1 flex items-center gap-3 rounded-btn px-2 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
-                  active ? 'bg-white/8' : 'hover:bg-white/6'
+                  active ? '' : 'hover:bg-white/6'
                 }`}
               >
+                {/* The selection mark, and the ONLY thing that says which
+                    sound is live now that the row's wash is gone — a filled
+                    square in `bg-text`, the same block the segmented control
+                    and the Group Info pill use, so "selected" reads identically
+                    everywhere. Square rather than a radio circle: it is not a
+                    native radio, and a lone round control in this UI reads as
+                    something borrowed. */}
                 <span
-                  className={`h-5 w-5 shrink-0 rounded-full border flex items-center justify-center transition-colors ${
+                  className={`h-5 w-5 shrink-0 border flex items-center justify-center transition-colors ${
                     active
                       ? 'border-text bg-text text-bg'
                       : 'border-line-2 text-transparent'
@@ -301,7 +308,7 @@ function NotificationSettings() {
                   onClick={() => void playNotificationSound(sound.value as NotificationSound)}
                   aria-label={`Preview ${sound.label}`}
                   title={`Preview ${sound.label}`}
-                  className="h-8 w-8 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/8 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                  className="h-8 w-8 shrink-0 flex items-center justify-center text-muted hover:text-text hover:bg-white/8 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
                 >
                   <Play size="0.875rem" strokeWidth={1.9} fill="currentColor" />
                 </button>
@@ -948,10 +955,18 @@ function SettingBlock({
   )
 }
 
-// The app's neutral segmented control — the same idiom as the rail's type
-// filter (FilterTab) and the Group Info tab bar: a quietly recessed track
-// where the active option lifts to a soft white pill. No accent color; the
-// constant font-medium keeps labels from shifting width when selection moves.
+// The app's neutral segmented control — the same idiom as the Group Info tab
+// bar, and now the same MARK: a quietly recessed track where the selected
+// option is a solid `bg-text` block with `text-bg` on it. That inverts per
+// theme for free (white block/black label on dark, black block/white label on
+// light), because both tokens flip together.
+//
+// It used to be `bg-white/8 text-text` — the same wash as a hover, one step
+// darker. Which meant "selected" and "the pointer is here" were the same
+// gesture at two alphas nobody can rank, and on the light theme an 8% black
+// wash on a 4% black track is very nearly nothing at all. Selection is a state
+// worth a real mark; hover keeps the wash. No accent colour; the constant
+// font-medium keeps labels from shifting width when selection moves.
 // The setting's label/description live in the SettingBlock above it.
 function Segmented({
   value,
@@ -973,7 +988,7 @@ function Segmented({
             onClick={() => onChange(o.value)}
             aria-pressed={active}
             className={`h-7 px-3 rounded-btn text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
-              active ? 'bg-white/8 text-text' : 'text-muted hover:text-text'
+              active ? 'bg-text text-bg' : 'text-muted hover:bg-white/6 hover:text-text'
             }`}
           >
             {o.label}

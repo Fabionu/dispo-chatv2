@@ -138,7 +138,7 @@ export default function FleetStatus({ rooms, onOpenRoom, onBack }: Props) {
           type="button"
           onClick={onBack}
           aria-label="Back to workspace"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-white/6 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+          className="flex h-8 w-8 shrink-0 items-center justify-center text-muted transition-colors hover:bg-white/6 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
         >
           <ArrowLeft size="1rem" strokeWidth={1.8} />
         </button>
@@ -153,7 +153,7 @@ export default function FleetStatus({ rooms, onOpenRoom, onBack }: Props) {
       <div className="flex-1 overflow-y-auto px-5 py-5">
         <div className="mx-auto flex max-w-[57.5rem] flex-col gap-4">
           <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
-            <label className="flex h-9 min-w-0 flex-1 cursor-text items-center gap-2 rounded-full border border-line bg-white/4 px-3 transition-colors hover:bg-white/6 focus-within:border-line-2 focus-within:bg-white/6">
+            <label className="flex h-9 min-w-0 flex-1 cursor-text items-center gap-2 border border-line bg-white/4 px-3 transition-colors hover:bg-white/6 focus-within:border-line-2 focus-within:bg-white/6">
               <Search size="0.875rem" strokeWidth={1.7} className="shrink-0 text-faint" />
               <input
                 value={query}
@@ -166,14 +166,14 @@ export default function FleetStatus({ rooms, onOpenRoom, onBack }: Props) {
                   type="button"
                   onClick={() => setQuery('')}
                   aria-label="Clear fleet search"
-                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-faint transition-colors hover:bg-white/6 hover:text-text"
+                  className="flex h-5 w-5 shrink-0 items-center justify-center text-faint transition-colors hover:bg-white/6 hover:text-text"
                 >
                   <X size="0.75rem" strokeWidth={1.8} />
                 </button>
               )}
             </label>
 
-            <div className="flex shrink-0 items-center gap-1 overflow-x-auto rounded-full bg-white/2 p-1">
+            <div className="flex shrink-0 items-center gap-1 overflow-x-auto bg-white/4 p-0.5">
               {([
                 ['all', 'All'],
                 ['active', 'Active'],
@@ -185,9 +185,9 @@ export default function FleetStatus({ rooms, onOpenRoom, onBack }: Props) {
                   type="button"
                   onClick={() => setFilter(value)}
                   aria-pressed={filter === value}
-                  className={`h-7 whitespace-nowrap rounded-full px-2.5 text-xs font-medium transition-colors ${
+                  className={`h-7 whitespace-nowrap px-2.5 text-xs font-medium transition-colors ${
                     filter === value
-                      ? 'bg-white/10 text-text'
+                      ? 'bg-text text-bg'
                       : 'text-muted hover:bg-white/6 hover:text-text'
                   }`}
                 >
@@ -290,7 +290,7 @@ function FleetRow({ item, onOpenRoom }: { item: FleetRoom; onOpenRoom: (groupId:
 function EmptyFleet() {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-10 text-center">
-      <span className="mb-2.5 flex h-10 w-10 items-center justify-center rounded-full bg-white/4 text-faint">
+      <span className="mb-2.5 flex h-10 w-10 items-center justify-center border border-line text-faint">
         <Truck size="1.125rem" strokeWidth={1.5} />
       </span>
       <p className="text-base text-muted">No vehicles in the fleet yet</p>

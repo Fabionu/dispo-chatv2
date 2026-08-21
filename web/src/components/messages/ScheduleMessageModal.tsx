@@ -222,7 +222,7 @@ export default function ScheduleMessageModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-line-2 px-3.5 py-1.5 text-sm font-medium text-text transition-colors hover:bg-white/4"
+            className=" border border-line-2 px-3.5 py-1.5 text-sm font-medium text-text transition-colors hover:bg-white/4"
           >
             Cancel
           </button>
@@ -381,7 +381,7 @@ function ScheduledRow({
         disabled={deleting}
         aria-label="Remove scheduled message"
         title="Remove scheduled message"
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-faint transition-colors hover:bg-white/6 hover:text-alert disabled:opacity-40"
+        className="flex h-7 w-7 shrink-0 items-center justify-center text-faint transition-colors hover:bg-white/6 hover:text-alert disabled:opacity-40"
       >
         {deleting ? (
           <Loader2 size="0.875rem" strokeWidth={2.2} className="animate-spin" />

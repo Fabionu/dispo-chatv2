@@ -52,7 +52,7 @@ export default function StopCard({
               onClick={onRemove}
               aria-label="Remove stop"
               title="Remove stop"
-              className="h-6 w-6 flex items-center justify-center rounded-full text-faint hover:text-alert hover:bg-white/4 transition-colors"
+              className="h-6 w-6 flex items-center justify-center text-faint hover:text-alert hover:bg-white/4 transition-colors"
             >
               <Trash2 size="0.75rem" strokeWidth={1.8} />
             </button>

@@ -98,7 +98,7 @@ export default function ScheduledMessageRow({
             Reply
           </span>
         )}
-        <span className="block whitespace-pre-wrap break-words font-light text-[length:var(--chat-plain-font-size)] leading-[1.6] text-text">
+        <span className="block whitespace-pre-wrap break-words font-[number:var(--msg-body-weight)] text-[length:var(--chat-plain-font-size)] leading-[1.6] text-text">
           {item.body}
         </span>
       </div>

@@ -115,7 +115,7 @@ export default function StopForm({
       <button
         type="button"
         onClick={() => setPhase('type')}
-        className="w-full inline-flex items-center justify-center gap-1.5 rounded-full border border-line bg-white/4 py-2 text-base text-muted hover:text-text hover:bg-white/6 transition-colors"
+        className="w-full inline-flex items-center justify-center gap-1.5 border border-line bg-white/4 py-2 text-base text-muted hover:text-text hover:bg-white/6 transition-colors"
       >
         <Plus size="0.875rem" strokeWidth={2} /> Add stop
       </button>
@@ -132,7 +132,7 @@ export default function StopForm({
             type="button"
             onClick={() => (editing ? setPhase('form') : setPhase('idle'))}
             aria-label="Back"
-            className="h-6 w-6 flex items-center justify-center rounded-full text-faint hover:text-text hover:bg-white/6 transition-colors"
+            className="h-6 w-6 flex items-center justify-center text-faint hover:text-text hover:bg-white/6 transition-colors"
           >
             <X size="0.8125rem" strokeWidth={1.8} />
           </button>
@@ -146,7 +146,7 @@ export default function StopForm({
                 setType(o.value)
                 setPhase('form')
               }}
-              className="h-8 rounded-full border border-line bg-white/4 text-sm text-text hover:bg-white/10 transition-colors"
+              className="h-8 border border-line bg-white/4 text-sm text-text hover:bg-white/10 transition-colors"
             >
               {o.label}
             </button>
@@ -175,7 +175,7 @@ export default function StopForm({
           type="button"
           onClick={cancel}
           aria-label={editing ? 'Cancel editing stop' : 'Cancel adding stop'}
-          className="h-6 w-6 flex items-center justify-center rounded-full text-faint hover:text-text hover:bg-white/6 transition-colors"
+          className="h-6 w-6 flex items-center justify-center text-faint hover:text-text hover:bg-white/6 transition-colors"
         >
           <X size="0.8125rem" strokeWidth={1.8} />
         </button>
@@ -245,7 +245,7 @@ export default function StopForm({
               onClick={pickOnMap}
               aria-label="Find coordinates on map"
               title="Find on map"
-              className="h-9 w-9 shrink-0 flex items-center justify-center rounded-full border border-line bg-white/4 text-muted hover:text-text hover:bg-white/8 transition-colors"
+              className="h-9 w-9 shrink-0 flex items-center justify-center border border-line bg-white/4 text-muted hover:text-text hover:bg-white/8 transition-colors"
             >
               <MapPinned size="1rem" strokeWidth={1.8} />
             </button>
@@ -270,7 +270,7 @@ export default function StopForm({
         <button
           type="button"
           onClick={cancel}
-          className="h-8 px-3 inline-flex items-center rounded-full text-sm text-muted hover:text-text hover:bg-white/4 transition-colors"
+          className="h-8 px-3 inline-flex items-center text-sm text-muted hover:text-text hover:bg-white/4 transition-colors"
         >
           Cancel
         </button>
@@ -278,7 +278,7 @@ export default function StopForm({
           type="button"
           onClick={submit}
           disabled={!canSave}
-          className="h-8 px-3.5 inline-flex items-center gap-1.5 rounded-full bg-white/10 text-sm font-medium text-text hover:bg-white/16 disabled:opacity-40 disabled:cursor-default transition-colors"
+          className="h-8 px-3.5 inline-flex items-center gap-1.5 bg-white/10 text-sm font-medium text-text hover:bg-white/16 disabled:opacity-40 disabled:cursor-default transition-colors"
         >
           {editing ? 'Save stop' : (
             <>

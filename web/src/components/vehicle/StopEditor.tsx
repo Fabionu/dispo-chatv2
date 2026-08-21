@@ -203,7 +203,7 @@ export default function StopEditor({
           disabled={saving}
           aria-label="Cancel"
           title="Cancel"
-          className="h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 disabled:opacity-50 transition-colors"
+          className="h-8 w-8 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 disabled:opacity-50 transition-colors"
         >
           <X size="0.875rem" strokeWidth={2} />
         </button>

@@ -57,7 +57,7 @@ export default function ComposerContextRow({ tone, label, snippet, attachment, o
         type="button"
         onClick={onCancel}
         aria-label={tone === 'reply' ? 'Cancel reply' : 'Cancel edit'}
-        className="h-7 w-7 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/8 transition-colors"
+        className="h-7 w-7 shrink-0 flex items-center justify-center text-muted hover:text-text hover:bg-white/8 transition-colors"
       >
         <X size="0.875rem" strokeWidth={1.9} />
       </button>

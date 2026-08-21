@@ -24,7 +24,14 @@ import {
   sampleScreenCandidates,
   snapDebug,
 } from './hereMapUtils'
-import { ROUTE_COLOR, ghostSvg, iconFor, savedPlaceIconFor } from './hereMapIcons'
+import {
+  ghostSvg,
+  iconFor,
+  routeArrowStyle,
+  routeCasingStyle,
+  routeSpineStyle,
+  savedPlaceIconFor,
+} from './hereMapIcons'
 import {
   createHereMapStyleControl,
   type BaseMapMode,
@@ -52,9 +59,29 @@ const TRAIL_CHEVRON_GAP_PX = 52
 // editor. A fixed seven-pixel route dominates the basemap at that scale, so the
 // planner can opt into a smooth zoom-dependent width while read-only trip maps
 // retain their deliberately prominent route/trail comparison.
-function routeStrokeWidths(zoom: number): { main: number; casing: number } {
+function routeStrokeWidths(zoom: number): {
+  main: number
+  casing: number
+  arrow: number
+  arrowsVisible: boolean
+} {
   const main = Math.min(7, Math.max(2.75, 2.75 + (zoom - 8) * 0.7))
-  return { main, casing: main + 2.5 }
+  return {
+    // +4 rather than +2.5: the casing is a SOLID white halo now, not a 38%
+    // black smudge, and it has to read as a deliberate outline on satellite
+    // imagery. Half of the extra width is spent on each side, so this is 2px of
+    // white per edge at every zoom.
+    casing: main + 4,
+    main,
+    // The arrow glyphs are stencilled INSIDE the spine, so this must stay
+    // meaningfully narrower than `main` or the arrows eat their own line.
+    arrow: Math.max(2, main - 2.5),
+    // Below roughly zoom 10 the spine is a thread crossing whole countries and
+    // arrow glyphs on it are noise, not information — the screenshot that
+    // prompted this rework is exactly that case. Direction only appears once
+    // the line is wide enough to carry a legible glyph.
+    arrowsVisible: main >= 4.25,
+  }
 }
 
 /** Forward azimuth from `a` to `b`, degrees clockwise from north. */
@@ -233,7 +260,7 @@ export default function HereMap({
   const routeDragTargetsRef = useRef<any[]>([])
   // Visible casing/main pairs whose width can be updated after a zoom without
   // decoding or rebuilding the route geometry.
-  const routeStrokePairsRef = useRef<Array<{ casing: any; main: any }>>([])
+  const routeStrokePairsRef = useRef<Array<{ casing: any; main: any; arrows: any }>>([])
   // The casing improves contrast while idle, but duplicates the visible route
   // geometry. Hide only this decorative layer while the camera is moving; the
   // coral route itself remains visible throughout navigation.
@@ -538,23 +565,31 @@ export default function HereMap({
         }
         const setRouteDecorationsVisible = (visible: boolean) => {
           for (const decoration of routeDecorationsRef.current) decoration.setVisibility?.(visible)
+          // Arrows are decorations too — they hide during a camera move for the
+          // same frame-cost reason — but they carry a SECOND condition: they
+          // only exist above the zoom where a glyph is legible. They are driven
+          // here rather than pushed into routeDecorationsRef, where `true` would
+          // mean unconditionally visible and the resume after every pan would
+          // put country-zoom arrows back on the line.
+          const arrowsAllowed =
+            !scaleRouteWidthRef.current ||
+            routeStrokeWidths(map.getZoom?.() ?? DEFAULT_ZOOM).arrowsVisible
+          for (const pair of routeStrokePairsRef.current) {
+            pair.arrows?.setVisibility?.(visible && arrowsAllowed)
+          }
         }
         const updateRouteWidths = () => {
           if (!scaleRouteWidthRef.current) return
           const widths = routeStrokeWidths(map.getZoom?.() ?? DEFAULT_ZOOM)
           for (const pair of routeStrokePairsRef.current) {
-            pair.casing.setStyle?.({
-              lineWidth: widths.casing,
-              strokeColor: 'rgba(0,0,0,0.38)',
-              lineJoin: 'round',
-              lineCap: 'round',
-            })
-            pair.main.setStyle?.({
-              lineWidth: widths.main,
-              strokeColor: ROUTE_COLOR,
-              lineJoin: 'round',
-              lineCap: 'round',
-            })
+            pair.casing.setStyle?.(routeCasingStyle(widths.casing))
+            pair.main.setStyle?.(routeSpineStyle(widths.main))
+            // The arrow line exists for the whole life of the route and is
+            // hidden rather than rebuilt when the zoom drops below the
+            // legibility threshold — rebuilding it per zoom step would churn
+            // map objects on every wheel tick.
+            pair.arrows?.setStyle?.(routeArrowStyle(H, widths.arrow))
+            pair.arrows?.setVisibility?.(widths.arrowsVisible && !viewChangingRef.current)
           }
         }
         const suspendEditObjectsForNavigation = () => {
@@ -1198,10 +1233,13 @@ export default function HereMap({
     // follows the road geometry exactly.
     const interactionBudgetPerSection = Math.max(80, Math.floor(1200 / sectionCount))
 
-    // Route line: a thin coral stroke over a subtle dark casing so it stays
-    // readable on the basemap without dominating it. The visible strokes remain
-    // static/cached. One wider transparent volatile line above them handles
-    // route dragging without forcing both visible strokes to redraw every frame.
+    // Route line: a near-black spine inside a solid white halo, with white
+    // arrow glyphs stencilled along it for direction. Three stacked strokes,
+    // drawn casing → spine → arrows, because HERE has no single style that
+    // expresses an outlined line and `setArrows()` was removed in v3.2 (see
+    // routeArrowStyle). The visible strokes remain static/cached. One wider
+    // transparent volatile line above them handles route dragging without
+    // forcing the visible strokes to redraw every frame.
     routePolylines.forEach((encoded, sectionIndex) => {
       let coords: number[][]
       try {
@@ -1221,17 +1259,17 @@ export default function HereMap({
       for (const point of sectionPath) line.pushPoint(point)
       const widths = scaleRouteWidthRef.current
         ? routeStrokeWidths(map.getZoom?.() ?? DEFAULT_ZOOM)
-        : { main: 7, casing: 10 }
-      const casing = new H.map.Polyline(line, {
-        style: { lineWidth: widths.casing, strokeColor: 'rgba(0,0,0,0.38)', lineJoin: 'round', lineCap: 'round' },
-      })
-      const main = new H.map.Polyline(line, {
-        style: { lineWidth: widths.main, strokeColor: ROUTE_COLOR, lineJoin: 'round', lineCap: 'round' },
-      })
+        // Read-only trip maps keep the deliberately prominent fixed route.
+        : { main: 7, casing: 11, arrow: 4.5, arrowsVisible: true }
+      const casing = new H.map.Polyline(line, { style: routeCasingStyle(widths.casing) })
+      const main = new H.map.Polyline(line, { style: routeSpineStyle(widths.main) })
+      const arrows = new H.map.Polyline(line, { style: routeArrowStyle(H, widths.arrow) })
       casing.setVisibility?.(!viewChangingRef.current)
+      arrows.setVisibility?.(widths.arrowsVisible && !viewChangingRef.current)
       group.addObject(casing)
       group.addObject(main)
-      routeStrokePairsRef.current.push({ casing, main })
+      group.addObject(arrows)
+      routeStrokePairsRef.current.push({ casing, main, arrows })
       routeDecorationsRef.current.push(casing)
       if (objectsDraggable) {
         // HERE requires volatile objects for reliable drag delivery. Keeping that

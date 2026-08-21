@@ -54,7 +54,7 @@ export function RoleBadge({
   /** Empty slots draw the badge quietly — nothing is set there yet. */
   muted?: boolean
 }) {
-  const base = 'h-6 w-6 shrink-0 rounded-full border flex items-center justify-center'
+  const base = 'h-6 w-6 shrink-0 border flex items-center justify-center'
   if (role === 'start') {
     return (
       <span
@@ -131,7 +131,7 @@ export function RouteRow({
             draggable, so rather than spending ~17px of a 300px column on a grip
             glyph, the marker itself picks up the grab cursor and a hover ring. */}
         <span
-          className={`rounded-full transition-shadow motion-reduce:transition-none ${
+          className={`transition-shadow motion-reduce:transition-none ${
             draggable ? 'group-hover/row:ring-1 group-hover/row:ring-white/16' : ''
           }`}
         >

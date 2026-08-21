@@ -13,7 +13,7 @@ type Props = {
   onSave: (input: WorkspacePlaceInput) => void
 }
 
-const FIELD = 'h-10 w-full rounded-full border border-line bg-white/4 px-3.5 text-sm text-text outline-none transition-colors placeholder:text-faint focus:border-line-2 focus:bg-white/6'
+const FIELD = 'h-10 w-full border border-line bg-transparent px-3 text-sm text-text outline-none transition-colors placeholder:text-faint hover:border-line-2 focus:border-line-2 focus:bg-white/4'
 
 export default function SavedPlaceModal({ place, coordinates, address, saving, error, onClose, onSave }: Props) {
   const [name, setName] = useState(place?.name ?? '')
@@ -41,10 +41,10 @@ export default function SavedPlaceModal({ place, coordinates, address, saving, e
       onClose={onClose}
       footer={
         <>
-          <button type="button" onClick={onClose} disabled={saving} className="rounded-full px-3.5 py-2 text-sm font-medium text-muted transition-colors hover:bg-white/6 hover:text-text disabled:opacity-50">
+          <button type="button" onClick={onClose} disabled={saving} className=" px-3.5 py-2 text-sm font-medium text-muted transition-colors hover:bg-white/6 hover:text-text disabled:opacity-50">
             Cancel
           </button>
-          <button type="submit" form="saved-place-form" disabled={!name.trim() || saving} className="rounded-full bg-text px-4 py-2 text-sm font-semibold text-bg transition-colors hover:bg-text/90 disabled:opacity-40">
+          <button type="submit" form="saved-place-form" disabled={!name.trim() || saving} className="bg-text px-4 py-2 text-sm font-semibold text-bg transition-colors hover:bg-text/90 disabled:opacity-40">
             {saving ? 'Saving…' : place ? 'Save changes' : 'Save place'}
           </button>
         </>
@@ -69,7 +69,7 @@ export default function SavedPlaceModal({ place, coordinates, address, saving, e
           <span className="text-xs font-medium text-muted">Notes <span className="font-normal text-faint">(optional)</span></span>
           <textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={500} rows={3} placeholder="Access instructions, opening hours…" className="w-full resize-none rounded-soft border border-line bg-white/4 px-3.5 py-2.5 text-sm leading-relaxed text-text outline-none transition-colors placeholder:text-faint focus:border-line-2 focus:bg-white/6" />
         </label>
-        <div className="rounded-full bg-white/4 px-3.5 py-2 text-xs tabular-nums text-faint">
+        <div className="border border-line px-3 py-2 text-xs tabular-nums text-faint">
           {coordinates.lat.toFixed(5)}, {coordinates.lng.toFixed(5)}
         </div>
         {error && <div className="text-sm text-alert">{error}</div>}

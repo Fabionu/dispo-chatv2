@@ -658,9 +658,26 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           stay reachable from chats and every sidebar drill-in. */}
       <WorkspaceNavRail
         collapsed={sidebarCollapsed}
+        // Chat is "the rail is showing conversations AND one is open". With
+        // nothing selected the main pane IS the workspace inbox, which is what
+        // the Workspace entry above means — so the two never light up together.
+        chatActive={sidebarView === 'list' && !inboxActive}
         workspaceActive={sidebarView === 'list' && inboxActive}
         settingsActive={sidebarView === 'settings'}
         onToggleSidebar={toggleSidebar}
+        // Back to the conversation list, and ONLY that. It deliberately does
+        // not touch `selection`: coming back from Settings or the inbox should
+        // return you to the rail you left, with whatever conversation you had
+        // open still open. Expanding a collapsed sidebar first, since restoring
+        // a list nobody can see would do nothing visible.
+        onOpenChat={() => {
+          setNewMenuOpen(false)
+          if (sidebarCollapsed) {
+            setStoredSidebarCollapsed(false)
+            setSidebarCollapsed(false)
+          }
+          openSidebarView('list')
+        }}
         onOpenWorkspace={() => {
           setNewMenuOpen(false)
           setSidebarView('list')

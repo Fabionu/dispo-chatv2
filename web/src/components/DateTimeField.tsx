@@ -40,7 +40,7 @@ const FIELD_WRAP =
 const FIELD_INPUT =
   'flex-1 min-w-0 h-full bg-transparent text-base text-text placeholder:text-faint/70 outline-none'
 const FIELD_BTN =
-  'h-6 w-6 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20'
+  'h-6 w-6 shrink-0 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20'
 const POPOVER = `absolute z-30 mt-1.5 ${MENU_SURFACE} p-2`
 
 // Close a popover on outside-click or Escape.
@@ -168,7 +168,7 @@ export function DateField({
               type="button"
               onClick={() => shift(-1)}
               aria-label="Previous month"
-              className="h-6 w-6 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 transition-colors"
+              className="h-6 w-6 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 transition-colors"
             >
               <ChevronLeft size="0.9375rem" strokeWidth={1.8} />
             </button>
@@ -179,7 +179,7 @@ export function DateField({
               type="button"
               onClick={() => shift(1)}
               aria-label="Next month"
-              className="h-6 w-6 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 transition-colors"
+              className="h-6 w-6 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 transition-colors"
             >
               <ChevronRight size="0.9375rem" strokeWidth={1.8} />
             </button>

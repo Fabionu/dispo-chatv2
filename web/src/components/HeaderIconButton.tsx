@@ -2,13 +2,18 @@ import type { ReactNode } from 'react'
 
 // ── Shared icon-button style ────────────────────────────────────────────────
 // ONE source of truth for the app's borderless 36×36 icon action button:
-// rounded-full, muted glyph that warms on hover, a subtle hover fill, an
-// on-theme focus ring, no border, no shadow. Exported so non-button preview
+// SQUARE, muted glyph that warms on hover, a subtle hover fill, an on-theme
+// focus ring, no border, no shadow. It was `rounded-full` until 2026-08-21, on
+// the reasoning that a round hover target is a control affordance rather than a
+// card corner — but the affordance a user actually reads is the fill appearing,
+// and a circle appearing inside a UI whose every other corner is mitred just
+// looked like a leftover. Squareness is the app's one visual rule; a control is
+// not the place to make an exception to it. Exported so non-button preview
 // surfaces that can't use this component directly — e.g. the download <a> link
 // and the tooltip-wrapped buttons in the attachment preview action bar — render
 // the IDENTICAL control instead of a one-off class string.
 export const ICON_ACTION_BASE =
-  'h-9 w-9 flex items-center justify-center rounded-full transition-colors ' +
+  'h-9 w-9 flex items-center justify-center transition-colors ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ' +
   'disabled:opacity-30 disabled:cursor-default'
 export const ICON_ACTION_IDLE = 'text-muted hover:text-text hover:bg-white/6'
@@ -16,12 +21,12 @@ export const ICON_ACTION_ACTIVE = 'text-text bg-white/6'
 
 // Compact 24×24 sibling of ICON_ACTION_BASE for inline row affordances (e.g. the
 // edit pencil on an EditableRow / stop card) that must stay small enough not to
-// grow their row. Same circular, borderless, muted-glyph-that-warms-on-hover look
+// grow their row. Same square, borderless, muted-glyph-that-warms-on-hover look
 // as the standard icon button — just smaller, and with no transition baked in so
 // each caller keeps its own (some fade opacity on row hover). The caller supplies
 // the glyph and any resting-visibility utilities.
 export const ICON_ACTION_SMALL =
-  'h-6 w-6 flex items-center justify-center rounded-full text-muted ' +
+  'h-6 w-6 flex items-center justify-center text-muted ' +
   'hover:text-text hover:bg-white/6 ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ' +
   'disabled:opacity-30 disabled:cursor-default'
@@ -42,7 +47,7 @@ type Props = {
   searchRegion?: boolean
 }
 
-// The app's standard borderless header / overlay action button: a 36×36 circle
+// The app's standard borderless header / overlay action button: a 36×36 square
 // with a muted glyph that warms on hover, an on-theme focus ring, and an
 // optional pressed (active) state. Shared by the chat header (search, group
 // info) and the attachment preview top bar so every action button reads the

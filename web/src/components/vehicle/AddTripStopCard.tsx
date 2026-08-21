@@ -33,7 +33,7 @@ export default function AddTripStopCard({
         onClick={onRemove}
         aria-label="Remove stop"
         title="Remove stop"
-        className="h-6 w-6 shrink-0 flex items-center justify-center rounded-full text-faint hover:text-alert hover:bg-white/4 transition-colors"
+        className="h-6 w-6 shrink-0 flex items-center justify-center text-faint hover:text-alert hover:bg-white/4 transition-colors"
       >
         <Trash2 size="0.8125rem" strokeWidth={1.8} />
       </button>

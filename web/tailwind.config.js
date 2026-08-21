@@ -166,9 +166,15 @@ export default {
       // across the whole app, and the roles stay meaningful if a future surface
       // wants its corners back — one value here, not ninety in components.
       //   chip / btn / card / modal / panel / soft
-      // Circular icon buttons still use rounded-full (ICON_ACTION_* in
-      // HeaderIconButton.tsx) — a round hover target is a control affordance,
-      // not a card corner.
+      // Icon buttons used to be the exception, on the reasoning that a round
+      // hover target is a control affordance rather than a card corner. They
+      // are square as of 2026-08-21 (user): what reads as the affordance is the
+      // fill appearing, and a circle inside a UI whose every other corner is
+      // mitred just looked unfinished. `rounded-full` now means one of three
+      // things, all of them CONTENT rather than chrome: a photo (Avatar,
+      // GroupAvatar, AppMark's disc), a dot (presence, unread), or a track that
+      // slides (the notification/traffic toggles, where roundness is what says
+      // the knob travels). A `rounded-full` on a hover target is a regression.
       borderRadius: {
         chip: '0',
         btn: '0',

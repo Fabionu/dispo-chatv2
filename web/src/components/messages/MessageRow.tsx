@@ -20,11 +20,12 @@ import type { LocalMessage } from './types'
 // words look secondary to your own. Ownership is carried by SIDE (left rule vs
 // right) and by the rule's weight — it does not need to dim anybody.
 //
-// Weight 300, not 400: near-white text on a black field BLOOMS, and Chrome on
-// Windows has no equivalent of the macOS font smoothing that thins it, so Inter
-// at 400 reads noticeably heavier here than in the reference this was drawn
-// from. Bold emphasis still lands — renderRichText's <strong> is 700.
-const BODY_TYPE = 'font-light text-text'
+// The weight is a TOKEN, not a `font-light` here, because it has to differ per
+// theme: near-white text on black blooms and wants 300, dark text on white is
+// eaten into and wants 400. Hardcoding the dark theme's answer is what made the
+// light theme's thread read as washed out. See --msg-body-weight in index.css
+// for the optics. Bold emphasis still lands — renderRichText's <strong> is 700.
+const BODY_TYPE = 'font-[number:var(--msg-body-weight)] text-text'
 
 // How recent a message must be, AT THE MOMENT ITS ROW FIRST MOUNTS, to read as
 // "just arrived" and play the entrance animation.
@@ -342,9 +343,17 @@ function MessageRow({
   // this design already speaks: the selected conversation in the rail and the
   // filter tab bar are both 2px of --color-text. Emphasis, not a new idea.
   //
-  // Only where it says something. A direct message has one other person in it
-  // and no colour on the rule, so it keeps the hairline and the quiet.
-  const boldRule = groupType !== 'direct'
+  // EVERY message, including a direct one. This used to be `groupType !==
+  // 'direct'`, on the reasoning that a DM's rule carries no colour and could
+  // therefore keep the hairline and the quiet. What that missed is the sentence
+  // three paragraphs up: at 1px a third of the ink lands in a half-covered
+  // device pixel and blends with the field behind it. That argument was made
+  // about losing a HUE, but it costs a plain grey rule just as much — and in a
+  // DM the rule it is answering is --color-line-own at full contrast, so the
+  // pair read as "one person has an edge and the other doesn't". It showed up
+  // worst on the light theme, where the surviving ink is grey on white.
+  // 2px on both sides restores the symmetry the side-as-ownership idea rests
+  // on: same weight, different edge, different colour.
   const highlightSkin = highlighted ? 'bg-active/10' : ''
   const authorLabel = (mine ? message.authorName || 'You' : message.authorName) || 'Member'
   const time = formatTime(message.createdAt)
@@ -422,17 +431,13 @@ function MessageRow({
         // Inline, because the value is per-author data rather than one of a
         // fixed set of states — a utility class per member is not a thing
         // Tailwind can generate. It overrides only the left edge of the
-        // `border-line` set by the class, so every other rule on the row is
-        // untouched.
+        // `--color-line-msg` set by the class, so every other rule on the row
+        // is untouched.
         style={ruleColor && !mine ? { borderLeftColor: ruleColor } : undefined}
         className={`group/msg relative w-fit max-w-full py-0.5 transition-colors duration-500 ${
           mine
-            ? `ml-auto flex flex-col items-end ${
-                boldRule ? 'border-r-2' : 'border-r'
-              } border-[rgb(var(--color-line-own))] pr-[var(--msg-indent)] pl-2`
-            : `mr-auto ${
-                boldRule ? 'border-l-2' : 'border-l'
-              } border-line pl-[var(--msg-indent)] pr-2`
+            ? 'ml-auto flex flex-col items-end border-r-2 border-[rgb(var(--color-line-own))] pr-[var(--msg-indent)] pl-2'
+            : 'mr-auto border-l-2 border-[rgb(var(--color-line-msg))] pl-[var(--msg-indent)] pr-2'
         } ${startNewGroup ? 'mt-7' : 'mt-4'} ${highlightSkin} ${
           justArrived ? 'message-enter' : ''
         }`}

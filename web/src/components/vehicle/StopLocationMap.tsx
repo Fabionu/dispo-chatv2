@@ -203,7 +203,7 @@ export default function StopLocationMap({ initialQuery, onConfirm, onCancel }: P
         <button
           type="button"
           onClick={onCancel}
-          className="h-8 px-3 inline-flex items-center rounded-full text-sm text-muted hover:text-text hover:bg-white/4 transition-colors"
+          className="h-8 px-3 inline-flex items-center text-sm text-muted hover:text-text hover:bg-white/4 transition-colors"
         >
           Cancel
         </button>
@@ -211,7 +211,7 @@ export default function StopLocationMap({ initialQuery, onConfirm, onCancel }: P
           type="button"
           onClick={() => selected && onConfirm(coordText(selected.position))}
           disabled={!selected}
-          className="h-8 px-3.5 inline-flex items-center gap-1.5 rounded-full bg-white/10 text-sm font-medium text-text hover:bg-white/16 disabled:opacity-40 disabled:cursor-default transition-colors"
+          className="h-8 px-3.5 inline-flex items-center gap-1.5 bg-white/10 text-sm font-medium text-text hover:bg-white/16 disabled:opacity-40 disabled:cursor-default transition-colors"
         >
           <Check size="0.875rem" strokeWidth={2.2} /> Use coordinates
         </button>

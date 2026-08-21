@@ -889,7 +889,6 @@ export default function RoutePlanner({ onBack }: Props) {
             value={null}
             initialQuery={p.label}
             autoFocus
-            pill
             onChange={(place) => {
               if (place) {
                 replacePoint(p.id, place)
@@ -902,7 +901,7 @@ export default function RoutePlanner({ onBack }: Props) {
         <button
           onClick={() => setEditingId(null)}
           aria-label="Cancel edit"
-          className="h-8 w-8 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 transition-colors"
+          className="h-8 w-8 shrink-0 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 transition-colors"
         >
           <X size="0.9375rem" strokeWidth={2} />
         </button>
@@ -978,12 +977,20 @@ export default function RoutePlanner({ onBack }: Props) {
           className="absolute inset-0"
         />
 
-        {/* Compact map layers/actions. */}
+        {/* Compact map layers/actions. Both are TOGGLES, and both say "on" the
+            way the whole app says it — a solid `bg-text` block with `text-bg`
+            on it, which inverts per theme for free. HGV used to say it in
+            `--color-active` instead; that token means a mention or an alert
+            here, and spending it on a map layer made the overlay look like a
+            warning. Drawn on `surface` rather than the field colour because
+            they float over the map, which is the one case that token is for. */}
         <div className="absolute z-20 right-3 top-3 flex items-center gap-1.5">
           <button
             onClick={() => setPlacesOpen((value) => !value)}
-            className={`flex h-8 items-center gap-1.5 rounded-full border px-3 text-sm font-medium shadow-raised transition-colors ${
-              placesOpen ? 'border-text bg-text text-bg' : 'border-line bg-rail/90 text-text hover:bg-rail'
+            className={`flex h-8 items-center gap-1.5 border px-3 text-sm font-medium shadow-overlay transition-colors ${
+              placesOpen
+                ? 'border-text bg-text text-bg'
+                : 'border-line bg-surface text-text hover:bg-surface-2'
             }`}
           >
             <MapPinned size="0.875rem" strokeWidth={2} />
@@ -997,8 +1004,10 @@ export default function RoutePlanner({ onBack }: Props) {
                 ? 'Toggle HERE truck/HGV restriction overlay'
                 : 'Truck overlay not available on this HERE plan'
             }
-            className={`flex h-8 items-center gap-1.5 rounded-full border px-3 text-sm font-medium shadow-raised transition-colors ${
-              truckOverlay ? 'bg-active text-bg border-active' : 'bg-rail/90 text-text border-line hover:bg-rail'
+            className={`flex h-8 items-center gap-1.5 border px-3 text-sm font-medium shadow-overlay transition-colors ${
+              truckOverlay
+                ? 'border-text bg-text text-bg'
+                : 'border-line bg-surface text-text hover:bg-surface-2'
             } disabled:cursor-not-allowed disabled:opacity-40`}
           >
             <Truck size="0.875rem" strokeWidth={2} />
@@ -1023,7 +1032,7 @@ export default function RoutePlanner({ onBack }: Props) {
         <button
           onClick={() => setPanelCollapsed(false)}
           aria-label="Open route panel"
-          className={`absolute z-20 top-3 left-3 flex items-center gap-1.5 h-9 pl-2.5 pr-3 rounded-full border border-line bg-rail/90 text-text text-sm font-medium shadow-raised transition-opacity hover:bg-rail ${
+          className={`absolute z-20 top-3 left-3 flex items-center gap-1.5 h-9 pl-2.5 pr-3 border border-line bg-surface text-text text-sm font-medium shadow-overlay transition-opacity hover:bg-surface-2 ${
             panelCollapsed ? 'opacity-100' : 'opacity-0 pointer-events-none'
           }`}
         >
@@ -1052,7 +1061,7 @@ export default function RoutePlanner({ onBack }: Props) {
           style={{ transform: panelCollapsed ? 'translateX(calc(-100% - 1rem))' : 'translateX(0)' }}
           aria-hidden={panelCollapsed}
         >
-        <div className="flex min-h-0 flex-col rounded-panel border border-line bg-rail shadow-raised">
+        <div className="flex min-h-0 flex-col border border-line bg-surface shadow-overlay">
           <div className="flex h-11 shrink-0 items-center justify-between gap-2 pl-3.5 pr-2">
             <div className="min-w-0">
               <div className="text-base font-semibold leading-tight tracking-[-0.1px]">Route</div>
@@ -1072,7 +1081,7 @@ export default function RoutePlanner({ onBack }: Props) {
                 onClick={() => setPanelCollapsed(true)}
                 title="Collapse panel"
                 aria-label="Collapse panel"
-                className="h-7 w-7 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 transition-colors"
+                className="h-7 w-7 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 transition-colors"
               >
                 <ChevronLeft size="1rem" strokeWidth={2} />
               </button>
@@ -1098,7 +1107,6 @@ export default function RoutePlanner({ onBack }: Props) {
                     <RouteRow key={row.key} connect={connect} badge={<RoleBadge role={row.role} muted />}>
                       <PlaceSearchField
                         value={null}
-                        pill
                         onChange={(p) => {
                           if (!p) return
                           if (row.role === 'start') setStart(fromSearch(p))
@@ -1118,7 +1126,6 @@ export default function RoutePlanner({ onBack }: Props) {
                             <PlaceSearchField
                               value={null}
                               autoFocus
-                              pill
                               onChange={(p) => {
                                 if (p) {
                                   // Panel "Add stop" appends the new stop in the current
@@ -1136,7 +1143,7 @@ export default function RoutePlanner({ onBack }: Props) {
                           <button
                             onClick={() => setAddingStop(false)}
                             aria-label="Cancel add stop"
-                            className="h-8 w-8 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 transition-colors"
+                            className="h-8 w-8 shrink-0 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 transition-colors"
                           >
                             <X size="0.9375rem" strokeWidth={2} />
                           </button>
@@ -1208,7 +1215,7 @@ export default function RoutePlanner({ onBack }: Props) {
                   <div className="border-t border-line pt-2">
                     {route.tolls.details.length > 0 ? (
                       <details className="group">
-                        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-full px-2 py-1 text-sm text-muted transition-colors hover:bg-white/4 hover:text-text">
+                        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1 text-sm text-muted transition-colors hover:bg-white/4 hover:text-text">
                           <span>Toll details · {route.tolls.details.reduce((count, detail) => count + detail.fares.length, 0)} charges</span>
                           <ChevronDown size="0.8125rem" className="transition-transform group-open:rotate-180" />
                         </summary>
@@ -1292,7 +1299,7 @@ export default function RoutePlanner({ onBack }: Props) {
               onClick={() => void calculate(true)}
               disabled={routeButtonDisabled}
               title={!hasEndpoints ? 'Set a start and destination first' : undefined}
-              className={`flex h-10 w-full items-center justify-center gap-2 rounded-full text-base font-semibold transition-colors ${
+              className={`flex h-10 w-full items-center justify-center gap-2 text-base font-semibold transition-colors ${
                 routeButtonDisabled
                   ? 'bg-white/6 text-muted cursor-default'
                   : 'bg-text text-bg hover:bg-text/90'
@@ -1315,7 +1322,7 @@ export default function RoutePlanner({ onBack }: Props) {
             standard grouped-row recipe (CategoryRow): glyph chip, label over its
             live current value, chevron. The value stays visible while open, so
             opening the fields never hides what they currently add up to. */}
-        <div className="shrink-0 rounded-panel border border-line bg-rail shadow-raised">
+        <div className="shrink-0 border border-line bg-surface shadow-overlay">
           <button
             onClick={() => setTruckOpen((o) => !o)}
             aria-expanded={truckOpen}
@@ -1355,7 +1362,7 @@ export default function RoutePlanner({ onBack }: Props) {
                   onClick={() => setSavingPreset((s) => !s)}
                   title="Save current profile as a preset"
                   aria-label="Save preset"
-                  className="h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/6 transition-colors"
+                  className="h-8 w-8 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 transition-colors"
                 >
                   <Bookmark size="0.875rem" strokeWidth={1.8} />
                 </button>
@@ -1364,7 +1371,7 @@ export default function RoutePlanner({ onBack }: Props) {
                     onClick={() => removePreset(activePreset.id)}
                     title="Delete this preset"
                     aria-label="Delete preset"
-                    className="h-8 w-8 flex items-center justify-center rounded-full text-muted hover:text-alert hover:bg-white/6 transition-colors"
+                    className="h-8 w-8 flex items-center justify-center text-muted hover:text-alert hover:bg-white/6 transition-colors"
                   >
                     <Trash2 size="0.875rem" strokeWidth={1.8} />
                   </button>
@@ -1379,7 +1386,7 @@ export default function RoutePlanner({ onBack }: Props) {
                     onKeyDown={(e) => e.key === 'Enter' && commitSavePreset()}
                     placeholder="Preset name"
                     autoFocus
-                    className="h-8 flex-1 min-w-0 rounded-full border border-line bg-white/4 px-2.5 text-sm outline-none transition-colors focus:border-line-2 focus:bg-white/6 placeholder:text-faint"
+                    className="h-8 flex-1 min-w-0 border border-line bg-transparent px-2.5 text-sm outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4 placeholder:text-faint"
                   />
                   <button
                     onClick={commitSavePreset}

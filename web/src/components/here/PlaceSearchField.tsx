@@ -9,9 +9,11 @@ import { MENU_SURFACE } from '../menuStyles'
 // One field surface for both the query input and the locked selected chip so
 // the two states read as the SAME control: hairline border, subtle fill and a
 // calm brighten on focus (mirrors tripFormStyles / the sidebar search).
+// Drawn, not filled — the app's field rule. `bg-white/4` at rest made this the
+// only filled control left in the planner.
 const FIELD_SURFACE =
-  'h-9 border border-line bg-white/4 px-3 transition-colors'
-const FIELD_FOCUS = 'outline-none focus:border-line-2 focus:bg-white/6'
+  'h-9 border border-line bg-transparent px-3 transition-colors hover:border-line-2'
+const FIELD_FOCUS = 'outline-none focus:border-line-2 focus:bg-white/4'
 
 // Build a HerePlace from directly-entered coordinates so the selection flow is
 // identical to picking a search result (caller reads `position` + `label`).
@@ -32,8 +34,6 @@ type Props = {
   initialQuery?: string
   // Focus the input on mount (inline edit / "add stop" reveal).
   autoFocus?: boolean
-  // Optional pill treatment for compact floating tools such as Route Planner.
-  pill?: boolean
 }
 
 type PopupPosition = {
@@ -48,7 +48,7 @@ type PopupPosition = {
 // Debounced; selecting a result locks the field to that place's label, with a
 // clear (×) button to pick again. Stays deliberately simple — no keyboard
 // arrow-nav yet, just click/tap selection.
-export default function PlaceSearchField({ label, value, onChange, placeholder, initialQuery, autoFocus, pill = false }: Props) {
+export default function PlaceSearchField({ label, value, onChange, placeholder, initialQuery, autoFocus }: Props) {
   const [query, setQuery] = useState(initialQuery ?? '')
   const [items, setItems] = useState<HerePlace[]>([])
   const [open, setOpen] = useState(false)
@@ -185,7 +185,7 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
     setItems([])
   }
 
-  const fieldSurface = `${FIELD_SURFACE} ${pill ? 'rounded-full' : 'rounded-card'}`
+  const fieldSurface = FIELD_SURFACE
 
   const dropdown = popup && dropdownVisible && (
     <ul

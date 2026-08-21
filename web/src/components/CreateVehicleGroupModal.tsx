@@ -4,6 +4,7 @@ import type { Group, WorkspaceMember } from '../lib/types'
 import { api } from '../lib/api'
 import Avatar from './Avatar'
 import Modal from './Modal'
+import { fieldClass } from './forms/fieldStyles'
 
 type Props = {
   onClose: () => void
@@ -113,7 +114,7 @@ export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
             onChange={(e) => setName(e.target.value)}
             autoFocus
             placeholder="Truck B-123-ABC"
-            className="modal-input"
+            className={fieldClass()}
           />
         </ModalField>
 
@@ -125,7 +126,7 @@ export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
               value={tractorPlate}
               onChange={(e) => setTractorPlate(e.target.value)}
               placeholder="B-123-ABC"
-              className="modal-input font-mono"
+              className={`${fieldClass()} font-mono`}
             />
           </ModalField>
           <ModalField label="Trailer reg. number">
@@ -133,7 +134,7 @@ export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
               value={trailerPlate}
               onChange={(e) => setTrailerPlate(e.target.value)}
               placeholder="B-456-XYZ"
-              className="modal-input font-mono"
+              className={`${fieldClass()} font-mono`}
             />
           </ModalField>
         </div>

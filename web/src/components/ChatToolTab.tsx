@@ -32,7 +32,7 @@ export default function ToolTab({
           type="button"
           onClick={onClose}
           aria-label={`Close ${label}`}
-          className="h-4 w-4 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/8 transition-colors"
+          className="h-4 w-4 flex items-center justify-center text-muted hover:text-text hover:bg-white/8 transition-colors"
         >
           <X size="0.6875rem" strokeWidth={2.2} />
         </button>

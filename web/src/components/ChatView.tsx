@@ -1476,7 +1476,7 @@ export default function ChatView({
                 onClick={scrollToBottom}
                 aria-label="Scroll to latest messages"
                 style={{ bottom: composerHeight + 8 }}
-                className="absolute left-1/2 -translate-x-1/2 z-10 h-9 w-9 rounded-full bg-surface border border-line text-text hover:bg-surface-2 hover:border-line-2 flex items-center justify-center transition-colors shadow-raised"
+                className="absolute left-1/2 -translate-x-1/2 z-10 h-9 w-9 bg-surface border border-line text-text hover:bg-surface-2 hover:border-line-2 flex items-center justify-center transition-colors shadow-raised"
               >
                 <ArrowDown size="1rem" strokeWidth={1.8} />
               </button>

@@ -119,7 +119,7 @@ export default function ChatHeader({
                   searchInputRef.current?.focus()
                 }}
                 aria-label="Clear search"
-                className="h-6 w-6 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-white/8 transition-colors shrink-0"
+                className="h-6 w-6 flex items-center justify-center text-muted hover:text-text hover:bg-white/8 transition-colors shrink-0"
               >
                 <X size="0.875rem" strokeWidth={2} />
               </button>

@@ -281,7 +281,7 @@ export default function AttachmentSendPreviewModal({
                 disabled={sending}
                 aria-label="Send attachment"
                 title="Send (Ctrl+Enter)"
-                className="h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 flex items-center justify-center rounded-full bg-text text-bg transition-colors hover:bg-white disabled:opacity-60 disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                className="h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 flex items-center justify-center bg-text text-bg transition-colors hover:bg-white disabled:opacity-60 disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
               >
                 {sending ? (
                   <Loader2

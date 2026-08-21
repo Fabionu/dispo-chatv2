@@ -116,9 +116,12 @@ export function FilterTabBar({
     }
     const x = active.offsetLeft
     // One pixel above the item's bottom edge, so the 2px bar covers the tab's
-    // own (now permanently transparent) hairline AND the top of the row rule
-    // under it: the mark reads as that rule thickening and lighting up, not as
-    // a third line stacked on the other two.
+    // own (permanently transparent) hairline. The row used to carry a `border-b`
+    // for the bar to sit on and the mark read as that rule lighting up; the rule
+    // is gone (user, 2026-08-21 — the rail is quieter without a line under the
+    // filters), so the bar is now the only mark on the row and simply underlines
+    // the live tab. The -1 stays: it is what keeps the bar inside the row's box
+    // rather than hanging a pixel below it.
     const y = active.offsetTop + active.offsetHeight - 1
     const w = active.offsetWidth
     setBar((prev) => (prev && prev.x === x && prev.y === y && prev.w === w ? prev : { x, y, w }))
@@ -157,7 +160,7 @@ export function FilterTabBar({
   }, [measure])
 
   return (
-    <div ref={attachRow} className="relative px-3 flex items-center gap-4 shrink-0 border-b">
+    <div ref={attachRow} className="relative px-3 flex items-center gap-4 shrink-0">
       <div className="flex min-w-0 flex-wrap items-center gap-4">{children}</div>
       {bar && (
         <span
