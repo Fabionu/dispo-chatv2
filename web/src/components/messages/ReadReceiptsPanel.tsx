@@ -116,7 +116,7 @@ function ReceiptSection({
           {title}
         </span>
       </div>
-      <div className="overflow-hidden rounded-card bg-white/2 divide-y divide-white/4">
+      <div className="overflow-hidden rounded-card bg-white/2 divide-y divide-line">
         {readers.length === 0 ? (
           <div className="px-3 py-4 text-center text-sm text-muted">Nobody yet</div>
         ) : (

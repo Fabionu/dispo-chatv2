@@ -720,7 +720,7 @@ export default function TripRouteMap({
 
         {/* Compact route summary overlay — distance + driving time, or a quiet
             calculating state. Gains a subtle "Editing" tag while in edit mode. */}
-        <div className="absolute top-2 left-2 rounded-full bg-bg/95 backdrop-blur-md border border-white/16 px-3 py-1.5 text-sm flex items-center gap-2 shadow-raised">
+        <div className="absolute top-2 left-2 rounded-full bg-bg/95 backdrop-blur-md border border-line-2 px-3 py-1.5 text-sm flex items-center gap-2 shadow-raised">
           {editing && (
             <span className="flex items-center gap-1.5 text-active font-medium">
               <span className="h-1.5 w-1.5 rounded-full bg-active" />
@@ -751,7 +751,7 @@ export default function TripRouteMap({
           // imagery — and at 85% those tiles bleed through and wash the text out.
           // A readout of the trip's actual numbers has to stay readable over
           // anything the map happens to draw underneath it.
-          <div className="absolute z-20 bottom-2 left-2 max-w-[calc(100%-1rem)] rounded-card bg-bg/95 backdrop-blur-md border border-white/16 px-3 py-2 text-xs text-text shadow-raised">
+          <div className="absolute z-20 bottom-2 left-2 max-w-[calc(100%-1rem)] rounded-card bg-bg/95 backdrop-blur-md border border-line-2 px-3 py-2 text-xs text-text shadow-raised">
             <div className="flex items-center gap-3">
               <span className="flex items-center gap-1.5">
                 <span className="block h-[5px] w-5 rounded-full bg-[#c89572] ring-1 ring-black/35" />
@@ -775,7 +775,7 @@ export default function TripRouteMap({
 
             {/* Driven vs planned, side by side — the comparison is the point, so
                 neither number is shown without the other. */}
-            <div className="mt-1.5 pt-1.5 border-t border-white/16 flex items-center gap-1.5 tabular-nums">
+            <div className="mt-1.5 pt-1.5 border-t border-line-2 flex items-center gap-1.5 tabular-nums">
               {/* The two figures are the panel's reason to exist, so they carry
                   the weight; their units and labels stay quiet beside them. */}
               <span className="text-driven font-semibold text-sm">{formatDistance(drivenM)}</span>
@@ -831,7 +831,7 @@ export default function TripRouteMap({
           <button
             type="button"
             onClick={startEdit}
-            className="absolute z-20 top-2 right-2 flex items-center gap-1.5 h-8 px-3 rounded-full bg-bg/80 backdrop-blur-sm border border-white/8 text-sm font-medium text-text hover:bg-bg transition-colors shadow-raised"
+            className="absolute z-20 top-2 right-2 flex items-center gap-1.5 h-8 px-3 rounded-full bg-bg/80 backdrop-blur-sm border border-line text-sm font-medium text-text hover:bg-bg transition-colors shadow-raised"
           >
             <Pencil size="0.8125rem" strokeWidth={2} />
             Edit route
@@ -845,7 +845,7 @@ export default function TripRouteMap({
               type="button"
               onClick={cancelEdit}
               disabled={saving}
-              className="flex items-center gap-1.5 h-8 px-3 rounded-full bg-bg/80 backdrop-blur-sm border border-white/8 text-sm font-medium text-muted hover:text-text hover:bg-bg transition-colors shadow-raised disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 h-8 px-3 rounded-full bg-bg/80 backdrop-blur-sm border border-line text-sm font-medium text-muted hover:text-text hover:bg-bg transition-colors shadow-raised disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <X size="0.8125rem" strokeWidth={2} />
               Cancel
@@ -871,7 +871,7 @@ export default function TripRouteMap({
                 {saveError}
               </div>
             ) : (
-              <div className="rounded-full bg-bg/80 backdrop-blur-sm border border-white/8 text-muted px-3 py-1.5 text-xs shadow-raised">
+              <div className="rounded-full bg-bg/80 backdrop-blur-sm border border-line text-muted px-3 py-1.5 text-xs shadow-raised">
                 Drag a stop to move it · right-click to add · click a stop to remove.
               </div>
             )}
@@ -885,7 +885,7 @@ export default function TripRouteMap({
             className={`absolute z-30 min-w-[10rem] ${MENU_CONTAINER}`}
             style={{ left: menu.x, top: menu.y }}
           >
-            <div className="px-3 py-1.5 text-2xs uppercase tracking-wide text-muted border-b border-white/6 mb-1">
+            <div className="px-3 py-1.5 text-2xs uppercase tracking-wide text-muted border-b border-line mb-1">
               {menu.lat.toFixed(5)}, {menu.lng.toFixed(5)}
             </div>
             <button type="button" onClick={addStopFromMenu} className={menuItemClass()}>
@@ -905,7 +905,7 @@ export default function TripRouteMap({
             className={`absolute z-30 min-w-[10rem] ${MENU_CONTAINER}`}
             style={{ left: markerMenu.x, top: markerMenu.y }}
           >
-            <div className="px-3 py-1.5 text-2xs uppercase tracking-wide text-muted border-b border-white/6 mb-1">
+            <div className="px-3 py-1.5 text-2xs uppercase tracking-wide text-muted border-b border-line mb-1">
               {markerMenu.kind === 'origin'
                 ? 'Start'
                 : markerMenu.kind === 'destination'

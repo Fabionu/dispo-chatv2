@@ -117,7 +117,7 @@ export default function AssignedDrivers({ members, assignedIds, canManage, onSav
   }, [open, draft, assignedIds])
 
   return (
-    <div ref={rootRef} className="relative py-2 border-b border-white/4 last:border-0">
+    <div ref={rootRef} className="relative py-2 border-b border-line last:border-0">
       <div className="flex items-center justify-between gap-2 mb-1">
         <label className="block text-xs text-faint">Assigned drivers</label>
         {canManage && (
@@ -138,7 +138,7 @@ export default function AssignedDrivers({ members, assignedIds, canManage, onSav
           {assignedMembers.map((m) => (
             <span
               key={m.id}
-              className="inline-flex items-center gap-1.5 rounded-full bg-white/6 border border-white/6 pl-1 pr-2 py-0.5"
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/6 border border-line pl-1 pr-2 py-0.5"
             >
               <Avatar userId={m.id} name={m.displayName} size={18} />
               <span className="text-sm text-text max-w-[9rem] truncate">
@@ -167,7 +167,7 @@ export default function AssignedDrivers({ members, assignedIds, canManage, onSav
       {/* Member picker popover (managers only). A custom multi-select — never a
           browser <select> — of the room's members, each a toggle with avatar. */}
       {open && (
-        <div className="absolute left-0 right-0 top-full z-20 mt-1 rounded-card border border-white/10 bg-rail shadow-overlay p-1">
+        <div className="absolute left-0 right-0 top-full z-20 mt-1 rounded-card border border-line bg-rail shadow-overlay p-1">
           {members.length === 0 ? (
             <div className="text-sm text-faint px-2 py-3 text-center">
               No members to assign yet.
@@ -197,7 +197,7 @@ export default function AssignedDrivers({ members, assignedIds, canManage, onSav
                     </span>
                     <span
                       className={`h-5 w-5 shrink-0 flex items-center justify-center rounded-full border transition-colors ${
-                        on ? 'bg-text text-bg border-transparent' : 'border-white/16 text-transparent'
+                        on ? 'bg-text text-bg border-transparent' : 'border-line-2 text-transparent'
                       }`}
                     >
                       <Check size="0.75rem" strokeWidth={2.4} />

@@ -40,8 +40,8 @@ export type MessageActionParams = {
 }
 
 // Build the ordered action list for a message's actions menu. Pure — the order,
-// labels, disabled/tone/separator flags and click handlers are unchanged from
-// the original inline construction in MessageRow.
+// labels, disabled/tone flags and click handlers are unchanged from the
+// original inline construction in MessageRow.
 export function buildMessageActions({
   message,
   pinned,
@@ -120,7 +120,6 @@ export function buildMessageActions({
       label: 'Delete for me',
       onClick: () => onDeleteForMe(message),
       tone: 'alert' as const,
-      separator: true,
       icon: <Trash2 {...MENU_GLYPH} />,
     },
     ...(mine

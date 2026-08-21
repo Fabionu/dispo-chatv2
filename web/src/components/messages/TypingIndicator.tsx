@@ -1,25 +1,55 @@
 import { useEffect, useState } from 'react'
-import Avatar from '../Avatar'
 import { typingStatusText, type TypingUser } from '../../lib/typing'
 
-// Temporary incoming-style bubble in the measured composer lane, immediately
-// above the input. The outer grid animates its real height, so ChatView expands
-// the list's bottom reserve and the conversation lifts/settles with the state.
-// Multiple typers share one identity stack and one compact dots bubble.
+// Live composing state, drawn as a message that hasn't arrived yet: the same
+// left rule, the same indent, the same mono attribution row, and three dots
+// where the body will be. It used to be an avatar stack plus an incoming-style
+// bubble — neither of which exists in the timeline any more, so it would have
+// been the one bubble left on the screen.
+//
+// It sits in the composer lane, immediately above the input. That lane FLOATS
+// over the message list — the thread scrolls underneath it — and what keeps the
+// last message clear of it is a bottom reserve on the scroller that ChatView
+// sizes from the lane's MEASURED height. Two rules follow from that, and both
+// were broken here:
+//
+//  1. THE ROW'S HEIGHT ARRIVES IN ONE STEP. It used to animate — an outer grid
+//     eased `0fr → 1fr` over 190ms — so for the whole of that transition the
+//     reserve was chasing a height no React render had produced, and the row
+//     was drawn over the last message until a ResizeObserver frame caught up.
+//     Now the height lands with the commit that mounts the row, so ChatView's
+//     post-layout measurement sees the final number immediately and the
+//     conversation lifts in one move. The APPEARANCE still eases (see
+//     .typing-indicator-enter / -exit): fade and travel cost no layout, so they
+//     can take as long as they like without the reserve ever being wrong.
+//
+//  2. IT IS OPAQUE, like every other object in the lane (the input itself, the
+//     reply/edit context rows). Even with the reserve exact, a transparent row
+//     over a scrolling thread has no margin for error; the fill costs nothing —
+//     it matches the field — and turns any residual frame of overlap into
+//     nothing visible at all.
 export default function TypingIndicator({ users }: { users: TypingUser[] }) {
   // Keep the last active set mounted very briefly after the socket says typing
-  // stopped. That gives the capsule time to ease away instead of blinking out;
-  // a new typing event during the exit cancels it immediately.
+  // stopped. That gives the row time to ease away instead of blinking out; a
+  // new typing event during the exit cancels it immediately.
   const [displayedUsers, setDisplayedUsers] = useState(users)
   const [leaving, setLeaving] = useState(false)
 
+  // ARRIVAL IS DERIVED DURING RENDER, not in an effect. The row's content and
+  // the height it occupies have to land in the same commit — adopting the new
+  // set in an effect split them across two, and the reserve was a frame stale
+  // for the gap. `users` is stable state from useTypingIndicator, so the
+  // identity check settles after one extra render.
+  if (users.length > 0 && users !== displayedUsers) {
+    setDisplayedUsers(users)
+    setLeaving(false)
+  }
+
+  // Departure keeps its timer: the row has to outlive the socket's stop event
+  // long enough to play its exit. It holds its full height until it unmounts,
+  // which is why the thread settles in one step rather than sliding shut.
   useEffect(() => {
-    if (users.length > 0) {
-      setDisplayedUsers(users)
-      setLeaving(false)
-      return
-    }
-    if (displayedUsers.length === 0) return
+    if (users.length > 0 || displayedUsers.length === 0) return
 
     setLeaving(true)
     const timer = window.setTimeout(() => {
@@ -29,56 +59,23 @@ export default function TypingIndicator({ users }: { users: TypingUser[] }) {
     return () => window.clearTimeout(timer)
   }, [users, displayedUsers.length])
 
-  const text = typingStatusText(displayedUsers)
-  const identityWidth =
-    displayedUsers.length > 2 ? 'w-[4.25rem]' : displayedUsers.length === 2 ? 'w-12' : 'w-8'
+  if (displayedUsers.length === 0) return null
 
   return (
     <div
-      className={`typing-indicator-slot ${users.length > 0 ? 'typing-indicator-slot-visible' : ''}`}
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      className={`${
+        leaving ? 'typing-indicator-exit' : 'typing-indicator-enter'
+      } border-l bg-bg pl-[var(--msg-indent)] pb-3`}
     >
-      <div className="min-h-0 overflow-hidden">
-        {displayedUsers.length > 0 && (
-          <div
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
-            className={`${leaving ? 'typing-indicator-exit' : 'typing-indicator-enter'} flex max-w-[min(82%,64rem)] items-end gap-2.5 pt-1 pb-2`}
-          >
-            <span
-              className={`flex ${identityWidth} shrink-0 -space-x-2 pb-0.5`}
-              aria-hidden="true"
-            >
-              {displayedUsers.slice(0, 2).map((user, index) => (
-                <span
-                  key={user.id}
-                  className="typing-avatar-enter relative rounded-full ring-2 ring-rail"
-                  style={{ zIndex: 2 - index, animationDelay: `${index * 70}ms` }}
-                >
-                  <Avatar userId={user.id} name={user.name} size={28} />
-                </span>
-              ))}
-              {displayedUsers.length > 2 && (
-                <span className="relative z-0 flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-rail bg-surface-2 px-1 text-2xs font-semibold text-muted">
-                  +{displayedUsers.length - 2}
-                </span>
-              )}
-            </span>
-            <span className="flex min-w-0 flex-col items-start gap-1">
-              <span className="max-w-full truncate px-1 text-sm font-medium leading-none text-muted">
-                {text}
-              </span>
-              {/* Same neutral skin and sender-side tail as an incoming message
-                  bubble; the content is only the live composing rhythm. */}
-              <span className="flex h-8 items-center gap-1 rounded-[1rem] rounded-bl-[0.375rem] bg-surface-2 px-3" aria-hidden="true">
-                <Dot delay="0ms" />
-                <Dot delay="160ms" />
-                <Dot delay="320ms" />
-              </span>
-            </span>
-          </div>
-        )}
-      </div>
+      <span className="eyebrow block truncate">{typingStatusText(displayedUsers)}</span>
+      <span className="mt-2 flex h-4 items-center gap-1" aria-hidden="true">
+        <Dot delay="0ms" />
+        <Dot delay="160ms" />
+        <Dot delay="320ms" />
+      </span>
     </div>
   )
 }

@@ -50,7 +50,7 @@ export default function VerificationNotice({
             <span className="text-2xl font-semibold tracking-[-0.01em]">Dispo-chat</span>
           </div>
 
-          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/8 bg-white/4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-line bg-white/4">
             {sent ? (
               <Check size="1.25rem" strokeWidth={1.8} className="text-done" />
             ) : (
@@ -87,7 +87,7 @@ export default function VerificationNotice({
             {sending && <Loader2 size="0.9375rem" strokeWidth={2.2} className="animate-spin" />}
           </button>
 
-          <p className="mt-8 border-t border-white/6 pt-5 text-base text-muted">
+          <p className="mt-8 border-t border-line pt-5 text-base text-muted">
             <button
               type="button"
               onClick={onBack}

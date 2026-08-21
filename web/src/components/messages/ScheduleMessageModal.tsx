@@ -77,8 +77,8 @@ function parseLocalDateTime(date: string, time: string): Date | null {
 const CHIP_BASE =
   'h-7 whitespace-nowrap rounded-full border px-2.5 text-sm font-medium transition-colors ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20'
-const CHIP_IDLE = 'border-white/8 text-muted hover:bg-white/6 hover:text-text'
-const CHIP_ACTIVE = 'border-white/16 bg-white/10 text-text'
+const CHIP_IDLE = 'border-line text-muted hover:bg-white/6 hover:text-text'
+const CHIP_ACTIVE = 'border-line-2 bg-white/10 text-text'
 
 export default function ScheduleMessageModal({
   groupId,
@@ -222,7 +222,7 @@ export default function ScheduleMessageModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-white/16 px-3.5 py-1.5 text-sm font-medium text-text transition-colors hover:bg-white/4"
+            className="rounded-full border border-line-2 px-3.5 py-1.5 text-sm font-medium text-text transition-colors hover:bg-white/4"
           >
             Cancel
           </button>
@@ -246,7 +246,7 @@ export default function ScheduleMessageModal({
           <>
             {/* What will be sent. Scrolls rather than clamping so a long draft
                 can still be read in full before committing to a send time. */}
-            <div className="flex gap-2.5 rounded-card border border-white/8 bg-white/2 px-3 py-2.5">
+            <div className="flex gap-2.5 rounded-card border border-line bg-white/2 px-3 py-2.5">
               <span className="w-0.5 shrink-0 rounded-full bg-active/70" aria-hidden />
               <div className="min-w-0 flex-1">
                 <p className="max-h-[5.5rem] overflow-y-auto whitespace-pre-wrap break-words text-base text-text">
@@ -302,7 +302,7 @@ export default function ScheduleMessageModal({
             </section>
           </>
         ) : (
-          <p className="rounded-card border border-white/8 bg-white/2 px-3 py-2.5 text-sm text-muted">
+          <p className="rounded-card border border-line bg-white/2 px-3 py-2.5 text-sm text-muted">
             Write a message in the composer, then use the clock button to choose when to send it.
           </p>
         )}
@@ -310,7 +310,7 @@ export default function ScheduleMessageModal({
         {notice && <p className="text-sm text-done">{notice}</p>}
         {error && <p className="text-sm text-alert">{error}</p>}
 
-        <section className="border-t border-white/6 pt-4">
+        <section className="border-t border-line pt-4">
           <div className="mb-2 flex items-center gap-2">
             <span className="eyebrow">Scheduled</span>
             {scheduled.length > 0 && (
@@ -357,7 +357,7 @@ function ScheduledRow({
   const failed = item.status === 'failed'
   const at = new Date(item.scheduledFor)
   return (
-    <li className="flex items-start gap-2.5 rounded-card border border-white/6 bg-white/2 px-3 py-2.5">
+    <li className="flex items-start gap-2.5 rounded-card border border-line bg-white/2 px-3 py-2.5">
       {failed ? (
         <AlertTriangle size="0.9375rem" strokeWidth={1.8} className="mt-0.5 shrink-0 text-alert" />
       ) : (

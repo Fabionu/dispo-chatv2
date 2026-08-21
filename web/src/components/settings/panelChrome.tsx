@@ -94,7 +94,7 @@ export function CategoryRow({
       onClick={onClick}
       className="w-full flex items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20"
     >
-      <span className="h-8 w-8 shrink-0 flex items-center justify-center rounded-btn border border-white/6 bg-white/2 text-muted">
+      <span className="h-8 w-8 shrink-0 flex items-center justify-center rounded-btn border border-line bg-white/2 text-muted">
         {icon}
       </span>
       <span className="min-w-0 flex-1">
@@ -109,4 +109,4 @@ export function CategoryRow({
 // The wrapper every grouped row list shares: hairline card, hairline dividers,
 // clipped corners so the first/last row hover follows the radius.
 export const PANEL_GROUP_CARD =
-  'rounded-card border border-white/6 bg-white/2 divide-y divide-white/6 overflow-hidden'
+  'rounded-card border border-line bg-white/2 divide-y divide-line overflow-hidden'

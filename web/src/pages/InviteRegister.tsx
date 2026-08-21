@@ -109,7 +109,7 @@ export default function InviteRegister({ token }: Props) {
   return (
     <div className="min-h-screen w-full bg-bg text-text flex flex-col">
       <div className="px-8 sm:px-12 lg:px-16 py-8 flex items-center gap-3">
-        <div className="h-9 w-9 rounded-card border border-white/10 bg-white/4 flex items-center justify-center">
+        <div className="h-9 w-9 rounded-card border border-line bg-white/4 flex items-center justify-center">
           <Box size="1.0625rem" strokeWidth={1.5} />
         </div>
         <div className="text-xl font-semibold tracking-[-0.2px]">Dispo-chat</div>
@@ -136,14 +136,14 @@ export default function InviteRegister({ token }: Props) {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-base text-text mb-1.5">Company</label>
-                    <div className="flex items-center gap-2 w-full bg-white/4 border border-white/8 rounded-btn px-3 py-2.5 text-lg text-muted">
+                    <div className="flex items-center gap-2 w-full bg-white/4 border border-line rounded-btn px-3 py-2.5 text-lg text-muted">
                       <Building2 size="0.9375rem" strokeWidth={1.6} className="text-faint shrink-0" />
                       <span className="truncate">{validation.companyName}</span>
                     </div>
                   </div>
                   <div>
                     <label className="block text-base text-text mb-1.5">Role</label>
-                    <div className="flex items-center gap-2 w-full bg-white/4 border border-white/8 rounded-btn px-3 py-2.5 text-lg text-muted">
+                    <div className="flex items-center gap-2 w-full bg-white/4 border border-line rounded-btn px-3 py-2.5 text-lg text-muted">
                       <UserCog size="0.9375rem" strokeWidth={1.6} className="text-faint shrink-0" />
                       <span className="truncate">{ROLE_LABEL[validation.role]}</span>
                     </div>
@@ -184,7 +184,7 @@ export default function InviteRegister({ token }: Props) {
                       placeholder="At least 8 characters"
                       autoComplete="new-password"
                       required
-                      className="w-full bg-transparent border border-white/8 rounded-btn pl-3 pr-10 py-2.5 text-lg focus:outline-none focus:border-white/20 transition-colors"
+                      className="w-full bg-transparent border border-line rounded-btn pl-3 pr-10 py-2.5 text-lg focus:outline-none focus:border-line-2 transition-colors"
                     />
                     <button
                       type="button"
@@ -308,7 +308,7 @@ function Field({
         autoComplete={autoComplete}
         required={required}
         readOnly={readOnly}
-        className="w-full bg-transparent border border-white/8 rounded-btn px-3 py-2.5 text-lg focus:outline-none focus:border-white/20 transition-colors"
+        className="w-full bg-transparent border border-line rounded-btn px-3 py-2.5 text-lg focus:outline-none focus:border-line-2 transition-colors"
       />
     </div>
   )

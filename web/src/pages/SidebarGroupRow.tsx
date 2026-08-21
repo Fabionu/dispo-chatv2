@@ -11,17 +11,13 @@ import {
   Trash2,
 } from 'lucide-react'
 import type { Group } from '../lib/types'
-import { groupLabel, groupPreview, isUnread } from '../lib/types'
+import { groupLabel, groupPreview, isUnread, tractorPlate, trailerPlate } from '../lib/types'
 import { useDraft } from '../lib/draftStorage'
 import { getOps, tripSummary } from '../lib/vehicleOps'
-import { TripStatusInline } from '../components/vehicle/opsControls'
-import Avatar from '../components/Avatar'
-import GroupAvatar from '../components/GroupAvatar'
-import IdentitySlot from '../components/IdentitySlot'
-import { RowActionsTrigger, RowStateIcon } from './sidebarBits'
+import { RowActionsTrigger, RowMeta, RowStateIcon } from './sidebarBits'
 import { initials } from '../components/messages/messageUtils'
 import { MENU_GLYPH } from '../components/menuStyles'
-import { statusMeta, OFFLINE } from '../lib/availability'
+import { statusMeta } from '../lib/availability'
 import { typingStatusText, type TypingUser } from '../lib/typing'
 
 // One cell in a row's inline action strip. `label` is the short form shown
@@ -58,23 +54,30 @@ function relTime(iso: string | null): string {
   return `${day}/${month}`
 }
 
-// One conversation in the unified rail — a single, calm, monochrome row. The
-// identity slot reads a conversation's TYPE by shape, not colour: a circular
-// Avatar for a direct message (with a live presence dot), a `card`-radius
-// GroupAvatar squircle for a vehicle room (its uploaded photo, or the generated
-// glyph). A photo-less DM falls back to the peer's INITIALS here rather than the
-// contact glyph — in a LIST, a column of identical silhouettes distinguishes
-// nobody, so the disc names who instead. The name is primary; a vehicle room's active-trip status trails it as
-// quiet tone-coloured text, followed by the last-activity timestamp. The preview
-// line carries pin/mute/mention/unread state; those indicators slide left on
-// hover to expose the downward actions arrow without covering the preview.
+// One conversation in the unified rail — two lines, no avatar.
+//
+// The identity slot (circular Avatar for a DM, squircle GroupAvatar for a
+// vehicle room) was removed 2026-08-20: it encoded TYPE by shape, but it cost
+// ~50px of a rail that is now 380px wide, and it said nothing a dispatcher
+// scans for. Line 2 does that job instead — for a vehicle room with a trip it
+// reads `SV 14 HLS │ RO→IT` (plate, then the trip's country corridor), which
+// identifies the room AND tells you what it's doing.
+//
+// Line 2 falls back to the last-message preview when there are no operational
+// facts to show, and DMs keep the preview outright: between a colleague's
+// company name and what they just said, what they said is the point. Live
+// states (someone typing, an unsent draft) override either.
+//
+// Line 1 is the name — with a DM peer's presence disc immediately after it —
+// plus the last-activity stamp at the far right. Pin/mute/mention/unread
+// indicators sit at the end of line 2 and slide left on hover to expose the
+// actions arrow.
 export default function GroupRow({
   group,
   typingUsers,
   selected,
   online,
   currentUserId,
-  size,
   actionsOpen,
   onActionsOpenChange,
   onClick,
@@ -93,8 +96,6 @@ export default function GroupRow({
   online: Set<string>
   // Viewing user — decides the "You:" / name prefix on the preview line.
   currentUserId: string
-  // Identity-slot diameter in design px (tracks display density).
-  size: number
   // Whether THIS row's action strip is expanded. Owned by the list so only one
   // row can be open at a time.
   actionsOpen: boolean
@@ -117,11 +118,12 @@ export default function GroupRow({
   // offline (signed out / app closed). Live via socket presence.
   const peer = group.type === 'direct' ? group.directPeer : null
   const peerOnline = peer ? online.has(peer.id) : false
-  const peerDot = peer
-    ? peerOnline
-      ? statusMeta(peer.availabilityStatus ?? 'available')
-      : OFFLINE
-    : null
+  // ONLINE ONLY. It used to render for every DM — the peer's status colour when
+  // online, a grey OFFLINE disc otherwise — which meant a rail full of identical
+  // grey dots carrying no information at all. Absence of a dot IS the offline
+  // state, which is how every other chat app reads it.
+  const peerDot =
+    peer && peerOnline ? statusMeta(peer.availabilityStatus ?? 'available') : null
   // Selecting a group clears its indicator immediately (it's about to be read).
   // Prefer the precise server count; fall back to the timestamp-based flag when
   // the API didn't send a count (older server) so the dot never disappears.
@@ -141,6 +143,27 @@ export default function GroupRow({
 
   const preview = groupPreview(group, currentUserId)
   const time = relTime(group.lastMessageAt)
+
+  // The mono meta line's facts, in scan order: what this vehicle IS, then what
+  // it is DOING. Only vehicle rooms produce any — a DM's most useful second
+  // line is still the last thing the person said, not their company name.
+  //
+  // The corridor is the trip's first and last country codes (`RO→IT`), which is
+  // how dispatchers talk about a run. It collapses to one code for a domestic
+  // trip and falls back to the status label when the stops carry no countries,
+  // so the segment is never an empty arrow.
+  const corridor = (() => {
+    if (!trip) return null
+    const codes = trip.routePlaces.map((p) => p.code).filter(Boolean) as string[]
+    if (codes.length === 0) return trip.statusLabel
+    const from = codes[0]
+    const to = codes[codes.length - 1]
+    return from === to ? from : `${from}→${to}`
+  })()
+  const metaSegments =
+    group.type === 'vehicle'
+      ? [tractorPlate(group) ?? trailerPlate(group), corridor].filter(Boolean).map(String)
+      : []
   // Local unsent draft for THIS conversation (this user/device only — never
   // synced). It is persisted while typing, but only replaces the last-message
   // preview after the user leaves this conversation. This keeps the active
@@ -203,8 +226,13 @@ export default function GroupRow({
   // Preview-line state slides left exactly one trigger slot on hover/open. The
   // indicators remain visible; the movement simply frees the far-right edge for
   // the downward actions arrow.
-  const metaShift = `min-w-5 justify-end transition-transform duration-200 ease-out group-hover/row:-translate-x-5 group-focus-within/row:-translate-x-5${
-    menuOpen ? ' -translate-x-5' : ''
+  // Both lines' metadata slide left on hover/open, clearing the column the
+  // actions arrow occupies. 28px, not the trigger's own 20px: at exactly one
+  // slot the timestamp cleared the arrow by 2px and still read as touching it.
+  // Line 1 (status dot + time) has to move as well as line 2 — the arrow is
+  // centred between them, so shifting only one still left it colliding.
+  const metaShift = `min-w-5 justify-end transition-transform duration-200 ease-out group-hover/row:-translate-x-7 group-focus-within/row:-translate-x-7${
+    menuOpen ? ' -translate-x-7' : ''
   }`
   // The menu's read/unread label reflects the ACTUAL stored unread, not the
   // selected→0 view used for the badge.
@@ -284,11 +312,13 @@ export default function GroupRow({
   // the row click.
   const rowActions = (
     <div
-      style={{
-        right: 'var(--sidebar-row-pad-x)',
-        bottom: 'var(--sidebar-row-pad-y)',
-      }}
-      className={`absolute z-10 transition-opacity group-hover/row:opacity-100 group-hover/row:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto ${
+      style={{ right: 'var(--sidebar-row-pad-x)' }}
+      // Vertically CENTRED, not bottom-anchored. It used to sit on the
+      // preview line's baseline, which was fine while rows were ~66px tall —
+      // once they shrank to ~46px the trigger ended up a few pixels under the
+      // timestamp and the two read as one smudged control. Centred, it owns a
+      // column of its own that both metadata clusters slide clear of.
+      className={`absolute top-1/2 -translate-y-1/2 z-10 transition-opacity group-hover/row:opacity-100 group-hover/row:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto ${
         menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
       }`}
     >
@@ -320,48 +350,24 @@ export default function GroupRow({
           paddingTop: 'var(--sidebar-row-pad-y)',
           paddingBottom: 'var(--sidebar-row-pad-y)',
         }}
-        className={`w-full flex items-center rounded-btn text-left transition-colors ${
+        className={`w-full flex items-center text-left transition-colors border-l-2 ${
           selected
-            ? 'bg-white/10 text-text'
-            : 'text-muted hover:bg-white/8 hover:text-text'
+            ? 'border-text bg-white/10 text-text'
+            : 'border-transparent text-muted hover:bg-white/8 hover:text-text'
         }`}
       >
-        {/* Identity — shape encodes the conversation type: circle = person,
-            squircle = vehicle room. Monochrome; no coloured fills. The zero-
-            height IdentitySlot keeps the larger avatar from adding row height. */}
-        <IdentitySlot>
-          {group.type === 'direct' ? (
-            <Avatar
-              userId={peer?.id ?? ''}
-              name={peer?.name ?? groupLabel(group)}
-              size={size}
-              fallback="initials"
-            />
-          ) : (
-            <GroupAvatar
-              groupId={group.id}
-              hasAvatar={Boolean(group.hasAvatar)}
-              shape="rounded"
-              size={size}
-            />
-          )}
-          {peerDot && (
-            <span
-              title={peerDot.label}
-              className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-sidebar"
-              style={{ backgroundColor: peerDot.color }}
-            />
-          )}
-        </IdentitySlot>
-
         {/* Two-line body. Line 1: name + vehicle trip status + timestamp. Line 2:
             last-message preview + conversation-state icons. Tight line-height
             groups the two lines into one block, vertically centred by the avatar. */}
         <span className="flex-1 min-w-0 flex flex-col gap-px">
           {/* Line 1 — name/status take the flexible space; timestamp stays at the
               far right, aligned with the identity rather than the preview. */}
-          <span className="flex items-baseline gap-1.5 min-w-0">
+          <span className="flex items-baseline gap-2 min-w-0">
             <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+              {/* Sans. The name is the row's CONTENT; the plate and corridor
+                  under it are its structure, and only structure speaks mono.
+                  Setting the name in mono too made every row read as a serial
+                  number instead of a conversation. */}
               <span
                 className={`min-w-0 shrink truncate leading-tight ${
                   unread ? 'text-text font-semibold' : 'text-text/90 font-medium'
@@ -370,53 +376,73 @@ export default function GroupRow({
               >
                 {groupLabel(group)}
               </span>
-              {trip && (
-                <TripStatusInline
-                  tone={trip.statusTone}
-                  label={trip.statusLabel}
-                  title={tripLineFull ?? trip.statusLabel}
-                  className="shrink-[3] leading-tight opacity-75"
-                  style={{ fontSize: 'var(--sidebar-conv-meta-font-size)' }}
+              {/* The peer's presence, TRAILING the name — it belongs to the
+                  person, so it reads as part of their identity rather than as
+                  another piece of right-edge metadata beside the clock. It sat
+                  at the right end while it was grouped with the timestamp, and
+                  before that it LED the name, which pushed every DM's name
+                  ~10px right of every room's and gave the list two left edges.
+                  Trailing keeps the left edge common to every row.
+                  `self-center` against the baseline row: the disc has no
+                  baseline worth aligning, so it centres on the middle of the
+                  name's line box instead of hanging off its baseline. */}
+              {peerDot && (
+                <span
+                  title={peerDot.label}
+                  aria-label={peerDot.label}
+                  className="h-1.5 w-1.5 shrink-0 self-center rounded-full"
+                  style={{ backgroundColor: peerDot.color }}
                 />
               )}
             </span>
-            {time && (
+            {/* The timestamp shares line 2's shift, so the actions arrow always
+                has a clear column between the two metadata clusters. */}
+            <span className={`flex items-center gap-2 shrink-0 ${metaShift}`}>
+              {/* Mono: the timestamp is structure, not content, and the rework
+                  sets all structure in the mono face. Tabular figures also stop
+                  the column jittering as times change width. */}
+              {time && <span className="eyebrow shrink-0 leading-tight">{time}</span>}
+            </span>
+          </span>
+          {/* Line 2 — operational facts in mono, or human text in sans. Live
+              states win, then the mono meta, then the message preview. State
+              icons sit inline at the right and slide left on hover/open,
+              exposing the arrow menu. */}
+          <span className="flex items-center gap-2">
+            {metaSegments.length > 0 && !typingText && !showDraft ? (
+              // `tripLineFull` carries the status plus the next stop — more than
+              // the two-segment line can show, so it rides along as the tooltip
+              // rather than being dropped.
+              <span className="min-w-0 flex-1" title={tripLineFull ?? undefined}>
+                <RowMeta segments={metaSegments} />
+              </span>
+            ) : (
               <span
-                className="shrink-0 tabular-nums text-muted leading-tight"
+                className={`flex-1 min-w-0 truncate leading-tight ${typingText ? 'text-active font-medium' : unread ? 'text-text/80' : 'text-muted'}`}
                 style={{ fontSize: 'var(--sidebar-conv-meta-font-size)' }}
               >
-                {time}
+                {typingText ? (
+                  <span role="status" aria-live="polite">{typingText}</span>
+                ) : showDraft ? (
+                  // A local unsent draft takes over the line, its "Draft:" tag
+                  // in the app's accent so it reads as a distinct, personal
+                  // state. The line truncates, so a long draft ellipsizes.
+                  <>
+                    <span className="text-active font-medium">Draft: </span>
+                    {draft}
+                  </>
+                ) : (
+                  <>
+                    {preview.prefix && (
+                      <span className={unread ? 'text-text/80 font-medium' : 'text-muted'}>
+                        {preview.prefix}{' '}
+                      </span>
+                    )}
+                    {preview.text}
+                  </>
+                )}
               </span>
             )}
-          </span>
-          {/* Line 2 — the preview remains unchanged. State icons sit inline at
-              the right and slide left on hover/open, exposing the arrow menu. */}
-          <span className="flex items-center gap-2">
-            <span
-              className={`flex-1 min-w-0 truncate leading-tight ${typingText ? 'text-active font-medium' : unread ? 'text-text/80' : 'text-muted'}`}
-              style={{ fontSize: 'var(--sidebar-conv-meta-font-size)' }}
-            >
-              {typingText ? (
-                <span role="status" aria-live="polite">{typingText}</span>
-              ) : showDraft ? (
-                // A local unsent draft takes over the preview line, its "Draft:"
-                // tag in the app's accent so it reads as a distinct, personal
-                // state. The line truncates, so a long draft ellipsizes.
-                <>
-                  <span className="text-active font-medium">Draft: </span>
-                  {draft}
-                </>
-              ) : (
-                <>
-                  {preview.prefix && (
-                    <span className={unread ? 'text-text/80 font-medium' : 'text-muted'}>
-                      {preview.prefix}{' '}
-                    </span>
-                  )}
-                  {preview.text}
-                </>
-              )}
-            </span>
             <span className={`flex items-center gap-2 shrink-0 ${metaShift}`}>
               {pinned && <RowStateIcon icon={Pin} label="Pinned" />}
               {hasUnreadMention && (

@@ -10,8 +10,8 @@ import { MENU_SURFACE } from '../menuStyles'
 // the two states read as the SAME control: hairline border, subtle fill and a
 // calm brighten on focus (mirrors tripFormStyles / the sidebar search).
 const FIELD_SURFACE =
-  'h-9 border border-white/6 bg-white/4 px-3 transition-colors'
-const FIELD_FOCUS = 'outline-none focus:border-white/16 focus:bg-white/6'
+  'h-9 border border-line bg-white/4 px-3 transition-colors'
+const FIELD_FOCUS = 'outline-none focus:border-line-2 focus:bg-white/6'
 
 // Build a HerePlace from directly-entered coordinates so the selection flow is
 // identical to picking a search result (caller reads `position` + `label`).

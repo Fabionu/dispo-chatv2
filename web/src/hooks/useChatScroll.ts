@@ -1,4 +1,14 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+
+// Read at call time, not once at module load: the user can flip the OS setting
+// while the app is open, and a stale answer would keep animating at them.
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
+}
 import type { LocalMessage } from '../components/messages/types'
 import { devlog } from '../lib/devlog'
 
@@ -100,7 +110,15 @@ export function useChatScroll(messages: LocalMessage[], loading: boolean) {
       firstId === prevFirstIdRef.current
     if (appendedAtEnd) {
       if (nearBottomRef.current) {
-        el.scrollTop = el.scrollHeight
+        // SMOOTH for an arrival: someone else's message is animating itself in
+        // (see .message-enter), and a snapped scroll under a travelling row
+        // reads as two unrelated jumps. My own sends never reach here — they
+        // take the forceBottom path above and stay instant, because a send is a
+        // direct response to a keypress.
+        el.scrollTo({
+          top: el.scrollHeight,
+          behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+        })
         devlog('append scroll-to-bottom (near bottom)', { messages: len })
       }
       remember()
@@ -138,9 +156,13 @@ export function useChatScroll(messages: LocalMessage[], loading: boolean) {
     })
     ro.observe(node)
     composerObserverRef.current = ro
+    // No companion unmount effect: React calls this ref with `null` when the
+    // composer goes away, and the disconnect at the top of the callback is the
+    // cleanup. An effect cleanup doing it as well is not redundant but
+    // destructive — StrictMode runs cleanups once on mount, and a stable
+    // callback ref is not re-invoked afterwards, so the observer would be dead
+    // for the rest of the session.
   }, [])
-
-  useEffect(() => () => composerObserverRef.current?.disconnect(), [])
 
   const onScroll = useCallback(() => {
     const el = scrollRef.current

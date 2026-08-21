@@ -56,10 +56,12 @@ export default function AttachMenu({ disabled, onPickKind, onAddTrip }: Props) {
         aria-label="Add"
         aria-haspopup="menu"
         aria-expanded={open}
-        className={`h-[var(--composer-size)] w-[var(--composer-size)] flex items-center justify-center rounded-full border transition-colors disabled:opacity-30 disabled:cursor-default ${
-          open
-            ? 'text-text bg-white/10 border-white/10'
-            : 'text-muted bg-white/4 border-white/6 hover:text-text hover:bg-white/8 hover:border-white/10'
+        // Undrawn: no box of its own. It used to carry a hairline, which put a
+        // second rectangle inside the composer's own rectangle for a control
+        // that is already unmistakably a `+`. The hover wash is the affordance,
+        // exactly as it is for the schedule button beside it.
+        className={`h-[var(--composer-size)] w-[var(--composer-size)] flex items-center justify-center transition-colors disabled:opacity-30 disabled:cursor-default ${
+          open ? 'text-text bg-white/10' : 'text-muted hover:text-text hover:bg-white/6'
         }`}
       >
         <Plus size="1.125rem" strokeWidth={1.8} />

@@ -69,7 +69,7 @@ export default function InlinePdfPreview({
           own canvas + scrollbar, never the browser's PDF toolbar. Falls back to
           the themed document card only if rendering fails. */}
       <div className={`flex-1 min-h-0 bg-bg ${embedded ? 'relative p-2' : 'p-3'}`}>
-        <div className="mx-auto h-full w-full max-w-[56.25rem] rounded-card border border-white/8 overflow-hidden bg-bg">
+        <div className="mx-auto h-full w-full max-w-[56.25rem] rounded-card border border-line overflow-hidden bg-bg">
           <PdfDocumentView
             url={attachment.url}
             fallback={

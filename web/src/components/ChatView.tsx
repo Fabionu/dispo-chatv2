@@ -76,6 +76,7 @@ import ToolTab from './ChatToolTab'
 import { VehicleRoomPicker } from './inbox/InboxView'
 import { toReplyPreview, attachmentTabLabel } from './chatViewUtils'
 import { useTypingIndicator } from '../hooks/useTypingIndicator'
+import { authorRuleColors } from '../lib/authorColor'
 import { usePinnedMessages } from '../hooks/usePinnedMessages'
 
 // Stable empty list so a group with no cached thread doesn't hand a fresh
@@ -427,6 +428,16 @@ export default function ChatView({
     [members, currentUserId],
   )
 
+  // Author → left-rule colour for this room. ONLY where it says something: a
+  // direct message has exactly one other person in it, so a hue there would be
+  // decoration with nothing to distinguish. Keyed off the roster rather than
+  // off the messages, so a member who has not spoken yet still holds their
+  // slot and nobody's colour shifts the first time they do.
+  const ruleColorFor = useMemo(
+    () => (group.type === 'direct' ? null : authorRuleColors(members.map((m) => m.id))),
+    [group.type, members],
+  )
+
   const composerHandleRef = useRef<ChatComposerHandle>(null)
   const highlightTimer = useRef<number | undefined>(undefined)
   const noticeTimer = useRef<number | undefined>(undefined)
@@ -451,11 +462,13 @@ export default function ChatView({
   // re-pin observer via `composerRef`.
   const [composerHeight, setComposerHeight] = useState(0)
   const composerRoRef = useRef<ResizeObserver | null>(null)
+  const composerNodeRef = useRef<HTMLDivElement | null>(null)
   const attachComposer = useCallback(
     (node: HTMLDivElement | null) => {
       composerRef(node)
       composerRoRef.current?.disconnect()
       composerRoRef.current = null
+      composerNodeRef.current = node
       if (!node) {
         setComposerHeight(0)
         return
@@ -465,15 +478,37 @@ export default function ChatView({
       ro.observe(node)
       composerRoRef.current = ro
     },
+    // The callback ref owns the observer's WHOLE life: React calls it with
+    // `null` when the composer unmounts, which is where the disconnect above
+    // runs. There must be no separate unmount effect doing the same job —
+    // StrictMode's simulated remount fires an effect's cleanup once on mount
+    // without re-invoking a stable callback ref, so such an effect silently
+    // killed this observer a beat after it started and the composer's measured
+    // height froze at whatever it was on the first paint. That is what put the
+    // typing row on top of the last message in dev: the row grew, the
+    // scroller's reserve never heard about it.
     [composerRef],
   )
+  // Measure again after EVERY render, before paint. The ResizeObserver above
+  // still catches height changes that no render caused (a dropped font, the
+  // window resizing), but everything that grows this lane in practice — the
+  // typing row mounting, a reply/edit context row, the textarea autosizing —
+  // is a React commit, and an observer callback for those arrives a frame
+  // later at best and not at all in a tab the browser has stopped rendering.
+  // Measuring here ties the reserve to the same commit that changed the
+  // height, so the last message is never briefly underneath the lane.
+  // `setComposerHeight` bails on an unchanged value, so this settles at once.
+  useLayoutEffect(() => {
+    const node = composerNodeRef.current
+    if (node) setComposerHeight(node.offsetHeight)
+  })
   // composerHeight is also the message scroller's bottom padding. Re-pin only
-  // after React has applied that padding, avoiding a cross-browser race where
-  // ResizeObserver sees the typing row before the new scrollHeight exists.
+  // after React has applied that padding — the measurement above runs in an
+  // earlier layout effect of the same commit, so by here the reserve on screen
+  // matches the lane.
   useLayoutEffect(() => {
     if (composerHeight > 0) syncBottomAfterComposerLayout()
   }, [composerHeight, syncBottomAfterComposerLayout])
-  useEffect(() => () => composerRoRef.current?.disconnect(), [])
 
   useEffect(
     () => () => {
@@ -1076,7 +1111,7 @@ export default function ChatView({
           the underlying drop zone; purely a visual affordance. */}
       {dragActive && !dropBlocked && (
         <div className="absolute inset-0 z-30 pointer-events-none flex items-center justify-center bg-chat/80 backdrop-blur-[2px]">
-          <div className="flex flex-col items-center gap-2.5 rounded-card border-2 border-dashed border-white/20 px-10 py-8 text-center">
+          <div className="flex flex-col items-center gap-2.5 rounded-card border-2 border-dashed border-line-2 px-10 py-8 text-center">
             <Upload size="1.625rem" strokeWidth={1.6} className="text-muted" />
             <div className="text-lg font-semibold text-text">Drop to send</div>
             <div className="text-sm text-faint">Images up to 10MB · files up to 25MB</div>
@@ -1110,7 +1145,7 @@ export default function ChatView({
       />
 
       {searchContext && (
-        <div className="shrink-0 h-9 px-4 flex items-center justify-between gap-3 border-y border-white/6 bg-white/2">
+        <div className="shrink-0 h-9 px-4 flex items-center justify-between gap-3 border-y border-line bg-white/2">
           <span className="text-sm text-muted">Viewing an older search result</span>
           <button
             type="button"
@@ -1144,7 +1179,7 @@ export default function ChatView({
           between Chat and the tool without losing either; the × closes the tool.
           No banner at all when only chat is open. */}
       {(mapPick || tripRouteOpen || attachmentTabs.length > 0) && (
-        <div className="shrink-0 h-9 px-3 flex items-center gap-1 border-b border-white/4 overflow-x-auto [scrollbar-width:none]">
+        <div className="shrink-0 h-9 px-3 flex items-center gap-1 border-b border-line overflow-x-auto [scrollbar-width:none]">
           <ToolTab
             active={activeTool === 'chat'}
             icon={<MessageSquare size="0.75rem" strokeWidth={2} />}
@@ -1328,7 +1363,7 @@ export default function ChatView({
                         <button
                           onClick={loadOlder}
                           disabled={loadingOlder}
-                          className="text-sm text-muted hover:text-text border border-white/10 rounded-full px-3 py-1 transition-colors disabled:opacity-50"
+                          className="text-sm text-muted hover:text-text border border-line rounded-full px-3 py-1 transition-colors disabled:opacity-50"
                         >
                           {loadingOlder ? 'Loading…' : 'Load earlier messages'}
                         </button>
@@ -1363,9 +1398,13 @@ export default function ChatView({
                           // undefined so they don't re-render on read updates.
                           readers={m.authorId === currentUserId ? readers : undefined}
                           prev={visibleMessages[i - 1]}
-                          next={visibleMessages[i + 1]}
                           conversationStart={i === 0 && !nextCursor}
                           groupType={group.type}
+                          ruleColor={
+                            ruleColorFor && m.authorId !== currentUserId
+                              ? ruleColorFor(m.authorId)
+                              : undefined
+                          }
                           highlighted={highlightedMessageId === m.id}
                           onRetry={retry}
                           imagePriority={i >= visibleMessages.length - RECENT_IMAGE_WINDOW}
@@ -1407,6 +1446,7 @@ export default function ChatView({
                       <ScheduledMessageRow
                         key={item.id}
                         item={item}
+                        groupType={group.type}
                         onCancel={cancelScheduledSend}
                       />
                     ))}
@@ -1436,7 +1476,7 @@ export default function ChatView({
                 onClick={scrollToBottom}
                 aria-label="Scroll to latest messages"
                 style={{ bottom: composerHeight + 8 }}
-                className="absolute left-1/2 -translate-x-1/2 z-10 h-9 w-9 rounded-full bg-surface border border-white/10 text-text hover:bg-surface-2 hover:border-white/20 flex items-center justify-center transition-colors shadow-raised"
+                className="absolute left-1/2 -translate-x-1/2 z-10 h-9 w-9 rounded-full bg-surface border border-line text-text hover:bg-surface-2 hover:border-line-2 flex items-center justify-center transition-colors shadow-raised"
               >
                 <ArrowDown size="1rem" strokeWidth={1.8} />
               </button>
@@ -1444,20 +1484,24 @@ export default function ChatView({
             {notice && (
               <div
                 style={{ bottom: composerHeight + 8 }}
-                className="absolute left-1/2 -translate-x-1/2 z-10 rounded-chip bg-surface border border-white/10 text-sm text-muted px-3 py-1.5 shadow-raised"
+                className="absolute left-1/2 -translate-x-1/2 z-10 rounded-chip bg-surface border border-line text-sm text-muted px-3 py-1.5 shadow-raised"
               >
                 {notice}
               </div>
             )}
 
-            {/* Floating composer — OVERLAYS the bottom of the message list, so
-                bubbles scroll behind its transparent body. The outer overlay is
-                pointer-events-none (scroll/clicks pass through to the messages);
-                only the inner lane is interactive. No background, border, or
-                footer chrome — just the input controls. .chat-column keeps it on
-                the message bubble lane (capped + centred) and it recenters/shrinks
-                with the chat when the group-info column opens. Reply/typing/error
-                rows sit directly above the input, sharing the same lane. */}
+            {/* Floating composer — OVERLAYS the bottom of the message list,
+                so the thread scrolls behind its transparent body. The wrapper
+                paints nothing and is pointer-events-none (scroll and clicks
+                pass straight through to the messages); only the inner lane is
+                interactive, and the input itself is opaque, so it stays a
+                distinct object riding over the conversation rather than a
+                footer bolted to the bottom of it.
+
+                .chat-column keeps that lane on the message column (capped +
+                centred) and it recentres with the chat when the group-info
+                column opens. Reply/typing/error rows sit directly above the
+                input, sharing the same lane. */}
             <div
               ref={attachComposer}
               data-composer

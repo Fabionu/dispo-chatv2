@@ -99,7 +99,7 @@ export default function StopEditor({
   }
 
   return (
-    <div className="rounded-soft border border-white/10 bg-white/4 p-2.5 flex flex-col gap-2">
+    <div className="rounded-soft border border-line bg-white/4 p-2.5 flex flex-col gap-2">
       <div className="grid grid-cols-2 gap-2">
         <label className="flex flex-col gap-1">
           <span className="text-xs text-muted">Type</span>

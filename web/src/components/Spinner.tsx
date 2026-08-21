@@ -39,7 +39,7 @@ export default function Spinner({ variant = 'sm', size, label, className = '' }:
     >
       <div
         style={{ height: rem(px), width: rem(px), borderWidth: rem(border) }}
-        className="rounded-full border-white/10 border-t-active animate-spin"
+        className="rounded-full border-line border-t-active animate-spin"
       />
       {label && <span className="text-xs text-faint">{label}</span>}
     </div>

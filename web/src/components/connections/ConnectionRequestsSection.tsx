@@ -13,7 +13,6 @@ type Props = {
   selectedId: string | null
   onSelect: (connectionId: string) => void
   // Identity-slot diameter in design px (tracks display density).
-  size: number
 }
 
 // Collapsible "Connection requests" rail section. Owns its own open/closed
@@ -26,7 +25,6 @@ export default function ConnectionRequestsSection({
   onRetry,
   selectedId,
   onSelect,
-  size,
 }: Props) {
   const [open, setOpen] = useState(false)
   const toggledRef = useRef(false)
@@ -99,7 +97,6 @@ export default function ConnectionRequestsSection({
                 key={c.id}
                 connection={c}
                 selected={selectedId === c.id}
-                size={size}
                 onClick={() => onSelect(c.id)}
               />
             ))}

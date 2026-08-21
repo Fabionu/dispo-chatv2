@@ -91,7 +91,7 @@ export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
         <>
           <button
             onClick={onClose}
-            className="h-8 px-3 text-base text-muted hover:text-text border border-white/10 rounded-btn transition-colors"
+            className="h-8 px-3 text-base text-muted hover:text-text border border-line rounded-btn transition-colors"
           >
             Cancel
           </button>
@@ -145,7 +145,7 @@ export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
           <div>
             <div className="eyebrow mb-2">Add members</div>
             {members.length > 0 ? (
-              <div className="max-h-44 overflow-y-auto rounded-card border border-white/6 py-1">
+              <div className="max-h-44 overflow-y-auto rounded-card border border-line py-1">
                 {members.map((m) => (
                   <label
                     key={m.id}
@@ -168,8 +168,8 @@ export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
                 ))}
               </div>
             ) : (
-              <div className="rounded-card border border-white/6 px-3 py-4 flex flex-col items-center text-center">
-                <div className="h-8 w-8 rounded-full border border-white/6 bg-white/4 flex items-center justify-center mb-2">
+              <div className="rounded-card border border-line px-3 py-4 flex flex-col items-center text-center">
+                <div className="h-8 w-8 rounded-full border border-line bg-white/4 flex items-center justify-center mb-2">
                   <Users size="0.875rem" strokeWidth={1.6} className="text-faint" />
                 </div>
                 <p className="text-sm text-muted">No one else to add yet</p>

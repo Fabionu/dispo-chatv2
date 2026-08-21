@@ -22,7 +22,7 @@ export default function CompanyLogo({ size = 28, version, className = '' }: Prop
     return (
       <div
         style={style}
-        className={`rounded-chip border border-white/10 bg-white/4 flex items-center justify-center shrink-0 ${className}`}
+        className={`rounded-chip border border-line bg-white/4 flex items-center justify-center shrink-0 ${className}`}
       >
         <Box size={rem(Math.round(size * 0.5))} strokeWidth={1.6} />
       </div>
@@ -37,7 +37,7 @@ export default function CompanyLogo({ size = 28, version, className = '' }: Prop
       draggable={false}
       onError={() => setFailed(true)}
       style={style}
-      className={`rounded-chip object-cover border border-white/10 bg-surface shrink-0 ${className}`}
+      className={`rounded-chip object-cover border border-line bg-surface shrink-0 ${className}`}
     />
   )
 }

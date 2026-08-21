@@ -15,11 +15,6 @@ import {
   Users,
 } from 'lucide-react'
 import {
-  useMessageDisplay,
-  setMessageDisplay,
-  type MessageDisplay,
-} from '../../lib/messageDisplay'
-import {
   useDensity,
   getStoredDensity,
   setDensity,
@@ -96,7 +91,6 @@ export default function WorkspaceSettingsPanel({ onBack, backLabel = 'Back' }: P
   const isAdmin = auth.status === 'signed_in' && auth.user.role === 'admin'
   // Live values for the category-list subtitles (the hooks subscribe, so the
   // summaries refresh when the user returns from a detail view).
-  const messageDisplay = useMessageDisplay()
   const theme = useTheme()
   const notificationSound = useNotificationSound()
   const browserNotifications = useBrowserNotifications()
@@ -134,8 +128,8 @@ export default function WorkspaceSettingsPanel({ onBack, backLabel = 'Back' }: P
 
   // ── Category list ───────────────────────────────────────────────────────────
   const appearanceValue = `${theme === 'light' ? 'Light' : 'Dark'} · ${
-    messageDisplay === 'bubble' ? 'Bubbles' : 'Plain stream'
-  } · ${densityOverride ? DENSITY_LABEL[densityOverride] : 'Auto'} density`
+    densityOverride ? DENSITY_LABEL[densityOverride] : 'Auto'
+  } density`
 
   return (
     <div className={`flex flex-col h-full ${SIDEBAR_PANEL_SURFACE}`}>
@@ -187,9 +181,8 @@ export default function WorkspaceSettingsPanel({ onBack, backLabel = 'Back' }: P
 function AppearanceSettings() {
   return (
     <div>
-      <div className="rounded-card border border-white/6 bg-white/2 px-4 divide-y divide-white/6">
+      <div className="rounded-card border border-line bg-white/2 px-4 divide-y divide-line">
         <ThemeSetting />
-        <MessageDisplaySetting />
         <DensitySetting />
       </div>
       <p className="text-xs text-faint mt-2.5 px-1 leading-[1.5]">
@@ -233,7 +226,7 @@ function NotificationSettings() {
 
   return (
     <div>
-      <div className="rounded-card border border-white/6 bg-white/2 px-4 py-4 mb-3">
+      <div className="rounded-card border border-line bg-white/2 px-4 py-4 mb-3">
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
             <div className="text-base font-medium leading-tight text-text">
@@ -271,7 +264,7 @@ function NotificationSettings() {
       <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-[0.12em] text-faint">
         Notification sound
       </div>
-      <div className="rounded-card border border-white/6 bg-white/2 divide-y divide-white/6 overflow-hidden">
+      <div className="rounded-card border border-line bg-white/2 divide-y divide-line overflow-hidden">
         {NOTIFICATION_SOUNDS.map((sound) => {
           const active = sound.value === selected
           return (
@@ -288,7 +281,7 @@ function NotificationSettings() {
                   className={`h-5 w-5 shrink-0 rounded-full border flex items-center justify-center transition-colors ${
                     active
                       ? 'border-text bg-text text-bg'
-                      : 'border-white/16 text-transparent'
+                      : 'border-line-2 text-transparent'
                   }`}
                 >
                   <Check size="0.75rem" strokeWidth={2.5} />
@@ -340,27 +333,6 @@ function ThemeSetting() {
           { value: 'light', label: 'Light' },
         ]}
         onChange={(value) => setTheme(value as Theme)}
-      />
-    </SettingBlock>
-  )
-}
-
-// Message display style: bubbles vs the plain "operational log" stream.
-// Applies live to every open conversation via the messageDisplay listeners.
-function MessageDisplaySetting() {
-  const messageDisplay = useMessageDisplay()
-  return (
-    <SettingBlock
-      label="Message display"
-      description="Bubbles align messages left and right; plain stream reads like a log."
-    >
-      <Segmented
-        value={messageDisplay}
-        options={[
-          { value: 'bubble', label: 'Bubbles' },
-          { value: 'plain', label: 'Plain stream' },
-        ]}
-        onChange={(v) => setMessageDisplay(v as MessageDisplay)}
       />
     </SettingBlock>
   )
@@ -423,7 +395,7 @@ function AboutSettings() {
     commitRaw !== 'Not available' && commitRaw.length > 10 ? commitRaw.slice(0, 7) : commitRaw
 
   return (
-    <div className="rounded-card border border-white/6 bg-white/2 px-4 py-1.5">
+    <div className="rounded-card border border-line bg-white/2 px-4 py-1.5">
       <FieldRow label="App version" value={APP_VERSION} />
       <FieldRow label="Environment" value={environment} />
       <FieldRow label="Build date" value={buildDate} />
@@ -524,7 +496,7 @@ function CompanyMembersSettings() {
           while no link exists). */}
       <section>
         <div className="eyebrow mb-2">New invitation</div>
-        <div className="rounded-card border border-white/6 bg-white/2 p-3.5">
+        <div className="rounded-card border border-line bg-white/2 p-3.5">
           <label htmlFor="invite-email" className="block text-sm text-muted">
             Recipient email
           </label>
@@ -544,7 +516,7 @@ function CompanyMembersSettings() {
               placeholder="name@company.com"
               autoComplete="off"
               disabled={generating}
-              className="h-9 w-full rounded-card border border-white/8 bg-white/4 pl-9 pr-3 text-base text-text outline-none placeholder:text-faint focus:border-white/20 disabled:opacity-60"
+              className="h-9 w-full rounded-card border border-line bg-white/4 pl-9 pr-3 text-base text-text outline-none placeholder:text-faint focus:border-line-2 disabled:opacity-60"
             />
           </div>
           <label htmlFor="invite-role" className="block text-sm text-muted">
@@ -572,7 +544,7 @@ function CompanyMembersSettings() {
           </p>
           {genError && <div className="mt-2 text-sm text-alert">{genError}</div>}
 
-          <div className="mt-3 pt-3 border-t border-white/6">
+          <div className="mt-3 pt-3 border-t border-line">
             {fresh ? (
               <FreshInviteLink invite={fresh} />
             ) : (
@@ -598,13 +570,13 @@ function CompanyMembersSettings() {
         ) : loadError ? (
           <div className="text-sm text-alert px-1 py-1">Could not load invites.</div>
         ) : invites.length === 0 ? (
-          <div className="rounded-card border border-white/6 bg-white/2 px-3.5 py-3 text-sm text-faint leading-[1.45]">
+          <div className="rounded-card border border-line bg-white/2 px-3.5 py-3 text-sm text-faint leading-[1.45]">
             No invites yet — generate a link above to add your first member.
           </div>
         ) : (
           // No overflow-hidden — the row role dropdown must be able to open past
           // the card edge; first/last rows round their own hover corners instead.
-          <div className="rounded-card border border-white/6 bg-white/2 divide-y divide-white/6">
+          <div className="rounded-card border border-line bg-white/2 divide-y divide-line">
             {invites.map((inv) => (
               <InviteListRow
                 key={inv.id}
@@ -691,7 +663,7 @@ function FreshInviteLink({ invite }: { invite: WorkspaceInviteCreated }) {
           readOnly
           value={invite.url}
           onFocus={(e) => e.currentTarget.select()}
-          className="flex-1 min-w-0 h-9 bg-white/4 border border-white/6 rounded-btn px-2.5 text-sm text-text font-mono truncate outline-none transition-colors focus:border-white/16"
+          className="flex-1 min-w-0 h-9 bg-white/4 border border-line rounded-btn px-2.5 text-sm text-text font-mono truncate outline-none transition-colors focus:border-line-2"
         />
         <button
           onClick={copy}
@@ -768,7 +740,7 @@ function InviteListRow({
   return (
     <div className="flex items-center gap-3 px-3 py-2.5 hover:bg-white/2 transition-colors first:rounded-t-card last:rounded-b-card">
       <div className="relative shrink-0">
-        <span className="h-[2.125rem] w-[2.125rem] flex items-center justify-center rounded-full border border-white/6 bg-white/2 text-muted">
+        <span className="h-[2.125rem] w-[2.125rem] flex items-center justify-center rounded-full border border-line bg-white/2 text-muted">
           {invite.status === 'used' ? (
             <Check size="0.9375rem" strokeWidth={2} />
           ) : (
@@ -884,8 +856,8 @@ function RoleSelect({
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className={`flex items-center gap-1.5 rounded-card border bg-white/4 text-text text-left outline-none transition-colors hover:border-white/16 focus-visible:border-white/20 disabled:opacity-50 disabled:cursor-default ${
-          open ? 'border-white/20' : 'border-white/8'
+        className={`flex items-center gap-1.5 rounded-card border bg-white/4 text-text text-left outline-none transition-colors hover:border-line-2 focus-visible:border-line-2 disabled:opacity-50 disabled:cursor-default ${
+          open ? 'border-line-2' : 'border-line'
         } ${compact ? 'h-7 w-[6.25rem] px-2 text-xs' : 'h-9 w-full px-2.5 text-base'}`}
       >
         <span className="flex-1 min-w-0 truncate">{ROLE_LABEL[value]}</span>
@@ -931,7 +903,7 @@ function RoleSelect({
 // A quiet, read-only role pill for used/expired invites and the fresh-link card.
 function RoleBadge({ role }: { role: Role }) {
   return (
-    <span className="shrink-0 text-2xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border border-white/10 bg-white/4 text-muted">
+    <span className="shrink-0 text-2xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border border-line bg-white/4 text-muted">
       {ROLE_LABEL[role]}
     </span>
   )
@@ -941,7 +913,7 @@ function RoleBadge({ role }: { role: Role }) {
 // Rows are separated by a hairline divider (none after the last).
 function FieldRow({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="flex items-center justify-between gap-3 py-2.5 border-b border-white/4 last:border-0">
+    <div className="flex items-center justify-between gap-3 py-2.5 border-b border-line last:border-0">
       <span className="shrink-0 text-sm text-muted">{label}</span>
       <span
         title={value}

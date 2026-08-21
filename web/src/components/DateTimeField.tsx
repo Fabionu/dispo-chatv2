@@ -36,7 +36,7 @@ export function joinPlannedAt(date: string, time: string): string {
 // wrapper takes the box, edge and focus states, and the inner input is
 // transparent inside it. Same height, radius and states as every other control.
 const FIELD_WRAP =
-  `${FIELD_BASE} flex items-center gap-0.5 pr-0.5 focus-within:border-white/20 focus-within:bg-white/6`
+  `${FIELD_BASE} flex items-center gap-0.5 pr-0.5 focus-within:border-line-2 focus-within:bg-white/6`
 const FIELD_INPUT =
   'flex-1 min-w-0 h-full bg-transparent text-base text-text placeholder:text-faint/70 outline-none'
 const FIELD_BTN =

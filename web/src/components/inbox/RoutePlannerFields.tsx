@@ -29,7 +29,7 @@ export function NumberField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="h-8 rounded-full border border-white/6 bg-white/4 px-2.5 text-base outline-none transition-colors focus:border-white/16 focus:bg-white/6 placeholder:text-faint"
+        className="h-8 rounded-full border border-line bg-white/4 px-2.5 text-base outline-none transition-colors focus:border-line-2 focus:bg-white/6 placeholder:text-faint"
       />
     </label>
   )
@@ -188,7 +188,7 @@ export function PresetSelect({
         onClick={() => (open ? setOpen(false) : openMenu())}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="h-8 w-full min-w-0 flex items-center justify-between gap-1.5 rounded-full border border-white/6 bg-white/4 px-2.5 text-sm outline-none transition-colors focus:border-white/16 focus:bg-white/6"
+        className="h-8 w-full min-w-0 flex items-center justify-between gap-1.5 rounded-full border border-line bg-white/4 px-2.5 text-sm outline-none transition-colors focus:border-line-2 focus:bg-white/6"
       >
         <span className={`truncate ${active ? 'text-text' : 'text-faint'}`} title={active?.name}>
           {active ? active.name : 'Preset…'}

@@ -1,20 +1,17 @@
 import type { Connection } from '../../lib/types'
-import Avatar from '../Avatar'
-import IdentitySlot from '../IdentitySlot'
+import { RowMeta } from '../../pages/sidebarBits'
 
 type Props = {
   connection: Connection
   selected: boolean
-  // Identity-slot diameter in design px (tracks display density).
-  size: number
   onClick: () => void
 }
 
 // One pending cross-company connection request in the rail. Reads as actionable
-// until handled: a circular requester avatar, the name in full-strength text,
-// and a quiet "Request" marker on the right where a conversation row shows its
-// time. Matches the single conversation-row layout.
-export default function ConnectionRequestRow({ connection, selected, size, onClick }: Props) {
+// until handled: the name in full-strength text over the requester's email, and
+// a quiet "Request" marker on the right where a conversation row shows its time.
+// Matches the single conversation-row layout.
+export default function ConnectionRequestRow({ connection, selected, onClick }: Props) {
   const peer = connection.otherUser
   return (
     <button
@@ -27,15 +24,12 @@ export default function ConnectionRequestRow({ connection, selected, size, onCli
         paddingTop: 'var(--sidebar-row-pad-y)',
         paddingBottom: 'var(--sidebar-row-pad-y)',
       }}
-      className={`w-full flex items-center rounded-btn text-left transition-colors ${
+      className={`w-full flex items-center border-l-2 text-left transition-colors ${
         selected
-          ? 'bg-white/8 text-text'
-          : 'text-muted hover:bg-white/8 hover:text-text'
+          ? 'border-text bg-white/8 text-text'
+          : 'border-transparent text-muted hover:bg-white/8 hover:text-text'
       }`}
     >
-      <IdentitySlot>
-        <Avatar userId={peer.id} name={peer.displayName} size={size} fallback="initials" />
-      </IdentitySlot>
       <span className="flex-1 min-w-0 flex flex-col gap-px">
         <span
           className="truncate leading-tight text-text font-semibold"
@@ -44,15 +38,10 @@ export default function ConnectionRequestRow({ connection, selected, size, onCli
           {peer.displayName}
         </span>
         <span className="flex items-center gap-2">
-          <span
-            className="flex-1 min-w-0 truncate leading-tight text-faint"
-            style={{ fontSize: 'var(--sidebar-conv-meta-font-size)' }}
-          >
-            {peer.email}
+          <span className="min-w-0 flex-1">
+            <RowMeta segments={[peer.email]} />
           </span>
-          <span className="shrink-0 h-[1.0625rem] px-1.5 rounded-full bg-white/8 text-muted text-2xs font-semibold leading-none flex items-center justify-center">
-            Request
-          </span>
+          <span className="eyebrow shrink-0 border px-1.5 py-0.5 leading-none">Request</span>
         </span>
       </span>
     </button>

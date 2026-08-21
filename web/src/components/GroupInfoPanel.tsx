@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Group, GroupMember, GroupPendingInvitee } from '../lib/types'
 import { groupLabel, tractorPlate, trailerPlate } from '../lib/types'
 import {
@@ -365,7 +365,7 @@ export default function GroupInfoPanel({
         // reflows narrower and the panel matches the app's flat card shell.
         className={`panel-fade-in fixed top-0 right-0 bottom-0 z-40 w-full max-w-[25rem] shadow-drawer ${PANEL_SURFACE} flex flex-col
                    xl:static xl:z-auto xl:w-[clamp(22.5rem,26vw,26.25rem)] xl:max-w-none xl:shrink-0 xl:shadow-none
-                   xl:rounded-panel xl:overflow-hidden xl:border xl:border-white/8`}
+                   xl:rounded-panel xl:overflow-hidden xl:border xl:border-line`}
       >
         <PanelCloseHeader title="Group info" onClose={onClose} closeLabel="Close group info" />
 
@@ -416,20 +416,7 @@ export default function GroupInfoPanel({
           />
 
           {/* Tab bar — compact segmented control for the operational sections. */}
-          <div className="mt-4 flex items-center gap-0.5 rounded-card bg-white/4 p-0.5">
-            {PANEL_TABS.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                aria-current={tab === t.id ? 'true' : undefined}
-                className={`flex-1 h-7 rounded-btn text-sm font-medium transition-colors ${
-                  tab === t.id ? 'bg-white/8 text-text' : 'text-muted hover:text-text'
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
+          <PanelTabs value={tab} onChange={setTab} />
 
           <div className="mt-4">
             {tab === 'info' && (
@@ -494,5 +481,116 @@ export default function GroupInfoPanel({
         />
       )}
     </>
+  )
+}
+
+
+// The panel's section switcher (Info / Trip / Docs / Members).
+//
+// ONE PILL THAT TRAVELS, not a background that blinks on and off per button.
+// The selection used to be a `bg-white/8` wash applied to whichever button was
+// active, so switching tabs meant a shape vanishing in one place and appearing
+// in another — two events for what is one selection moving. Here the pill is a
+// single element measured onto the active button and moved with a transform, so
+// the eye follows it across instead of re-finding it.
+//
+// The fill is `bg-text` over `text-bg`: near-white with black labels on the dark
+// theme, and the exact inverse on the light one. That is the app's existing
+// filled-control idiom — the composer's send button and the rail's unread badge
+// are the same pair — and it is deliberately the loudest thing in the panel,
+// because it answers the only question this bar exists to answer.
+//
+// The position is read off `aria-current`, which the buttons already publish, so
+// the pill and the accessibility tree can never disagree about which tab is on.
+function PanelTabs({
+  value,
+  onChange,
+}: {
+  value: PanelTab
+  onChange: (tab: PanelTab) => void
+}) {
+  const trackRef = useRef<HTMLDivElement | null>(null)
+  const roRef = useRef<ResizeObserver | null>(null)
+  const [pill, setPill] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+
+  const measure = useCallback(() => {
+    const track = trackRef.current
+    if (!track) return
+    const active = track.querySelector<HTMLElement>('[aria-current="true"]')
+    if (!active) {
+      setPill(null)
+      return
+    }
+    const next = {
+      x: active.offsetLeft,
+      y: active.offsetTop,
+      w: active.offsetWidth,
+      h: active.offsetHeight,
+    }
+    setPill((prev) =>
+      prev && prev.x === next.x && prev.y === next.y && prev.w === next.w && prev.h === next.h
+        ? prev
+        : next,
+    )
+  }, [])
+
+  useLayoutEffect(measure, [measure, value])
+
+  // The track is the offsetParent, so its resize — the panel widening, the
+  // labels reflowing — is what moves the tabs under the pill. The callback ref
+  // owns the observer's whole life: React calls it with `null` on unmount, and
+  // a separate cleanup effect would be run once by StrictMode and leave the
+  // observer dead for the rest of the session.
+  const attachTrack = useCallback(
+    (node: HTMLDivElement | null) => {
+      roRef.current?.disconnect()
+      roRef.current = null
+      trackRef.current = node
+      if (!node) return
+      const ro = new ResizeObserver(measure)
+      ro.observe(node)
+      roRef.current = ro
+    },
+    [measure],
+  )
+
+  return (
+    <div
+      ref={attachTrack}
+      className="relative mt-4 flex items-center gap-0.5 rounded-card bg-white/4 p-0.5"
+    >
+      {pill && (
+        <span
+          aria-hidden
+          // Mounted only once a position is known, which is what keeps the first
+          // paint still: a transition has no previous value to run from on the
+          // frame an element is inserted, so the pill appears under the live tab
+          // and only travels on later changes.
+          className="panel-tab-pill pointer-events-none absolute left-0 top-0 rounded-btn bg-text motion-reduce:transition-none"
+          style={{
+            width: pill.w,
+            height: pill.h,
+            transform: `translate(${pill.x}px, ${pill.y}px)`,
+          }}
+        />
+      )}
+      {PANEL_TABS.map((t) => {
+        const active = t.id === value
+        return (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => onChange(t.id)}
+            aria-current={active ? 'true' : undefined}
+            // `relative` so the label sits ON the pill rather than under it.
+            className={`relative z-10 flex-1 h-7 rounded-btn text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+              active ? 'text-bg' : 'text-muted hover:text-text'
+            }`}
+          >
+            {t.label}
+          </button>
+        )
+      })}
+    </div>
   )
 }

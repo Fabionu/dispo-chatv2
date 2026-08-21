@@ -348,7 +348,7 @@ export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
         role="dialog"
         aria-modal="true"
         aria-label="Crop photo"
-        className="relative w-full max-w-[28.75rem] rounded-modal border border-white/8 bg-panel overflow-hidden"
+        className="relative w-full max-w-[28.75rem] rounded-modal border border-line bg-panel overflow-hidden"
         style={{ boxShadow: '0 32px 80px rgba(0,0,0,0.65)' }}
       >
         {/* Header: close (left) · helper title (centre) · replace + rotate
@@ -528,7 +528,7 @@ function IconBtn({
       </button>
       <span
         role="tooltip"
-        className={`pointer-events-none absolute z-10 whitespace-nowrap rounded-chip border border-white/10 bg-surface px-2 py-1 text-xs text-text opacity-0 transition-opacity duration-100 group-hover:opacity-100 ${tip}`}
+        className={`pointer-events-none absolute z-10 whitespace-nowrap rounded-chip border border-line bg-surface px-2 py-1 text-xs text-text opacity-0 transition-opacity duration-100 group-hover:opacity-100 ${tip}`}
         style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.55)' }}
       >
         {label}

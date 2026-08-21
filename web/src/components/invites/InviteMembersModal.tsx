@@ -156,7 +156,7 @@ export default function InviteMembersModal({
       onClose={onClose}
     >
       <div className="space-y-3">
-        <label className="flex items-center gap-2 h-8 px-2.5 rounded-chip border border-white/6 bg-white/2 focus-within:border-white/16 transition-colors cursor-text">
+        <label className="flex items-center gap-2 h-8 px-2.5 rounded-chip border border-line bg-white/2 focus-within:border-line-2 transition-colors cursor-text">
           <Search size="0.75rem" strokeWidth={1.6} className="text-faint shrink-0" />
           <input
             value={query}
@@ -225,7 +225,7 @@ function ResultRow({
       </div>
 
       {person.external && (
-        <span className="text-2xs text-faint border border-white/8 rounded-chip px-1.5 py-0.5 shrink-0">
+        <span className="text-2xs text-faint border border-line rounded-chip px-1.5 py-0.5 shrink-0">
           Connection
         </span>
       )}

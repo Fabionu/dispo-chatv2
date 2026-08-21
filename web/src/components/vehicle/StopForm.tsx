@@ -115,7 +115,7 @@ export default function StopForm({
       <button
         type="button"
         onClick={() => setPhase('type')}
-        className="w-full inline-flex items-center justify-center gap-1.5 rounded-full border border-white/6 bg-white/4 py-2 text-base text-muted hover:text-text hover:bg-white/6 transition-colors"
+        className="w-full inline-flex items-center justify-center gap-1.5 rounded-full border border-line bg-white/4 py-2 text-base text-muted hover:text-text hover:bg-white/6 transition-colors"
       >
         <Plus size="0.875rem" strokeWidth={2} /> Add stop
       </button>
@@ -125,7 +125,7 @@ export default function StopForm({
   // Type picker — choose what kind of stop before any fields appear.
   if (phase === 'type') {
     return (
-      <div className="rounded-soft border border-white/6 bg-white/2 p-2.5 flex flex-col gap-2">
+      <div className="rounded-soft border border-line bg-white/2 p-2.5 flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <span className="text-xs text-muted">Choose stop type</span>
           <button
@@ -146,7 +146,7 @@ export default function StopForm({
                 setType(o.value)
                 setPhase('form')
               }}
-              className="h-8 rounded-full border border-white/6 bg-white/4 text-sm text-text hover:bg-white/10 transition-colors"
+              className="h-8 rounded-full border border-line bg-white/4 text-sm text-text hover:bg-white/10 transition-colors"
             >
               {o.label}
             </button>
@@ -159,7 +159,7 @@ export default function StopForm({
   // Form — the stop's fields. The type is shown up top and can be changed (back to
   // the picker) without losing the typed details.
   return (
-    <div className="rounded-soft border border-white/6 bg-white/2 p-2.5 flex flex-col gap-2">
+    <div className="rounded-soft border border-line bg-white/2 p-2.5 flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-sm font-medium text-text truncate">{labelOf(STOP_TYPES, type)}</span>
@@ -245,7 +245,7 @@ export default function StopForm({
               onClick={pickOnMap}
               aria-label="Find coordinates on map"
               title="Find on map"
-              className="h-9 w-9 shrink-0 flex items-center justify-center rounded-full border border-white/6 bg-white/4 text-muted hover:text-text hover:bg-white/8 transition-colors"
+              className="h-9 w-9 shrink-0 flex items-center justify-center rounded-full border border-line bg-white/4 text-muted hover:text-text hover:bg-white/8 transition-colors"
             >
               <MapPinned size="1rem" strokeWidth={1.8} />
             </button>

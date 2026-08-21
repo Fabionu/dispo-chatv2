@@ -8,13 +8,12 @@ type Props = {
   selectedId: string | null
   onSelect: (inviteId: string) => void
   // Identity-slot diameter in design px (tracks display density).
-  size: number
 }
 
 // Collapsible "Group invites" rail section — a sibling of (and separate from)
 // the cross-company "Connection requests" section. Owns its open/closed state
 // and auto-expands the first time an invite appears, until the user toggles it.
-export default function GroupInvitesSection({ invites, selectedId, onSelect, size }: Props) {
+export default function GroupInvitesSection({ invites, selectedId, onSelect }: Props) {
   const [open, setOpen] = useState(false)
   const toggledRef = useRef(false)
   const count = invites.length
@@ -62,7 +61,6 @@ export default function GroupInvitesSection({ invites, selectedId, onSelect, siz
             <GroupInviteRow
               key={inv.id}
               invite={inv}
-              size={size}
               selected={selectedId === inv.id}
               onClick={() => onSelect(inv.id)}
             />

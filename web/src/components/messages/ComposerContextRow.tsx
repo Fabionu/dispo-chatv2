@@ -9,11 +9,14 @@ type Props = {
   onCancel: () => void
 }
 
-// A compact inset card above the textarea. Keeping it inside the composer's
-// edges (instead of stretching a divider across the entire capsule) makes the
-// reply/edit state feel like contextual content rather than a second toolbar.
+// The reply/edit banner above the textarea, drawn like a quoted message: a
+// left rule in the tone of the action, then the label over the snippet. It was
+// an inset filled card, which only worked while the composer was a capsule with
+// an inside to inset from — the composer is a drawn rectangle now, so a second
+// filled rectangle inside it read as a box in a box. The bottom hairline is what
+// separates it from the input.
 export default function ComposerContextRow({ tone, label, snippet, attachment, onCancel }: Props) {
-  const accent = tone === 'reply' ? 'bg-active/70' : 'bg-white/20'
+  const accent = tone === 'reply' ? 'border-l-active/70' : 'border-l-line-2'
   const icon =
     tone === 'reply' ? (
       <Reply size="0.75rem" strokeWidth={1.8} />
@@ -21,26 +24,27 @@ export default function ComposerContextRow({ tone, label, snippet, attachment, o
       <Pencil size="0.75rem" strokeWidth={1.8} />
     )
   return (
-    <div className="mx-2 mt-2 flex items-center gap-2.5 rounded-[1.125rem] bg-white/4 px-2.5 py-2">
-      <span className={`h-8 w-0.5 shrink-0 rounded-full ${accent}`} aria-hidden="true" />
+    <div className={`flex items-center gap-2.5 border-b border-l-2 border-b-line px-3 py-2 ${accent}`}>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 text-sm font-medium leading-tight text-text">
-          <span className={tone === 'reply' ? 'text-active' : 'text-muted'}>{icon}</span>
+        <div
+          className={`eyebrow flex items-center gap-1.5 leading-tight ${
+            tone === 'reply' ? 'text-active' : ''
+          }`}
+        >
+          {icon}
           <span className="truncate">{label}</span>
         </div>
-        <div className="mt-1 truncate text-sm leading-tight text-muted">
-          {snippet || '…'}
-        </div>
+        <div className="mt-1 truncate text-sm leading-tight text-muted">{snippet || '…'}</div>
       </div>
       {tone === 'reply' && attachment && (
         attachment.mimeType.startsWith('image/') && !attachment.missing ? (
           <img
             src={attachment.previewUrl ?? attachment.url}
             alt=""
-            className="h-9 w-9 shrink-0 rounded-[0.5rem] object-cover bg-black/30"
+            className="h-9 w-9 shrink-0 object-cover bg-black/30"
           />
         ) : (
-          <span className="h-9 w-9 shrink-0 rounded-[0.5rem] bg-white/6 flex items-center justify-center text-muted">
+          <span className="h-9 w-9 shrink-0 border flex items-center justify-center text-muted">
             {attachment.mimeType.startsWith('image/') ? (
               <ImageIcon size="0.9375rem" strokeWidth={1.8} />
             ) : (

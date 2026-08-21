@@ -3,7 +3,6 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
 import { initDensity } from './lib/density'
-import { initMessageDisplay } from './lib/messageDisplay'
 import { initTheme } from './lib/theme'
 import { initNotificationSound } from './lib/notificationSound'
 import { initBrowserNotifications } from './lib/browserNotifications'
@@ -15,7 +14,6 @@ initTheme()
 // paint so large monitors render at a comfortable scale with no flash.
 initDensity()
 // Apply the saved message display style (bubble/plain) before first paint.
-initMessageDisplay()
 // Unlock Web Audio on the first user gesture so later socket notifications can
 // play even when they arrive while the app is in the background.
 initNotificationSound()

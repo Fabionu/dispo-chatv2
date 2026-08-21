@@ -1,19 +1,16 @@
 import type { GroupInvite } from '../../lib/types'
-import GroupAvatar from '../GroupAvatar'
-import IdentitySlot from '../IdentitySlot'
+import { RowMeta } from '../../pages/sidebarBits'
 
 type Props = {
   invite: GroupInvite
-  // Identity-slot diameter in design px (tracks display density).
-  size: number
   selected: boolean
   onClick: () => void
 }
 
-// One pending vehicle-group invite in the sidebar. Uses the same rounded-square
-// vehicle identity slot as a real vehicle-room row (so an invite reads as a room,
-// not a person) and shows the tractor plate as the quiet secondary detail.
-export default function GroupInviteRow({ invite, size, selected, onClick }: Props) {
+// One pending vehicle-group invite in the sidebar. Same two-line shape as a real
+// vehicle-room row — the tractor plate on the mono meta line is what makes it
+// read as a room rather than a person, now that no row carries an identity slot.
+export default function GroupInviteRow({ invite, selected, onClick }: Props) {
   return (
     <button
       onClick={onClick}
@@ -25,15 +22,12 @@ export default function GroupInviteRow({ invite, size, selected, onClick }: Prop
         paddingTop: 'var(--sidebar-row-pad-y)',
         paddingBottom: 'var(--sidebar-row-pad-y)',
       }}
-      className={`w-full flex items-center rounded-btn text-left transition-colors ${
+      className={`w-full flex items-center border-l-2 text-left transition-colors ${
         selected
-          ? 'bg-white/8 text-text'
-          : 'text-muted hover:bg-white/8 hover:text-text'
+          ? 'border-text bg-white/8 text-text'
+          : 'border-transparent text-muted hover:bg-white/8 hover:text-text'
       }`}
     >
-      <IdentitySlot>
-        <GroupAvatar shape="rounded" size={size} />
-      </IdentitySlot>
       <span className="flex-1 min-w-0 flex flex-col gap-px">
         <span
           className="truncate leading-tight text-text font-semibold"
@@ -42,15 +36,10 @@ export default function GroupInviteRow({ invite, size, selected, onClick }: Prop
           {invite.groupName ?? 'Vehicle group'}
         </span>
         <span className="flex items-center gap-2">
-          <span
-            className="flex-1 min-w-0 truncate leading-tight font-mono text-faint"
-            style={{ fontSize: 'var(--sidebar-conv-meta-font-size)' }}
-          >
-            {invite.tractorPlate ?? 'Pending invitation'}
+          <span className="min-w-0 flex-1">
+            <RowMeta segments={[invite.tractorPlate ?? 'Pending invitation']} />
           </span>
-          <span className="shrink-0 h-[1.0625rem] px-1.5 rounded-full bg-white/8 text-muted text-2xs font-semibold leading-none flex items-center justify-center">
-            Invite
-          </span>
+          <span className="eyebrow shrink-0 border px-1.5 py-0.5 leading-none">Invite</span>
         </span>
       </span>
     </button>

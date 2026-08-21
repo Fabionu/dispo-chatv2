@@ -9,10 +9,15 @@
 // the radius scale for corners, `focus-visible:ring-white/20` for focus, and the
 // text/muted/faint trio for content. No literal colours here.
 //
+// A field is DRAWN, not filled: the rework took the sunken white/4 wash off
+// every control, so what marks a field is its hairline, exactly like every other
+// box in the app. That also means fill is free again as a pure STATE — nothing
+// else is competing for it.
+//
 // States, in the order the eye should be able to tell them apart:
-//   default    quiet sunken fill, hairline edge
+//   default    hairline edge, no fill
 //   hover      edge brightens (the control says "I'm interactive")
-//   focus      edge brightens further + a calm ring — never a colour change
+//   focus      edge goes to line-2 + a calm ring — never a colour change
 //   invalid    alert edge + alert ring; the message sits under the field
 //   disabled   dimmed, no pointer
 //   read-only  no field chrome at all — a plain value line (see FieldValue)
@@ -21,7 +26,7 @@
 
 // The control box shared by input / textarea / select.
 export const FIELD_BASE =
-  'min-w-0 rounded-card border bg-white/4 text-base text-text ' +
+  'min-w-0 rounded-card border text-base text-text ' +
   'placeholder:text-faint/70 outline-none ' +
   'transition-[border-color,background-color,box-shadow] duration-150 ' +
   'motion-reduce:transition-none ' +
@@ -29,8 +34,8 @@ export const FIELD_BASE =
 
 // Resting edge + its hover/focus progression.
 export const FIELD_EDGE =
-  'border-white/8 hover:border-white/16 ' +
-  'focus:border-white/20 focus:bg-white/6 ' +
+  'border-line hover:border-line-2 ' +
+  'focus:border-line-2 focus:bg-white/4 ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20'
 
 // Invalid overrides the edge entirely so the two can never stack ambiguously.
@@ -60,9 +65,9 @@ export function fieldClass(opts?: {
   ].join(' ')
 }
 
-// The label above a control. Identical position and metrics everywhere: a small
-// faint line, tight to its field.
-export const FIELD_LABEL = 'block text-xs text-faint leading-tight'
+// The label above a control. Identical position and metrics everywhere, and in
+// the mono voice — a field label names a slot, which is structure.
+export const FIELD_LABEL = 'eyebrow block leading-tight'
 
 // The value line of a READ-ONLY row — deliberately not a disabled input, which
 // would read as "you could edit this if something changed".
@@ -70,4 +75,4 @@ export const FIELD_VALUE = 'text-base break-words leading-snug'
 
 // Row rhythm inside a grouped field card. The card draws the box; each row
 // carries its own hairline, and the last one drops it.
-export const FIELD_ROW = 'py-2 border-b border-white/4 last:border-0'
+export const FIELD_ROW = 'py-2 border-b border-line last:border-0'

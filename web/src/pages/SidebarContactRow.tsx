@@ -1,21 +1,17 @@
 import type { WorkspaceMember } from '../lib/types'
-import Avatar from '../components/Avatar'
-import IdentitySlot from '../components/IdentitySlot'
+import { RowMeta } from './sidebarBits'
 
 // One company colleague who has no open DM yet, shown inline in the unified rail
-// list (All + Direct filters). A quiet people-row (circular avatar + name)
+// list (All + Direct filters). Name over their role in the mono meta line,
 // matching the conversation-row metrics; clicking it opens the user's profile
-// modal, whose Message action opens or creates a DM. No
-// unread/presence affordances — it's a directory entry. Once a DM exists the
-// colleague renders as a full conversation row (GroupRow) instead, so they never
-// appear twice.
+// modal, whose Message action opens or creates a DM. No unread/presence
+// affordances — it's a directory entry. Once a DM exists the colleague renders
+// as a full conversation row (GroupRow) instead, so they never appear twice.
 export default function ContactRow({
   member,
-  size,
   onClick,
 }: {
   member: WorkspaceMember
-  size: number
   onClick: () => void
 }) {
   const role = member.role ? member.role.charAt(0).toUpperCase() + member.role.slice(1) : ''
@@ -32,11 +28,8 @@ export default function ContactRow({
         paddingTop: 'var(--sidebar-row-pad-y)',
         paddingBottom: 'var(--sidebar-row-pad-y)',
       }}
-      className="w-full flex items-center rounded-btn text-left text-muted hover:bg-white/8 hover:text-text transition-colors"
+      className="w-full flex items-center border-l-2 border-transparent text-left text-muted hover:bg-white/8 hover:text-text transition-colors"
     >
-      <IdentitySlot>
-        <Avatar userId={member.id} name={member.displayName} size={size} fallback="initials" />
-      </IdentitySlot>
       <span className="min-w-0 flex-1 flex flex-col gap-px">
         <span
           className="truncate leading-tight text-text/90 font-medium"
@@ -44,14 +37,7 @@ export default function ContactRow({
         >
           {member.displayName}
         </span>
-        {role && (
-          <span
-            className="truncate leading-tight text-faint"
-            style={{ fontSize: 'var(--sidebar-conv-meta-font-size)' }}
-          >
-            {role}
-          </span>
-        )}
+        <RowMeta segments={[role]} />
       </span>
     </button>
   )

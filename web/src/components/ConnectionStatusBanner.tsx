@@ -52,7 +52,7 @@ export default function ConnectionStatusBanner() {
     <div
       role="status"
       aria-live="polite"
-      className="fixed left-1/2 top-3 z-[100] -translate-x-1/2 flex items-center gap-2 rounded-full border border-white/10 bg-surface-2 px-3 py-1.5 text-sm font-medium text-text shadow-overlay"
+      className="fixed left-1/2 top-3 z-[100] -translate-x-1/2 flex items-center gap-2 rounded-full border border-line bg-surface-2 px-3 py-1.5 text-sm font-medium text-text shadow-overlay"
     >
       {restored ? (
         <Check size="0.875rem" className="text-done" strokeWidth={2} />

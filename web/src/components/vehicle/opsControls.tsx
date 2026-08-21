@@ -58,7 +58,7 @@ export function StatusChip({
 }) {
   const pill =
     size === 'lg'
-      ? 'h-7 gap-2 px-3 text-base font-semibold bg-white/8 border border-white/6'
+      ? 'h-7 gap-2 px-3 text-base font-semibold bg-white/8 border border-line'
       : 'gap-1.5 px-2 py-0.5 text-xs font-medium bg-white/6'
   const dot = size === 'lg' ? 'h-2 w-2' : 'h-1.5 w-1.5'
   return (

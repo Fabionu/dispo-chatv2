@@ -57,7 +57,7 @@ export default function ConnectionRequestView({ connection, onAccepted, onDeclin
           <div className="text-lg font-semibold truncate">Connection invitation</div>
           <div className="text-xs text-muted truncate">from {u.workspace.name}</div>
         </div>
-        <span className="font-mono text-xs text-muted border border-white/8 rounded-chip px-2 py-0.5 shrink-0">
+        <span className="font-mono text-xs text-muted border border-line rounded-chip px-2 py-0.5 shrink-0">
           Pending
         </span>
       </header>
@@ -78,7 +78,7 @@ export default function ConnectionRequestView({ connection, onAccepted, onDeclin
           {u.email && <div className="mt-0.5 text-sm text-faint">{u.email}</div>}
 
           {connection.message && (
-            <div className="mt-5 w-full max-w-[22.5rem] rounded-card border border-white/8 bg-white/2 px-3.5 py-2.5 text-left">
+            <div className="mt-5 w-full max-w-[22.5rem] rounded-card border border-line bg-white/2 px-3.5 py-2.5 text-left">
               <div className="eyebrow text-faint mb-1">Message</div>
               <p className="text-base text-text leading-[1.5] break-words whitespace-pre-wrap">
                 {connection.message}
@@ -103,7 +103,7 @@ export default function ConnectionRequestView({ connection, onAccepted, onDeclin
             <button
               onClick={() => void decline()}
               disabled={busy !== null}
-              className="flex-1 h-10 rounded-btn border border-white/16 text-text text-base font-medium hover:bg-white/4 disabled:opacity-50 transition-colors"
+              className="flex-1 h-10 rounded-btn border border-line-2 text-text text-base font-medium hover:bg-white/4 disabled:opacity-50 transition-colors"
             >
               {busy === 'decline' ? 'Declining…' : 'Decline'}
             </button>

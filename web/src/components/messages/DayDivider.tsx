@@ -1,10 +1,12 @@
 import { formatDay } from './messageUtils'
 
-// A compact, centered timeline separator rendered as a low-weight PILL (subtle
-// fill, muted text — no border) rather than a divider line or chat bubble — it
-// cleanly breaks the timeline into day sections without competing with messages. The
-// first separator of a thread doubles as the conversation-start marker
-// ("Conversation started · <date>"). Dark-theme friendly via theme tokens.
+// The timeline's day break: a hairline running the width of the thread with a
+// mono label sitting in it. It was a low-weight pill, which was the right answer
+// when the timeline was made of filled bubbles and a divider LINE would have
+// competed with them — but the timeline is made of rules now, so the rule is the
+// quiet option and the pill would be the only floating shape on the screen.
+//
+// The first separator of a thread doubles as the conversation-start marker.
 export default function DayDivider({
   iso,
   conversationStart = false,
@@ -14,10 +16,12 @@ export default function DayDivider({
 }) {
   const day = formatDay(iso)
   return (
-    <div className="flex justify-center py-3">
-      <span className="inline-flex items-center rounded-full bg-white/4 px-2.5 py-0.5 text-xs leading-[1.5] text-faint">
+    <div className="flex items-center gap-4 pt-8 pb-2" role="separator">
+      <span className="h-px flex-1 bg-line" aria-hidden="true" />
+      <span className="eyebrow shrink-0">
         {conversationStart ? `Conversation started · ${day}` : day}
       </span>
+      <span className="h-px flex-1 bg-line" aria-hidden="true" />
     </div>
   )
 }

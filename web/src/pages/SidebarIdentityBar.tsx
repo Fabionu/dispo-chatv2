@@ -2,8 +2,6 @@ import type { ReactNode } from 'react'
 import type { User, Workspace } from '../auth/AuthContext'
 import type { Profile } from '../lib/types'
 import { AWAY, statusMeta } from '../lib/availability'
-import Avatar from '../components/Avatar'
-import CompanyLogo from '../components/CompanyLogo'
 
 type Props = {
   user: User
@@ -13,10 +11,6 @@ type Props = {
   /** Auto-away presence (idle / tab hidden): greys the dot without changing the
    *  stored status. */
   away: boolean
-  /** Avatar / logo diameter for the active density tier. */
-  size: number
-  avatarVersion: number
-  logoVersion: number
   /** Opens the Account view IN the sidebar (never a floating menu). */
   onOpenAccount: () => void
   /** Opens the existing company profile panel in the sidebar. */
@@ -28,6 +22,17 @@ type Props = {
 // triggers into sidebar views — the account menu that used to pop out of the
 // footer is gone, so nothing here floats over the conversation list.
 //
+// Neither half carries a picture any more (2026-08-20): the rail dropped every
+// avatar, and a 37px portrait plus a company logo were most of this row's
+// height in a rail that is now 380px wide. Name over a mono label carries the
+// same information. The availability dot stays — it is live state, not
+// decoration — and TRAILS the name, on the name's own line. In front of the
+// name it was a child of the two-line cell, so it centred itself between the
+// name and the role beneath: a mark about the person, floating in the gap
+// between their two lines and indenting the name away from the company name
+// opposite it. After the name, centred on that line, it reads as part of the
+// name — the same placement a DM row uses in the list above (SidebarGroupRow).
+//
 // The row sits outside the scroller (see Workspace) and is always reachable. Each
 // half owns its own hover / focus / active surface so the two never light up
 // together, and both truncate rather than wrap, which keeps them usable at the
@@ -37,9 +42,6 @@ export default function SidebarIdentityBar({
   workspace,
   profile,
   away,
-  size,
-  avatarVersion,
-  logoVersion,
   onOpenAccount,
   onOpenCompany,
 }: Props) {
@@ -47,7 +49,7 @@ export default function SidebarIdentityBar({
   const status = user.role === 'driver' ? null : away ? AWAY : profile ? statusMeta(profile.availabilityStatus) : null
 
   return (
-    <div className="shrink-0 grid grid-cols-2 gap-1 px-1.5 pt-1.5 pb-1.5 border-t border-white/6">
+    <div className="shrink-0 grid grid-cols-2 gap-1 px-1.5 pt-1.5 pb-1.5 border-t border-line">
       <button
         type="button"
         onClick={onOpenAccount}
@@ -55,17 +57,12 @@ export default function SidebarIdentityBar({
         aria-label={`Account: ${user.displayName}`}
         className={IDENTITY_CELL}
       >
-        <span className="relative shrink-0">
-          <Avatar userId={user.id} name={user.displayName} size={size} version={avatarVersion} />
-          {status && (
-            <span
-              title={status.label}
-              className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-sidebar"
-              style={{ backgroundColor: status.color }}
-            />
-          )}
-        </span>
-        <IdentityText primary={user.displayName} secondary={user.role} capitalize />
+        <IdentityText
+          primary={user.displayName}
+          secondary={user.role}
+          capitalize
+          status={status}
+        />
       </button>
 
       <button
@@ -75,7 +72,6 @@ export default function SidebarIdentityBar({
         aria-label={`Company profile: ${workspace.name}`}
         className={IDENTITY_CELL}
       >
-        <CompanyLogo size={size} version={logoVersion} className="!rounded-full" />
         <IdentityText primary={workspace.name} secondary="Company" />
       </button>
     </div>
@@ -94,23 +90,41 @@ function IdentityText({
   primary,
   secondary,
   capitalize,
+  status,
 }: {
   primary: string
   secondary: ReactNode
   capitalize?: boolean
+  /** Availability, drawn as a disc trailing the name. Omitted for the company
+   *  half, which has no presence of its own. */
+  status?: { label: string; color: string } | null
 }) {
   return (
     <span className="min-w-0 flex-1">
-      <span
-        className="block truncate font-medium leading-tight text-text"
-        style={{ fontSize: 'var(--sidebar-row-font-size)' }}
-      >
-        {primary}
+      {/* The name line is a flex row so the disc can sit ON it. `items-center`
+          against the name's line box, not the cell: the mark belongs to the
+          name, so it centres on the name's text rather than on the two-line
+          block. */}
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span
+          className="min-w-0 truncate font-medium leading-tight text-text"
+          style={{ fontSize: 'var(--sidebar-row-font-size)' }}
+        >
+          {primary}
+        </span>
+        {status && (
+          <span
+            title={status.label}
+            aria-label={status.label}
+            className="h-1.5 w-1.5 shrink-0 rounded-full"
+            style={{ backgroundColor: status.color }}
+          />
+        )}
       </span>
-      <span
-        className={`block truncate leading-tight text-muted ${capitalize ? 'capitalize' : ''}`}
-        style={{ fontSize: 'var(--sidebar-meta-font-size)' }}
-      >
+      {/* Mono: role and "Company" are labels for the name above them, not
+          content of their own. `capitalize` is now redundant against the
+          eyebrow's uppercase, so it only survives for non-role secondaries. */}
+      <span className={`eyebrow block truncate leading-tight ${capitalize ? 'capitalize' : ''}`}>
         {secondary}
       </span>
     </span>

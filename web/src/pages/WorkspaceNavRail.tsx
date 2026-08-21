@@ -18,6 +18,9 @@ type Props = {
 // Persistent, icon-only application navigation. It is deliberately narrower
 // than the conversation sidebar and stays in place when that sidebar collapses,
 // so the main destinations never disappear with the current sidebar view.
+//
+// It is not a card: it shares the app's one field colour and is drawn from the
+// sidebar beside it by the single hairline on its right edge.
 export default function WorkspaceNavRail({
   collapsed,
   workspaceActive,
@@ -29,11 +32,11 @@ export default function WorkspaceNavRail({
   return (
     <aside
       aria-label="Main navigation"
-      className="w-full min-w-0 overflow-hidden flex flex-col items-center gap-1 bg-chat rounded-panel border border-white/8 px-1.5 py-2.5"
+      className="w-full min-w-0 overflow-hidden flex flex-col items-center gap-1 bg-bg border-r px-1.5 py-2.5"
     >
       <CollapseButton collapsed={collapsed} onClick={onToggleSidebar} />
 
-      <div className="my-1 h-px w-5 bg-white/8" aria-hidden="true" />
+      <div className="my-1 h-px w-5 bg-line" aria-hidden="true" />
 
       <NavButton
         icon={LayoutGrid}

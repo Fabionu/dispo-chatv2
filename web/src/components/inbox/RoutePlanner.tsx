@@ -953,7 +953,7 @@ export default function RoutePlanner({ onBack }: Props) {
       </header>
 
       {/* Map region — the panel floats over this and never resizes it. */}
-      <div ref={regionRef} className="relative flex-1 min-h-[22.5rem] rounded-card overflow-hidden border border-white/8">
+      <div ref={regionRef} className="relative flex-1 min-h-[22.5rem] rounded-card overflow-hidden border border-line">
         <HereMap
           markers={markers}
           savedPlaces={placesOpen ? places : []}
@@ -983,7 +983,7 @@ export default function RoutePlanner({ onBack }: Props) {
           <button
             onClick={() => setPlacesOpen((value) => !value)}
             className={`flex h-8 items-center gap-1.5 rounded-full border px-3 text-sm font-medium shadow-raised transition-colors ${
-              placesOpen ? 'border-text bg-text text-bg' : 'border-white/8 bg-rail/90 text-text hover:bg-rail'
+              placesOpen ? 'border-text bg-text text-bg' : 'border-line bg-rail/90 text-text hover:bg-rail'
             }`}
           >
             <MapPinned size="0.875rem" strokeWidth={2} />
@@ -998,7 +998,7 @@ export default function RoutePlanner({ onBack }: Props) {
                 : 'Truck overlay not available on this HERE plan'
             }
             className={`flex h-8 items-center gap-1.5 rounded-full border px-3 text-sm font-medium shadow-raised transition-colors ${
-              truckOverlay ? 'bg-active text-bg border-active' : 'bg-rail/90 text-text border-white/8 hover:bg-rail'
+              truckOverlay ? 'bg-active text-bg border-active' : 'bg-rail/90 text-text border-line hover:bg-rail'
             } disabled:cursor-not-allowed disabled:opacity-40`}
           >
             <Truck size="0.875rem" strokeWidth={2} />
@@ -1023,7 +1023,7 @@ export default function RoutePlanner({ onBack }: Props) {
         <button
           onClick={() => setPanelCollapsed(false)}
           aria-label="Open route panel"
-          className={`absolute z-20 top-3 left-3 flex items-center gap-1.5 h-9 pl-2.5 pr-3 rounded-full border border-white/8 bg-rail/90 text-text text-sm font-medium shadow-raised transition-opacity hover:bg-rail ${
+          className={`absolute z-20 top-3 left-3 flex items-center gap-1.5 h-9 pl-2.5 pr-3 rounded-full border border-line bg-rail/90 text-text text-sm font-medium shadow-raised transition-opacity hover:bg-rail ${
             panelCollapsed ? 'opacity-100' : 'opacity-0 pointer-events-none'
           }`}
         >
@@ -1052,7 +1052,7 @@ export default function RoutePlanner({ onBack }: Props) {
           style={{ transform: panelCollapsed ? 'translateX(calc(-100% - 1rem))' : 'translateX(0)' }}
           aria-hidden={panelCollapsed}
         >
-        <div className="flex min-h-0 flex-col rounded-panel border border-white/8 bg-rail shadow-raised">
+        <div className="flex min-h-0 flex-col rounded-panel border border-line bg-rail shadow-raised">
           <div className="flex h-11 shrink-0 items-center justify-between gap-2 pl-3.5 pr-2">
             <div className="min-w-0">
               <div className="text-base font-semibold leading-tight tracking-[-0.1px]">Route</div>
@@ -1082,7 +1082,7 @@ export default function RoutePlanner({ onBack }: Props) {
           {/* The card's ONLY scroll region. `divide-y` draws the section seams,
               so a section that isn't rendered (the summary before a route
               exists) leaves no orphaned hairline behind. */}
-          <div className="min-h-0 flex-1 overflow-y-auto border-t border-white/6 divide-y divide-white/6">
+          <div className="min-h-0 flex-1 overflow-y-auto border-t border-line divide-y divide-line">
             {/* The itinerary. Every row hangs off the same connector spine, so
                 the list reads as one route rather than a stack of boxes; the
                 cards themselves are borderless and the badges carry the roles.
@@ -1147,7 +1147,7 @@ export default function RoutePlanner({ onBack }: Props) {
                         // slot to fill rather than another committed point.
                         <button
                           onClick={() => setAddingStop(true)}
-                          className="h-9 w-full flex items-center gap-1.5 px-2.5 rounded-soft border border-dashed border-white/8 text-base text-muted transition-colors hover:border-white/16 hover:bg-white/4 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                          className="h-9 w-full flex items-center gap-1.5 px-2.5 rounded-soft border border-dashed border-line text-base text-muted transition-colors hover:border-line-2 hover:bg-white/4 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
                         >
                           <Plus size="0.8125rem" strokeWidth={2} /> Add stop
                         </button>
@@ -1194,18 +1194,18 @@ export default function RoutePlanner({ onBack }: Props) {
                     duration ("4 h 40 min"), every toll status ("Not calculated")
                     and even a five-digit distance. Two columns give ~110px —
                     more than the longest string any of these four can produce. */}
-                <div className="divide-y divide-white/6">
-                  <div className="grid grid-cols-2 divide-x divide-white/6">
+                <div className="divide-y divide-line">
+                  <div className="grid grid-cols-2 divide-x divide-line">
                     <Stat label="Distance" value={formatDistance(route.summary.length)} />
                     <Stat label="Duration" value={formatDuration(route.summary.duration)} />
                   </div>
-                  <div className="grid grid-cols-2 divide-x divide-white/6">
+                  <div className="grid grid-cols-2 divide-x divide-line">
                     <Stat label="ETA" value={formatEta(route.summary.duration)} />
                     <Stat label="Tolls" value={tollSummaryValue(route.tolls, dirty)} />
                   </div>
                 </div>
                 {!dirty && route.tolls && (
-                  <div className="border-t border-white/6 pt-2">
+                  <div className="border-t border-line pt-2">
                     {route.tolls.details.length > 0 ? (
                       <details className="group">
                         <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-full px-2 py-1 text-sm text-muted transition-colors hover:bg-white/4 hover:text-text">
@@ -1276,7 +1276,7 @@ export default function RoutePlanner({ onBack }: Props) {
               scroll region: what went wrong, what is stale, and the one button
               that draws the route. `bg-white/6` (not `bg-rail`) for the inert
               states, because a rail-on-rail button would vanish into the card. */}
-          <div className="flex shrink-0 flex-col gap-1.5 border-t border-white/6 p-2">
+          <div className="flex shrink-0 flex-col gap-1.5 border-t border-line p-2">
             {error && (
               <div className="rounded-card border border-alert/20 bg-alert/10 px-2.5 py-2 text-sm leading-snug text-alert">
                 {error}
@@ -1315,7 +1315,7 @@ export default function RoutePlanner({ onBack }: Props) {
             standard grouped-row recipe (CategoryRow): glyph chip, label over its
             live current value, chevron. The value stays visible while open, so
             opening the fields never hides what they currently add up to. */}
-        <div className="shrink-0 rounded-panel border border-white/8 bg-rail shadow-raised">
+        <div className="shrink-0 rounded-panel border border-line bg-rail shadow-raised">
           <button
             onClick={() => setTruckOpen((o) => !o)}
             aria-expanded={truckOpen}
@@ -1323,7 +1323,7 @@ export default function RoutePlanner({ onBack }: Props) {
               truckOpen ? 'rounded-t-panel' : 'rounded-panel'
             }`}
           >
-            <span className="h-8 w-8 shrink-0 flex items-center justify-center rounded-btn border border-white/6 bg-white/2 text-muted">
+            <span className="h-8 w-8 shrink-0 flex items-center justify-center rounded-btn border border-line bg-white/2 text-muted">
               <Truck size="0.9375rem" strokeWidth={1.8} />
             </span>
             <span className="min-w-0 flex-1">
@@ -1342,7 +1342,7 @@ export default function RoutePlanner({ onBack }: Props) {
           </button>
 
           {truckOpen && (
-            <div className="flex flex-col gap-2.5 border-t border-white/6 p-2.5">
+            <div className="flex flex-col gap-2.5 border-t border-line p-2.5">
               {/* Presets */}
               <div className="flex items-center gap-1.5">
                 <PresetSelect
@@ -1379,7 +1379,7 @@ export default function RoutePlanner({ onBack }: Props) {
                     onKeyDown={(e) => e.key === 'Enter' && commitSavePreset()}
                     placeholder="Preset name"
                     autoFocus
-                    className="h-8 flex-1 min-w-0 rounded-full border border-white/6 bg-white/4 px-2.5 text-sm outline-none transition-colors focus:border-white/16 focus:bg-white/6 placeholder:text-faint"
+                    className="h-8 flex-1 min-w-0 rounded-full border border-line bg-white/4 px-2.5 text-sm outline-none transition-colors focus:border-line-2 focus:bg-white/6 placeholder:text-faint"
                   />
                   <button
                     onClick={commitSavePreset}
@@ -1414,7 +1414,7 @@ export default function RoutePlanner({ onBack }: Props) {
             {/* Coordinate header — the copy button copies EXACTLY the displayed
                 string. Clicking it keeps the menu open (it's inside the menu, so
                 the outside-click closer ignores it). */}
-            <div className="pl-3 pr-1.5 py-1 flex items-center justify-between gap-2 border-b border-white/6 mb-1">
+            <div className="pl-3 pr-1.5 py-1 flex items-center justify-between gap-2 border-b border-line mb-1">
               <span className="text-2xs uppercase tracking-wide text-muted tabular-nums truncate">
                 {fmtCoord({ lat: menu.lat, lng: menu.lng })}
               </span>
@@ -1451,7 +1451,7 @@ export default function RoutePlanner({ onBack }: Props) {
               className={`absolute z-30 min-w-[11.25rem] ${MENU_CONTAINER}`}
               style={{ left: markerMenu.x, top: markerMenu.y }}
             >
-              <div className="px-3 py-1.5 border-b border-white/6 mb-1">
+              <div className="px-3 py-1.5 border-b border-line mb-1">
                 <div className="text-2xs uppercase tracking-wide text-muted">{heading}</div>
                 <div className="text-sm text-text truncate" title={point.label}>
                   {point.label}
@@ -1491,7 +1491,7 @@ export default function RoutePlanner({ onBack }: Props) {
               className={`absolute z-30 w-[13rem] ${MENU_CONTAINER}`}
               style={{ left: savedPlaceMenu.x, top: savedPlaceMenu.y }}
             >
-              <div className="border-b border-white/6 px-3 py-2 mb-1">
+              <div className="border-b border-line px-3 py-2 mb-1">
                 <div className="truncate text-base font-semibold text-text" title={place.name}>{place.name}</div>
                 <div className="mt-0.5 text-2xs uppercase tracking-wide text-faint">
                   {PLACE_CATEGORY_LABEL[place.category]}
@@ -1514,7 +1514,7 @@ export default function RoutePlanner({ onBack }: Props) {
                 <span className={menuIconClass()}><Flag {...MENU_GLYPH} /></span>
                 Use as destination
               </button>
-              <div className="my-1 border-t border-white/6" />
+              <div className="my-1 border-t border-line" />
               <button
                 onClick={() => {
                   setPlaceError(null)

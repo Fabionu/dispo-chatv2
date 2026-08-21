@@ -359,15 +359,14 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
     ? !text.trim() || text.trim() === editContext.originalBody
     : !text.trim()
 
-  // Floating input bar: a wide capsule one calm step above the near-black chat
-  // window — the same tone as my own bubbles, so the input and my messages read
-  // as one family. It sits inside ChatView's transparent overlay (which lets
-  // messages scroll behind); the tone step plus its rounded shape define it
-  // without a border or shadow. `relative` anchors the mention picker.
+  // The input: a drawn rectangle, opaque, floating over the bottom of the
+  // message list. It used to be a capsule defined by a tone step, which no
+  // longer exists — so the hairline does the whole job, and brightens to
+  // `line-2` while the field has focus. The fill has to be solid even though
+  // it matches the field: the thread scrolls UNDER this. `relative` anchors the
+  // mention picker.
   return (
-    <div
-      className={`relative bg-composer ${replyContext || editContext ? 'rounded-[1.75rem]' : 'rounded-full'}`}
-    >
+    <div className="relative border bg-bg transition-colors focus-within:border-strong">
       {pickerOpen && (
         <MentionPicker
           members={matches}
@@ -389,7 +388,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           drop the selection before the wrap runs). Hidden while the @-mention
           picker is open to avoid stacking two popovers. */}
       {hasSelection && !pickerOpen && !tripOpen && (
-        <div className="absolute left-1/2 -translate-x-1/2 bottom-[calc(100%+8px)] z-20 flex items-center gap-0.5 rounded-chip border border-white/10 bg-surface-2 px-1 py-1 shadow-raised">
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-[calc(100%+8px)] z-20 flex items-center gap-0.5 border bg-surface px-1 py-1 shadow-overlay">
           <FormatButton label="Bold" shortcut="Ctrl/Cmd+B" onClick={() => applyFormat('*')}>
             <Bold size="0.9375rem" strokeWidth={2.4} />
           </FormatButton>
@@ -397,7 +396,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
             <Italic size="0.9375rem" strokeWidth={2.2} />
           </FormatButton>
           {/* Downward caret so it reads as a tooltip anchored to the input. */}
-          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-px h-2 w-2 rotate-45 border-r border-b border-white/10 bg-surface-2" />
+          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-px h-2 w-2 rotate-45 border-r border-b bg-surface" />
         </div>
       )}
       {replyContext && (
@@ -427,7 +426,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           --composer-size and are vertically centred against the textarea, so
           they stay aligned with the middle of the input whether it's one line or
           grown to several (items-center tracks the textarea's height). */}
-      <div className="flex items-center gap-1.5 px-2.5 py-2">
+      <div className="flex items-center gap-1.5 px-1.5 py-1.5">
         <input
           ref={fileInputRef}
           type="file"
@@ -448,14 +447,14 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           onBlur={() => setHasSelection(false)}
           rows={1}
           placeholder={editContext ? 'Edit message…' : placeholder}
-          className="flex-1 min-w-0 bg-transparent text-[length:var(--chat-msg-font-size)] leading-[1.5] outline-none resize-none placeholder:text-faint overflow-y-auto max-h-[9em] px-2 py-1.5"
+          className="flex-1 min-w-0 bg-transparent text-[length:var(--chat-msg-font-size)] leading-[1.5] outline-none resize-none placeholder:text-faint overflow-y-auto max-h-[9em] px-2 py-1"
         />
         <button
           type="button"
           onClick={onSchedule}
           aria-label="Schedule message"
           title="Schedule message"
-          className={`h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 items-center justify-center rounded-full text-muted hover:bg-white/6 hover:text-text transition-colors ${
+          className={`h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 items-center justify-center text-muted hover:bg-white/6 hover:text-text transition-colors ${
             editContext ? 'hidden' : 'flex'
           }`}
         >
@@ -466,10 +465,15 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           onClick={onSend}
           disabled={disabled}
           aria-label={editContext ? 'Save edit' : 'Send message'}
-          className={`h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 flex items-center justify-center rounded-full transition-colors ${
-            disabled
-              ? 'bg-white/8 text-faint cursor-default'
-              : 'bg-text text-bg hover:bg-white'
+          // The fill IS the state. With nothing to send the button is undrawn —
+          // no box, no wash, just a faint arrow sitting in the bar; the moment
+          // there's text it fills solid and becomes the one filled control in
+          // the thread, which is what makes it read as the primary action
+          // without a colour. It used to keep a hairline while disabled, so the
+          // empty state looked like an outlined button that had been switched
+          // off rather than an action that isn't available yet.
+          className={`h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 flex items-center justify-center transition-colors ${
+            disabled ? 'text-faint cursor-default' : 'bg-text text-bg hover:bg-white'
           }`}
         >
           <ArrowUp size="1rem" strokeWidth={2.2} />
@@ -499,7 +503,7 @@ function FormatButton({
       title={`${label} (${shortcut})`}
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
-      className="h-7 w-7 flex items-center justify-center rounded-[0.1875rem] text-muted hover:text-text hover:bg-white/8 transition-colors"
+      className="h-7 w-7 flex items-center justify-center text-muted hover:text-text hover:bg-white/8 transition-colors"
     >
       {children}
     </button>

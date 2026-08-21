@@ -1,21 +1,78 @@
-import { memo, useEffect, useRef, useState, type MouseEvent } from 'react'
-import { Pin } from 'lucide-react'
+import { memo, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react'
+import { Copy, Forward, MoreHorizontal, Pin, Reply } from 'lucide-react'
 import type { Attachment, GroupType } from '../../lib/types'
 import AttachmentBlock from '../attachments/AttachmentBlock'
-import MessageActionsPanel, { MessageActionsTrigger } from './MessageActionsPanel'
+import MessageActionsPanel from './MessageActionsPanel'
 import ReadReceipts, { type Reader } from './ReadReceipts'
 import ReplyQuote from './ReplyQuote'
 import { DELETE_WINDOW_MS, formatTime } from './messageUtils'
 import DayDivider from './DayDivider'
-import Avatar from '../Avatar'
-import { useMessageDisplay } from '../../lib/messageDisplay'
+import { Attribution, ThreadAction, ThreadActions } from '../thread/threadChrome'
 import { renderBody } from './messageBody'
 import { buildMessageActions } from './messageActionItems'
 import type { LocalMessage } from './types'
 
-// Consecutive messages from the same author within this window are grouped (one
-// author header, then plain rows / tight bubbles). A new group also starts on an
-// author change, a system row, or a date divider. ~7 min reads as "same burst".
+// Message body type — the same for EVERY message, whoever sent it.
+//
+// Incoming bodies used to step back to `muted`. That came from the design
+// reference, where the grey speaker is an assistant and the bright one is you;
+// in a vehicle room with six dispatchers in it, it only made everyone else's
+// words look secondary to your own. Ownership is carried by SIDE (left rule vs
+// right) and by the rule's weight — it does not need to dim anybody.
+//
+// Weight 300, not 400: near-white text on a black field BLOOMS, and Chrome on
+// Windows has no equivalent of the macOS font smoothing that thins it, so Inter
+// at 400 reads noticeably heavier here than in the reference this was drawn
+// from. Bold emphasis still lands — renderRichText's <strong> is 700.
+const BODY_TYPE = 'font-light text-text'
+
+// How recent a message must be, AT THE MOMENT ITS ROW FIRST MOUNTS, to read as
+// "just arrived" and play the entrance animation.
+//
+// This is the whole trick, and it is deliberately a timestamp check rather than
+// a list diff: opening a conversation mounts a page of rows at once, and
+// animating those would make every thread open with a wave of fading text. A
+// row animates only if the message it carries is seconds old — true for
+// something I just sent (the optimistic row is stamped client-side at send
+// time) and for something that just arrived over the socket, false for history.
+//
+// The row's key is `localId ?? id` (see ChatView), stable across the
+// optimistic→real reconcile, so a confirmed send does NOT remount and therefore
+// cannot play the animation a second time.
+const FRESH_WINDOW_MS = 4000
+
+// ── Batch stagger ───────────────────────────────────────────────────────────
+// Rows that mount in the SAME commit form a burst and animate 60ms apart — a
+// socket backlog after a reconnect, or several messages from one author landing
+// together. React mounts them in list order, so a shared counter is all the
+// ordering we need; each row only ever knows about itself.
+//
+// The window is deliberately tiny. 50ms means "the same paint", not "recently":
+// two messages arriving a second apart are two arrivals, not a burst, and the
+// second must not sit behind a delay the reader has no way to explain.
+const BURST_WINDOW_MS = 50
+// Past ~300ms a burst stops reading as one arrival and starts looking like the
+// app is loading slowly, so later rows in a long batch share the last step.
+const MAX_STAGGER_STEPS = 5
+
+let burstAt = 0
+let burstIndex = 0
+
+function claimStaggerStep(): number {
+  const now = Date.now()
+  if (now - burstAt > BURST_WINDOW_MS) burstIndex = 0
+  burstAt = now
+  return Math.min(burstIndex++, MAX_STAGGER_STEPS)
+}
+
+// Consecutive messages from the same author within this window read as one
+// burst. A new group also starts on an author change, a system row, or a date
+// divider. ~7 min reads as "same burst".
+//
+// Grouping now controls SPACING ONLY. Every message keeps its own attribution
+// row, because in this layout the label is what identifies a message at all —
+// suppress it on a follow-up and that message has no author, no time and no
+// visible owner, just an unexplained second block of text under the first.
 const GROUP_WINDOW_MS = 7 * 60 * 1000
 
 type Props = {
@@ -31,11 +88,15 @@ type Props = {
   // of my rows, so its reference is stable unless the roster actually changes.
   readers?: Reader[]
   prev?: LocalMessage
-  next?: LocalMessage
   // True when this is the very first message of the whole thread (no older page
   // to load) — the day divider then reads "Conversation started · <date>".
   conversationStart?: boolean
   groupType: GroupType
+  // Colour for this row's left rule, identifying WHICH of the room's members
+  // sent it (see lib/authorColor.ts). Supplied only where it carries
+  // information: someone else's message, in a room with more than two people.
+  // Undefined everywhere else, which leaves the neutral `line` rule in place.
+  ruleColor?: string
   highlighted: boolean
   onRetry: (localId: string, body: string, file: File | null) => void
   // This row is among the newest in the thread — load its image attachments
@@ -73,9 +134,9 @@ function MessageRow({
   currentUserId,
   readers,
   prev,
-  next,
   conversationStart,
   groupType,
+  ruleColor,
   highlighted,
   onRetry,
   imagePriority,
@@ -115,21 +176,7 @@ function MessageRow({
 
   // A group starts on an author change / time gap / system break (all folded
   // into !sameAuthorAsPrev) or whenever a date divider precedes this row.
-  // Drives the author chrome (avatar + name), group spacing, and the bubble
-  // corner grouping in BOTH display styles.
   const startNewGroup = !sameAuthorAsPrev || showDayDivider
-  const sameAuthorAsNext =
-    next !== undefined &&
-    next.kind !== 'system' &&
-    next.authorId === message.authorId &&
-    new Date(next.createdAt).toDateString() === new Date(message.createdAt).toDateString() &&
-    new Date(next.createdAt).getTime() - new Date(message.createdAt).getTime() < GROUP_WINDOW_MS
-  const endGroup = !sameAuthorAsNext
-
-  // Which message timeline style to render — 'bubble' (classic) or 'plain' (the
-  // no-bubble grouped operational-log stream). Reads live via a <html> attribute
-  // so toggling re-renders every row without ChatView prop changes.
-  const display = useMessageDisplay()
 
   const failed = message.failed === true
   const pending = message.pending === true
@@ -139,10 +186,7 @@ function MessageRow({
   const pinned = Boolean(message.pinnedAt) && !deleted
   // Copy lifts the text body; disabled for attachment-only messages.
   const canCopy = !deleted && Boolean(message.body)
-  // Any attachment (image OR document) means the chevron can sit over media,
-  // so it needs the readability patch behind it.
-  const hasAttachment = !deleted && (message.attachments?.length ?? 0) > 0
-  // Optimistic + failed bubbles aren't real messages yet, so they shouldn't
+  // Optimistic + failed sends aren't real messages yet, so they shouldn't
   // expose the menu. Deleted placeholders shouldn't either.
   const canShowActions = !deleted && !pending && !failed
   // Desktop shortcut: double-clicking the message row starts a reply. Keep
@@ -177,19 +221,38 @@ function MessageRow({
   // The private-DM actions only make sense for someone else's message inside a
   // group conversation — in a 1:1 the "private" chat would be this same one.
   const canMessagePrivately = !mine && groupType === 'vehicle'
-  // In a direct (1:1) conversation the peer is identified by the header, so
-  // per-message avatars and author labels are redundant — drop them and let
-  // incoming bubbles sit flush to the left.
-  const showAuthorChrome = !mine && groupType === 'vehicle'
+  // Computed once per mount (useState initialiser, not a render-time
+  // expression) so a re-render — a read receipt landing, an edit, the actions
+  // opening — can never restart the entrance.
+  const [justArrived] = useState(
+    () => Date.now() - new Date(message.createdAt).getTime() < FRESH_WINDOW_MS,
+  )
 
-  // The actions open two ways — the chevron or a right-click on the bubble —
-  // and land in the same place either way: inline under this bubble. No anchor
+  // Stagger is claimed in a LAYOUT EFFECT, never during render: the burst
+  // counter is shared mutable state, and touching it from a useState
+  // initialiser would make render impure (and double-count under StrictMode,
+  // which invokes initialisers twice). A layout effect runs once the node
+  // exists but before paint, so the delay class still catches the animation's
+  // first frame. The ref guard survives StrictMode's simulated remount.
+  //
+  // MY OWN send never staggers, even if it lands in the same commit as incoming
+  // traffic: it is the direct result of a keypress, and 60ms of hesitation
+  // there reads as lag rather than polish.
+  const staggerClaimed = useRef(false)
+  useLayoutEffect(() => {
+    if (staggerClaimed.current || !justArrived || mine) return
+    staggerClaimed.current = true
+    const step = claimStaggerStep()
+    if (step > 0) rowRef.current?.classList.add(`message-enter-${step}`)
+  }, [justArrived, mine])
+
+  // The actions open two ways — the MORE button or a right-click on the row —
+  // and land in the same place either way: inline under this message. No anchor
   // maths, so one boolean covers both.
   const [menuOpen, setMenuOpen] = useState(false)
   // Keep the strip mounted briefly after close so its fade/lift can finish.
   // Opening still mounts on demand, so closed rows do not retain action DOM.
   const [menuRendered, setMenuRendered] = useState(false)
-  const triggerRef = useRef<HTMLButtonElement>(null)
   const rowRef = useRef<HTMLDivElement>(null)
 
   // Clicking outside THIS row closes its panel — which also means opening
@@ -224,47 +287,67 @@ function MessageRow({
     return () => window.clearTimeout(timer)
   }, [menuOpen, menuRendered])
 
-  // 82% keeps bubbles comfortably inset on small screens; the wider absolute
-  // cap lets conversations occupy more of the enlarged desktop chat column on
-  // 2K+ monitors. CSS min() picks whichever is smaller at the current width.
-  // Font size comes from --chat-msg-font-size so it scales with the display.
-  // max-w lives on the row so the trigger overlay can hug the bubble without
-  // breaking the alignment math.
-  const rowMaxW = 'max-w-[min(82%,64rem)]'
-  // Media (image/doc) messages use a tight frame so the attachment nearly
-  // fills the bubble instead of floating inside a thick coloured margin; text-
-  // only messages keep a comfortable-but-compact padding. Caption text and the
-  // meta footer re-add a small inset on media bubbles (see below).
-  const bubblePad = hasAttachment ? 'p-1.5' : 'px-3.5 pt-2 pb-1.5'
-  const bubbleBase = `${bubblePad} text-[length:var(--chat-msg-font-size)] leading-[1.45] flex flex-col text-text transition-[box-shadow,border-color] duration-500`
-  // The sender-side corners describe the bubble's exact position in a run:
-  // single, first, middle, or last. Joined 5px corners make consecutive
-  // messages interlock while the first/last keep a rounded outer edge.
-  const shapeMine = `rounded-[1rem] ${
-    startNewGroup ? 'rounded-tr-[1rem]' : 'rounded-tr-[0.3125rem]'
-  } ${endGroup ? 'rounded-br-[1rem]' : 'rounded-br-[0.3125rem]'}`
-  const shapeOther = `rounded-[1rem] ${
-    startNewGroup ? 'rounded-tl-[1rem]' : 'rounded-tl-[0.3125rem]'
-  } ${endGroup ? 'rounded-bl-[1rem]' : 'rounded-bl-[0.3125rem]'}`
-  const deletedSkin = `bg-white/2 text-muted italic ${mine ? shapeMine : shapeOther}`
-  // Bubble skins sit on the near-black chat window (`chat` #0C0C0C). Incoming
-  // uses the top neutral surface step (`surface-2` #2D2D2D); my own messages use
-  // the quieter `bubble-own` tone (#1A1A1A, shared with the composer). Both are
-  // LIGHTER than the conversation surface and separated from each other by a
-  // clear step, so colour alone tells the two sides apart — no border or shadow
-  // — while right alignment and the tail shape carry ownership. The bubble
-  // itself never changes on hover; only the actions affordance reveals.
-  // (Failed sends keep an alert border as their error cue.)
-  const bubbleSkin = deleted
-    ? deletedSkin
-    : mine
-      ? failed
-        ? `bg-bubble-own border border-alert/50 ${shapeMine}`
-        : `bg-bubble-own ${shapeMine}`
-      : `bg-surface-2 ${shapeOther}`
-  // Subtle, theme-warm pulse applied when this row is the target of a
-  // jump-to-original. Clears after ~1.8s back in ChatView.
-  const highlightSkin = highlighted ? 'ring-2 ring-active/60' : ''
+  // ── Row chrome ──────────────────────────────────────────────────────────
+  // A message is a LABEL, a RULE and an INDENT — never a bubble. Ownership is
+  // carried by SIDE: incoming messages hang off a rule on the left of the
+  // column, mine off a mirrored rule on the right. COLOUR reinforces it: mine
+  // is --color-line-own, the only rule in the app at full contrast — pure white on
+  // dark, pure black on light — against the quiet `line` hairline everyone
+  // else's hangs from. Body tone does NOT — both sides read at full brightness;
+  // see BODY_TYPE above.
+  //
+  // In a room with a crowd in it that left rule also carries WHOSE message this
+  // is, as a hue (see ruleColor). Side answers "is this mine"; the hue answers
+  // "is this the same person as the message above" — the question you actually
+  // have when six people share a truck. My own rule stays neutral: it is
+  // already the only one on the right, and a colour there would put hue on both
+  // edges of the column to say something the position has said already.
+  //
+  // The block is `w-fit`, so the rule hugs the longest line instead of running
+  // to the column edge — which is the whole point of putting it on the right
+  // for my own messages. Body text inside stays LEFT-aligned either way: a
+  // right-aligned paragraph is hard to read, and the block's position already
+  // says whose it is.
+  //
+  // MY OWN block is also a flex column that packs its children to the END. The
+  // rule is on the right there, but every child was a plain block filling the
+  // block's width, and that width is set by whichever child is widest — usually
+  // the attribution row, since `FABIO TOFAN 14:31 ✓✓` is longer than most
+  // things anyone types. A short body then sat at the LEFT of that width,
+  // measured at 136px from its own rule while every incoming message's text
+  // held 21px from theirs. `items-end` makes each child shrink to its content
+  // and sit against the rule, so my text hangs off my edge exactly the way
+  // theirs hangs off theirs.
+  //
+  // This is alignment of the BLOCKS, not of the text in them: a paragraph that
+  // wraps still sets ragged-right inside its own box, so nothing about reading
+  // it changes. Absolutely positioned children (the hover actions, the actions
+  // panel) are not flex items and keep their own anchoring.
+  // Jump-to-original pulse. A wash, not a ring: there is no shape here to ring.
+  // It runs to the row's edges so the highlighted band starts AT the rule.
+  // RULE WEIGHT. Structural hairlines in this app are 1px and stay 1px. This
+  // rule is not structure though — in a room with a crowd in it it is carrying
+  // WHO, in a colour (see ruleColor), and 1px is not enough of it to carry a
+  // colour reliably. A 1px border lands on a fractional number of device pixels
+  // on most displays (1.5 of them at the 1.5 pixel ratio this was measured on),
+  // so a third of the ink ends up in a half-covered pixel that blends with
+  // whatever is behind it: toward black that reads as a dimmer version of the
+  // hue, toward white it reads as pastel, which is why the light theme lost the
+  // colours first.
+  //
+  // 2px, NOT 1.5px, and the extra half pixel is the whole reason. Widths land
+  // on whole device pixels at 2px for every common ratio (1 → 2, 1.5 → 3, 2 →
+  // 4), whereas 1.5px is fractional at BOTH 1 and 1.5 — it would add a blurred
+  // edge on a plain display that does not have one today. 2px is also a weight
+  // this design already speaks: the selected conversation in the rail and the
+  // filter tab bar are both 2px of --color-text. Emphasis, not a new idea.
+  //
+  // Only where it says something. A direct message has one other person in it
+  // and no colour on the rule, so it keeps the hairline and the quiet.
+  const boldRule = groupType !== 'direct'
+  const highlightSkin = highlighted ? 'bg-active/10' : ''
+  const authorLabel = (mine ? message.authorName || 'You' : message.authorName) || 'Member'
+  const time = formatTime(message.createdAt)
 
   const actions = buildMessageActions({
     message,
@@ -287,517 +370,170 @@ function MessageRow({
     onDeleteForEveryone,
   })
 
-  // Subtle bubble-corner meta: optional `edited` tag then the time (or a
-  // `Failed` marker). Rendered two ways below — tucked into the last line of a
-  // text bubble (WhatsApp-style float), or on its own right-aligned line under
-  // an attachment-only bubble.
-  const meta = (
+  // The attribution row's trailing slot — the message's own state, spoken in the
+  // same mono voice as the name and time beside it. These used to be scattered:
+  // a pin tag above the body, `Forwarded` italics under it, `edited` floating in
+  // the bubble's corner. They all describe the message rather than say anything,
+  // so they belong on the label row, and putting them there is what lets the
+  // body below be nothing but the body.
+  //
+  // Read ticks are the exception that stays a glyph: they carry live delivery
+  // state, so they're always visible rather than hover-revealed.
+  const attributionTrailing = (
     <>
-      {edited && <span className="italic">edited</span>}
-      {failed ? <span className="not-italic text-alert">Failed</span> : formatTime(message.createdAt)}
+      {pinned && (
+        <span className="eyebrow inline-flex items-center gap-1 text-active">
+          <Pin size="0.625rem" strokeWidth={2} className="fill-current" />
+          Pinned
+        </span>
+      )}
+      {forwarded && <span className="eyebrow">Forwarded</span>}
+      {edited && <span className="eyebrow">Edited</span>}
+      {failed && <span className="eyebrow text-alert">Failed</span>}
+      {mine && !failed && !deleted && (
+        <ReadReceipts
+          others={readers ?? []}
+          createdAt={message.createdAt}
+          pending={pending}
+          onOpen={() => onOpenReadReceipts(message)}
+        />
+      )}
     </>
   )
-  const metaReserve = failed
-    ? 'w-[2.875rem]'
-    : mine
-      ? edited
-        ? 'w-[5.5rem]'
-        : 'w-[3.25rem]'
-      : edited
-        ? 'w-[4.25rem]'
-        : 'w-[2.125rem]'
-
-  // ── Plain stream (grouped "operational log") ────────────────────────────────
-  // Slack/Discord-style work-log for INCOMING messages: a group start shows the
-  // avatar (in a fixed left gutter) + author name; following rows in the group
-  // are bare text indented under that gutter. MY OWN messages are the one
-  // asymmetry: right-aligned AND wrapped in the same dark own-message bubble as
-  // bubble view (`bg` skin + tail shape), so ownership remains clear while the
-  // incoming side keeps the bare log structure.
-  // Per-message time trails the body on the row's end (faint, never
-  // in the header, never above the text). A single subtle dropdown chevron
-  // reveals on hover, ATTACHED to the content: for text it sits just after the
-  // last line (before the time/ticks); for attachment-only messages it sits to
-  // the RIGHT of the media (never below it). It opens the full actions menu;
-  // right-click opens the same menu — both reuse the same handlers.
-  if (display === 'plain') {
-    const authorLabel = message.authorName || 'Member'
-    const time = formatTime(message.createdAt)
-    // My own (non-deleted) rows render as a bubble even in the plain stream —
-    // the same skin/shape/padding as bubble view (bubbleSkin/bubblePad above),
-    // including the failed-send alert border. Deleted rows stay bare muted
-    // italics on both sides, so a removed message never draws attention.
-    const ownBubble = mine && !deleted
-    // Trailing meta cluster, a flex sibling at the END of the message (close on
-    // short messages, at the row end on long ones) — never at the viewport edge,
-    // the author header, or above the text. Order: optional `edited`, then my
-    // read ticks, then the time. The ticks stay visible (delivery/read state);
-    // the time and `edited` reveal only on THIS row's hover. Both stay mounted
-    // (opacity-only) so the cluster's width is constant — hovering never reflows.
-    const metaCluster = (
-      <span className="inline-flex items-center gap-1 shrink-0 leading-none select-none pb-[2px]">
-        {edited && (
-          <span className="text-2xs text-faint italic opacity-0 transition-opacity group-hover/msg:opacity-100">
-            edited
-          </span>
-        )}
-        {mine && !failed && !deleted && (
-          <ReadReceipts
-            others={readers ?? []}
-            createdAt={message.createdAt}
-            pending={pending}
-            onOpen={() => onOpenReadReceipts(message)}
-          />
-        )}
-        {/* Time is always visible (no hover-reveal) so the log is scannable
-            without hovering each row. */}
-        <span className="text-2xs text-faint tabular-nums">
-          {time}
-        </span>
-      </span>
-    )
-
-    // Actions chevron — sits inline AFTER the message text but BEFORE the
-    // trailing timestamp / read-ticks (the metaCluster). Icon-only, no chrome;
-    // revealed on this row's hover/focus. Always mounted (opacity-only) so
-    // revealing it never reflows the line. Clicking opens the full actions menu;
-    // right-click on the row opens the same menu. Null for rows that don't
-    // expose actions (pending / failed / deleted) — they show no chevron.
-    const actionsTrigger = canShowActions ? (
-      <MessageActionsTrigger
-        ref={triggerRef}
-        variant="inline"
-        open={menuOpen}
-        onToggle={() => setMenuOpen((open) => !open)}
-      />
-    ) : null
-
-    return (
-      <>
-        {showDayDivider && (
-          <DayDivider iso={message.createdAt} conversationStart={conversationStart} />
-        )}
-        <div
-          ref={rowRef}
-          data-message-id={message.id}
-          onDoubleClick={handleDoubleClick}
-          onContextMenu={(e) => {
-            if (!canShowActions) return
-            e.preventDefault()
-            // Toggle, so a second right-click on the same message closes the
-            // strip. Right-clicking ANOTHER message closes this one first (the
-            // outside-mousedown handler above fires before that row's
-            // contextmenu), then opens there — one strip open at a time.
-            setMenuOpen((open) => !open)
-          }}
-          className={`relative pl-1.5 pr-2 ${startNewGroup ? 'mt-4' : 'mt-0.5'}`}
-        >
-          {/* Row layout: avatar gutter · content column. The chevron does NOT
-              live up here next to the avatar/name — it sits INSIDE the content
-              column, in a gutter on the message block (below the author header),
-              so it aligns with the message text row and never shifts the avatar,
-              name, or body. MY OWN messages are a right-aligned own-skin BUBBLE
-              (no avatar, no author header — alignment + the warm fill mark
-              ownership, WhatsApp-style); incoming rows keep the plain no-bubble
-              structure. */}
-          <div className={`flex items-start gap-2.5 ${mine ? 'justify-end' : ''}`}>
-            {/* Avatar gutter (incoming only) — avatar at a group start; empty
-                (indent) on following rows so the group stays visually anchored.
-                My own rows have no gutter at all: the block hugs the right edge
-                with only the row/column padding keeping it off the pane edge. */}
-            {!mine && (
-              <div className="w-8 shrink-0 pt-0.5">
-                {startNewGroup && (
-                  <button
-                    type="button"
-                    onClick={() => onOpenProfile(message.authorId, authorLabel)}
-                    aria-label={`View ${authorLabel}'s profile`}
-                    title={authorLabel}
-                    className="block rounded-full cursor-pointer transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
-                  >
-                    <Avatar userId={message.authorId} name={authorLabel} size={32} />
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Content column — left-aligned for others, right-aligned (items-end)
-                for my own messages, capped for readability either way. Carries
-                the hover/jump highlight + `group/msg` so the affordances
-                (background, chevron, trailing time) reveal ONLY when the cursor
-                is over the actual content, not the empty horizontal space that
-                fills the rest of the row. It hugs its content (no `flex-1`) so
-                the highlight never stretches past the text; `-mx-1.5 px-1.5`
-                gives the pill breathing room without shifting the content. */}
-            <div
-              className={`group/msg min-w-0 flex flex-col ${
-                mine ? 'items-end' : 'items-start'
-              } max-w-[56rem] ${
-                // Own-bubble rows carry no hover pill and no highlight wash on
-                // the wrapper — the bubble itself never changes on hover (same
-                // rule as bubble view) and the jump-highlight rides the bubble
-                // as a ring instead (see the message block below).
-                ownBubble
-                  ? ''
-                  : `-mx-1.5 px-1.5 rounded-btn transition-colors duration-500 ${
-                      highlighted ? 'bg-active/10' : 'hover:bg-white/2'
-                    }`
-              }`}
-            >
-              {/* Author header: just the name — incoming messages only. My own
-                  rows carry no name (the right alignment is the ownership cue),
-                  so the text block stays the anchor. Kept clean — NO chevron and
-                  NO timestamp ever live on this row. It sits at the content-left
-                  edge, sharing its x with the chevron gutter below it. */}
-              {startNewGroup && !mine && (
-                <div className="flex items-center gap-1.5 mb-0.5 leading-none">
-                  <button
-                    type="button"
-                    onClick={() => onOpenProfile(message.authorId, authorLabel)}
-                    className="text-lg font-semibold text-text hover:underline underline-offset-2 focus-visible:outline-none focus-visible:underline"
-                  >
-                    {authorLabel}
-                  </button>
-                </div>
-              )}
-
-              {/* Message block — reply quote / pins / attachments / body, all
-                  aligned under the author name on the row's own side (left for
-                  others, right for mine; no indent). The actions chevron is NOT
-                  a separate gutter: it's rendered inline at the END of the text
-                  row, right after the body and just before the trailing
-                  timestamp / read-ticks (see metaCluster usages below), so it
-                  follows the text without interrupting reading. */}
-              <div
-                className={`min-w-0 flex flex-col ${mine ? 'items-end' : 'items-start'} ${
-                  // The bubble hugs its content (no w-full stretch); the
-                  // jump-highlight pulses as a ring on it, like bubble view.
-                  ownBubble
-                    ? `${bubblePad} ${bubbleSkin} transition-[box-shadow,border-color] duration-500 ${highlightSkin}`
-                    : 'w-full'
-                }`}
-              >
-                  {!deleted && message.replyTo && (
-                    <ReplyQuote replyTo={message.replyTo} onJump={onJumpToMessage} neutral={mine} />
-                  )}
-                  {pinned && (
-                    <span
-                      className={`flex items-center gap-1 text-xs mb-0.5 leading-none ${mine ? 'text-muted' : 'text-active'}`}
-                    >
-                      <Pin size="0.625rem" strokeWidth={2} className="fill-current" /> Pinned
-                    </span>
-                  )}
-                  {forwarded && (
-                    <span className="block text-xs text-muted italic mb-0.5 leading-none">Forwarded</span>
-                  )}
-
-                  {!deleted && message.attachments && message.attachments.length > 0 && (
-                    // Media + (for attachment-ONLY messages) the actions chevron
-                    // on the media's OUTER-FLOW side, top-aligned — never below
-                    // it: to the right of the media on incoming rows, mirrored to
-                    // the left on my right-aligned rows (so it never collides
-                    // with the chat edge). Captioned attachments omit the chevron
-                    // here; it rides the caption's text row instead (see the body
-                    // branch below), so there's never a duplicate.
-                    <div
-                      className={`flex items-start gap-1.5 max-w-full ${ownBubble ? '' : 'my-1'} ${
-                        mine ? 'flex-row-reverse' : ''
-                      }`}
-                    >
-                      <div className="flex flex-col gap-1 min-w-0">
-                        {message.attachments.map((a, i) => (
-                          <AttachmentBlock
-                            key={i}
-                            attachment={a}
-                            uploading={pending}
-                            priority={imagePriority}
-                            captioned={Boolean(message.body)}
-                            onActivate={(a) => onActivateAttachment(message, a)}
-                            onImageLoad={onImageLoad}
-                          />
-                        ))}
-                        {/* Attachment-only: time/ticks sit in the bottom-RIGHT
-                            corner under the media (right-aligned to the image's
-                            edge), matching the bubble layout — not on a left row
-                            below. Captioned attachments keep their meta inline
-                            with the caption (body branch below). */}
-                        {!message.body && (
-                          // Own-bubble rows keep the chevron INSIDE the bubble,
-                          // riding the meta row (the media sets the row's width,
-                          // so the always-mounted trigger never widens the
-                          // bubble). Incoming rows keep it beside the media.
-                          <div className="flex justify-end items-center gap-1 -mt-0.5">
-                            {ownBubble && actionsTrigger}
-                            {metaCluster}
-                          </div>
-                        )}
-                      </div>
-                      {!message.body && !ownBubble && <div className="pt-0.5">{actionsTrigger}</div>}
-                    </div>
-                  )}
-
-                  {/* Body + trailing time on the same row (items-end keeps the
-                      time on the body's last line). Deleted → muted italic with
-                      the time still trailing; attachment-only → time on its own
-                      trailing row. */}
-                  {deleted ? (
-                    <div className="flex items-end gap-2 max-w-full">
-                      <span className="min-w-0 text-[length:var(--chat-plain-font-size)] text-muted italic">
-                        {mine ? 'You deleted this message' : 'This message was deleted'}
-                      </span>
-                      <span className="shrink-0 text-2xs text-faint tabular-nums leading-none select-none pb-[2px] opacity-0 transition-opacity group-hover/msg:opacity-100">
-                        {time}
-                      </span>
-                    </div>
-                  ) : message.body ? (
-                    // Text (or image caption): chevron + trailing time/ticks flow
-                    // INLINE at the very end of the text — NOT as a flex sibling —
-                    // so on a wrapped message they trail the LAST line instead of
-                    // floating off at the row's right edge. They're two separate
-                    // inline boxes with DIFFERENT vertical anchors:
-                    //   • the chevron uses align-text-top so it sits level with the
-                    //     TOP of the text line;
-                    //   • the time/ticks use align-bottom so they stay in the
-                    //     bottom corner (on the text baseline) as before.
-                    // A ~4px lead keeps each attached; both stay one-piece (nowrap).
-                    <div className="max-w-full text-[length:var(--chat-plain-font-size)] leading-[1.55] text-text whitespace-pre-wrap break-words">
-                      {renderBody(message.body, message.mentions, currentUserId, tripCtx)}
-                      {actionsTrigger &&
-                        (ownBubble ? (
-                          // Inside a bubble the expand animation would visibly
-                          // grow the bubble on hover, so own-bubble rows keep
-                          // the chevron's space reserved (opacity-only reveal,
-                          // same trick as the meta cluster) — the bubble's
-                          // width never changes.
-                          <span className="inline-flex align-text-top ml-1">{actionsTrigger}</span>
-                        ) : (
-                          // Collapsed to zero width when the row isn't hovered,
-                          // so the trailing time/ticks tuck right up against the
-                          // text. On hover it expands (animated) to make room
-                          // for the chevron, nudging the meta over — space is
-                          // only reserved for the arrow while it's shown.
-                          <span className="inline-flex align-text-top overflow-hidden max-w-0 ml-0 group-hover/msg:max-w-[1.25rem] group-hover/msg:ml-1 transition-[max-width,margin] duration-200 ease-out">
-                            {actionsTrigger}
-                          </span>
-                        ))}
-                      <span className="inline-flex items-end align-bottom ml-1 whitespace-nowrap">
-                        {metaCluster}
-                      </span>
-                    </div>
-                  ) : null}
-
-                  {failed && mine && message.localId && (
-                    <button
-                      onClick={() => onRetry(message.localId!, message.body, message.pendingFile ?? null)}
-                      className="block text-xs text-alert hover:text-text transition-colors mt-0.5"
-                    >
-                      Tap to retry
-                    </button>
-                  )}
-
-                  {menuRendered && (
-                    <MessageActionsPanel
-                      actions={actions}
-                      mine={mine}
-                      open={menuOpen}
-                      onClose={() => setMenuOpen(false)}
-                    />
-                  )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </>
-    )
-  }
 
   return (
     <>
       {showDayDivider && (
         <DayDivider iso={message.createdAt} conversationStart={conversationStart} />
       )}
-      <div
+      <article
         ref={rowRef}
         data-message-id={message.id}
         onDoubleClick={handleDoubleClick}
-        className={`flex ${startNewGroup ? 'mt-3' : 'mt-0.5'}`}
+        onContextMenu={(e) => {
+          if (!canShowActions) return
+          e.preventDefault()
+          // Toggle, so a second right-click on the same message closes the
+          // strip. Right-clicking ANOTHER message closes this one first (the
+          // outside-mousedown handler above fires before that row's
+          // contextmenu), then opens there — one strip open at a time.
+          setMenuOpen((open) => !open)
+        }}
+        // Inline, because the value is per-author data rather than one of a
+        // fixed set of states — a utility class per member is not a thing
+        // Tailwind can generate. It overrides only the left edge of the
+        // `border-line` set by the class, so every other rule on the row is
+        // untouched.
+        style={ruleColor && !mine ? { borderLeftColor: ruleColor } : undefined}
+        className={`group/msg relative w-fit max-w-full py-0.5 transition-colors duration-500 ${
+          mine
+            ? `ml-auto flex flex-col items-end ${
+                boldRule ? 'border-r-2' : 'border-r'
+              } border-[rgb(var(--color-line-own))] pr-[var(--msg-indent)] pl-2`
+            : `mr-auto ${
+                boldRule ? 'border-l-2' : 'border-l'
+              } border-line pl-[var(--msg-indent)] pr-2`
+        } ${startNewGroup ? 'mt-7' : 'mt-4'} ${highlightSkin} ${
+          justArrived ? 'message-enter' : ''
+        }`}
       >
-        {/* Avatar gutter — incoming vehicle-group messages only (a DM's peer is
-            identified by the header, and my own side stays clean). The avatar
-            renders once per author run (day-divider aware); follow-up rows keep
-            the empty gutter so the group stays visually anchored. */}
-        {showAuthorChrome && (
-          <div className="w-9 mr-2.5 shrink-0">
-            {startNewGroup && (
-              <button
-                type="button"
-                onClick={() => onOpenProfile(message.authorId, message.authorName)}
-                aria-label={`View ${message.authorName}'s profile`}
-                title={message.authorName}
-                className="block rounded-full cursor-pointer transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
-              >
-                <Avatar userId={message.authorId} name={message.authorName} size={36} />
-              </button>
-            )}
+        <Attribution
+          name={authorLabel}
+          time={time}
+          trailing={attributionTrailing}
+          alignEnd={mine}
+          onNameClick={mine ? undefined : () => onOpenProfile(message.authorId, authorLabel)}
+        />
+
+        {!deleted && message.replyTo && (
+          <ReplyQuote replyTo={message.replyTo} onJump={onJumpToMessage} neutral={mine} />
+        )}
+
+        {!deleted && message.attachments && message.attachments.length > 0 && (
+          <div className="my-2 flex max-w-body flex-col gap-1.5">
+            {message.attachments.map((a, i) => (
+              <AttachmentBlock
+                key={i}
+                attachment={a}
+                uploading={pending}
+                priority={imagePriority}
+                captioned={Boolean(message.body)}
+                onActivate={(a) => onActivateAttachment(message, a)}
+                onImageLoad={onImageLoad}
+              />
+            ))}
           </div>
         )}
-        <div className={`flex-1 min-w-0 flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
-          {showAuthorChrome && startNewGroup && (
-            <button
-              type="button"
-              onClick={() => onOpenProfile(message.authorId, message.authorName)}
-              className="text-xs text-muted hover:text-text hover:underline underline-offset-2 mb-1 px-1 leading-none focus-visible:outline-none focus-visible:underline"
-            >
-              {message.authorName}
-            </button>
-          )}
-          {/* Group wrapper for hover-reveal of the actions chevron. Width is
-              capped here so the trigger hugs the bubble's edge. The chevron is
-              a flex SIBLING on the bubble's outer-flow side (right of incoming,
-              left of mine — mirrored by flex-row-reverse) so it never covers
-              text or media and reveals without any layout shift (always
-              mounted, opacity-only). Right-click anywhere on the bubble opens
-              the same actions menu at the cursor. */}
+
+        {/* The body, and nothing else. Capped at --msg-body (62ch) — the cap is
+            on the TEXT, not on the row, so an attachment or a data block inside
+            the same message can still use the column's full width. */}
+        {deleted ? (
+          <p className="max-w-body text-[length:var(--chat-plain-font-size)] italic leading-[1.6] text-faint">
+            {mine ? 'You deleted this message' : 'This message was deleted'}
+          </p>
+        ) : message.body ? (
           <div
-            className={`group relative ${rowMaxW} flex items-center gap-1 ${mine ? 'flex-row-reverse' : ''}`}
-            onContextMenu={(e) => {
-              if (!canShowActions) return
-              e.preventDefault()
-              // Toggle: a second right-click on the SAME bubble closes the
-              // strip. Right-clicking another message closes this one first
-              // (its outside-mousedown handler runs before that bubble's
-              // contextmenu), so only one strip is ever open. Covers text,
-              // replies, images and documents alike — the handler sits on the
-              // whole bubble, so anything inside it bubbles up here.
-              setMenuOpen((open) => !open)
-            }}
+            className={`max-w-body text-[length:var(--chat-plain-font-size)] leading-[1.6] whitespace-pre-wrap break-words ${BODY_TYPE}`}
           >
-            <div className={`relative min-w-0 ${bubbleBase} ${bubbleSkin} ${highlightSkin}`}>
-              {pinned && (
-                <span
-                  className={`flex items-center gap-1 text-xs mb-1 leading-none ${mine ? 'text-muted' : 'text-active'}`}
-                >
-                  <Pin size="0.625rem" strokeWidth={2} className="fill-current" />
-                  Pinned
-                </span>
-              )}
-              {forwarded && (
-                <span className="text-xs text-muted italic mb-1 leading-none">
-                  Forwarded
-                </span>
-              )}
-              {!deleted && message.replyTo && (
-                <ReplyQuote replyTo={message.replyTo} onJump={onJumpToMessage} neutral={mine} />
-              )}
-              {!deleted && message.attachments && message.attachments.length > 0 && (
-                <div className="flex flex-col gap-1 mb-0.5">
-                  {message.attachments.map((a, i) => (
-                    <AttachmentBlock
-                      // Index key keeps the block (and its <img>) mounted across
-                      // the optimistic→real swap, so the blob preview persists.
-                      key={i}
-                      attachment={a}
-                      uploading={pending}
-                      priority={imagePriority}
-                      // Captioned: this image is sent with a text body, so it
-                      // gets wider thumbnail bounds to sit visually with the
-                      // caption instead of floating narrow above wide text.
-                      captioned={Boolean(message.body)}
-                      onActivate={(a) => onActivateAttachment(message, a)}
-                      onImageLoad={onImageLoad}
-                    />
-                  ))}
-                </div>
-              )}
-              {deleted ? (
-                <span className="whitespace-pre-wrap break-words">
-                  {mine ? 'You deleted this message' : 'This message was deleted'}
-                </span>
-              ) : (
-                <>
-                  {message.body && (
-                    // The actions chevron lives OUTSIDE the bubble, so text
-                    // needs no reserved corner. Captions on media bubbles get a
-                    // small inset back from the tight media frame. Timestamp is
-                    // NOT inline — it's the footer row below.
-                    <span
-                      className={`whitespace-pre-wrap break-words font-medium tracking-normal ${
-                        hasAttachment ? 'px-1.5 pt-0.5' : ''
-                      }`}
-                    >
-                      {renderBody(message.body, message.mentions, currentUserId, tripCtx)}
-                      <span
-                        aria-hidden="true"
-                        className={`inline-block h-[0.6875rem] ${metaReserve}`}
-                      />
-                    </span>
-                  )}
-                  {/* Subtle footer row: the time (and `edited`) on their own line,
-                      tucked into the bubble's bottom-right corner — below the
-                      text/caption (or the media in an attachment-only bubble). */}
-                  <span
-                    className={`inline-flex items-center gap-1 whitespace-nowrap text-xs leading-none text-faint select-none ${
-                      message.body
-                        ? `absolute bottom-[0.3125rem] ${
-                            hasAttachment ? 'right-[0.375rem]' : 'right-[0.5rem]'
-                          }`
-                        : `self-end mt-0.5 -mb-0.5 ${
-                            hasAttachment ? '-mr-0.5' : '-mr-1.5'
-                          }`
-                    }`}
-                  >
-                    {meta}
-                    {/* Read checkmarks — only on my own sent messages. Clicking
-                        opens the chat's right-side receipts panel. Hidden for
-                        failed sends (the "Failed" marker stands in). */}
-                    {mine && !failed && (
-                      <ReadReceipts
-                        others={readers ?? []}
-                        createdAt={message.createdAt}
-                        pending={pending}
-                        onOpen={() => onOpenReadReceipts(message)}
-                        // Fit the tick to the timestamp's line box so my own
-                        // bubble's meta row is the same height as an incoming
-                        // one's (a full-size tick would make it a few px taller).
-                        glyphSize="0.6875rem"
-                      />
-                    )}
-                  </span>
-                </>
-              )}
-            </div>
-
-            {/* Minimal hover-revealed actions trigger — a bare muted chevron
-                riding the bubble's outer edge (see the wrapper comment). One
-                affordance for text AND media bubbles: it never sits over the
-                content, so no translucent patch is needed. */}
-            {canShowActions && (
-              <MessageActionsTrigger
-                ref={triggerRef}
-                open={menuOpen}
-                onToggle={() => setMenuOpen((open) => !open)}
-              />
-            )}
-
+            {renderBody(message.body, message.mentions, currentUserId, tripCtx)}
           </div>
-          {menuRendered && (
+        ) : null}
+
+        {failed && mine && message.localId && (
+          <button
+            onClick={() => onRetry(message.localId!, message.body, message.pendingFile ?? null)}
+            className="eyebrow mt-2 block text-alert transition-colors hover:text-text"
+          >
+            Tap to retry
+          </button>
+        )}
+
+        {/* Mono uppercase text buttons, invisible until the message is hovered
+            or one of them is focused. The three verbs that carry most of the
+            traffic are inline; MORE opens the full menu below, so nothing that
+            was reachable before stops being reachable. */}
+        {canShowActions && (
+          <ThreadActions side={mine ? 'right' : 'left'}>
+            <ThreadAction icon={Reply} onClick={() => onReply(message)}>
+              Reply
+            </ThreadAction>
+            {canCopy && (
+              <ThreadAction icon={Copy} onClick={() => onCopy(message)}>
+                Copy
+              </ThreadAction>
+            )}
+            <ThreadAction icon={Forward} onClick={() => onForward(message)}>
+              Forward
+            </ThreadAction>
+            <ThreadAction
+              icon={MoreHorizontal}
+              title="All message actions"
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              More
+            </ThreadAction>
+          </ThreadActions>
+        )}
+
+        {/* Absolute for the same reason the action strip is: in flow it would
+            stretch the block (and its rule) to the panel's width the moment the
+            menu opened. A menu overlaying the message under it is normal; a
+            message silently changing shape is not. */}
+        {menuRendered && (
+          <div
+            className={`absolute top-full z-20 ${
+              mine ? 'right-[var(--msg-indent)]' : 'left-[var(--msg-indent)]'
+            }`}
+          >
             <MessageActionsPanel
               actions={actions}
-              mine={mine}
               open={menuOpen}
               onClose={() => setMenuOpen(false)}
             />
-          )}
-          {failed && mine && message.localId && (
-            <button
-              onClick={() => onRetry(message.localId!, message.body, message.pendingFile ?? null)}
-              className="text-xs text-alert hover:text-text transition-colors mt-1 px-1"
-            >
-              Tap to retry
-            </button>
-          )}
-        </div>
-      </div>
+          </div>
+        )}
+      </article>
     </>
   )
 }
@@ -815,12 +551,14 @@ function propsEqual(a: Props, b: Props): boolean {
   return (
     a.message === b.message &&
     a.prev === b.prev &&
-    a.next === b.next &&
     a.conversationStart === b.conversationStart &&
     a.mine === b.mine &&
     a.currentUserId === b.currentUserId &&
     a.readers === b.readers &&
     a.groupType === b.groupType &&
+    // A plain string, so this is a real comparison — it only changes when the
+    // roster does, which is exactly when a row's rule should be repainted.
+    a.ruleColor === b.ruleColor &&
     a.highlighted === b.highlighted &&
     a.imagePriority === b.imagePriority &&
     // Active-trip reference — rows re-tokenize their `#ref` trip mentions when

@@ -76,7 +76,7 @@ export default function Avatar({
   const fallbackNode = (
     <span
       style={style}
-      className={`rounded-full bg-surface-2 border border-white/10 flex items-center justify-center shrink-0 ${
+      className={`rounded-full bg-surface-2 border border-line flex items-center justify-center shrink-0 ${
         fallback === 'initials' ? 'text-text/75' : 'text-muted'
       } ${className}`}
     >

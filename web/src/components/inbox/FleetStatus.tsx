@@ -153,7 +153,7 @@ export default function FleetStatus({ rooms, onOpenRoom, onBack }: Props) {
       <div className="flex-1 overflow-y-auto px-5 py-5">
         <div className="mx-auto flex max-w-[57.5rem] flex-col gap-4">
           <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
-            <label className="flex h-9 min-w-0 flex-1 cursor-text items-center gap-2 rounded-full border border-white/6 bg-white/4 px-3 transition-colors hover:bg-white/6 focus-within:border-white/16 focus-within:bg-white/6">
+            <label className="flex h-9 min-w-0 flex-1 cursor-text items-center gap-2 rounded-full border border-line bg-white/4 px-3 transition-colors hover:bg-white/6 focus-within:border-line-2 focus-within:bg-white/6">
               <Search size="0.875rem" strokeWidth={1.7} className="shrink-0 text-faint" />
               <input
                 value={query}
@@ -212,7 +212,7 @@ export default function FleetStatus({ rooms, onOpenRoom, onBack }: Props) {
             )}
           </div>
 
-          <div className="overflow-hidden rounded-panel border border-white/6 bg-white/2">
+          <div className="overflow-hidden rounded-panel border border-line bg-white/2">
             {fleet.length === 0 ? (
               <EmptyFleet />
             ) : visibleFleet.length === 0 ? (
@@ -230,7 +230,7 @@ export default function FleetStatus({ rooms, onOpenRoom, onBack }: Props) {
                 </button>
               </div>
             ) : (
-              <div className="divide-y divide-white/6">
+              <div className="divide-y divide-line">
                 {visibleFleet.map((item) => (
                   <FleetRow key={item.room.id} item={item} onOpenRoom={onOpenRoom} />
                 ))}

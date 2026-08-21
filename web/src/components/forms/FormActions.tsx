@@ -101,7 +101,7 @@ export function FormFooter({
     <div
       className={`flex items-center justify-end gap-2 ${
         sticky
-          ? 'sticky bottom-0 -mx-4 mt-3 border-t border-white/6 bg-panel px-4 py-2.5'
+          ? 'sticky bottom-0 -mx-4 mt-3 border-t border-line bg-panel px-4 py-2.5'
           : 'mt-3'
       }`}
     >

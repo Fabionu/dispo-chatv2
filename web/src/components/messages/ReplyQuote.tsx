@@ -18,7 +18,7 @@ function ReplyMedia({ replyTo }: { replyTo: ReplyToPreview }) {
   }
 
   return (
-    <span className="h-11 w-11 shrink-0 flex items-center justify-center bg-white/6 text-muted">
+    <span className="h-11 w-11 shrink-0 flex items-center justify-center border text-muted">
       {image ? (
         <ImageIcon size="1rem" strokeWidth={1.8} />
       ) : (
@@ -44,38 +44,26 @@ export default function ReplyQuote({
       attachment?.originalName ||
       (replyTo.hasAttachments ? 'Attachment' : 'Message')
 
+  // The quote is a message nested inside a message, so it is drawn the same
+  // way the outer one is: a left rule, an indent, a mono attribution over the
+  // body. No fill and no corner radius — a filled card here would be the only
+  // solid block inside a thread built from rules, and it read as heavier than
+  // the message actually quoting it.
   const content = (
-    <span className="flex min-h-11 min-w-0 items-stretch">
-      <span
-        className={`w-[3px] shrink-0 ${
-          neutral ? 'bg-white/20' : 'bg-active/70'
-        }`}
-        aria-hidden="true"
-      />
-      <span
-        className={`flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-2.5 ${
-          attachment && !replyTo.deleted ? '' : 'pr-2.5'
-        }`}
-      >
-        <span className="min-w-0 flex-1">
-          <span
-            className={`block truncate text-xs font-semibold leading-[1.15] ${
-              neutral ? 'text-text' : 'text-active'
-            }`}
-          >
-            {replyTo.authorName}
-          </span>
-          <span className="mt-1 block truncate text-xs leading-[1.15] text-muted">
-            {snippet}
-          </span>
+    <span className="flex min-h-11 min-w-0 items-center gap-2 py-1 pl-2.5 pr-2.5">
+      <span className="min-w-0 flex-1">
+        <span className={`eyebrow block truncate ${neutral ? '' : 'text-active'}`}>
+          {replyTo.authorName}
         </span>
-        <ReplyMedia replyTo={replyTo} />
+        <span className="mt-1 block truncate text-xs leading-[1.3] text-muted">{snippet}</span>
       </span>
+      <ReplyMedia replyTo={replyTo} />
     </span>
   )
 
-  const base =
-    'mb-1.5 block min-w-[11.5rem] max-w-full overflow-hidden rounded-[0.625rem] bg-white/6 text-left'
+  const base = `mb-2 block min-w-[11.5rem] max-w-body overflow-hidden border-l text-left ${
+    neutral ? 'border-line-2' : 'border-active/70'
+  }`
 
   if (!onJump) return <span className={base}>{content}</span>
 
@@ -83,7 +71,7 @@ export default function ReplyQuote({
     <button
       type="button"
       onClick={() => onJump(replyTo.id)}
-      className={`${base} transition-colors hover:bg-white/8`}
+      className={`${base} transition-colors hover:bg-white/4`}
       title="Jump to message"
     >
       {content}

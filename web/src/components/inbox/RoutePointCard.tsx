@@ -81,7 +81,7 @@ export function RoleBadge({
     <span
       aria-hidden
       title={role === 'add' ? 'New stop' : `Stop ${index}`}
-      className={`${base} border-white/16 bg-white/6 text-2xs font-semibold tabular-nums ${
+      className={`${base} border-line-2 bg-white/6 text-2xs font-semibold tabular-nums ${
         muted ? 'text-faint' : 'text-muted'
       }`}
     >

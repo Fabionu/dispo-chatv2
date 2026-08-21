@@ -47,12 +47,12 @@ export default function EmailVerification({ token }: { token: string }) {
         <span className="text-lg font-semibold">Dispo-chat</span>
       </header>
       <main className="flex min-h-[calc(100vh-74px)] items-center justify-center px-5 pb-20">
-        <section className="w-full max-w-[27rem] rounded-panel border border-white/10 bg-rail p-6 text-center">
+        <section className="w-full max-w-[27rem] rounded-panel border border-line bg-rail p-6 text-center">
           <div
             className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full border ${
               failed
                 ? 'border-alert/30 bg-alert/[0.08] text-alert'
-                : 'border-white/10 bg-white/4'
+                : 'border-line bg-white/4'
             }`}
           >
             {state === 'confirming' ? (

@@ -37,7 +37,7 @@ export default function PinnedBar({ messages, onJump, onUnpin }: Props) {
   const visible = expanded ? pins : pins.slice(0, 1)
 
   return (
-    <div className="shrink-0 border-b border-white/6 bg-rail/50">
+    <div className="shrink-0 border-b bg-bg">
       <div className="pr-[var(--chat-scrollbar-gutter)]">
         <div className="chat-column">
           <div className="flex items-start gap-3 py-2">
@@ -45,7 +45,7 @@ export default function PinnedBar({ messages, onJump, onUnpin }: Props) {
                 sized to the row height so it centres against the first pin. */}
             <div className="flex h-7 items-center gap-1.5 text-active shrink-0">
               <Pin size="0.8125rem" strokeWidth={2} className="fill-current" />
-              <span className="text-sm font-semibold leading-none tracking-[0.01em]">
+              <span className="eyebrow leading-none text-current">
                 Pinned{multiple ? ` · ${pins.length}` : ''}
               </span>
             </div>

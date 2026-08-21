@@ -152,7 +152,7 @@ export default function AttachmentSendPreviewModal({
       />
 
       <div
-        className="relative flex w-full max-w-[34rem] max-h-[85vh] flex-col overflow-hidden rounded-modal border border-white/8 bg-panel shadow-modal"
+        className="relative flex w-full max-w-[34rem] max-h-[85vh] flex-col overflow-hidden rounded-modal border border-line bg-panel shadow-modal"
       >
         <header className="flex shrink-0 items-center justify-between gap-2 px-4 pt-3 pb-2">
           <h2 className="text-base font-semibold">Send attachment</h2>
@@ -258,7 +258,7 @@ export default function AttachmentSendPreviewModal({
 
         {/* Caption + send. Same capsule, spacing and circular send control as
             the chat composer, so the two read as one control. */}
-        <div className="shrink-0 border-t border-white/6 px-4 pt-2.5 pb-3">
+        <div className="shrink-0 border-t border-line px-4 pt-2.5 pb-3">
           <div className="rounded-card bg-composer">
             <div className="flex items-end gap-1.5 px-2.5 py-2">
               <textarea

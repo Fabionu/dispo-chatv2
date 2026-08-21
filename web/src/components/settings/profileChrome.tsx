@@ -67,7 +67,7 @@ export const SIDEBAR_PANEL_SURFACE = 'bg-sidebar'
 
 // A grouped card of rows — the same recipe as Account's settings groups. Rows
 // inside carry their own hairline (EditableRow), so this only draws the box.
-export const PANEL_FIELD_CARD = 'rounded-card border border-white/6 bg-white/2 px-3.5'
+export const PANEL_FIELD_CARD = 'rounded-card border border-line bg-white/2 px-3.5'
 
 // One labelled block: eyebrow over a grouped card. `action` is an optional
 // trailing control on the label line (e.g. "Invite" in the members list).

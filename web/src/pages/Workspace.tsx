@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Archive,
   MailOpen,
-  Menu,
+  Plus,
   Search,
   UserPlus,
   Users,
@@ -43,9 +43,6 @@ import { useConnections } from '../hooks/useConnections'
 import { useGroupInvites } from '../hooks/useGroupInvites'
 import { useWorkspaceGroups } from '../hooks/useWorkspaceGroups'
 import {
-  useDensity,
-  SIDEBAR_AVATAR_SIZE,
-  SIDEBAR_CONVERSATION_AVATAR_SIZE,
 } from '../lib/density'
 import { getStoredSidebarCollapsed, setStoredSidebarCollapsed } from '../lib/sidebar'
 import { preloadAvatar } from '../lib/avatarCache'
@@ -53,7 +50,7 @@ import { useAuth } from '../auth/AuthContext'
 import GroupRow from './SidebarGroupRow'
 import ContactRow from './SidebarContactRow'
 import SidebarIdentityBar from './SidebarIdentityBar'
-import { FilterTab, ArchiveToggle, EmptyHint, MenuItem } from './sidebarBits'
+import { FilterTab, FilterTabBar, ArchiveToggle, EmptyHint, MenuItem } from './sidebarBits'
 import { optimisticDirectGroup } from './workspaceUtils'
 import ConnectionStatusBanner from '../components/ConnectionStatusBanner'
 import { NOTIFICATION_OPEN_EVENT } from '../lib/browserNotifications'
@@ -116,11 +113,6 @@ function initialSelection(): Selection {
 
 export default function Workspace({ user, workspace, onSignOut }: Props) {
   const { refresh } = useAuth()
-  // Sidebar avatar/logo diameter tracks the display density (these components
-  // take a numeric size, so they can't read the CSS density tokens directly).
-  const density = useDensity()
-  const sidebarAvatar = SIDEBAR_AVATAR_SIZE[density]
-  const conversationAvatar = SIDEBAR_CONVERSATION_AVATAR_SIZE[density]
   // Auto-away presence: grey "Away" on the footer status dot when idle / tab
   // hidden. Doesn't change the stored (manual) status — presence only.
   const away = useIdle()
@@ -147,7 +139,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // Bumped after the current user / admin changes their avatar / logo, to bust
   // the browser image cache in the rail.
   const [avatarVersion, setAvatarVersion] = useState(0)
-  const [logoVersion, setLogoVersion] = useState(0)
   // Active members of the caller's own company (internal/trusted contacts).
   const [members, setMembers] = useState<WorkspaceMember[]>([])
   const [selection, setSelection] = useState<Selection>(initialSelection)
@@ -652,12 +643,12 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     setSelection({ kind: 'group', id: groupId })
   }, [])
 
-  // App shell: the rail reads as one black field with the workspace background,
-  // while the main pane carries the raised conversation surface. The shared outer
-  // gap plus each panel's hairline keep the two regions distinct.
+  // App shell: edge to edge, one field colour, three tracks divided by the
+  // hairline each carries on its right. There is no outer padding and no gap —
+  // nothing here floats, so nothing needs a background behind it to float on.
   return (
     <div
-      className={`workspace-shell h-screen w-full p-2 2xl:p-3 bg-bg text-text overflow-hidden ${
+      className={`workspace-shell h-screen w-full bg-bg text-text overflow-hidden ${
         sidebarCollapsed ? 'workspace-shell--collapsed' : ''
       }`}
     >
@@ -689,12 +680,11 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         className="workspace-sidebar-slot min-w-0 overflow-hidden"
         aria-hidden={sidebarCollapsed}
       >
-      {/* Left rail — the app's deepest surface: pure black, drawn against the
-          shell by its hairline edge rather than by a tone step, so the chat
-          window beside it reads as the raised panel. Its content is a small
+      {/* Left rail — the same field as everything else, separated from the
+          thread by the hairline on its right edge. Its content is a small
           navigation stack (see SidebarView): the conversation list, or one
           drill-in view rendered in its place. */}
-      <aside className="workspace-sidebar-panel relative h-full min-w-0 overflow-hidden bg-sidebar rounded-panel border border-white/8">
+      <aside className="workspace-sidebar-panel relative h-full min-w-0 overflow-hidden bg-bg border-r">
         {/* Keep the conversation list mounted while a sidebar panel covers it.
             Rows therefore retain their image elements, decoded avatars, action
             state and scroll position instead of rebuilding on every Back. */}
@@ -704,58 +694,31 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             sidebarView === 'list' ? '' : 'invisible pointer-events-none'
           }`}
         >
-        {/* Top toolbar — ONE compact row: the conversation search takes the
-            flexible width, followed by the fixed circular actions control.
-            This replaced the old workspace-identity header; the company identity
-            now lives in the rail's bottom row, and workspace home is the first
-            item of the persistent navigation rail. */}
-        <div className="px-2.5 pt-2 pb-0 flex items-center gap-1.5 shrink-0">
-          {/* The field is compact VERTICALLY only: its height comes from the
-              (reduced) --sidebar-search-height token and it keeps flex-1, so it
-              still takes all the width the two fixed controls leave. */}
-          <label
-            htmlFor="rail-search"
-            className="flex-1 min-w-0 h-[var(--sidebar-search-height)] flex items-center gap-2 px-3 rounded-full border border-white/10 bg-surface-2/60 hover:bg-surface-2/80 hover:border-white/16 focus-within:bg-surface-2 focus-within:border-white/20 transition-colors cursor-text"
-          >
-            <Search size="0.875rem" strokeWidth={1.7} className="text-muted shrink-0" />
-            <input
-              id="rail-search"
-              // The field carries no visible label (the magnifier + placeholder
-              // do the work), so it names itself for assistive tech.
-              aria-label="Search conversations"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') setQuery('')
-              }}
-              placeholder="Search…"
-              style={{ fontSize: 'var(--sidebar-row-font-size)' }}
-              className="bg-transparent flex-1 outline-none placeholder:text-muted min-w-0"
-            />
-            {query && (
-              <button
-                onClick={() => setQuery('')}
-                aria-label="Clear search"
-                className="text-faint hover:text-text shrink-0 transition-colors"
-              >
-                <X size="0.8125rem" strokeWidth={1.8} />
-              </button>
-            )}
-          </label>
-
-          <div className="relative shrink-0" ref={newMenuRef}>
+        {/* Top toolbar — the rail's primary action over the search row.
+            `New thread` is a full-width bordered button rather than the old
+            circular hamburger: it is the one thing in the rail that should read
+            as a control, and a drawn rectangle says that in a UI made of rules,
+            without needing a fill. The search below it is deliberately
+            UNBORDERED — two stacked boxes would fight for the same job, and the
+            magnifier plus placeholder already say "field". */}
+        <div
+          className="px-3 pt-3 pb-2.5 flex flex-col shrink-0"
+          style={{ gap: 'var(--sidebar-toolbar-gap)' }}
+        >
+          <div className="relative" ref={newMenuRef}>
             <button
               onClick={() => setNewMenuOpen((v) => !v)}
-              aria-label="Sidebar actions"
               aria-haspopup="menu"
               aria-expanded={newMenuOpen}
-              className={`h-[var(--sidebar-search-height)] w-[var(--sidebar-search-height)] flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+              style={{ fontSize: 'var(--sidebar-row-font-size)' }}
+              className={`w-full h-[var(--sidebar-search-height)] flex items-center gap-2.5 px-3 border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
                 newMenuOpen
-                  ? 'bg-white/10 text-text'
-                  : 'text-muted hover:bg-white/8 hover:text-text'
+                  ? 'border-strong bg-white/6 text-text'
+                  : 'text-text hover:border-strong hover:bg-white/4'
               }`}
             >
-              <Menu size="1.0625rem" strokeWidth={1.9} />
+              <Plus size="1rem" strokeWidth={1.8} className="shrink-0 text-muted" />
+              New thread
             </button>
 
             {newMenuOpen && (
@@ -765,7 +728,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 // than a utility class) is immune to purge/override and to the
                 // abs-positioning shrink-to-fit of the narrow button wrapper.
                 style={{ width: 'max-content', maxWidth: '13.75rem' }}
-                className={`absolute right-0 top-[calc(100%+6px)] ${MENU_CONTAINER} z-20`}
+                className={`absolute left-0 top-[calc(100%+6px)] ${MENU_CONTAINER} z-20`}
               >
                 <MenuItem icon={<Users {...MENU_GLYPH} />} onClick={() => startCreate('vehicle')}>
                   Vehicle room
@@ -787,6 +750,35 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             )}
           </div>
 
+          <label
+            htmlFor="rail-search"
+            className="min-w-0 h-[var(--sidebar-search-height)] flex items-center gap-2.5 cursor-text"
+          >
+            <Search size="0.875rem" strokeWidth={1.7} className="text-faint shrink-0" />
+            <input
+              id="rail-search"
+              // The field carries no visible label (the magnifier + placeholder
+              // do the work), so it names itself for assistive tech.
+              aria-label="Search conversations"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setQuery('')
+              }}
+              placeholder="Search threads"
+              style={{ fontSize: 'var(--sidebar-row-font-size)' }}
+              className="bg-transparent flex-1 outline-none placeholder:text-faint min-w-0"
+            />
+            {query && (
+              <button
+                onClick={() => setQuery('')}
+                aria-label="Clear search"
+                className="text-faint hover:text-text shrink-0 transition-colors"
+              >
+                <X size="0.8125rem" strokeWidth={1.8} />
+              </button>
+            )}
+          </label>
         </div>
 
         {/* Filters — Archived leads the segmented control (everything / vehicle
@@ -795,40 +787,38 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             Fixed, like the toolbar above it — only the list scrolls. The pills
             wrap rather than overflow at the narrowest rail width. The space
             above comes from --sidebar-toolbar-gap so the search field and this
-            row keep ONE agreed distance (see index.css). */}
-        <div
-          style={{ paddingTop: 'var(--sidebar-toolbar-gap)' }}
-          className="px-2.5 pb-1.5 flex items-center gap-1.5 shrink-0"
-        >
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <ArchiveToggle
-              active={filter === 'archived'}
-              label={filter === 'archived' ? 'Show conversations' : 'Show archived'}
-              onClick={() => setFilter((f) => (f === 'archived' ? 'all' : 'archived'))}
-            >
-              <Archive size="0.8125rem" strokeWidth={1.8} />
-            </ArchiveToggle>
-            <FilterTab active={filter === 'all'} onClick={() => setFilter('all')}>
-              All
-            </FilterTab>
-            <FilterTab active={filter === 'groups'} onClick={() => setFilter('groups')}>
-              Groups
-            </FilterTab>
-            <FilterTab active={filter === 'dms'} onClick={() => setFilter('dms')}>
-              Direct
-            </FilterTab>
-            {/* Unread cuts across the three type pills: every conversation with
-                something new, room or DM. Its count is live (socket unread
-                updates), so it empties as you read. */}
-            <FilterTab
-              active={filter === 'unread'}
-              onClick={() => setFilter('unread')}
-              badge={unreadConversationCount || undefined}
-            >
-              Unread
-            </FilterTab>
-          </div>
-        </div>
+            row keep ONE agreed distance (see index.css).
+
+            FilterTabBar owns the row itself: exactly one of these five is live
+            at a time, and it draws the single bar that slides between them. */}
+        <FilterTabBar activeKey={filter}>
+          <ArchiveToggle
+            active={filter === 'archived'}
+            label={filter === 'archived' ? 'Show conversations' : 'Show archived'}
+            onClick={() => setFilter((f) => (f === 'archived' ? 'all' : 'archived'))}
+          >
+            <Archive size="0.8125rem" strokeWidth={1.8} />
+          </ArchiveToggle>
+          <FilterTab active={filter === 'all'} onClick={() => setFilter('all')}>
+            All
+          </FilterTab>
+          <FilterTab active={filter === 'groups'} onClick={() => setFilter('groups')}>
+            Groups
+          </FilterTab>
+          <FilterTab active={filter === 'dms'} onClick={() => setFilter('dms')}>
+            Direct
+          </FilterTab>
+          {/* Unread cuts across the three type pills: every conversation with
+              something new, room or DM. Its count is live (socket unread
+              updates), so it empties as you read. */}
+          <FilterTab
+            active={filter === 'unread'}
+            onClick={() => setFilter('unread')}
+            badge={unreadConversationCount || undefined}
+          >
+            Unread
+          </FilterTab>
+        </FilterTabBar>
 
         {/* Rail list. Pending actionable items keep their OWN separated,
             collapsible sections (Connection requests / Group invites) at the top
@@ -838,7 +828,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             wrapper stays tight. */}
         <nav
           ref={attachList}
-          className="flex-1 min-h-0 overflow-y-auto px-1.5 pt-1 pb-1.5 flex flex-col"
+          className="flex-1 min-h-0 overflow-y-auto px-1.5 pt-3 pb-1.5 flex flex-col"
           style={{ gap: 'var(--sidebar-section-gap)' }}
         >
           {loadingGroups ? (
@@ -859,7 +849,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                   onRetry={() => void refreshConnections()}
                   selectedId={selection?.kind === 'request' ? selection.id : null}
                   onSelect={(id) => setSelection({ kind: 'request', id })}
-                  size={sidebarAvatar}
                 />
               )}
               {!searching && filter !== 'archived' && (
@@ -867,7 +856,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                   invites={groupInvites}
                   selectedId={selection?.kind === 'invite' ? selection.id : null}
                   onSelect={(id) => setSelection({ kind: 'invite', id })}
-                  size={sidebarAvatar}
                 />
               )}
 
@@ -888,7 +876,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                         typingUsers={typingByGroup[item.group.id] ?? []}
                         online={onlineIds}
                         currentUserId={user.id}
-                        size={conversationAvatar}
                         selected={selection?.kind === 'group' && selection.id === item.group.id}
                         actionsOpen={rowActionsId === item.group.id}
                         onActionsOpenChange={(open) =>
@@ -914,7 +901,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                       <ContactRow
                         key={item.key}
                         member={item.member}
-                        size={sidebarAvatar}
                         onClick={() =>
                           setProfileTarget({ id: item.member.id, name: item.member.displayName })
                         }
@@ -935,9 +921,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           workspace={workspace}
           profile={cachedProfile}
           away={away}
-          size={sidebarAvatar}
-          avatarVersion={avatarVersion}
-          logoVersion={logoVersion}
           onOpenAccount={() => openSidebarView('account')}
           onOpenCompany={() => openSidebarView('company')}
         />
@@ -978,8 +961,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               <CompanySidebarPanel
                 onBack={() => setSidebarView('list')}
                 backLabel="Back to conversations"
-                onSaved={(_c, v) => {
-                  setLogoVersion((n) => Math.max(n, v) + 1)
+                onSaved={() => {
                   void refresh()
                 }}
               />
@@ -994,12 +976,11 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
       </aside>
       </div>
 
-      {/* Main — the conversation window, one tone above the black rail. Panels,
-          drawers and modals that open over it use `surface`/`rail`, a step
-          lighter again, so they always read as a layer ON the chat. The hairline
-          outline pairs with the rail's: with the palette this close to black, the
-          tone step alone no longer draws the card's edge against the shell gap. */}
-      <main className="workspace-main flex flex-col min-w-0 bg-chat rounded-panel overflow-hidden border border-white/8">
+      {/* Main — the thread. Same field again; the rail's right-edge hairline is
+          the only thing between them. Drawers and modals that open over it use
+          `surface`, the one remaining tone step, because they COVER content and
+          have to stay distinguishable from it. */}
+      <main className="workspace-main flex flex-col min-w-0 bg-bg overflow-hidden">
         {selectedGroup ? (
           <ChatView
             key={selectedGroup.id}

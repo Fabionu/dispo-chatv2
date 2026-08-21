@@ -109,7 +109,7 @@ export default function NewMessageModal({ onClose, onOpenGroup }: Props) {
       <div className="space-y-3">
         {/* Search field — the app's standard input recipe (card radius, faint
             fill, calm focus), sized as the modal's primary control. */}
-        <label className="flex items-center gap-2.5 h-9 px-3 rounded-card border border-white/6 bg-white/4 focus-within:border-white/16 focus-within:bg-white/6 transition-colors cursor-text">
+        <label className="flex items-center gap-2.5 h-9 px-3 rounded-card border border-line bg-white/4 focus-within:border-line-2 focus-within:bg-white/6 transition-colors cursor-text">
           <Search size="0.875rem" strokeWidth={1.6} className="text-faint shrink-0" />
           <input
             value={query}
@@ -175,7 +175,7 @@ export default function NewMessageModal({ onClose, onOpenGroup }: Props) {
 function EmptyState({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-4">
-      <div className="h-9 w-9 rounded-full border border-white/6 bg-white/4 flex items-center justify-center mb-2.5">
+      <div className="h-9 w-9 rounded-full border border-line bg-white/4 flex items-center justify-center mb-2.5">
         {icon}
       </div>
       {children}
@@ -246,7 +246,7 @@ function RowButton({
       className={`shrink-0 text-sm font-medium rounded-btn px-2.5 py-1 transition-colors disabled:opacity-50 ${
         primary
           ? 'bg-text text-bg font-semibold hover:bg-text/90'
-          : 'border border-white/16 text-text hover:bg-white/4'
+          : 'border border-line-2 text-text hover:bg-white/4'
       }`}
     >
       {children}

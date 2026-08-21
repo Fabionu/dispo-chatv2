@@ -5,6 +5,7 @@ import StopCard from './StopCard'
 import StopEditor from './StopEditor'
 import { SelectRow, StatusChip, SubHeading } from './opsControls'
 import { canRouteStops } from '../../lib/tripRoute'
+import { DataStat, DataStats } from '../thread/threadChrome'
 import {
   TRIP_STATUSES,
   labelOf,
@@ -77,7 +78,7 @@ function JourneyNode({
       <div className="flex flex-col items-center pt-[3px]">
         <span
           className={`h-2 w-2 rounded-full shrink-0 ${
-            origin ? 'border border-white/40' : 'bg-white/60'
+            origin ? 'border border-line-2' : 'bg-white/60'
           }`}
         />
         {origin && <span className="w-px flex-1 bg-white/10 mt-1" />}
@@ -195,53 +196,57 @@ export default function TripTab({
         )}
       </div>
 
-      {/* Summary card — the scannable overview. A header (order + status), the
-          loading → unloading journey as a small timeline, and a footer carrying
-          the route total + the expand affordance. Click anywhere to expand into
-          the full editable detail below. */}
+      {/* Summary — the scannable overview, drawn with the shared data-block
+          vocabulary (threadChrome) rather than as its own card, so a trip reads
+          the same way here as a route or a load does anywhere else: a mono
+          header row, the journey, then a stats grid split by hairlines.
+
+          It stays a <button> — the whole block toggles the editable detail
+          below — which is why it carries the block's border itself instead of
+          nesting inside <DataBlock>. */}
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
-        className="w-full text-left rounded-card border border-white/8 bg-white/2 hover:bg-white/4 transition-colors p-3"
+        className="w-full border text-left transition-colors hover:border-strong"
       >
         {/* Header — order reference + client, with the status on the right. */}
-        <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start justify-between gap-2 border-b px-4 py-2.5">
           <div className="min-w-0">
-            <div className="text-base font-semibold leading-tight truncate">
-              {trip.reference ? (
-                `#${trip.reference}`
-              ) : (
-                <span className="text-faint font-normal">No order reference</span>
-              )}
+            <div className="eyebrow truncate">
+              {trip.reference ? `#${trip.reference}` : 'No order reference'}
             </div>
             {trip.client && (
-              <div className="text-sm text-muted leading-tight truncate mt-0.5">{trip.client}</div>
+              <div className="mt-1 truncate text-base leading-tight text-text">{trip.client}</div>
             )}
           </div>
           <StatusChip tone={tripStatusTone(trip.status)} label={statusLabel} />
         </div>
 
         {/* Journey — loading → unloading as a compact timeline. */}
-        <div className="mt-3">
+        <div className="px-4 py-3.5">
           <JourneyNode label="Loading" stop={loadingStop} origin />
           <JourneyNode label="Unloading" stop={unloadingStop} />
         </div>
 
-        {/* Footer — route total (when computed) on the left, expand toggle right. */}
-        <div className="flex items-center justify-between gap-2 mt-2.5 pt-2 border-t border-white/6">
-          <span className="text-xs text-faint tabular-nums truncate">
-            {routeOk ? `${routeOk.distanceText} · ${routeOk.durationText}` : ''}
-          </span>
-          <span className="flex items-center gap-1 text-xs text-faint shrink-0">
-            {expanded ? 'Less' : 'Details'}
-            <ChevronDown
-              size="0.875rem"
-              strokeWidth={2}
-              className={`transition-transform ${expanded ? 'rotate-180' : ''}`}
-            />
-          </span>
-        </div>
+        {/* Stats — the trip's numbers, one row of equal columns. The expand
+            affordance is the last cell, so the grid's own hairlines separate it
+            instead of a second footer rule. */}
+        <DataStats>
+          <DataStat label="Distance" value={routeOk ? routeOk.distanceText : '—'} />
+          <DataStat label="Drive time" value={routeOk ? routeOk.durationText : '—'} />
+          <DataStat label="Stops" value={stops.length || '—'} />
+          <div className="flex min-w-0 items-center justify-end px-4 py-3">
+            <span className="eyebrow inline-flex items-center gap-1.5">
+              {expanded ? 'Less' : 'Details'}
+              <ChevronDown
+                size="0.875rem"
+                strokeWidth={2}
+                className={`transition-transform ${expanded ? 'rotate-180' : ''}`}
+              />
+            </span>
+          </div>
+        </DataStats>
       </button>
 
       {/* Full editable detail — only when expanded. */}
@@ -325,20 +330,14 @@ export default function TripTab({
 
           <SubHeading label="Route">
           {route?.status === 'ok' ? (
-            <div className="py-2 border-b border-white/4">
-              <div className="flex items-stretch gap-6">
-                <div>
-                  <div className="text-xs text-muted">Distance</div>
-                  <div className="text-base text-text mt-0.5 tabular-nums">
-                    {route.distanceText}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted">Driving time</div>
-                  <div className="text-base text-text mt-0.5 tabular-nums">
-                    {route.durationText}
-                  </div>
-                </div>
+            <div className="py-2 border-b border-line">
+              {/* The same stat cells as the summary block above — one recipe,
+                  so the computed route reads identically wherever it appears.
+                  `-mx-4` cancels DataStat's own gutter against this section's
+                  padding, keeping the labels on the section's left edge. */}
+              <div className="data-stats -mx-4">
+                <DataStat label="Distance" value={route.distanceText} />
+                <DataStat label="Driving time" value={route.durationText} />
               </div>
               {canManage && onEditRoute && (
                 <button
@@ -354,7 +353,7 @@ export default function TripTab({
             // Coordinates exist for ≥2 stops, but the stored route isn't an "ok"
             // result yet — show an accurate state (never "missing coordinates")
             // with ways to build it from the current stops.
-            <div className="py-2 border-b border-white/4">
+            <div className="py-2 border-b border-line">
               <div className="text-sm text-faint leading-[1.45]">
                 {route?.status === 'failed'
                   ? "Route couldn't be calculated last time — try again."
@@ -382,7 +381,7 @@ export default function TripTab({
               )}
             </div>
           ) : (
-            <div className="py-2 border-b border-white/4 text-sm text-faint leading-[1.45]">
+            <div className="py-2 border-b border-line text-sm text-faint leading-[1.45]">
               Add coordinates to at least two stops to build a route.
             </div>
           )}

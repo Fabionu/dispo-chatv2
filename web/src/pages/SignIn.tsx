@@ -268,7 +268,7 @@ export default function SignIn() {
           {/* The ONLY flow switch on the page (the old tab strip did the same
               job at the top). A hairline separates it from the form so it reads
               as an aside, not a third form control. */}
-          <p className="mt-8 border-t border-white/6 pt-5 text-base text-muted">
+          <p className="mt-8 border-t border-line pt-5 text-base text-muted">
             {isSignIn ? 'Need a workspace?' : 'Already have an account?'}{' '}
             <button
               type="button"
@@ -305,13 +305,13 @@ function AuthBackdrop() {
   )
 }
 
-const LABEL_CLASS = 'mb-1.5 block text-base font-medium text-muted'
+const LABEL_CLASS = 'eyebrow mb-2 block'
 // The app's field recipe (components/forms/fieldStyles) one size step up: same
 // radius, same sunken fill, same hairline, and the SAME hover/focus progression
 // imported directly — only the control height and text size change, because an
 // auth field on a bare canvas is doing more work than a row in a dense panel.
 const FIELD_CLASS =
-  'w-full min-w-0 h-10 px-3 rounded-card border bg-white/4 text-lg text-text ' +
+  'w-full min-w-0 h-10 px-3 rounded-card border text-lg text-text ' +
   'placeholder:text-faint/70 outline-none ' +
   'transition-[border-color,background-color,box-shadow] duration-150 ' +
   'motion-reduce:transition-none ' +

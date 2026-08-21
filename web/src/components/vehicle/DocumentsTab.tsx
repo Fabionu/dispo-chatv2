@@ -31,7 +31,7 @@ export default function DocumentsTab() {
         </button>
       </div>
 
-      <div className="rounded-card border border-white/8 bg-white/2 px-3 py-3 text-center">
+      <div className="rounded-card border border-line bg-white/2 px-3 py-3 text-center">
         <FileText size="1.25rem" strokeWidth={1.6} className="mx-auto text-faint" />
         <div className="text-base text-muted mt-1.5">No documents yet</div>
         <div className="text-sm text-faint mt-0.5">
@@ -46,7 +46,7 @@ export default function DocumentsTab() {
         {DOCUMENT_TYPES.map((t) => (
           <span
             key={t}
-            className="inline-flex items-center rounded-chip border border-white/8 bg-white/2 px-2 py-0.5 text-xs text-muted"
+            className="inline-flex items-center rounded-chip border border-line bg-white/2 px-2 py-0.5 text-xs text-muted"
           >
             {t}
           </span>

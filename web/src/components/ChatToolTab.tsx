@@ -1,8 +1,9 @@
 import { X } from 'lucide-react'
 
-// One tab in the chat-window tool banner. A compact pill: a subtle filled state
-// when active, quiet hover otherwise. An optional × (for closeable tools like the
-// Map) sits inside the pill without triggering the tab's own click.
+// One tab in the chat-window tool banner. A drawn mono button, matching the
+// composer's own controls below it: the active tab takes the hairline and full
+// text, the rest stay borderless and quiet until hovered. An optional × (for
+// closeable tools like the Map) sits inside without triggering the tab's click.
 export default function ToolTab({
   active,
   icon,
@@ -18,9 +19,9 @@ export default function ToolTab({
 }) {
   return (
     <div
-      className={`h-7 inline-flex items-center gap-1.5 rounded-full pl-2.5 text-sm font-medium transition-colors ${
+      className={`eyebrow h-7 inline-flex items-center gap-1.5 border pl-2.5 transition-colors ${
         onClose ? 'pr-1.5' : 'pr-2.5'
-      } ${active ? 'bg-white/8 text-text' : 'text-muted hover:text-text hover:bg-white/4'}`}
+      } ${active ? 'border-strong text-text' : 'border-transparent hover:text-text'}`}
     >
       <button type="button" onClick={onClick} className="inline-flex items-center gap-1.5">
         {icon}

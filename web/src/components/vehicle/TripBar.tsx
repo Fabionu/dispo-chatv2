@@ -3,9 +3,11 @@ import CountryFlag from '../CountryFlag'
 import { TONE_TEXT } from './opsControls'
 import type { ChipTone, TripPlace, TripProgress, TripSummary } from '../../lib/vehicleOps'
 
-// Slim operational strip under a vehicle-room header. Equal outer Grid tracks
-// keep the complete route geometrically centered even when the status or order
-// text on either side has a different width.
+// Slim operational strip under a vehicle-room header — a continuation of the
+// header rather than a card floating under it, so it shares the header's
+// full-bleed width and is closed by its own bottom hairline. Equal outer Grid
+// tracks keep the complete route geometrically centred even when the status or
+// order text on either side has a different width.
 export default function TripBar({ trip, onOpen }: { trip: TripSummary; onOpen: () => void }) {
   // Prefer the complete dispatcher-entered sequence. The fallback keeps older
   // summary objects safe during hot reloads while still showing their endpoints.
@@ -22,14 +24,12 @@ export default function TripBar({ trip, onOpen }: { trip: TripSummary; onOpen: (
       onClick={onOpen}
       title="View trip details"
       style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 2.4fr) minmax(0, 1fr)' }}
-      className="group/tripbar shrink-0 mx-3 mb-1.5 h-11 px-3.5 grid items-center gap-3 text-left rounded-card bg-white/4 hover:bg-white/6 active:bg-white/6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+      className="group/tripbar shrink-0 h-11 px-5 grid items-center gap-3 text-left border-b hover:bg-white/4 active:bg-white/6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
     >
       {/* Status + completion stay in the left track. */}
       <span className="flex items-center gap-2.5 min-w-0 justify-self-start">
         {trip.progress && <ProgressRing progress={trip.progress} tone={trip.statusTone} />}
-        <span
-          className={`truncate text-base font-medium ${TONE_TEXT[trip.statusTone]}`}
-        >
+        <span className={`eyebrow truncate ${TONE_TEXT[trip.statusTone]}`}>
           {trip.statusLabel}
         </span>
       </span>
@@ -57,7 +57,7 @@ export default function TripBar({ trip, onOpen }: { trip: TripSummary; onOpen: (
       {/* Order / client + open affordance stay in the right track. */}
       <span className="flex items-center gap-2 min-w-0 justify-self-end text-faint">
         {orderClient && (
-          <span className="hidden lg:block max-w-[14rem] truncate text-sm text-muted">
+          <span className="eyebrow hidden lg:block max-w-[14rem] truncate normal-case tracking-badge">
             {orderClient}
           </span>
         )}

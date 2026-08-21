@@ -6,7 +6,7 @@
 //
 // Storage key: `dispo:drafts:{userId}:{conversationId}`.
 //
-// Same persistence shape as lib/messageDisplay.ts — localStorage is the single
+// Same persistence shape as lib/theme.ts — localStorage is the single
 // source of truth, with same-tab listeners + the cross-tab `storage` event so
 // the sidebar draft preview updates live as the composer writes.
 

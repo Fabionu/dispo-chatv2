@@ -4,8 +4,11 @@
 // they open (same exported-constant pattern as ICON_ACTION_* in
 // HeaderIconButton.tsx). Callers add positioning, sizing and z-index only.
 //
-// Surface:   card radius, standard hairline border, shared #202020 fill, one calm
-//            elevation shadow. MENU_SURFACE alone is also used by non-menu
+// Surface:   square, standard hairline border, the `surface` fill, one calm
+//            elevation shadow. `surface` and the shadow are the two things the
+//            rework kept for floating chrome specifically: a menu COVERS the
+//            content behind it, so unlike every inline surface it does need to
+//            be told apart from it. MENU_SURFACE alone is also used by non-menu
 //            popovers (pickers, date fields); action menus use MENU_CONTAINER,
 //            which adds the standard vertical inset.
 // Items:     one row recipe (height, padding, type, hover) with two tones —
@@ -15,7 +18,7 @@
 // Separator: a subtle hairline used only where grouping helps (e.g. before the
 //            destructive group).
 export const MENU_SURFACE =
-  'rounded-card border border-white/8 bg-surface shadow-overlay'
+  'rounded-card border border-line bg-surface shadow-overlay'
 
 // The standard action-menu container: surface + edge-to-edge item hovers +
 // the y-inset every action menu shares.
@@ -48,4 +51,4 @@ export function menuIconClass(tone: 'default' | 'danger' = 'default'): string {
 export const MENU_GLYPH = { size: '0.875rem', strokeWidth: 1.7 } as const
 
 // Hairline group separator (e.g. above the destructive group).
-export const MENU_SEPARATOR = 'my-1 h-px bg-white/6'
+export const MENU_SEPARATOR = 'my-1 h-px bg-line'

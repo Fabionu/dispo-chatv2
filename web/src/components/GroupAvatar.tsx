@@ -79,7 +79,7 @@ export default function GroupAvatar({
   const fallback = (
     <span
       style={style}
-      className={`${radius} bg-surface-2 border border-white/10 flex items-center justify-center shrink-0 text-muted ${className}`}
+      className={`${radius} bg-surface-2 border border-line flex items-center justify-center shrink-0 text-muted ${className}`}
     >
       <Users size={rem(Math.max(12, Math.round(size * 0.52)))} strokeWidth={1.7} />
     </span>

@@ -3,11 +3,26 @@ import type { LocalMessage } from './types'
 import DayDivider from './DayDivider'
 import { TRIP_STATUSES, labelOf, type TripStatus } from '../../lib/vehicleOps'
 
-// Compact, centered timeline entry for persisted activity (joins, member adds,
-// pin/unpin, trips, …). No avatar, no bubble, no actions menu — just muted
-// text. Pin/unpin carry a target message, rendered as a button that jumps to it.
-// (Only the date/start separator is the subtle pill — the operational activity
-// line below stays as readable muted text so real events aren't hidden.)
+// Timeline entry for persisted activity (joins, member adds, pin/unpin, trips,
+// …). No bubble and no actions menu — an event, not a message.
+//
+// CENTRED, with the day dividers, rather than left-aligned with the messages.
+// It used to sit on the messages' left edge on the reasoning that a centred
+// line reads as a divider — but that is the right reading: nobody said this,
+// the room did. Sharing an edge with the messages put these rows in the
+// speaking order, so a status change looked like a turn someone had taken. Down
+// the middle they belong to the timeline instead, which is where the date
+// breaks already are.
+//
+// SANS, in its own case. This row is a SENTENCE — "Fabio Tofan edited the trip
+// route" — and the mono voice is for structure: plates, times, stat values,
+// labels. Note it was already written that way (`normal-case tracking-badge`
+// were on this span) and never rendered: `.eyebrow` sets text-transform and
+// letter-spacing too, and at equal specificity the later rule won, so the row
+// came out uppercase at 0.14em regardless. Leaving `.eyebrow` is what finally
+// applies the intent that was already here.
+//
+// Pin/unpin carry a target message, rendered as a button that jumps to it.
 export default function SystemMessageRow({
   message,
   prev,
@@ -30,8 +45,11 @@ export default function SystemMessageRow({
       {showDayDivider && (
         <DayDivider iso={message.createdAt} conversationStart={conversationStart} />
       )}
-      <div className="flex justify-center my-1.5">
-        <span className="text-xs text-faint text-center px-2 leading-[1.5]">
+      <div className="mt-5 flex justify-center px-[var(--msg-indent)]">
+        {/* Capped and centred on the same measure the message bodies use, so a
+            long activity sentence wraps into a readable block in the middle of
+            the column instead of running its full width. */}
+        <span className="max-w-body text-center text-[length:var(--msg-system-size)] leading-[1.6] text-faint">
           {renderActivity(message, onJumpToMessage)}
         </span>
       </div>

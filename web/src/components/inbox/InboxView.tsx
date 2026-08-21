@@ -278,7 +278,7 @@ function ToolCard({
   return (
     <button
       onClick={onClick}
-      className="group flex flex-col rounded-soft border border-white/6 bg-white/2 p-4 text-left transition-colors hover:border-white/10 hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+      className="group flex flex-col rounded-soft border border-line bg-white/2 p-4 text-left transition-colors hover:border-line hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
     >
       <span className="flex items-center gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-card border border-active/20 bg-active/10 text-active">
@@ -292,7 +292,7 @@ function ToolCard({
       </span>
       <span className="mt-3 block text-lg font-semibold tracking-[-0.2px]">{title}</span>
       <span className="mt-1 mb-3.5 block text-base leading-[1.5] text-muted">{subtitle}</span>
-      <span className="mt-auto flex flex-wrap items-center gap-1.5 border-t border-white/6 pt-2.5 text-xs text-faint">
+      <span className="mt-auto flex flex-wrap items-center gap-1.5 border-t border-line pt-2.5 text-xs text-faint">
         {meta.map((part, index) => (
           <Fragment key={part.label}>
             {index > 0 && <span aria-hidden className="text-white/16">·</span>}
@@ -320,9 +320,9 @@ function ActionCard({
   return (
     <button
       onClick={onClick}
-      className="group flex items-center gap-3 rounded-soft border border-white/6 bg-white/2 px-3.5 py-3 text-left transition-colors hover:border-white/10 hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+      className="group flex items-center gap-3 rounded-soft border border-line bg-white/2 px-3.5 py-3 text-left transition-colors hover:border-line hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-card border border-white/6 bg-white/4 text-muted transition-colors group-hover:text-text">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-card border border-line bg-white/4 text-muted transition-colors group-hover:text-text">
         {icon}
       </span>
       <span className="min-w-0 flex-1">

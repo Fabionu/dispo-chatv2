@@ -51,7 +51,7 @@ export default function GroupInviteView({ invite, onAccepted, onDeclined }: Prop
           <div className="text-lg font-semibold truncate">{title}</div>
           <div className="text-xs text-muted truncate">Vehicle group invitation</div>
         </div>
-        <span className="font-mono text-xs text-muted border border-white/8 rounded-chip px-2 py-0.5 shrink-0">
+        <span className="font-mono text-xs text-muted border border-line rounded-chip px-2 py-0.5 shrink-0">
           Pending
         </span>
       </header>
@@ -92,7 +92,7 @@ export default function GroupInviteView({ invite, onAccepted, onDeclined }: Prop
             <button
               onClick={() => void decline()}
               disabled={busy !== null}
-              className="flex-1 h-10 rounded-btn border border-white/16 text-text text-base font-medium hover:bg-white/4 disabled:opacity-50 transition-colors"
+              className="flex-1 h-10 rounded-btn border border-line-2 text-text text-base font-medium hover:bg-white/4 disabled:opacity-50 transition-colors"
             >
               {busy === 'decline' ? 'Declining…' : 'Decline'}
             </button>
@@ -112,7 +112,7 @@ export default function GroupInviteView({ invite, onAccepted, onDeclined }: Prop
 
 function PlateCard({ label, value }: { label: string; value?: string }) {
   return (
-    <div className="rounded-card border border-white/8 bg-white/2 px-3 py-2 text-left">
+    <div className="rounded-card border border-line bg-white/2 px-3 py-2 text-left">
       <div className="eyebrow text-faint mb-1">{label}</div>
       <div className="font-mono text-base text-text truncate">{value || '—'}</div>
     </div>

@@ -77,12 +77,12 @@ export default function ForwardModal({ fromGroupId, message, onClose, onForwarde
     <Modal title="Forward message" subtitle="Choose a conversation to send this to." onClose={onClose}>
       <div className="space-y-3">
         {previewText && (
-          <div className="pl-2 border-l-2 border-active/60 bg-white/2 rounded-[0.1875rem] px-2 py-1.5">
+          <div className="pl-2 border-l-2 border-active/60 bg-white/2  px-2 py-1.5">
             <div className="text-sm text-muted truncate italic">{previewText}</div>
           </div>
         )}
 
-        <label className="flex items-center gap-2 h-8 px-2.5 rounded-chip border border-white/6 bg-white/2 focus-within:border-white/16 transition-colors cursor-text">
+        <label className="flex items-center gap-2 h-8 px-2.5 rounded-chip border border-line bg-white/2 focus-within:border-line-2 transition-colors cursor-text">
           <Search size="0.75rem" strokeWidth={1.6} className="text-faint shrink-0" />
           <input
             value={query}

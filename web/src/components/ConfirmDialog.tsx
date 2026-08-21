@@ -31,7 +31,7 @@ export default function ConfirmDialog({
         <>
           <button
             onClick={onCancel}
-            className="text-sm font-medium rounded-btn px-3 py-1.5 border border-white/16 text-text hover:bg-white/4 transition-colors"
+            className="text-sm font-medium rounded-btn px-3 py-1.5 border border-line-2 text-text hover:bg-white/4 transition-colors"
           >
             {cancelLabel}
           </button>
