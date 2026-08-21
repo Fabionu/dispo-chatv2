@@ -711,65 +711,25 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             sidebarView === 'list' ? '' : 'invisible pointer-events-none'
           }`}
         >
-        {/* Top toolbar — the rail's primary action over the search row.
-            `New thread` is a full-width bordered button rather than the old
-            circular hamburger: it is the one thing in the rail that should read
-            as a control, and a drawn rectangle says that in a UI made of rules,
-            without needing a fill. The search below it is deliberately
-            UNBORDERED — two stacked boxes would fight for the same job, and the
-            magnifier plus placeholder already say "field". */}
+        {/* Top toolbar — ONE row: the search field takes the width, the new-thread
+            control sits inline at its right as a square `+`.
+            It used to be a full-width bordered `New thread` button STACKED above
+            the search, which spent a whole row of a 380px rail on a label for an
+            action that is universally a plus. Inline, the row reads the way the
+            rail's rows do — content first, affordance at the trailing edge — and
+            the list starts one row higher.
+            The division of labour that made the stacked version work is kept: the
+            `+` is the only BORDERED thing here, because it is the one control in
+            the rail, and the search stays UNBORDERED because the magnifier plus
+            placeholder already say "field". Side by side, the single box reads as
+            the button rather than as a second field. */}
         <div
-          className="px-3 pt-3 pb-2.5 flex flex-col shrink-0"
-          style={{ gap: 'var(--sidebar-toolbar-gap)' }}
+          className="px-3 pt-3 flex items-center gap-2 shrink-0"
+          style={{ paddingBottom: 'var(--sidebar-toolbar-gap)' }}
         >
-          <div className="relative" ref={newMenuRef}>
-            <button
-              onClick={() => setNewMenuOpen((v) => !v)}
-              aria-haspopup="menu"
-              aria-expanded={newMenuOpen}
-              style={{ fontSize: 'var(--sidebar-row-font-size)' }}
-              className={`w-full h-[var(--sidebar-search-height)] flex items-center gap-2.5 px-3 border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
-                newMenuOpen
-                  ? 'border-strong bg-white/6 text-text'
-                  : 'text-text hover:border-strong hover:bg-white/4'
-              }`}
-            >
-              <Plus size="1rem" strokeWidth={1.8} className="shrink-0 text-muted" />
-              New thread
-            </button>
-
-            {newMenuOpen && (
-              <div
-                role="menu"
-                // Hug the widest label exactly. Inline width:max-content (rather
-                // than a utility class) is immune to purge/override and to the
-                // abs-positioning shrink-to-fit of the narrow button wrapper.
-                style={{ width: 'max-content', maxWidth: '13.75rem' }}
-                className={`absolute left-0 top-[calc(100%+6px)] ${MENU_CONTAINER} z-20`}
-              >
-                <MenuItem icon={<Users {...MENU_GLYPH} />} onClick={() => startCreate('vehicle')}>
-                  Vehicle room
-                </MenuItem>
-                <MenuItem icon={<UserPlus {...MENU_GLYPH} />} onClick={() => startCreate('direct')}>
-                  Add connection
-                </MenuItem>
-                <div className={MENU_SEPARATOR} />
-                <MenuItem
-                  icon={<MailOpen {...MENU_GLYPH} />}
-                  onClick={() => {
-                    setNewMenuOpen(false)
-                    void handleMarkAllRead()
-                  }}
-                >
-                  Mark all as read
-                </MenuItem>
-              </div>
-            )}
-          </div>
-
           <label
             htmlFor="rail-search"
-            className="min-w-0 h-[var(--sidebar-search-height)] flex items-center gap-2.5 cursor-text"
+            className="min-w-0 flex-1 h-[var(--sidebar-search-height)] flex items-center gap-2.5 cursor-text"
           >
             <Search size="0.875rem" strokeWidth={1.7} className="text-faint shrink-0" />
             <input
@@ -796,6 +756,57 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               </button>
             )}
           </label>
+
+          <div className="relative shrink-0" ref={newMenuRef}>
+            <button
+              onClick={() => setNewMenuOpen((v) => !v)}
+              aria-haspopup="menu"
+              aria-expanded={newMenuOpen}
+              // The label is gone from the surface, so it lives here — the glyph
+              // alone is not an accessible name, and the tooltip is what tells a
+              // new user what the square does.
+              aria-label="New thread"
+              title="New thread"
+              className={`h-[var(--sidebar-search-height)] w-[var(--sidebar-search-height)] flex items-center justify-center border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+                newMenuOpen
+                  ? 'border-strong bg-white/6 text-text'
+                  : 'text-muted hover:border-strong hover:bg-white/4 hover:text-text'
+              }`}
+            >
+              <Plus size="1rem" strokeWidth={1.8} />
+            </button>
+
+            {newMenuOpen && (
+              <div
+                role="menu"
+                // Hug the widest label exactly. Inline width:max-content (rather
+                // than a utility class) is immune to purge/override and to the
+                // abs-positioning shrink-to-fit of the narrow button wrapper.
+                style={{ width: 'max-content', maxWidth: '13.75rem' }}
+                // RIGHT-anchored, unlike the stacked version's left-0: the
+                // trigger now sits at the rail's right edge, and a menu opening
+                // rightward from there would run straight off it.
+                className={`absolute right-0 top-[calc(100%+6px)] ${MENU_CONTAINER} z-20`}
+              >
+                <MenuItem icon={<Users {...MENU_GLYPH} />} onClick={() => startCreate('vehicle')}>
+                  Vehicle room
+                </MenuItem>
+                <MenuItem icon={<UserPlus {...MENU_GLYPH} />} onClick={() => startCreate('direct')}>
+                  Add connection
+                </MenuItem>
+                <div className={MENU_SEPARATOR} />
+                <MenuItem
+                  icon={<MailOpen {...MENU_GLYPH} />}
+                  onClick={() => {
+                    setNewMenuOpen(false)
+                    void handleMarkAllRead()
+                  }}
+                >
+                  Mark all as read
+                </MenuItem>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Filters — Archived leads the segmented control (everything / vehicle
