@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { Group, GroupMember, GroupPendingInvitee } from '../lib/types'
+import { useTravellingMarker } from './useTravellingMarker'
 import { groupLabel, tractorPlate, trailerPlate } from '../lib/types'
 import {
   getOps,
@@ -509,68 +510,27 @@ function PanelTabs({
   value: PanelTab
   onChange: (tab: PanelTab) => void
 }) {
-  const trackRef = useRef<HTMLDivElement | null>(null)
-  const roRef = useRef<ResizeObserver | null>(null)
-  const [pill, setPill] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
-
-  const measure = useCallback(() => {
-    const track = trackRef.current
-    if (!track) return
-    const active = track.querySelector<HTMLElement>('[aria-current="true"]')
-    if (!active) {
-      setPill(null)
-      return
-    }
-    const next = {
-      x: active.offsetLeft,
-      y: active.offsetTop,
-      w: active.offsetWidth,
-      h: active.offsetHeight,
-    }
-    setPill((prev) =>
-      prev && prev.x === next.x && prev.y === next.y && prev.w === next.w && prev.h === next.h
-        ? prev
-        : next,
-    )
-  }, [])
-
-  useLayoutEffect(measure, [measure, value])
-
-  // The track is the offsetParent, so its resize — the panel widening, the
-  // labels reflowing — is what moves the tabs under the pill. The callback ref
-  // owns the observer's whole life: React calls it with `null` on unmount, and
-  // a separate cleanup effect would be run once by StrictMode and leave the
-  // observer dead for the rest of the session.
-  const attachTrack = useCallback(
-    (node: HTMLDivElement | null) => {
-      roRef.current?.disconnect()
-      roRef.current = null
-      trackRef.current = node
-      if (!node) return
-      const ro = new ResizeObserver(measure)
-      ro.observe(node)
-      roRef.current = ro
-    },
-    [measure],
-  )
+  // Shared with the rail's filter bar, the Settings segmented control and the
+  // conversation bar — see components/useTravellingMarker.
+  const { trackRef, rect } = useTravellingMarker(value)
 
   return (
     <div
-      ref={attachTrack}
+      ref={trackRef}
       className="relative mt-4 flex items-center gap-0.5 rounded-card bg-white/4 p-0.5"
     >
-      {pill && (
+      {rect && (
         <span
           aria-hidden
           // Mounted only once a position is known, which is what keeps the first
           // paint still: a transition has no previous value to run from on the
           // frame an element is inserted, so the pill appears under the live tab
           // and only travels on later changes.
-          className="panel-tab-pill pointer-events-none absolute left-0 top-0 rounded-btn bg-text motion-reduce:transition-none"
+          className="travelling-marker pointer-events-none absolute left-0 top-0 rounded-btn bg-text motion-reduce:transition-none"
           style={{
-            width: pill.w,
-            height: pill.h,
-            transform: `translate(${pill.x}px, ${pill.y}px)`,
+            width: rect.w,
+            height: rect.h,
+            transform: `translate(${rect.x}px, ${rect.y}px)`,
           }}
         />
       )}

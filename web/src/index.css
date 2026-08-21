@@ -1041,26 +1041,30 @@ button {
   color: rgb(var(--color-text));
 }
 
-/* The travelling mark under the live tab (see FilterTabBar). Only transform and
-   width move, so the bar can slide the width of the rail without laying out a
-   single tab. The curve is the app's standard ease-out over 260ms — long enough
-   to read as one object moving between two places, short enough that clicking
-   through the filters never feels like waiting for the UI. */
-.filter-tab-bar {
-  transition:
-    transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    width 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
+/* ── The travelling marker ──────────────────────────────────────────────────
+   ONE class for every moving selection mark in the app (see
+   components/useTravellingMarker.ts): the rail's filter bar, the Group Info tab
+   pill, the Settings segmented control, and the bar down the selected
+   conversation. They are the same gesture — a selection moving between fixed
+   positions — and they should read as one idiom even though one is a hairline,
+   one is a filled block, and one travels vertically.
 
-/* The Group Info tab bar's selected pill (see PanelTabs). Same curve and
-   duration as the rail's travelling bar above — the two are the same gesture,
-   a selection moving between fixed positions, and they should read as one idiom
-   even though one is a hairline and the other a filled block. Transform and
-   width only, so a pill crossing four tabs lays out nothing. */
-.panel-tab-pill {
+   Only transform and the two box dimensions move, so a mark crossing the whole
+   rail lays out nothing behind it. The curve is the app's standard ease-out over
+   260ms: long enough to read as one object travelling, short enough that
+   clicking through filters never feels like waiting for the UI.
+
+   `height` is in the list because the conversation bar travels DOWN a column of
+   rows that are not all the same height (a two-line row with a draft is taller
+   than a plain one), so it has to resize as it moves or it would jump.
+
+   It replaced `.filter-tab-bar` and `.panel-tab-pill`, which were the same three
+   declarations written twice. */
+.travelling-marker {
   transition:
     transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    width 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    width 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    height 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 /* HERE map: keep the normal (default arrow) cursor everywhere on the map

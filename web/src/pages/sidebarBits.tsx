@@ -3,15 +3,8 @@
 // create/options menu). Kept together so the rail's row/menu chrome lives in one
 // place; behaviour is identical to the previous inline definitions.
 
-import {
-  Fragment,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react'
+import { Fragment, type ReactNode } from 'react'
+import { useTravellingMarker } from '../components/useTravellingMarker'
 import { ChevronDown, type LucideIcon } from 'lucide-react'
 import { menuIconClass, menuItemClass } from '../components/menuStyles'
 
@@ -102,75 +95,32 @@ export function FilterTabBar({
   activeKey: string
   children: ReactNode
 }) {
-  const rowRef = useRef<HTMLDivElement | null>(null)
-  const roRef = useRef<ResizeObserver | null>(null)
-  const [bar, setBar] = useState<{ x: number; y: number; w: number } | null>(null)
-
-  const measure = useCallback(() => {
-    const row = rowRef.current
-    if (!row) return
-    const active = row.querySelector<HTMLElement>('[aria-pressed="true"]')
-    if (!active) {
-      setBar(null)
-      return
-    }
-    const x = active.offsetLeft
-    // One pixel above the item's bottom edge, so the 2px bar covers the tab's
-    // own (permanently transparent) hairline. The row used to carry a `border-b`
-    // for the bar to sit on and the mark read as that rule lighting up; the rule
-    // is gone (user, 2026-08-21 — the rail is quieter without a line under the
-    // filters), so the bar is now the only mark on the row and simply underlines
-    // the live tab. The -1 stays: it is what keeps the bar inside the row's box
-    // rather than hanging a pixel below it.
-    const y = active.offsetTop + active.offsetHeight - 1
-    const w = active.offsetWidth
-    setBar((prev) => (prev && prev.x === x && prev.y === y && prev.w === w ? prev : { x, y, w }))
-  }, [])
-
-  useLayoutEffect(measure, [measure, activeKey])
-
-  // The row is the offsetParent, so its own resize — the rail widening, the
-  // tabs wrapping — is what moves the items. The callback ref owns the
-  // observer's whole life: React calls it with `null` on unmount, and a
-  // separate cleanup effect would be run once by StrictMode and kill the
-  // observer for the rest of the session.
-  const attachRow = useCallback(
-    (node: HTMLDivElement | null) => {
-      roRef.current?.disconnect()
-      roRef.current = null
-      rowRef.current = node
-      if (!node) return
-      const ro = new ResizeObserver(measure)
-      ro.observe(node)
-      roRef.current = ro
-    },
-    [measure],
-  )
-
-  // The labels are mono and the mono face loads late, so the widths measured on
-  // the first pass can be the fallback font's. Re-measure once it lands.
-  useEffect(() => {
-    let live = true
-    document.fonts?.ready.then(() => {
-      if (live) measure()
-    })
-    return () => {
-      live = false
-    }
-  }, [measure])
+  // The measuring/sliding mechanism is shared with the Group Info tabs, the
+  // Settings segmented control and the conversation bar — see
+  // components/useTravellingMarker.
+  const { trackRef, rect } = useTravellingMarker(activeKey, '[aria-pressed="true"]')
 
   return (
-    <div ref={attachRow} className="relative px-3 flex items-center gap-4 shrink-0">
+    <div ref={trackRef} className="relative px-3 flex items-center gap-4 shrink-0">
       <div className="flex min-w-0 flex-wrap items-center gap-4">{children}</div>
-      {bar && (
+      {rect && (
         <span
           aria-hidden
           // Mounted only once a position is known, which is also what keeps the
           // first placement still: a transition has no previous value to run
           // from on the frame an element is inserted, so the bar appears under
           // the live tab and only travels on later changes.
-          className="filter-tab-bar pointer-events-none absolute left-0 top-0 h-0.5 bg-text motion-reduce:transition-none"
-          style={{ width: bar.w, transform: `translate(${bar.x}px, ${bar.y}px)` }}
+          className="travelling-marker pointer-events-none absolute left-0 top-0 h-0.5 bg-text motion-reduce:transition-none"
+          style={{
+            width: rect.w,
+            // One pixel above the item's bottom edge, so the 2px bar covers the
+            // tab's own (permanently transparent) hairline. The row used to
+            // carry a `border-b` for the bar to sit on; the rule is gone (user,
+            // 2026-08-21), so the bar is now the only mark on the row and simply
+            // underlines the live tab. The -1 keeps it inside the row's box
+            // rather than hanging a pixel below it.
+            transform: `translate(${rect.x}px, ${rect.y + rect.h - 1}px)`,
+          }}
         />
       )}
     </div>

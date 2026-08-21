@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useTravellingMarker } from '../useTravellingMarker'
 import {
   Bell,
   Check,
@@ -977,8 +978,29 @@ function Segmented({
   options: { value: string; label: string }[]
   onChange: (value: string) => void
 }) {
+  // The selected block TRAVELS between options rather than switching on and off
+  // per button — the same mark, and the same mechanism, as the Group Info tab
+  // pill (components/useTravellingMarker). Options here are label-width, not
+  // equal-width like Group Info's, so the pill animates its width as well as its
+  // position.
+  const { trackRef, rect } = useTravellingMarker(value)
+
   return (
-    <div className="inline-flex items-center gap-0.5 rounded-card bg-white/4 p-0.5">
+    <div
+      ref={trackRef}
+      className="relative inline-flex items-center gap-0.5 rounded-card bg-white/4 p-0.5"
+    >
+      {rect && (
+        <span
+          aria-hidden
+          className="travelling-marker pointer-events-none absolute left-0 top-0 rounded-btn bg-text motion-reduce:transition-none"
+          style={{
+            width: rect.w,
+            height: rect.h,
+            transform: `translate(${rect.x}px, ${rect.y}px)`,
+          }}
+        />
+      )}
       {options.map((o) => {
         const active = o.value === value
         return (
@@ -987,8 +1009,13 @@ function Segmented({
             type="button"
             onClick={() => onChange(o.value)}
             aria-pressed={active}
-            className={`h-7 px-3 rounded-btn text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
-              active ? 'bg-text text-bg' : 'text-muted hover:bg-white/6 hover:text-text'
+            // `aria-current` is what the marker measures; `aria-pressed` stays
+            // because that is what makes these read as a toggle group.
+            aria-current={active ? 'true' : undefined}
+            // `relative` so the label sits ON the pill rather than under it, and
+            // the colour swap is the only thing this button now draws.
+            className={`relative z-10 h-7 px-3 rounded-btn text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+              active ? 'text-bg' : 'text-muted hover:text-text'
             }`}
           >
             {o.label}

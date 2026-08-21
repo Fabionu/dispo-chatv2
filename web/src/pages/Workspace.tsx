@@ -56,6 +56,7 @@ import ConnectionStatusBanner from '../components/ConnectionStatusBanner'
 import { NOTIFICATION_OPEN_EVENT } from '../lib/browserNotifications'
 import UserProfilePanel from '../components/UserProfilePanel'
 import WorkspaceNavRail from './WorkspaceNavRail'
+import { useTravellingMarker } from '../components/useTravellingMarker'
 
 type Props = {
   user: User
@@ -569,6 +570,26 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     return items
   }, [groups, filter, matchesQuery, filteredContacts])
 
+  // The bar that slides down the rail to whichever conversation is open. It is
+  // ONE element measured against the list wrapper (see
+  // components/useTravellingMarker) rather than a border on each row, so
+  // changing conversation reads as the mark travelling rather than as one row
+  // lighting up while another goes dark.
+  //
+  // Living inside the SCROLLED content is what makes it track the list for free:
+  // offsetTop is measured against the wrapper, so the bar scrolls with its row
+  // and needs no scroll listener.
+  //
+  // The re-measure key carries BOTH the selection and the rendered order. A
+  // ResizeObserver on the wrapper catches rows entering and leaving (its height
+  // changes), but not a reorder that keeps the same height — pinning a
+  // conversation moves every row between it and the top without changing the
+  // list's total height at all.
+  const railBarKey = `${selection?.kind === 'group' ? selection.id : ''}|${conversationItems
+    .map((item) => item.key)
+    .join(',')}`
+  const railBar = useTravellingMarker(railBarKey)
+
   // How many ACTIVE conversations are still unread — the Unread pill's live
   // count. Derived from the same `groups` state the rows read, so it moves the
   // instant a conversation is read, muted-or-not, room or DM.
@@ -887,8 +908,31 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 />
               )}
 
-              {/* The unified conversation + contact stream for the active filter. */}
-              <div className="flex flex-col gap-1">
+              {/* The unified conversation + contact stream for the active filter.
+                  `relative` is load-bearing: it makes this wrapper the
+                  offsetParent the travelling bar is measured against. */}
+              <div ref={railBar.trackRef} className="relative flex flex-col gap-1">
+                {railBar.rect && (
+                  <span
+                    aria-hidden
+                    // 2px wide, sitting in the transparent border channel every
+                    // row reserves (see SidebarGroupRow) — so the bar arriving
+                    // never shifts a row's text. Mounted only once a position is
+                    // known: a transition has no previous value to run from on
+                    // the frame an element is inserted, so it appears beside the
+                    // open conversation and only travels on later changes.
+                    className="travelling-marker pointer-events-none absolute left-0 top-0 bg-text motion-reduce:transition-none"
+                    style={{
+                      // 2px in PX, not the rem scale, because it has to fill the
+                      // `border-l-2` channel exactly — Tailwind border widths are
+                      // px, so a rem width would under- or overshoot the channel
+                      // by a fraction on every density tier but the default.
+                      width: 2,
+                      height: railBar.rect.h,
+                      transform: `translate(${railBar.rect.x}px, ${railBar.rect.y}px)`,
+                    }}
+                  />
+                )}
                 {conversationItems.length === 0 ? (
                   searching ? (
                     <EmptyHint>No conversations match “{query.trim()}”.</EmptyHint>

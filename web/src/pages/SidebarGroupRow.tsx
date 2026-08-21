@@ -350,10 +350,18 @@ export default function GroupRow({
           paddingTop: 'var(--sidebar-row-pad-y)',
           paddingBottom: 'var(--sidebar-row-pad-y)',
         }}
-        className={`w-full flex items-center text-left transition-colors border-l-2 ${
-          selected
-            ? 'border-text bg-white/10 text-text'
-            : 'border-transparent text-muted hover:bg-white/8 hover:text-text'
+        // `aria-current` is what the rail's travelling bar measures to find
+        // this row — and it is the correct thing for a selected navigation item
+        // to say regardless.
+        aria-current={selected ? 'true' : undefined}
+        // The 2px left border stays TRANSPARENT in both states: it reserves the
+        // channel the travelling bar slides down (see Workspace's rail list) so
+        // selecting a row never shifts its text by two pixels. The row still
+        // owns its wash and its text colour; only the rule moved out, because a
+        // border that belongs to the row can only appear and disappear, and the
+        // point is for it to travel.
+        className={`w-full flex items-center text-left transition-colors border-l-2 border-transparent ${
+          selected ? 'bg-white/10 text-text' : 'text-muted hover:bg-white/8 hover:text-text'
         }`}
       >
         {/* Two-line body. Line 1: name + vehicle trip status + timestamp. Line 2:
