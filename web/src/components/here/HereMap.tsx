@@ -40,15 +40,6 @@ import {
   type HereMapStyleControlHandle,
 } from './HereMapStyleControl'
 import { createHereMapZoomControl, type HereMapZoomControlHandle } from './HereMapZoomControl'
-import {
-  ROUTE_REVEAL_VERTEX_BUDGET,
-  canRevealRoute,
-  finishRouteReveal,
-  seedRevealSection,
-  startRouteReveal,
-  type RevealSection,
-  type RouteReveal,
-} from './hereRouteReveal'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -96,14 +87,56 @@ function simplifyPathForMap(path: LatLng[], toleranceMeters: number, maxPoints: 
   return sampled
 }
 
-// Read at call time, not once at module load: the user can flip the OS setting
-// while the app is open, and a stale answer would keep animating at them.
+// ── Route reveal animation ───────────────────────────────────────────────────
+// A freshly calculated route draws itself from the origin to the destination
+// instead of appearing all at once. It answers "which way does this go?" — the
+// question a static line makes you trace with your eyes — in the moment the
+// route arrives, and it gives adding a stop a visible result.
+
+/** Vertices the reveal animates over. The line is rebuilt every frame, so this
+ *  is what keeps a 4000-point international route from dropping frames; the
+ *  full-fidelity geometry takes over the moment the animation ends. */
+const REVEAL_MAX_POINTS = 700
+
+/**
+ * How long the sweep takes, in ms, for a route of `meters`.
+ *
+ * Deliberately sub-linear and hard-capped. Time proportional to distance would
+ * make a Bucharest→Rotterdam route crawl for half a minute — the longer the
+ * route, the LESS patience there is for watching it draw. The square root keeps
+ * short hops from feeling instant while letting long hauls stay brisk: a 5 km
+ * delivery sweeps in ~0.6 s, 100 km in ~1.2 s, and anything beyond ~500 km is
+ * clamped to the same 1.4 s ceiling.
+ */
+function revealDurationMs(meters: number): number {
+  const km = Math.max(0, meters) / 1000
+  return Math.min(1400, Math.max(450, 400 + Math.sqrt(km) * 80))
+}
+
+/** Ease-out cubic: the line leaves the origin fast and settles onto the
+ *  destination, rather than arriving at full speed and stopping dead. */
+function easeOutCubic(t: number): number {
+  return 1 - (1 - t) ** 3
+}
+
 function prefersReducedMotion(): boolean {
   return (
     typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
   )
+}
+
+/** A stable fingerprint of the drawn route. draw() also runs for marker and
+ *  layer changes, so the animation needs to tell "the route itself changed"
+ *  from "something else on the map did". */
+function routeSignature(polylines: string[]): string {
+  let hash = 0
+  for (const encoded of polylines) {
+    for (let i = 0; i < encoded.length; i++) {
+      hash = (hash * 31 + encoded.charCodeAt(i)) | 0
+    }
+  }
+  return `${polylines.length}:${hash}`
 }
 
 type Props = {
@@ -257,6 +290,23 @@ export default function HereMap({
   // geometry. Hide only this decorative layer while the camera is moving; the
   // coral route itself remains visible throughout navigation.
   const routeDecorationsRef = useRef<any[]>([])
+  // ── Route reveal state ────────────────────────────────────────────────────
+  // Fingerprint of the route currently drawn. draw() also runs for marker moves,
+  // the saved-places layer and edit-mode toggles, so this is what separates "the
+  // route changed" (reframe + sweep) from "something else did" (leave the camera
+  // and the line alone).
+  const drawnRouteSigRef = useRef<string | null>(null)
+  const revealRef = useRef<{ raf: number; temps: any[]; sig: string; startedAt: number } | null>(null)
+  // A sweep that a redraw interrupted, and how far it had got. draw() runs for
+  // far more than route changes — a marker identity change or the distance label
+  // landing a tick later is enough — and each one clears the map group the sweep
+  // is drawing into. Without this the animation would simply stop partway and,
+  // because the route itself did not change, never restart.
+  const interruptedRevealRef = useRef<{ sig: string; elapsed: number } | null>(null)
+  // When a direct drag last finished. Dragging a waypoint or the line itself is
+  // a refinement of a route already on screen — re-sweeping the whole thing on
+  // every drop would punish the user for adjusting it.
+  const lastInteractiveDragAtRef = useRef(0)
   const scaleRouteWidthRef = useRef(scaleRouteWidthWithZoom)
   scaleRouteWidthRef.current = scaleRouteWidthWithZoom
   // True while the cursor is on (or right beside) the drawn route line — the
@@ -290,11 +340,6 @@ export default function HereMap({
   // recalculates. This keeps the user's zoom/pan stable while adding stops, which
   // otherwise reframed (and felt like a random zoom-in) on every change.
   const lastFitSigRef = useRef<string>('')
-  // Whether the last draw() put a route on the map. The reveal fires on the
-  // false → true edge only, so recalculating an existing route redraws it in
-  // place instead of replaying its entrance.
-  const hadRouteRef = useRef(false)
-  const routeRevealRef = useRef<RouteReveal | null>(null)
   // Decoded route path (whole route, travel order) + per-vertex cumulative
   // distances (metres from the start), refreshed by draw(). Read by the
   // pointermove hover readout; null when there's no route so the readout stays
@@ -778,6 +823,10 @@ export default function HereMap({
             }
           }
           activeDragRef.current = false
+          // Remember a DIRECT edit (a marker or the line itself), not a plain
+          // pan: the route that arrives moments later is this drag's result, and
+          // re-sweeping it would be a distraction rather than an answer.
+          if (interactiveDragRef.current) lastInteractiveDragAtRef.current = Date.now()
           interactiveDragRef.current = false
         }
         map.addEventListener('dragstart', onDragStart)
@@ -846,8 +895,6 @@ export default function HereMap({
       cancelled = true
       resizeObserver?.disconnect()
       if (resizeRaf) cancelAnimationFrame(resizeRaf)
-      routeRevealRef.current?.cancel()
-      routeRevealRef.current = null
       detachListeners?.()
       mapStyleControlRef.current?.dispose()
       mapStyleControlRef.current = null
@@ -870,6 +917,11 @@ export default function HereMap({
         routeDragTargetsRef.current = []
         routeStrokePairsRef.current = []
         routeDecorationsRef.current = []
+        // The sweep holds a rAF handle and map objects; both die with the map.
+        if (revealRef.current) cancelAnimationFrame(revealRef.current.raf)
+        revealRef.current = null
+        interruptedRevealRef.current = null
+        drawnRouteSigRef.current = null
         markerIconCacheRef.current.clear()
       }
     }
@@ -1247,6 +1299,137 @@ export default function HereMap({
     applyRouteWidths()
   }
 
+  /** Put the real route strokes back on screen, honouring the same visibility
+   *  rules the camera handler applies (casing and arrows hide during a move;
+   *  arrows additionally need a zoom where a glyph is legible). */
+  function restoreRouteStrokes() {
+    const arrowsAllowed = routeWidthsNow().arrowsVisible
+    for (const pair of routeStrokePairsRef.current) {
+      pair.main?.setVisibility?.(true)
+      pair.casing?.setVisibility?.(!viewChangingRef.current)
+      pair.arrows?.setVisibility?.(arrowsAllowed && !viewChangingRef.current)
+    }
+  }
+
+  /** Stop any in-flight sweep and drop its temporary geometry. Safe to call at
+   *  any time; leaves the real strokes visible. */
+  function cancelRouteReveal(restore: boolean) {
+    const reveal = revealRef.current
+    if (!reveal) return
+    revealRef.current = null
+    cancelAnimationFrame(reveal.raf)
+    // Interrupted rather than finished: remember the progress so the redraw that
+    // is about to replace the geometry can pick the sweep back up mid-stride.
+    if (!restore) {
+      interruptedRevealRef.current = {
+        sig: reveal.sig,
+        elapsed: performance.now() - reveal.startedAt,
+      }
+    }
+    const group = groupRef.current
+    for (const temp of reveal.temps) {
+      try {
+        group?.removeObject(temp)
+      } catch {
+        // The group may already have been cleared by a redraw or disposal.
+      }
+    }
+    if (restore) restoreRouteStrokes()
+  }
+
+  /**
+   * Sweep the route on from origin to destination.
+   *
+   * The real strokes are hidden and ONE temporary line grows in their place,
+   * rather than re-cutting each section's geometry every frame: a route is a
+   * chain of sections and only the head one is ever partially drawn, so a single
+   * growing line over the concatenated path is both simpler and cheaper. The
+   * arrow glyphs sit out the animation — they mark direction on a finished line,
+   * and the sweep is already showing direction far more directly.
+   */
+  function startRouteReveal(path: LatLng[], elapsedMs = 0) {
+    const H = HRef.current
+    const map = mapRef.current
+    const group = groupRef.current
+    if (!H || !map || !group || path.length < 2) return
+
+    const animPath = simplifyPathForMap(path, 8, REVEAL_MAX_POINTS)
+    // Cumulative distance drives the sweep, so it advances at a constant ground
+    // speed. Stepping one VERTEX per frame instead would race through motorways
+    // (few, far-apart points) and crawl through town centres (many, close ones).
+    const cumulative = new Array<number>(animPath.length)
+    cumulative[0] = 0
+    for (let i = 1; i < animPath.length; i++) {
+      cumulative[i] = cumulative[i - 1] + haversineMeters(animPath[i - 1], animPath[i])
+    }
+    const total = cumulative[cumulative.length - 1]
+    if (!(total > 0)) return
+
+    // Through routeWidthsNow, so a sweep that starts while the cursor is already
+    // on the line grows at the hovered weight instead of snapping heavier the
+    // moment it lands.
+    const widths = routeWidthsNow()
+
+    for (const pair of routeStrokePairsRef.current) {
+      pair.main?.setVisibility?.(false)
+      pair.casing?.setVisibility?.(false)
+      pair.arrows?.setVisibility?.(false)
+    }
+
+    const seed = new H.geo.LineString()
+    seed.pushPoint(animPath[0])
+    seed.pushPoint(animPath[0])
+    const casing = new H.map.Polyline(seed, { style: routeCasingStyle(widths.casing) })
+    const spine = new H.map.Polyline(seed, { style: routeSpineStyle(widths.main) })
+    group.addObject(casing)
+    group.addObject(spine)
+
+    const duration = revealDurationMs(total)
+    // Backdating the start is what makes a resumed sweep continue from where it
+    // was interrupted instead of snapping back to the origin.
+    const startedAt = performance.now() - elapsedMs
+    // The sweep only moves forward, so the vertex cursor is carried between
+    // frames — the whole animation walks the path once, not once per frame.
+    let cursor = 1
+
+    const frame = (nowMs: number) => {
+      const linear = Math.min(1, (nowMs - startedAt) / duration)
+      const reached = easeOutCubic(linear) * total
+      while (cursor < animPath.length - 1 && cumulative[cursor] < reached) cursor++
+
+      const line = new H.geo.LineString()
+      for (let i = 0; i < cursor; i++) line.pushPoint(animPath[i])
+      // Interpolate the head inside the current segment so the line grows
+      // smoothly instead of jumping from vertex to vertex.
+      const spanStart = cumulative[cursor - 1]
+      const spanLength = cumulative[cursor] - spanStart
+      const t = spanLength > 0 ? Math.min(1, Math.max(0, (reached - spanStart) / spanLength)) : 1
+      const from = animPath[cursor - 1]
+      const to = animPath[cursor]
+      line.pushPoint({
+        lat: from.lat + (to.lat - from.lat) * t,
+        lng: from.lng + (to.lng - from.lng) * t,
+      })
+
+      casing.setGeometry(line)
+      spine.setGeometry(line)
+
+      if (linear < 1 && revealRef.current) {
+        revealRef.current.raf = requestAnimationFrame(frame)
+        return
+      }
+      // Done: hand the line back to the real, full-fidelity strokes.
+      cancelRouteReveal(true)
+    }
+
+    revealRef.current = {
+      raf: requestAnimationFrame(frame),
+      temps: [casing, spine],
+      sig: drawnRouteSigRef.current ?? '',
+      startedAt,
+    }
+  }
+
   function draw() {
     const H = HRef.current
     const map = mapRef.current
@@ -1254,11 +1437,9 @@ export default function HereMap({
     const markerGroup = markerGroupRef.current
     if (!H || !map || !group || !markerGroup) return
 
-    // A redraw supersedes any reveal still in flight — the objects it was growing
-    // are about to be discarded with the group.
-    routeRevealRef.current?.cancel()
-    routeRevealRef.current = null
-
+    // Any sweep in flight belongs to the route being replaced. Drop it WITHOUT
+    // restoring — the strokes it was hiding are about to be removed anyway.
+    cancelRouteReveal(false)
     group.removeAll()
     markerGroup.removeAll()
     draggableObjectsRef.current = []
@@ -1276,17 +1457,6 @@ export default function HereMap({
     // two visible strokes below retain every HERE vertex so zooming in always
     // follows the road geometry exactly.
     const interactionBudgetPerSection = Math.max(80, Math.floor(1200 / sectionCount))
-
-    // Entrance only — see ROUTE_REVEAL_MS. Decided before the strokes are built
-    // so each section can be seeded collapsed onto its own first vertex rather
-    // than drawn whole and then rewound (which is the flash this exists to avoid).
-    const hasRouteNow = routePolylines.length > 0
-    let revealing =
-      hasRouteNow && !hadRouteRef.current && canRevealRoute(H) && !prefersReducedMotion()
-    hadRouteRef.current = hasRouteNow
-    const revealSections: RevealSection[] = []
-    const revealBudgetPerSection = Math.max(60, Math.floor(ROUTE_REVEAL_VERTEX_BUDGET / sectionCount))
-    let revealOffset = 0
 
     // Route line: a near-black spine inside a solid white halo, with white
     // arrow glyphs stencilled along it for direction. Three stacked strokes,
@@ -1323,30 +1493,6 @@ export default function HereMap({
       group.addObject(arrows)
       routeStrokePairsRef.current.push({ casing, main, arrows })
       routeDecorationsRef.current.push(casing)
-      if (revealing) {
-        try {
-          const section = seedRevealSection(H, {
-            path: simplifyPathForMap(sectionPath, 8, revealBudgetPerSection),
-            offset: revealOffset,
-            full: line,
-            casing,
-            main,
-            arrows,
-            arrowsAllowed: widths.arrowsVisible,
-          })
-          revealOffset += section.cum[section.cum.length - 1]
-          revealSections.push(section)
-        } catch (err) {
-          // Never let the entrance cost the route. Whatever this SDK objected
-          // to, put back every section already collapsed and draw the rest of
-          // this route — markers, badge and fit included — the plain way.
-          // eslint-disable-next-line no-console
-          console.error('HERE route reveal unavailable — drawing the route directly', err)
-          revealing = false
-          finishRouteReveal(revealSections, { isViewChanging: () => viewChangingRef.current })
-          revealSections.length = 0
-        }
-      }
       if (objectsDraggable) {
         // HERE requires volatile objects for reliable drag delivery. Keeping that
         // cost on one interaction line leaves the two visible lines cached. The
@@ -1444,7 +1590,6 @@ export default function HereMap({
     // none` lets every press/drag fall through to the route line and markers
     // underneath; it never intercepts a gesture. Cleared with the group on each
     // redraw, so it follows the route as stops/legs change.
-    let distanceBadge: any = null
     if (routeDistanceLabel && routePath.length >= 2) {
       const mid = pathMidpoint(routePath)
       if (mid) {
@@ -1454,37 +1599,58 @@ export default function HereMap({
         pill.textContent = routeDistanceLabel
         outer.appendChild(pill)
         const badge = new H.map.DomMarker(mid, { icon: new H.map.DomIcon(outer) })
-        // The badge is anchored at the route's MIDPOINT, so while the line is
-        // still growing toward it it would be a pill floating over empty map. It
-        // arrives with the route.
-        if (revealing) badge.setVisibility?.(false)
         markerGroup.addObject(badge)
-        distanceBadge = badge
       }
     }
 
-    // Reframe only when the route's STRUCTURE changes — it first gains an
-    // endpoint, the start/destination is added or removed, or a drawn route first
-    // appears. Adding/removing/dragging an intermediate stop, or a plain
-    // recalculation, leaves this signature unchanged, so the viewport stays put
-    // (no surprise zoom-in near the new stop). On a structural change we frame the
-    // current points once; the user is then free to pan/zoom.
+    // ── Framing + reveal ─────────────────────────────────────────────────────
+    // Both hang off the same question: is this a different route from the one
+    // already on screen?
     const hasOrigin = markers.some((m) => m.kind === 'origin')
     const hasDestination = markers.some((m) => m.kind === 'destination')
     const hasRoute = routePolylines.length > 0
     const fitSig = `${hasOrigin ? 1 : 0}|${hasDestination ? 1 : 0}|${hasRoute ? 1 : 0}`
-    if (fitSig !== lastFitSigRef.current) {
-      lastFitSigRef.current = fitSig
+    const structuralChange = fitSig !== lastFitSigRef.current
+    lastFitSigRef.current = fitSig
+
+    const sig = routeSignature(routePolylines)
+    const routeChanged = sig !== drawnRouteSigRef.current
+    drawnRouteSigRef.current = sig
+
+    // A hand edit — dragging a waypoint or the line itself — is the one case
+    // where the camera must hold still. The driver of that gesture is looking at
+    // a specific junction; yanking the view out to the whole route would undo
+    // the zoom they just chose. Every other route change reframes.
+    const isHandEdit = Date.now() - lastInteractiveDragAtRef.current < 1_500
+
+    // Frame the route whenever it changes, the way a maps app does: a new
+    // destination beyond the current view pulls the camera out to contain the
+    // whole line, and a short route inside a country-level view pulls it in.
+    // fitToPoints does both — it fits BOUNDS, so the direction of the zoom
+    // follows from the geometry rather than from any rule here. Marker-only
+    // structural changes (a first pin dropped, an endpoint cleared) still frame
+    // too, which is what positions the map before a route exists.
+    if ((routeChanged && routePath.length >= 2 && !isHandEdit) || structuralChange) {
       fitToPoints(H, map, allPoints)
     }
 
-    // Last of all, so the line grows over a viewport the fit above has already
-    // settled rather than racing the camera for the same frames.
-    if (revealing && revealSections.length > 0) {
-      routeRevealRef.current = startRouteReveal(H, revealSections, {
-        badge: distanceBadge,
-        isViewChanging: () => viewChangingRef.current,
-      })
+    // Sweep the line on, after the camera has settled so the stroke widths and
+    // the simplification are chosen for the zoom the user will actually see.
+    // Fires for a CHANGED route as well as a new one — editing stops is exactly
+    // when you want to watch where the route now goes.
+    const canAnimate = routePath.length >= 2 && !prefersReducedMotion()
+    if (routeChanged) {
+      // A pending resume belongs to the route being replaced; drop it so it can
+      // never continue onto a different line.
+      interruptedRevealRef.current = null
+      if (canAnimate) startRouteReveal(routePath)
+    } else if (interruptedRevealRef.current?.sig === sig && canAnimate) {
+      // This redraw interrupted a sweep of the SAME route (a marker identity
+      // change, the distance label arriving a tick later). Continue it from
+      // where it stopped rather than leaving it frozen half-drawn.
+      const { elapsed } = interruptedRevealRef.current
+      interruptedRevealRef.current = null
+      startRouteReveal(routePath, elapsed)
     }
   }
 
