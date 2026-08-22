@@ -38,6 +38,15 @@ import {
   type HereMapStyleControlHandle,
 } from './HereMapStyleControl'
 import { createHereMapZoomControl, type HereMapZoomControlHandle } from './HereMapZoomControl'
+import {
+  ROUTE_REVEAL_VERTEX_BUDGET,
+  canRevealRoute,
+  finishRouteReveal,
+  seedRevealSection,
+  startRouteReveal,
+  type RevealSection,
+  type RouteReveal,
+} from './hereRouteReveal'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -112,6 +121,16 @@ function simplifyPathForMap(path: LatLng[], toleranceMeters: number, maxPoints: 
   for (let i = 1; i < maxPoints - 1; i++) sampled.push(simplified[Math.round(i * step)])
   sampled.push(simplified[simplified.length - 1])
   return sampled
+}
+
+// Read at call time, not once at module load: the user can flip the OS setting
+// while the app is open, and a stale answer would keep animating at them.
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
 }
 
 type Props = {
@@ -294,6 +313,11 @@ export default function HereMap({
   // recalculates. This keeps the user's zoom/pan stable while adding stops, which
   // otherwise reframed (and felt like a random zoom-in) on every change.
   const lastFitSigRef = useRef<string>('')
+  // Whether the last draw() put a route on the map. The reveal fires on the
+  // false → true edge only, so recalculating an existing route redraws it in
+  // place instead of replaying its entrance.
+  const hadRouteRef = useRef(false)
+  const routeRevealRef = useRef<RouteReveal | null>(null)
   // Decoded route path (whole route, travel order) + per-vertex cumulative
   // distances (metres from the start), refreshed by draw(). Read by the
   // pointermove hover readout; null when there's no route so the readout stays
@@ -851,6 +875,8 @@ export default function HereMap({
       cancelled = true
       resizeObserver?.disconnect()
       if (resizeRaf) cancelAnimationFrame(resizeRaf)
+      routeRevealRef.current?.cancel()
+      routeRevealRef.current = null
       detachListeners?.()
       mapStyleControlRef.current?.dispose()
       mapStyleControlRef.current = null
@@ -1215,6 +1241,11 @@ export default function HereMap({
     const markerGroup = markerGroupRef.current
     if (!H || !map || !group || !markerGroup) return
 
+    // A redraw supersedes any reveal still in flight — the objects it was growing
+    // are about to be discarded with the group.
+    routeRevealRef.current?.cancel()
+    routeRevealRef.current = null
+
     group.removeAll()
     markerGroup.removeAll()
     draggableObjectsRef.current = []
@@ -1232,6 +1263,17 @@ export default function HereMap({
     // two visible strokes below retain every HERE vertex so zooming in always
     // follows the road geometry exactly.
     const interactionBudgetPerSection = Math.max(80, Math.floor(1200 / sectionCount))
+
+    // Entrance only — see ROUTE_REVEAL_MS. Decided before the strokes are built
+    // so each section can be seeded collapsed onto its own first vertex rather
+    // than drawn whole and then rewound (which is the flash this exists to avoid).
+    const hasRouteNow = routePolylines.length > 0
+    let revealing =
+      hasRouteNow && !hadRouteRef.current && canRevealRoute(H) && !prefersReducedMotion()
+    hadRouteRef.current = hasRouteNow
+    const revealSections: RevealSection[] = []
+    const revealBudgetPerSection = Math.max(60, Math.floor(ROUTE_REVEAL_VERTEX_BUDGET / sectionCount))
+    let revealOffset = 0
 
     // Route line: a near-black spine inside a solid white halo, with white
     // arrow glyphs stencilled along it for direction. Three stacked strokes,
@@ -1271,6 +1313,30 @@ export default function HereMap({
       group.addObject(arrows)
       routeStrokePairsRef.current.push({ casing, main, arrows })
       routeDecorationsRef.current.push(casing)
+      if (revealing) {
+        try {
+          const section = seedRevealSection(H, {
+            path: simplifyPathForMap(sectionPath, 8, revealBudgetPerSection),
+            offset: revealOffset,
+            full: line,
+            casing,
+            main,
+            arrows,
+            arrowsAllowed: widths.arrowsVisible,
+          })
+          revealOffset += section.cum[section.cum.length - 1]
+          revealSections.push(section)
+        } catch (err) {
+          // Never let the entrance cost the route. Whatever this SDK objected
+          // to, put back every section already collapsed and draw the rest of
+          // this route — markers, badge and fit included — the plain way.
+          // eslint-disable-next-line no-console
+          console.error('HERE route reveal unavailable — drawing the route directly', err)
+          revealing = false
+          finishRouteReveal(revealSections, { isViewChanging: () => viewChangingRef.current })
+          revealSections.length = 0
+        }
+      }
       if (objectsDraggable) {
         // HERE requires volatile objects for reliable drag delivery. Keeping that
         // cost on one interaction line leaves the two visible lines cached. The
@@ -1368,6 +1434,7 @@ export default function HereMap({
     // none` lets every press/drag fall through to the route line and markers
     // underneath; it never intercepts a gesture. Cleared with the group on each
     // redraw, so it follows the route as stops/legs change.
+    let distanceBadge: any = null
     if (routeDistanceLabel && routePath.length >= 2) {
       const mid = pathMidpoint(routePath)
       if (mid) {
@@ -1377,7 +1444,12 @@ export default function HereMap({
         pill.textContent = routeDistanceLabel
         outer.appendChild(pill)
         const badge = new H.map.DomMarker(mid, { icon: new H.map.DomIcon(outer) })
+        // The badge is anchored at the route's MIDPOINT, so while the line is
+        // still growing toward it it would be a pill floating over empty map. It
+        // arrives with the route.
+        if (revealing) badge.setVisibility?.(false)
         markerGroup.addObject(badge)
+        distanceBadge = badge
       }
     }
 
@@ -1394,6 +1466,15 @@ export default function HereMap({
     if (fitSig !== lastFitSigRef.current) {
       lastFitSigRef.current = fitSig
       fitToPoints(H, map, allPoints)
+    }
+
+    // Last of all, so the line grows over a viewport the fit above has already
+    // settled rather than racing the camera for the same frames.
+    if (revealing && revealSections.length > 0) {
+      routeRevealRef.current = startRouteReveal(H, revealSections, {
+        badge: distanceBadge,
+        isViewChanging: () => viewChangingRef.current,
+      })
     }
   }
 
