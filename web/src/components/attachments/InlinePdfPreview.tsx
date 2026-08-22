@@ -1,74 +1,51 @@
-import { useEffect } from 'react'
-import { FileText } from 'lucide-react'
 import type { Attachment } from '../../lib/types'
 import type { LocalMessage } from '../messages/types'
 import DocumentCard from './DocumentCard'
-import PreviewActionBar from './PreviewActionBar'
+import AttachmentPreviewShell from './previewChrome'
 import { PdfDocumentView } from './PdfRender'
 
 type Props = {
   attachment: Attachment
   message: LocalMessage
+  currentUserId: string
   onReply: (m: LocalMessage) => void
   onForward: (m: LocalMessage) => void
   onClose: () => void
   onOpenInTab?: () => void
-  // Rendered inside a chat-window tab: drop the gray filename banner (the name is
-  // already in the tab label) and keep just the action bar; no Esc close.
+  // Rendered inside a chat-window tab rather than opened from a bubble: no Esc
+  // close (the tab's × owns dismissal) and no "Open in tab" action — it is one.
   embedded?: boolean
 }
 
-// PDF preview rendered INLINE inside the chat pane — fills the area that
+// PDF preview rendered INLINE inside the chat pane — it fills the area that
 // would normally hold the message list + composer, leaving the conversation
-// header (and the sidebar) untouched. Esc returns to messages.
+// header (and the sidebar) untouched. Never a fullscreen dialog, so the shell
+// is used in its pane-filling shape in both modes; Esc returns to messages.
 export default function InlinePdfPreview({
   attachment,
   message,
+  currentUserId,
   onReply,
   onForward,
   onClose,
   onOpenInTab,
   embedded = false,
 }: Props) {
-  useEffect(() => {
-    if (embedded) return
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onClose, embedded])
-
   return (
-    <div className="flex-1 min-h-0 flex flex-col">
-      {/* Modal-only top bar: PDF glyph + filename on the left, icon-only actions
-          on the right. An inset, card-rounded strip in the TripBar language (the
-          shared `card` radius, faint fill, no border/shadow) rather than an
-          edge-to-edge band. In a tab the filename is in the tab label and the
-          actions FLOAT over the page (below), so no banner height is reserved. */}
-      {!embedded && (
-        <div className="shrink-0 mx-3 mt-2 h-11 flex items-center justify-between gap-3 px-3.5 rounded-card bg-white/4">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <FileText size="0.9375rem" strokeWidth={1.6} className="text-muted shrink-0" />
-            <div className="text-base text-text truncate min-w-0">
-              {attachment.originalName}
-            </div>
-          </div>
-          <PreviewActionBar
-            attachment={attachment}
-            message={message}
-            onReply={onReply}
-            onForward={onForward}
-            onClose={onClose}
-            onOpenInTab={onOpenInTab}
-          />
-        </div>
-      )}
-
+    <AttachmentPreviewShell
+      attachment={attachment}
+      message={message}
+      currentUserId={currentUserId}
+      onReply={onReply}
+      onForward={onForward}
+      onClose={onClose}
+      onOpenInTab={onOpenInTab}
+      closeOnEsc={!embedded}
+    >
       {/* Page content rendered by pdf.js into a themed, scrollable surface — our
           own canvas + scrollbar, never the browser's PDF toolbar. Falls back to
           the themed document card only if rendering fails. */}
-      <div className={`flex-1 min-h-0 bg-bg ${embedded ? 'relative p-2' : 'p-3'}`}>
+      <div className="flex-1 min-h-0 bg-bg p-3">
         <div className="mx-auto h-full w-full max-w-[56.25rem] rounded-card border border-line overflow-hidden bg-bg">
           <PdfDocumentView
             url={attachment.url}
@@ -81,19 +58,7 @@ export default function InlinePdfPreview({
             }
           />
         </div>
-        {/* Floating action cluster (tab mode) — top-right over the page. The pill
-            carries its own dark surface, so it stays readable without any scrim. */}
-        {embedded && (
-          <PreviewActionBar
-            attachment={attachment}
-            message={message}
-            onReply={onReply}
-            onForward={onForward}
-            onClose={onClose}
-            floating
-          />
-        )}
       </div>
-    </div>
+    </AttachmentPreviewShell>
   )
 }

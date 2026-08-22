@@ -13,11 +13,6 @@ type Props = {
   // as a chat-window tab. Omitted when the surface IS already a tab (no point
   // re-opening itself).
   onOpenInTab?: () => void
-  // Float the cluster over the preview content (top-right) on a compact dark
-  // translucent pill, instead of sitting in an in-flow row that reserves height.
-  // Used by the embedded (tab) previews; the parent must be a positioning
-  // context. Buttons + actions are otherwise identical.
-  floating?: boolean
 }
 
 // Compact, themed action bar shared by every attachment preview surface (image
@@ -25,6 +20,12 @@ type Props = {
 // buttons with themed hover tooltips (see IconAction). Reply/Forward are
 // message-level — they hand the parent message back to ChatView, which owns the
 // actual logic.
+//
+// It has one placement now: the trailing end of the preview header, beside the
+// sender it acts on. The floating variant it used to grow inside a chat-window
+// tab is gone with the tab's banner — a rounded pill hovering over the picture
+// was the odd one out in a squared, hairline-drawn UI, and it covered the top
+// right of the very image it was meant to serve.
 export default function PreviewActionBar({
   attachment,
   message,
@@ -32,16 +33,9 @@ export default function PreviewActionBar({
   onForward,
   onClose,
   onOpenInTab,
-  floating = false,
 }: Props) {
   return (
-    <div
-      className={
-        floating
-          ? 'absolute top-2 right-2 z-10 flex items-center gap-0.5 rounded-full bg-bg/[0.92] p-0.5 shadow-raised'
-          : 'flex items-center gap-1.5 shrink-0'
-      }
-    >
+    <div className="flex shrink-0 items-center gap-1.5">
       <IconButton label="Reply" onClick={() => onReply(message)}>
         <Reply size="1.125rem" strokeWidth={1.8} />
       </IconButton>

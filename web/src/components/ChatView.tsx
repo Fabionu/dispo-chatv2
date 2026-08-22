@@ -1271,6 +1271,7 @@ export default function ChatView({
         <AttachmentTabView
           attachment={activeAttachmentTab.attachment}
           message={activeAttachmentTab.message}
+          currentUserId={currentUserId}
           onReply={(message) => {
             if (activeAttachmentTab.groupId === group.id) {
               replyFromPreview(message)
@@ -1288,6 +1289,7 @@ export default function ChatView({
         <InlinePdfPreview
           attachment={pdfPreview.attachment}
           message={pdfPreview.message}
+          currentUserId={currentUserId}
           onReply={replyFromPreview}
           onForward={forwardFromPreview}
           onClose={() => setPdfPreview(null)}
@@ -1581,6 +1583,7 @@ export default function ChatView({
       <ChatModals
         group={group}
         members={members}
+        currentUserId={currentUserId}
         pendingFile={pendingFile}
         pendingCaption={text}
         onReplacePendingFile={setPendingFile}

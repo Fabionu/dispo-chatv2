@@ -1,20 +1,22 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Image as ImageIcon, Maximize, ZoomIn, ZoomOut } from 'lucide-react'
+import { Maximize, ZoomIn, ZoomOut } from 'lucide-react'
 import type { Attachment } from '../../lib/types'
 import type { LocalMessage } from '../messages/types'
-import PreviewActionBar from './PreviewActionBar'
+import AttachmentPreviewShell from './previewChrome'
 import { IconButton } from './IconAction'
 
 type Props = {
   attachment: Attachment
   message: LocalMessage
+  currentUserId: string
   onReply: (m: LocalMessage) => void
   onForward: (m: LocalMessage) => void
   onClose: () => void
   onOpenInTab?: () => void
-  // Render INLINE inside a chat-window tab instead of as a fullscreen modal: no
-  // backdrop, no filename banner (it's in the tab label), no Esc/click-away
-  // close — but the full zoom/pan + action bar are kept identical.
+  // Render INLINE inside a chat-window tab instead of as a fullscreen dialog: no
+  // Esc / click-away close and no "Open in tab" action (it already is one) — but
+  // the sender header, the caption, the full zoom/pan and the action bar are
+  // identical.
   embedded?: boolean
 }
 
@@ -27,13 +29,15 @@ const DOUBLE_CLICK_ZOOM = 2.5
 type View = { scale: number; tx: number; ty: number }
 const FIT: View = { scale: 1, tx: 0, ty: 0 }
 
-// In-app image lightbox with zoom + bounded pan. The image fits the viewport
-// at scale=1; users can zoom (buttons / wheel / double-click) and pan once
-// zoomed. Pan is clamped so the image can never be dragged past its own
+// In-app image lightbox with zoom + bounded pan, wrapped in the shared preview
+// shell (sender header above, caption below — see previewChrome). The image fits
+// the stage at scale=1; users can zoom (buttons / wheel / double-click) and pan
+// once zoomed. Pan is clamped so the image can never be dragged past its own
 // edges into the empty area.
 export default function ImagePreviewModal({
   attachment,
   message,
+  currentUserId,
   onReply,
   onForward,
   onClose,
@@ -54,17 +58,6 @@ export default function ImagePreviewModal({
     setView(FIT)
     setNaturalSize({ w: 0, h: 0 })
   }, [attachment.id])
-
-  // Esc closes the modal — only in modal mode. In a tab the × / Close action
-  // handles dismissal, and a global Esc would clash with the chat's own handlers.
-  useEffect(() => {
-    if (embedded) return
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onClose, embedded])
 
   // Track the live container dimensions so the fit math reacts to viewport /
   // window resizes.
@@ -208,61 +201,21 @@ export default function ImagePreviewModal({
   const canPan = view.scale > 1
 
   return (
-    <div
-      role={embedded ? undefined : 'dialog'}
-      aria-modal={embedded ? undefined : true}
-      aria-label={attachment.originalName}
-      className={
-        embedded
-          ? 'flex-1 min-h-0 flex flex-col bg-bg'
-          : 'fixed inset-0 z-50 bg-black/85 flex flex-col p-4'
-      }
-      onClick={embedded ? undefined : onClose}
+    <AttachmentPreviewShell
+      attachment={attachment}
+      message={message}
+      currentUserId={currentUserId}
+      onReply={onReply}
+      onForward={onForward}
+      onClose={onClose}
+      onOpenInTab={onOpenInTab}
+      overlay={!embedded}
+      closeOnEsc={!embedded}
     >
-      {/* Modal-only top bar: image glyph + filename on the left, actions on the
-          right, on an inset card-rounded strip (TripBar language — shared `card`
-          radius, faint fill, no border/shadow; slightly stronger fill so it reads
-          over the black backdrop). The modal's own p-4 keeps the radius clear of
-          the screen edges. In a tab the filename is in the tab label and the
-          actions FLOAT over the image (below), so no height is reserved here. */}
-      {!embedded && (
-        <div
-          className="shrink-0 mb-2 h-11 flex items-center justify-between gap-3 px-3.5 rounded-card bg-white/6"
-          onClick={stop}
-        >
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <ImageIcon size="0.9375rem" strokeWidth={1.6} className="text-muted shrink-0" />
-            <div className="text-base text-text truncate min-w-0">
-              {attachment.originalName}
-            </div>
-          </div>
-          <PreviewActionBar
-            attachment={attachment}
-            message={message}
-            onReply={onReply}
-            onForward={onForward}
-            onClose={onClose}
-            onOpenInTab={onOpenInTab}
-          />
-        </div>
-      )}
-
       <div
         ref={containerRef}
-        className="flex-1 min-h-0 relative overflow-hidden flex items-center justify-center select-none"
+        className="flex-1 min-h-0 relative overflow-hidden flex items-center justify-center select-none p-2"
       >
-        {/* Floating action cluster (tab mode) — top-right over the image. The pill
-            carries its own dark surface, so it stays readable without any scrim. */}
-        {embedded && (
-          <PreviewActionBar
-            attachment={attachment}
-            message={message}
-            onReply={onReply}
-            onForward={onForward}
-            onClose={onClose}
-            floating
-          />
-        )}
         <img
           src={attachment.url}
           alt={attachment.originalName}
@@ -286,16 +239,12 @@ export default function ImagePreviewModal({
           className="max-w-full max-h-full object-contain rounded-card"
         />
 
-        {/* Floating zoom controls — icon-only, themed tooltips. Clicks here
-            mustn't close the modal. In a tab they sit on a dark translucent pill
-            so they stay readable over a light image. */}
+        {/* Floating zoom controls — icon-only, themed tooltips, on the app's own
+            field behind a hairline so they stay readable over a white scan as
+            well as a dark photo. Clicks here mustn't close the preview. */}
         <div
           onClick={stop}
-          className={`absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 ${
-            embedded
-              ? 'rounded-full bg-bg/[0.92] px-1 py-0.5 shadow-raised'
-              : ''
-          }`}
+          className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 rounded-card border border-line bg-bg px-1 py-0.5"
         >
           <IconButton
             label="Zoom out"
@@ -318,6 +267,6 @@ export default function ImagePreviewModal({
           </IconButton>
         </div>
       </div>
-    </div>
+    </AttachmentPreviewShell>
   )
 }

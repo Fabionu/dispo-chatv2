@@ -7,21 +7,29 @@ import InlinePdfPreview from './InlinePdfPreview'
 type Props = {
   attachment: Attachment
   message: LocalMessage
+  currentUserId: string
   onReply: (m: LocalMessage) => void
   onForward: (m: LocalMessage) => void
-  // Closes THIS attachment tab (the banner × and the bar's Close both call it).
+  // Closes THIS attachment tab (the bar's Close action calls it).
   onClose: () => void
 }
 
 // An attachment shown as a chat-window tab. Rather than reimplementing the
 // preview, it delegates to the SAME components the modal/inline previews use, in
 // their `embedded` mode — so the image keeps full zoom/pan, the PDF keeps its
-// pdf.js render, and the document keeps its card, all with the shared action bar
-// (Reply/Forward/Download/Close) and WITHOUT the redundant filename banner (the
-// name is already in the tab label). No "Open in tab" action here — it already
-// is one.
-export default function AttachmentTabView({ attachment, message, onReply, onForward, onClose }: Props) {
-  const common = { attachment, message, onReply, onForward, onClose, embedded: true }
+// pdf.js render, and the document keeps its card, all inside the shared preview
+// shell: who sent it, the stage, the message it came with, and the action bar
+// (Reply/Forward/Download/Close). No "Open in tab" action here — it already is
+// one.
+export default function AttachmentTabView({
+  attachment,
+  message,
+  currentUserId,
+  onReply,
+  onForward,
+  onClose,
+}: Props) {
+  const common = { attachment, message, currentUserId, onReply, onForward, onClose, embedded: true }
 
   if (attachment.mimeType.startsWith('image/')) return <ImagePreviewModal {...common} />
   if (attachment.mimeType === 'application/pdf') return <InlinePdfPreview {...common} />
