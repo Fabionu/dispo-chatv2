@@ -1315,9 +1315,17 @@ export default function ChatView({
               // composer too: the scroller's own bottom edge sits well below the
               // last actually-visible pixel. MessageActionsPanel reads this as a
               // scroll margin so `scrollIntoView` stops short of the overlay.
+              //
+              // --strip-reserve is that panel's other half: a strip opened on the
+              // LAST message hangs into this padding, and being out of flow it
+              // adds nothing to scroll with, so it asks for the shortfall here
+              // and the thread lifts to show it — the same way the typing
+              // indicator lifts it by growing the composer. The panel clears the
+              // property when it closes, so the padding is the composer's alone
+              // for all but the moment a strip is open.
               style={{
-                paddingBottom: composerHeight + 8,
                 ['--composer-reserve' as string]: `${composerHeight + 8}px`,
+                paddingBottom: 'calc(var(--composer-reserve) + var(--strip-reserve, 0px))',
               }}
             >
               {loading ? (
