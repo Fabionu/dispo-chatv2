@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 
 export type MessageAction = {
   label: string
@@ -13,11 +13,13 @@ export type MessageAction = {
 type Props = {
   actions: MessageAction[]
   open: boolean
+  /** Which edge of the message the strip hangs from — its own side. */
+  side: 'left' | 'right'
   onClose: () => void
 }
 
 // The FULL action list for a message, opened by its MORE button or a
-// right-click. Anchored under the message it belongs to, on that message's own
+// right-click. Anchored to the message it belongs to, on that message's own
 // side, so it never floats free of its subject.
 //
 // A single straight run of glyphs — ten actions in the width of a short
@@ -39,8 +41,15 @@ type Props = {
 // it appears under the cell you're actually addressing, which is the only
 // moment the division matters. Destructive actions still separate themselves,
 // by colour.
-export default function MessageActionsPanel({ actions, open, onClose }: Props) {
+//
+// ABSOLUTE, not in flow: in flow it would stretch the message block (and its
+// rule) to the strip's width the moment the menu opened. A menu overlaying the
+// thread around it is normal; a message silently changing shape is not.
+export default function MessageActionsPanel({ actions, open, side, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null)
+  // Under the message by default — it reads as belonging to the row above it.
+  // Flipped over only when there is no room left below; see the effect.
+  const [above, setAbove] = useState(false)
 
   // Opening on the newest message puts the strip behind the composer, which
   // OVERLAYS the bottom of the thread's scroll area. `nearest` alone can't see
@@ -48,11 +57,40 @@ export default function MessageActionsPanel({ actions, open, onClose }: Props) {
   // view and scrolls nothing — it just happens to be under the input. The
   // scroll margin (--composer-reserve, published by ChatView's scroller) makes
   // scrollIntoView aim for the last VISIBLE pixel instead of the scroller's
-  // edge, so the strip clears the composer. Still `nearest`, so a strip already
-  // in the clear doesn't move the thread at all.
-  useEffect(() => {
-    ref.current?.scrollIntoView({ block: 'nearest' })
-  }, [])
+  // edge. Still `nearest`, so a strip already in the clear doesn't move the
+  // thread at all.
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.scrollIntoView({ block: 'nearest' })
+    // Already flipped: this pass exists only to bring the flipped strip into
+    // view, and re-deciding from the new position is how a popover oscillates.
+    if (above) return
+
+    // Did the scroll actually clear the composer? On the LAST message it can't.
+    // The strip is out of flow, so it adds nothing to the scroller's content and
+    // there is no further scroll to spend: the thread is already at its bottom,
+    // and the reserve the composer sits in is exactly the band the strip hangs
+    // into — it lands underneath the input, entirely hidden. Flip it to the
+    // other side of the message, the way any popover handles a wall.
+    const port = scrollParent(el)
+    // `top-full` is measured from the message; it is also what the strip flips
+    // around.
+    const anchor = el.offsetParent
+    if (!port || !(anchor instanceof HTMLElement)) return
+    const reserve = parseFloat(getComputedStyle(el).getPropertyValue('--composer-reserve')) || 0
+    const portRect = port.getBoundingClientRect()
+    const rect = el.getBoundingClientRect()
+    if (rect.bottom <= portRect.bottom - reserve) return
+    const anchorRect = anchor.getBoundingClientRect()
+    // The gap is whatever the placement class supplies (mt-2 / mb-2), read off
+    // the live layout rather than restated as a number that can drift from it.
+    const gap = rect.top - anchorRect.bottom
+    // Only if the message has room above it: hidden under the composer is bad,
+    // clipped off the top of the thread is no better, and between the two the
+    // strip may as well stay where it belongs.
+    if (anchorRect.top - gap - rect.height >= portRect.top) setAbove(true)
+  }, [above])
 
   return (
     <div
@@ -64,11 +102,21 @@ export default function MessageActionsPanel({ actions, open, onClose }: Props) {
       // Keeps the strip clear of the overlaid composer when it scrolls itself
       // into view (see the effect above). Falls back to 0 outside that scroller.
       style={{ scrollMarginBottom: 'var(--composer-reserve, 0px)' }}
-      // `origin-top` rather than a corner: the same component is anchored left
-      // under an incoming message and right under one of mine.
+      // The materialisation moves AWAY from the message — down when the strip
+      // hangs below it, up when it has flipped over — so the motion always reads
+      // as unfolding out of the row it belongs to.
+      //
+      // `origin-top`/`origin-bottom` rather than a corner: the same component is
+      // anchored left under an incoming message and right under one of mine.
       className={`${
-        open ? 'action-strip-enter' : 'action-strip-exit pointer-events-none'
-      } mt-2 flex w-max origin-top items-stretch border bg-bg`}
+        open
+          ? above
+            ? 'action-strip-enter-up'
+            : 'action-strip-enter'
+          : `${above ? 'action-strip-exit-up' : 'action-strip-exit'} pointer-events-none`
+      } absolute z-20 flex w-max items-stretch border bg-bg ${
+        side === 'right' ? 'right-[var(--msg-indent)]' : 'left-[var(--msg-indent)]'
+      } ${above ? 'bottom-full mb-2 origin-bottom' : 'top-full mt-2 origin-top'}`}
     >
       {actions.map((a, i) => {
         const alert = a.tone === 'alert'
@@ -99,4 +147,15 @@ export default function MessageActionsPanel({ actions, open, onClose }: Props) {
       })}
     </div>
   )
+}
+
+// The thread's scrollport, when the strip is opened inside one. Found by walking
+// up rather than handed down, so the strip stays a self-contained popover — it
+// is rendered from a memoised row that knows nothing about the chat's layout.
+function scrollParent(el: HTMLElement): HTMLElement | null {
+  for (let node = el.parentElement; node; node = node.parentElement) {
+    const overflowY = getComputedStyle(node).overflowY
+    if (overflowY === 'auto' || overflowY === 'scroll') return node
+  }
+  return null
 }

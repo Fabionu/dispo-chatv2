@@ -521,22 +521,16 @@ function MessageRow({
           </ThreadActions>
         )}
 
-        {/* Absolute for the same reason the action strip is: in flow it would
-            stretch the block (and its rule) to the panel's width the moment the
-            menu opened. A menu overlaying the message under it is normal; a
-            message silently changing shape is not. */}
+        {/* Positions itself against this row (which is why the row is
+            `relative`): out of flow, on the message's own side, and under the
+            message unless the composer leaves it no room there. */}
         {menuRendered && (
-          <div
-            className={`absolute top-full z-20 ${
-              mine ? 'right-[var(--msg-indent)]' : 'left-[var(--msg-indent)]'
-            }`}
-          >
-            <MessageActionsPanel
-              actions={actions}
-              open={menuOpen}
-              onClose={() => setMenuOpen(false)}
-            />
-          </div>
+          <MessageActionsPanel
+            actions={actions}
+            open={menuOpen}
+            side={mine ? 'right' : 'left'}
+            onClose={() => setMenuOpen(false)}
+          />
         )}
       </article>
     </>

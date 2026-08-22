@@ -880,13 +880,48 @@ input, button, textarea, select {
   }
 }
 
+/* Mirrored, for a strip that has flipped ABOVE its message because the composer
+   left no room below it (see MessageActionsPanel). Same motion, reflected, so it
+   still materialises AWAY from the row it belongs to rather than down onto it. */
+@keyframes action-strip-enter-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes action-strip-exit-up {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(3px) scale(0.98);
+  }
+}
+
 .action-strip-enter {
   animation: action-strip-enter 170ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   will-change: opacity, transform;
 }
 
+.action-strip-enter-up {
+  animation: action-strip-enter-up 170ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  will-change: opacity, transform;
+}
+
 .action-strip-exit {
   animation: action-strip-exit 120ms ease-in both;
+  will-change: opacity, transform;
+}
+
+.action-strip-exit-up {
+  animation: action-strip-exit-up 120ms ease-in both;
   will-change: opacity, transform;
 }
 
@@ -926,11 +961,14 @@ input, button, textarea, select {
   }
 
   .action-strip-enter,
-  .action-strip-exit {
+  .action-strip-enter-up,
+  .action-strip-exit,
+  .action-strip-exit-up {
     animation: none;
   }
 
-  .action-strip-exit {
+  .action-strip-exit,
+  .action-strip-exit-up {
     opacity: 0;
   }
 
