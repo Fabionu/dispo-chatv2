@@ -99,6 +99,7 @@ export function RoleBadge({
 export function RouteRow({
   badge,
   children,
+  rowKey,
   connect = false,
   draggable = false,
   dragging = false,
@@ -107,6 +108,12 @@ export function RouteRow({
   badge: ReactNode
   /** The row's content: a RoutePointCard, a search field, an add button. */
   children: ReactNode
+  /**
+   * Stable identity for the reorder animation (see useFlipReorder): rows are
+   * matched across a reorder by this key, which is how "the stop slid down one
+   * slot" is told apart from "a different stop is rendering here now".
+   */
+  rowKey?: string
   /** Draw the connector down to the next row. False on the last row only. */
   connect?: boolean
   /** Row can be dragged to reorder — the whole row is the handle. */
@@ -118,13 +125,18 @@ export function RouteRow({
   return (
     <div
       {...dragProps}
+      data-flip-key={rowKey}
       // The hint sits on the row, not on the badge: the badge, the address and
       // every action already carry their own title, and a nested one would never
       // surface. The whole row is the drag surface anyway.
       title={draggable ? 'Drag to reorder' : undefined}
+      // The held row is lifted out of the stack (`relative z-10`) so that while
+      // the rows slide past each other it crosses OVER the ones it displaces
+      // rather than disappearing behind them — the point of animating the
+      // reorder is to be able to follow this row.
       className={`group/row flex gap-2.5 transition-opacity motion-reduce:transition-none ${
         draggable ? 'cursor-grab active:cursor-grabbing' : ''
-      } ${dragging ? 'opacity-60' : ''}`}
+      } ${dragging ? 'relative z-10 opacity-60' : ''}`}
     >
       <div className="flex w-6 shrink-0 flex-col items-center pt-1.5">
         {/* The badge doubles as the drag affordance: the whole row is

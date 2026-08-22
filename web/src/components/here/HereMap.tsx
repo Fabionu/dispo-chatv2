@@ -25,11 +25,13 @@ import {
   snapDebug,
 } from './hereMapUtils'
 import {
+  ROUTE_HOVER_BOOST,
   ghostSvg,
   iconFor,
   routeArrowStyle,
   routeCasingStyle,
   routeSpineStyle,
+  routeStrokeWidths,
   savedPlaceIconFor,
 } from './hereMapIcons'
 import {
@@ -54,35 +56,6 @@ const MAX_TRAIL_CANDIDATES = 240
 const MAX_TRAIL_CHEVRONS = 60
 /** Minimum on-screen spacing between chevrons, in px. */
 const TRAIL_CHEVRON_GAP_PX = 52
-
-// Route Planner overview zooms cover far more ground than the street-level
-// editor. A fixed seven-pixel route dominates the basemap at that scale, so the
-// planner can opt into a smooth zoom-dependent width while read-only trip maps
-// retain their deliberately prominent route/trail comparison.
-function routeStrokeWidths(zoom: number): {
-  main: number
-  casing: number
-  arrow: number
-  arrowsVisible: boolean
-} {
-  const main = Math.min(7, Math.max(2.75, 2.75 + (zoom - 8) * 0.7))
-  return {
-    // +4 rather than +2.5: the casing is a SOLID white halo now, not a 38%
-    // black smudge, and it has to read as a deliberate outline on satellite
-    // imagery. Half of the extra width is spent on each side, so this is 2px of
-    // white per edge at every zoom.
-    casing: main + 4,
-    main,
-    // The arrow glyphs are stencilled INSIDE the spine, so this must stay
-    // meaningfully narrower than `main` or the arrows eat their own line.
-    arrow: Math.max(2, main - 2.5),
-    // Below roughly zoom 10 the spine is a thread crossing whole countries and
-    // arrow glyphs on it are noise, not information — the screenshot that
-    // prompted this rework is exactly that case. Direction only appears once
-    // the line is wide enough to carry a legible glyph.
-    arrowsVisible: main >= 4.25,
-  }
-}
 
 /** Forward azimuth from `a` to `b`, degrees clockwise from north. */
 function bearingBetween(a: LatLng, b: LatLng): number {
@@ -336,6 +309,10 @@ export default function HereMap({
   const lastInteractiveDragAtRef = useRef(0)
   const scaleRouteWidthRef = useRef(scaleRouteWidthWithZoom)
   scaleRouteWidthRef.current = scaleRouteWidthWithZoom
+  // True while the cursor is on (or right beside) the drawn route line — the
+  // same reach that shows the distance readout. Held in a ref, like everything
+  // else the hover touches, so following the line never re-renders React.
+  const routeHoveredRef = useRef(false)
   // HERE recommends reusing marker icons. Route recalculation redraws every
   // marker, so retain the small set of icons across draw() calls rather than
   // rebuilding and reparsing identical SVGs each time.
@@ -522,11 +499,15 @@ export default function HereMap({
         const hideHover = () => {
           if (hoverLabel.style.display !== 'none') hoverLabel.style.display = 'none'
           container.classList.remove('route-hover')
+          setRouteHovered(false)
         }
         const showHover = (x: number, y: number, meters: number) => {
           hoverLabel.textContent = formatHoverDistance(meters)
           hoverLabel.style.display = 'block'
           container.classList.add('route-hover')
+          // The readout says WHERE on the route the cursor is; the weight says
+          // the line itself is live under it. One reach, both answers.
+          setRouteHovered(true)
           // Flip the pill below the point near the top edge so it never clips;
           // the CSS tail points back at the line either way.
           hoverLabel.classList.toggle('route-hover-label--below', y < 48)
@@ -640,26 +621,16 @@ export default function HereMap({
           // here rather than pushed into routeDecorationsRef, where `true` would
           // mean unconditionally visible and the resume after every pan would
           // put country-zoom arrows back on the line.
-          const arrowsAllowed =
-            !scaleRouteWidthRef.current ||
-            routeStrokeWidths(map.getZoom?.() ?? DEFAULT_ZOOM).arrowsVisible
+          const arrowsAllowed = routeWidthsNow().arrowsVisible
           for (const pair of routeStrokePairsRef.current) {
             pair.arrows?.setVisibility?.(visible && arrowsAllowed)
           }
         }
         const updateRouteWidths = () => {
+          // Only the zoom-scaled route changes weight with the camera; the fixed
+          // trip-map route is restyled solely by the hover.
           if (!scaleRouteWidthRef.current) return
-          const widths = routeStrokeWidths(map.getZoom?.() ?? DEFAULT_ZOOM)
-          for (const pair of routeStrokePairsRef.current) {
-            pair.casing.setStyle?.(routeCasingStyle(widths.casing))
-            pair.main.setStyle?.(routeSpineStyle(widths.main))
-            // The arrow line exists for the whole life of the route and is
-            // hidden rather than rebuilt when the zoom drops below the
-            // legibility threshold — rebuilding it per zoom step would churn
-            // map objects on every wheel tick.
-            pair.arrows?.setStyle?.(routeArrowStyle(H, widths.arrow))
-            pair.arrows?.setVisibility?.(widths.arrowsVisible && !viewChangingRef.current)
-          }
+          applyRouteWidths()
         }
         const suspendEditObjectsForNavigation = () => {
           viewChangingRef.current = true
@@ -1286,14 +1257,53 @@ export default function HereMap({
     }
   }
 
+  // The widths every stroke is drawn at RIGHT NOW: the zoom-scaled ramp when the
+  // planner asked for it, the fixed trip-map weights otherwise, thickened either
+  // way while the cursor is on the line. Everything that draws or restyles the
+  // route asks here, so the three can never disagree — a zoom that lands while
+  // the line is hovered keeps its weight, and so does a redraw.
+  function routeWidthsNow() {
+    const hovered = routeHoveredRef.current
+    if (scaleRouteWidthRef.current) {
+      return routeStrokeWidths(mapRef.current?.getZoom?.() ?? DEFAULT_ZOOM, hovered)
+    }
+    // Read-only trip maps keep the deliberately prominent fixed route.
+    const main = hovered ? 7 * ROUTE_HOVER_BOOST : 7
+    return { main, casing: main + 4, arrow: 4.5, arrowsVisible: true }
+  }
+
+  // Restyle the drawn strokes in place. No geometry is decoded or rebuilt, which
+  // is what makes this cheap enough for a hover transition as well as for every
+  // settled zoom.
+  function applyRouteWidths() {
+    const H = HRef.current
+    if (!H) return
+    const widths = routeWidthsNow()
+    for (const pair of routeStrokePairsRef.current) {
+      pair.casing.setStyle?.(routeCasingStyle(widths.casing))
+      pair.main.setStyle?.(routeSpineStyle(widths.main))
+      // The arrow line exists for the whole life of the route and is hidden
+      // rather than rebuilt when the zoom drops below the legibility threshold —
+      // rebuilding it per zoom step would churn map objects on every wheel tick.
+      pair.arrows?.setStyle?.(routeArrowStyle(H, widths.arrow))
+      pair.arrows?.setVisibility?.(widths.arrowsVisible && !viewChangingRef.current)
+    }
+  }
+
+  // The cursor arrived on the route line, or left it. Only the transitions cost
+  // anything: the hover hit-test runs up to 30 times a second and would restyle
+  // every section on each of them otherwise.
+  function setRouteHovered(hovered: boolean) {
+    if (routeHoveredRef.current === hovered) return
+    routeHoveredRef.current = hovered
+    applyRouteWidths()
+  }
+
   /** Put the real route strokes back on screen, honouring the same visibility
    *  rules the camera handler applies (casing and arrows hide during a move;
    *  arrows additionally need a zoom where a glyph is legible). */
   function restoreRouteStrokes() {
-    const map = mapRef.current
-    const arrowsAllowed =
-      !scaleRouteWidthRef.current ||
-      routeStrokeWidths(map?.getZoom?.() ?? DEFAULT_ZOOM).arrowsVisible
+    const arrowsAllowed = routeWidthsNow().arrowsVisible
     for (const pair of routeStrokePairsRef.current) {
       pair.main?.setVisibility?.(true)
       pair.casing?.setVisibility?.(!viewChangingRef.current)
@@ -1355,9 +1365,10 @@ export default function HereMap({
     const total = cumulative[cumulative.length - 1]
     if (!(total > 0)) return
 
-    const widths = scaleRouteWidthRef.current
-      ? routeStrokeWidths(map.getZoom?.() ?? DEFAULT_ZOOM)
-      : { main: 7, casing: 11, arrow: 4.5, arrowsVisible: true }
+    // Through routeWidthsNow, so a sweep that starts while the cursor is already
+    // on the line grows at the hovered weight instead of snapping heavier the
+    // moment it lands.
+    const widths = routeWidthsNow()
 
     for (const pair of routeStrokePairsRef.current) {
       pair.main?.setVisibility?.(false)
@@ -1471,10 +1482,7 @@ export default function HereMap({
       }
       const line = new H.geo.LineString()
       for (const point of sectionPath) line.pushPoint(point)
-      const widths = scaleRouteWidthRef.current
-        ? routeStrokeWidths(map.getZoom?.() ?? DEFAULT_ZOOM)
-        // Read-only trip maps keep the deliberately prominent fixed route.
-        : { main: 7, casing: 11, arrow: 4.5, arrowsVisible: true }
+      const widths = routeWidthsNow()
       const casing = new H.map.Polyline(line, { style: routeCasingStyle(widths.casing) })
       const main = new H.map.Polyline(line, { style: routeSpineStyle(widths.main) })
       const arrows = new H.map.Polyline(line, { style: routeArrowStyle(H, widths.arrow) })

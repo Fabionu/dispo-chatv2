@@ -23,20 +23,22 @@ import type { LatLng, RoutePoint, RoutePointRole } from '../../lib/here/types'
 // the card's full width. Every row is draggable (native DnD) once the route has
 // ≥2 points, so the whole route — start and finish included — can be reordered;
 // the badge picks up the grab cursor and hover ring rather than spending column
-// width on a grip glyph. The reorder happens live as the dragged row enters
-// another row; roles are re-derived from the resulting order by the parent.
+// width on a grip glyph. The reorder happens live as the dragged row is hovered
+// over another row; roles are re-derived from the resulting order by the parent,
+// and the rows slide between slots rather than jumping (see useFlipReorder).
 export default function PointRow({
   role,
   index,
   point,
   coord,
   connect,
+  rowKey,
   onClear,
   onEdit,
   draggable = false,
   dragging = false,
   onDragStartRow,
-  onDragEnterRow,
+  onDragOverRow,
   onDragEndRow,
 }: {
   role: RoutePointRole
@@ -45,12 +47,20 @@ export default function PointRow({
   coord: LatLng
   /** Draw the spine down to the next row. */
   connect?: boolean
+  /** Identity for the reorder animation — see RouteRow's `rowKey`. */
+  rowKey?: string
   onClear: () => void
   onEdit?: () => void
   draggable?: boolean
   dragging?: boolean
   onDragStartRow?: () => void
-  onDragEnterRow?: () => void
+  /**
+   * A drag is hovering this row — the planner decides whether that means a
+   * reorder. Fires on dragenter (so entering a row reacts at once) AND on the
+   * repeating dragover, because a hover the planner declines the first time
+   * has to get another chance without the cursor leaving and re-entering.
+   */
+  onDragOverRow?: (e: React.DragEvent) => void
   onDragEndRow?: () => void
 }) {
   const { head, rest } = splitLabel(point.label)
@@ -62,6 +72,7 @@ export default function PointRow({
     <RouteRow
       badge={<RoleBadge role={role} index={index} />}
       connect={connect}
+      rowKey={rowKey}
       draggable={draggable}
       dragging={dragging}
       dragProps={
@@ -74,11 +85,13 @@ export default function PointRow({
                 e.dataTransfer.setData('text/plain', point.id)
                 onDragStartRow?.()
               },
-              onDragEnter: () => onDragEnterRow?.(),
+              onDragEnter: (e) => onDragOverRow?.(e),
               // preventDefault marks this row as a valid drop target so the live
-              // reorder (done on dragenter) sticks and the cursor reads as
-              // "movable".
-              onDragOver: (e) => e.preventDefault(),
+              // reorder sticks and the cursor reads as "movable".
+              onDragOver: (e) => {
+                e.preventDefault()
+                onDragOverRow?.(e)
+              },
               onDragEnd: () => onDragEndRow?.(),
             }
           : undefined

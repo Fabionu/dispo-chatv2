@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { DragEvent } from 'react'
 import { decode } from '@here/flexpolyline'
 import {
   ArrowLeft,
@@ -21,6 +22,7 @@ import {
   X,
 } from 'lucide-react'
 import { api, ApiError } from '../../lib/api'
+import { useFlipReorder } from '../../hooks/useFlipReorder'
 import { useWorkspacePlaces } from '../../hooks/useWorkspacePlaces'
 import { bestInsertionIndex, haversineMeters, nearestRouteSection, routeCourseNear } from '../../lib/here/geo'
 import { builtInPresets, deleteUserPreset, loadUserPresets, saveUserPreset } from '../../lib/here/truckPresets'
@@ -81,6 +83,11 @@ type PlaceEditorState = {
   address?: string | null
 }
 
+// How far the pointer has to travel between two list reorders. Small enough to
+// be invisible when the user is actually dragging, big enough that a row sliding
+// under a parked cursor can't trigger the next reorder by itself.
+const REORDER_TRAVEL_PX = 6
+
 function formatMoney(money: RouteMoney): string {
   try {
     return new Intl.NumberFormat(undefined, {
@@ -138,6 +145,18 @@ export default function RoutePlanner({ onBack }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null)
   // Id of the stop currently being dragged in the list (for reorder + ghosting).
   const [dragId, setDragId] = useState<string | null>(null)
+  // Where the pointer was when the drag last reordered the list. Native DnD
+  // re-fires dragenter/dragover at whatever sits under the pointer on its own
+  // timer, so rows SLIDING under a still cursor (the reorder animation below)
+  // would otherwise retarget the drag and bounce the list between two orders for
+  // as long as the user holds it there. Demanding a few pixels of real pointer
+  // travel between reorders keeps the list moving only when the user does.
+  const lastReorderPointRef = useRef<{ x: number; y: number } | null>(null)
+  // Rows slide between slots instead of teleporting when the list reorders under
+  // the cursor: at 300px wide, with rows that look alike by design, an instant
+  // swap gives the eye nothing to follow — which row moved, and where did the one
+  // it displaced go?
+  const rowFlip = useFlipReorder()
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [markerMenu, setMarkerMenu] = useState<MarkerMenuState | null>(null)
   const [savedPlaceMenu, setSavedPlaceMenu] = useState<SavedPlaceMenuState | null>(null)
@@ -478,6 +497,14 @@ export default function RoutePlanner({ onBack }: Props) {
   // and recalcs on the next Create/Update, same as the old stop-only reorder.
   function reorder(dragId: string, targetId: string) {
     if (dragId === targetId) return
+    // Bail BEFORE capturing: a reorder that can't move anything must not arm the
+    // animation, or some later, unrelated render would play back a stale snapshot.
+    const from = points.findIndex((p) => p.id === dragId)
+    const to = points.findIndex((p) => p.id === targetId)
+    if (from < 0 || to < 0 || from === to) return
+    // Snapshot where the rows are drawn right now; the layout effect inside the
+    // hook replays them from there once React has laid out the new order.
+    rowFlip.capture()
     setPoints((prev) => {
       const from = prev.findIndex((p) => p.id === dragId)
       const to = prev.findIndex((p) => p.id === targetId)
@@ -500,6 +527,25 @@ export default function RoutePlanner({ onBack }: Props) {
         return { ...p, role, course: undefined }
       })
     })
+  }
+  // A drag is hovering `targetId`. Reorder unless the pointer has barely moved
+  // since the last one — see `lastReorderPointRef`. Runs off dragover as well as
+  // dragenter, so a hover declined here is retried a few pixels later without the
+  // cursor having to leave the row and come back.
+  function handleRowDragOver(e: DragEvent, targetId: string) {
+    if (!dragId || dragId === targetId) return
+    // A row still sliding into its new slot is drawn where it WAS, so the browser
+    // targets the drag at the slot it just left — act on that and the list asks
+    // for the swap straight back. Let it land first; dragover keeps firing.
+    if (rowFlip.isSettling(targetId)) return
+    // Some browsers report 0,0 on drag events they synthesise; treat that as "no
+    // idea where the pointer is" and let the reorder through rather than
+    // freezing the list against a bogus origin.
+    const known = e.clientX !== 0 || e.clientY !== 0
+    const last = lastReorderPointRef.current
+    if (known && last && Math.hypot(e.clientX - last.x, e.clientY - last.y) < REORDER_TRAVEL_PX) return
+    lastReorderPointRef.current = known ? { x: e.clientX, y: e.clientY } : null
+    reorder(dragId, targetId)
   }
   function clearRoute() {
     setPoints([])
@@ -1097,14 +1143,22 @@ export default function RoutePlanner({ onBack }: Props) {
                 cards themselves are borderless and the badges carry the roles.
                 Points are draggable anywhere in the sequence — drop the start
                 lower and the next point becomes the new start, drag the finish
-                up and it demotes to a stop (roles are re-derived by `reorder`). */}
-            <section className="flex flex-col gap-1 p-2">
+                up and it demotes to a stop (roles are re-derived by `reorder`).
+                Every row carries its point's id as `rowKey`, which is what lets
+                `rowFlip` animate the rows between slots instead of snapping
+                them. */}
+            <section ref={rowFlip.containerRef} className="flex flex-col gap-1 p-2">
               {plannerRows.map((row, i) => {
                 const connect = i < plannerRows.length - 1
 
                 if (row.kind === 'slot')
                   return (
-                    <RouteRow key={row.key} connect={connect} badge={<RoleBadge role={row.role} muted />}>
+                    <RouteRow
+                      key={row.key}
+                      rowKey={row.key}
+                      connect={connect}
+                      badge={<RoleBadge role={row.role} muted />}
+                    >
                       <PlaceSearchField
                         value={null}
                         onChange={(p) => {
@@ -1119,7 +1173,12 @@ export default function RoutePlanner({ onBack }: Props) {
 
                 if (row.kind === 'add')
                   return (
-                    <RouteRow key={row.key} connect={connect} badge={<RoleBadge role="add" muted />}>
+                    <RouteRow
+                      key={row.key}
+                      rowKey={row.key}
+                      connect={connect}
+                      badge={<RoleBadge role="add" muted />}
+                    >
                       {addingStop ? (
                         <div className="flex items-center gap-1">
                           <div className="flex-1 min-w-0">
@@ -1165,7 +1224,12 @@ export default function RoutePlanner({ onBack }: Props) {
                 const { point, role, index } = row
                 if (editingId === point.id)
                   return (
-                    <RouteRow key={row.key} connect={connect} badge={<RoleBadge role={role} index={index} />}>
+                    <RouteRow
+                      key={row.key}
+                      rowKey={row.key}
+                      connect={connect}
+                      badge={<RoleBadge role={role} index={index} />}
+                    >
                       {editorContent(point)}
                     </RouteRow>
                   )
@@ -1173,6 +1237,7 @@ export default function RoutePlanner({ onBack }: Props) {
                 return (
                   <PointRow
                     key={row.key}
+                    rowKey={row.key}
                     role={role}
                     index={index}
                     point={point}
@@ -1180,11 +1245,15 @@ export default function RoutePlanner({ onBack }: Props) {
                     connect={connect}
                     draggable={canReorder}
                     dragging={dragId === point.id}
-                    onDragStartRow={() => setDragId(point.id)}
-                    onDragEnterRow={() => {
-                      if (dragId && dragId !== point.id) reorder(dragId, point.id)
+                    onDragStartRow={() => {
+                      setDragId(point.id)
+                      lastReorderPointRef.current = null
                     }}
-                    onDragEndRow={() => setDragId(null)}
+                    onDragOverRow={(e) => handleRowDragOver(e, point.id)}
+                    onDragEndRow={() => {
+                      setDragId(null)
+                      lastReorderPointRef.current = null
+                    }}
                     onEdit={() => setEditingId(point.id)}
                     onClear={() => removePoint(point.id)}
                   />
