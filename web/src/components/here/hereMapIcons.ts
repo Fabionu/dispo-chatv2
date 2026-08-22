@@ -35,6 +35,45 @@ export const ROUTE_COLOR = ROUTE_SPINE
 // this file that really wants a live map in front of you.
 export const ROUTE_ARROW_DASH = [1, 7]
 
+// How much heavier the route is drawn while the cursor is on it. The line is
+// draggable — grab it anywhere to add a stop — and a hairline at overview zoom
+// gives no sign of that until something answers the cursor. Enough to read as
+// "this one, and it is live"; not so much that the map jumps when the pointer
+// crosses it.
+export const ROUTE_HOVER_BOOST = 1.35
+
+// Route Planner overview zooms cover far more ground than the street-level
+// editor. A fixed seven-pixel route dominates the basemap at that scale, so the
+// planner can opt into a smooth zoom-dependent width while read-only trip maps
+// retain their deliberately prominent route/trail comparison.
+export function routeStrokeWidths(zoom: number, hovered = false): {
+  main: number
+  casing: number
+  arrow: number
+  arrowsVisible: boolean
+} {
+  const base = Math.min(7, Math.max(2.75, 2.75 + (zoom - 8) * 0.7))
+  const main = hovered ? base * ROUTE_HOVER_BOOST : base
+  return {
+    // +4 rather than +2.5: the casing is a SOLID white halo now, not a 38%
+    // black smudge, and it has to read as a deliberate outline on satellite
+    // imagery. Half of the extra width is spent on each side, so this is 2px of
+    // white per edge at every zoom.
+    casing: main + 4,
+    main,
+    // The arrow glyphs are stencilled INSIDE the spine, so this must stay
+    // meaningfully narrower than `main` or the arrows eat their own line.
+    arrow: Math.max(2, main - 2.5),
+    // Below roughly zoom 10 the spine is a thread crossing whole countries and
+    // arrow glyphs on it are noise, not information — the screenshot that
+    // prompted this rework is exactly that case. Direction only appears once
+    // the line is wide enough to carry a legible glyph. Read off the BASE
+    // width: hovering thickens the line it is already drawing, it must not
+    // conjure arrows onto a zoom that had none.
+    arrowsVisible: base >= 4.25,
+  }
+}
+
 // ── Route line styles ─────────────────────────────────────────────
 // Both the initial draw and the zoom-driven restyle go through these. They used
 // to be two hand-written copies of the same style object in HereMap, and only
