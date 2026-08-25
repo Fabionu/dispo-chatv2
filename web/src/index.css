@@ -182,7 +182,7 @@ html[data-density='comfortable'] {
        --sidebar-icon-size        conversation type glyphs
        --sidebar-search-height    search field / + button height
        --sidebar-row-height       conversation row min-height
-       --sidebar-badge-size       unread / mention badge box
+       --sidebar-badge-size       unread / mention badge box (derived, see below)
        --sidebar-row-gap          gap between a row's glyph and its text
        --sidebar-row-pad-x        conversation row left/right padding
        --sidebar-row-pad-y        conversation row top/bottom padding
@@ -208,6 +208,19 @@ html[data-density='comfortable'] {
      request / invite rows. */
   --sidebar-conv-font-size: calc(var(--sidebar-row-font-size) - 2px);
   --sidebar-conv-meta-font-size: calc(var(--sidebar-meta-font-size) - 1px);
+  /* The unread / mention badge box, and the count set inside it. DERIVED, and
+     the only sidebar box that is: the badge is not an object with a size of its
+     own, it is a square drawn around one or two mono figures, so its size is a
+     fact about --sidebar-meta-font-size rather than a tenth number to hand-tune
+     per tier. It used to be one, and the tiers had drifted to 22/23/24/25/28/29px
+     — a 23px DISC on a 13.5px figure, the largest solid object in a rail built
+     entirely from hairlines, and wider than the row's own timestamp.
+     +5px is the padding either side of the digits; -2px sets the count a step
+     under the row meta so the badge reads as a mark on the row rather than as
+     another piece of text competing with the preview. Same lazy-resolve trick as
+     the two font sizes above: define once, track every density tier for free. */
+  --sidebar-badge-size: calc(var(--sidebar-meta-font-size) + 5px);
+  --sidebar-badge-font-size: calc(var(--sidebar-meta-font-size) - 2px);
   --header-height: 56px;
   --workspace-nav-width: 3.25rem;
   --sidebar-width: 380px;
@@ -275,7 +288,6 @@ html[data-density='comfortable'] {
   --sidebar-icon-size: 23px;
   --sidebar-search-height: 37px;
   --sidebar-row-height: 44px;
-  --sidebar-badge-size: 23px;
   --sidebar-row-gap: 13px;
   --sidebar-row-pad-x: 14px;
   --sidebar-row-pad-y: 7px;
@@ -362,7 +374,6 @@ html[data-theme='light'] {
   --sidebar-icon-size: 22px;
   --sidebar-search-height: 34px;
   --sidebar-row-height: 42px;
-  --sidebar-badge-size: 22px;
   --sidebar-row-gap: 12px;
   --sidebar-row-pad-x: 13px;
   --sidebar-row-pad-y: 7px;
@@ -385,7 +396,6 @@ html[data-theme='light'] {
   --sidebar-icon-size: 23px;
   --sidebar-search-height: 37px;
   --sidebar-row-height: 44px;
-  --sidebar-badge-size: 23px;
   --sidebar-row-gap: 13px;
   --sidebar-row-pad-x: 14px;
   --sidebar-row-pad-y: 7px;
@@ -415,7 +425,6 @@ html[data-theme='light'] {
   --sidebar-icon-size: 29px;
   --sidebar-search-height: 46px;
   --sidebar-row-height: 54px;
-  --sidebar-badge-size: 28px;
   --sidebar-row-gap: 16px;
   --sidebar-row-pad-x: 17px;
   --sidebar-row-pad-y: 9px;
@@ -442,7 +451,6 @@ html[data-theme='light'] {
     --sidebar-icon-size: 22px;
     --sidebar-search-height: 34px;
     --sidebar-row-height: 42px;
-    --sidebar-badge-size: 22px;
     --sidebar-row-gap: 12px;
     --sidebar-row-pad-x: 13px;
     --sidebar-row-pad-y: 7px;
@@ -465,7 +473,6 @@ html[data-theme='light'] {
     --sidebar-icon-size: 29px;
     --sidebar-search-height: 46px;
     --sidebar-row-height: 54px;
-    --sidebar-badge-size: 28px;
     --sidebar-row-gap: 16px;
     --sidebar-row-pad-x: 17px;
     --sidebar-row-pad-y: 9px;
@@ -496,7 +503,6 @@ html[data-theme='light'] {
     --sidebar-icon-size: 30px;
     --sidebar-search-height: 49px;
     --sidebar-row-height: 58px;
-    --sidebar-badge-size: 29px;
     --sidebar-row-gap: 17px;
     --sidebar-row-pad-x: 18px;
     --sidebar-row-pad-y: 10px;
@@ -586,7 +592,6 @@ html[data-density-mode='auto'] {
   --sidebar-icon-size: 24px;
   --sidebar-search-height: 40px;
   --sidebar-row-height: 46px;
-  --sidebar-badge-size: 24px;
   --sidebar-row-gap: 14px;
   --sidebar-row-pad-x: 15px;
   --sidebar-row-pad-y: 7px;
@@ -619,7 +624,6 @@ html[data-density-mode='auto'] {
     --sidebar-icon-size: 22px;
     --sidebar-search-height: 34px;
     --sidebar-row-height: 42px;
-    --sidebar-badge-size: 22px;
     --sidebar-row-gap: 12px;
     --sidebar-row-pad-x: 13px;
     --sidebar-row-pad-y: 7px;
@@ -644,7 +648,6 @@ html[data-density-mode='auto'] {
     --sidebar-icon-size: 25px;
     --sidebar-search-height: 42px;
     --sidebar-row-height: 48px;
-    --sidebar-badge-size: 25px;
     --sidebar-row-gap: 15px;
     --sidebar-row-pad-x: 16px;
     --sidebar-row-pad-y: 8px;

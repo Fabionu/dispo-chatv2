@@ -1,18 +1,13 @@
 import { useMemo, useState } from 'react'
-import {
-  Building2,
-  CircleParking,
-  Fuel,
-  Landmark,
-  MapPin,
-  Search,
-  ShieldCheck,
-  Warehouse,
-  Wrench,
-  X,
-} from 'lucide-react'
+import { MapPin, Search, X } from 'lucide-react'
 import type { WorkspacePlace, WorkspacePlaceCategory } from '../../lib/types'
-import { PLACE_CATEGORIES, PLACE_CATEGORY_COLOR, PLACE_CATEGORY_LABEL } from '../../lib/savedPlaces'
+import { rem } from '../../lib/density'
+import {
+  PLACE_CATEGORIES,
+  PLACE_CATEGORY_COLOR,
+  PLACE_CATEGORY_GLYPH,
+  PLACE_CATEGORY_LABEL,
+} from '../../lib/savedPlaces'
 
 type Props = {
   places: WorkspacePlace[]
@@ -22,15 +17,47 @@ type Props = {
   onSelect: (place: WorkspacePlace) => void
 }
 
-export function SavedPlaceIcon({ category, size = 15 }: { category: WorkspacePlaceCategory; size?: number }) {
-  const props = { size, strokeWidth: 1.9 }
-  if (category === 'parking') return <CircleParking {...props} />
-  if (category === 'depot') return <Warehouse {...props} />
-  if (category === 'fuel') return <Fuel {...props} />
-  if (category === 'customer') return <Building2 {...props} />
-  if (category === 'service') return <Wrench {...props} />
-  if (category === 'customs') return <ShieldCheck {...props} />
-  return <Landmark {...props} />
+// The saved-place mark, as it is drawn on the map: a solid square of category
+// ink with a white mono glyph (see here/hereMapIcons savedPlaceIconFor).
+//
+// It is the SAME mark here on purpose. This list is the map's legend, and a
+// legend that draws its own thing — the swatch used to be a lucide pictogram in
+// the category colour on a 16%-alpha tint — teaches nothing about the pins the
+// user is actually looking at. Learning "blue P" once now works in both places.
+//
+// The block carries its own ground, so it needs no border and no theme-aware
+// tint: it reads identically on the black field and the white one, which is
+// what the old tinted swatch could not do.
+export function PlaceMark({
+  category,
+  size = 32,
+}: {
+  category: WorkspacePlaceCategory
+  size?: number
+}) {
+  return (
+    <span
+      title={PLACE_CATEGORY_LABEL[category]}
+      aria-label={PLACE_CATEGORY_LABEL[category]}
+      role="img"
+      className="shrink-0 inline-flex items-center justify-center font-mono font-semibold leading-none text-pure-white"
+      style={{
+        // Design px through `rem()`, not raw px: the mark then tracks --ui-scale
+        // with the rest of the panel's chrome instead of staying 32 physical
+        // pixels while everything around it grows on a 4K display. Numeric prop,
+        // rem output — the convention lib/density.ts documents.
+        width: rem(size),
+        height: rem(size),
+        // The glyph rides at ~40% of the box, the same proportion it holds in
+        // the 18px map pin, so passing a size scales the whole mark rather than
+        // leaving a fixed glyph rattling inside a bigger square.
+        fontSize: rem(Math.round(size * 0.4)),
+        backgroundColor: PLACE_CATEGORY_COLOR[category],
+      }}
+    >
+      {PLACE_CATEGORY_GLYPH[category]}
+    </span>
+  )
 }
 
 export default function SavedPlacesPanel({ places, loading, error, onClose, onSelect }: Props) {
@@ -109,14 +136,9 @@ export default function SavedPlacesPanel({ places, loading, error, onClose, onSe
                 key={place.id}
                 type="button"
                 onClick={() => onSelect(place)}
-                className="group flex w-full items-center gap-2.5 rounded-card px-2.5 py-2 text-left transition-colors hover:bg-white/6 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20"
+                className="group flex w-full items-center gap-2.5 px-2.5 py-2 text-left transition-colors hover:bg-white/6 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20"
               >
-                <span
-                  className="flex h-8 w-8 shrink-0 items-center justify-center border border-line"
-                  style={{ color: PLACE_CATEGORY_COLOR[place.category], backgroundColor: `${PLACE_CATEGORY_COLOR[place.category]}16` }}
-                >
-                  <SavedPlaceIcon category={place.category} />
-                </span>
+                <PlaceMark category={place.category} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-text">{place.name}</span>
                   <span className="mt-0.5 block truncate text-xs text-muted">

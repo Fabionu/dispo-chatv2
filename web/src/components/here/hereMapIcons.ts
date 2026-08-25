@@ -1,6 +1,6 @@
 import type { RouteMarker } from '../../lib/here/types'
 import type { WorkspacePlaceCategory } from '../../lib/types'
-import { PLACE_CATEGORY_COLOR } from '../../lib/savedPlaces'
+import { PLACE_CATEGORY_COLOR, PLACE_CATEGORY_GLYPH } from '../../lib/savedPlaces'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -120,14 +120,32 @@ export function routeArrowStyle(H: any, width: number) {
 // the icon's anchor point on the coordinate.) SVG rather than DomMarker
 // deliberately: DomMarkers do not render under the v3.2 HARP engine.
 //
-// The three are told apart by FILL, not by colour: start is solid, a stop is a
-// frame around its number, the destination is a frame around a solid core. Each
-// sits on a white plate — the keyline that keeps it readable on satellite
+// The three are told apart by FILL — start is solid, a stop and the destination
+// are frames — and the two ENDPOINTS additionally carry a pictogram, because
+// fill alone never said WHICH end. Start was a solid square and the destination
+// a square inside a square: two abstract blocks a few hundred pixels apart, told
+// apart only by a detail you had to go and compare. Nothing on either one said
+// "this is where the truck leaves from".
+//
+// The pictograms are not invented here. The route planner's own list already
+// names them — an arrow for the start, a flag for the destination (see
+// inbox/RoutePointCard RoleBadge) — so the map now speaks the list's vocabulary
+// instead of a second private one, and the panel beside it reads as the legend.
+//
+// Each sits on a white plate — the keyline that keeps it readable on satellite
 // imagery as well as on the pale vector map, the same job the route's halo does.
 // Kept deliberately small so the markers don't blanket the spot under them —
 // precise clicking/placement needs the coordinate to stay visible.
+//
+// Both endpoints are 20×20, up from the start's old 16: they are a matched pair
+// and neither outranks the other, and 20 against the stops' 18 is what makes the
+// ends of the route read as the ends.
 export function originSvg(): string {
-  return `<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><rect width="16" height="16" fill="${ROUTE_HALO}"/><rect x="2" y="2" width="12" height="12" fill="${ROUTE_SPINE}"/></svg>`
+  // Solid core, white arrow — the start keeps the "solid" identity it always
+  // had, and the arrow is lucide's Navigation silhouette (the planner's own
+  // start glyph) scaled into the core with ~3px of margin so it never crowds
+  // the plate.
+  return `<svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><rect width="20" height="20" fill="${ROUTE_HALO}"/><rect x="2" y="2" width="16" height="16" fill="${ROUTE_SPINE}"/><polygon points="4.8,9.7 15.2,4.8 10.3,15.2 9.2,10.8" fill="${ROUTE_HALO}"/></svg>`
 }
 
 export function stopSvg(label: string): string {
@@ -135,7 +153,12 @@ export function stopSvg(label: string): string {
 }
 
 export function destSvg(): string {
-  return `<svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><rect width="20" height="20" fill="${ROUTE_HALO}"/><rect x="2" y="2" width="16" height="16" fill="${ROUTE_HALO}" stroke="${ROUTE_SPINE}" stroke-width="2"/><rect x="6" y="6" width="8" height="8" fill="${ROUTE_SPINE}"/></svg>`
+  // Framed, with a black flag on white — the inverse ink of the start, so the
+  // two ends differ in FILL as well as in glyph and can't be confused at a
+  // glance or at a distance. The flag is a staff plus a rectangular banner
+  // rather than lucide's waving one: at 12px a wave is mud, and a rectangle is
+  // the shape language this app is drawn in anyway.
+  return `<svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><rect width="20" height="20" fill="${ROUTE_HALO}"/><rect x="2" y="2" width="16" height="16" fill="${ROUTE_HALO}" stroke="${ROUTE_SPINE}" stroke-width="2"/><rect x="5.9" y="4.8" width="1.7" height="10.4" fill="${ROUTE_SPINE}"/><rect x="7.6" y="4.8" width="6.6" height="6" fill="${ROUTE_SPINE}"/></svg>`
 }
 
 // Small translucent dot shown under the cursor while dragging the route line.
@@ -146,32 +169,46 @@ export function ghostSvg(): string {
 
 // Build the H.map.Icon for a marker with the correct anchor for its kind.
 export function iconFor(H: any, marker: RouteMarker): any {
+  // Centre of the 20×20 box for both endpoints — the mark sits ON the
+  // coordinate, like every other mark on this map. (The destination's old
+  // teardrop was tip-anchored at (10, 26).)
   if (marker.kind === 'origin') {
-    return new H.map.Icon(originSvg(), { anchor: new H.math.Point(8, 8) })
+    return new H.map.Icon(originSvg(), { anchor: new H.math.Point(10, 10) })
   }
   if (marker.kind === 'destination') {
-    // Centre of the 20×20 box — the mark sits ON the coordinate, like the other
-    // two. The old teardrop was tip-anchored at (10, 26).
     return new H.map.Icon(destSvg(), { anchor: new H.math.Point(10, 10) })
   }
   return new H.map.Icon(stopSvg(marker.label ?? ''), { anchor: new H.math.Point(9, 9) })
 }
 
-const PLACE_GLYPH: Record<WorkspacePlaceCategory, string> = {
-  parking: 'P',
-  depot: 'D',
-  fuel: 'F',
-  customer: 'C',
-  service: 'S',
-  customs: 'B',
-  other: '•',
-}
-
-// Saved places are deliberately a softer, smaller pin than route destinations:
-// category colour + a single glyph make a dense workspace map easy to scan.
+// ── Saved-place pins ──────────────────────────────────────────────────────
+// The workspace's operational layer: parking, depots, fuel, customers. These
+// are drawn in the SAME language as the route marks above — a square on a white
+// plate, centre-anchored, with a mono glyph — and told apart from them by being
+// the FILLED, coloured sibling of a route stop.
+//
+// What they replaced: a 24×30 teardrop, near-black, anchored at its tip. Three
+// things were wrong with it, all of them the same thing.
+//   · It was the roundest, largest object on a map whose route marks are 16–20px
+//     squares, so the background layer outweighed the layer it is background to.
+//   · Anchored at the tip, a place did not sit on its own coordinate. That is
+//     exactly the bug the destination marker was fixed for (see destSvg) — a
+//     pin whose mark is a body's height away from the point it names cannot be
+//     placed or clicked precisely.
+//   · Its glyph was the category colour on a near-black body, so the colour was
+//     carrying both the identity AND the legibility. At pin size neither won.
+//
+// Geometry is deliberately IDENTICAL to stopSvg — an 18×18 box, a 2px plate, a
+// 14×14 core, a 9.5px mono glyph — so a place and a numbered stop sit as
+// siblings rather than as two unrelated marks that happen to share a map. The
+// core is solid category ink with a white glyph; a route stop is a white core
+// with near-black ink. That inversion is what separates the two layers at a
+// glance, and it survives the map being switched to satellite, where the white
+// plate does the same job it does for the route.
 export function savedPlaceIconFor(H: any, category: WorkspacePlaceCategory): any {
   const color = PLACE_CATEGORY_COLOR[category]
-  const glyph = PLACE_GLYPH[category]
-  const svg = `<svg width="24" height="30" viewBox="0 0 24 30" xmlns="http://www.w3.org/2000/svg"><path d="M12 1.5c-5.65 0-10 4.2-10 9.55C2 18.1 12 28.5 12 28.5S22 18.1 22 11.05C22 5.7 17.65 1.5 12 1.5Z" fill="#202020" stroke="${color}" stroke-width="2"/><circle cx="12" cy="11" r="6.1" fill="${color}" fill-opacity=".2"/><text x="12" y="11.2" text-anchor="middle" dominant-baseline="central" font-family="Inter,system-ui,sans-serif" font-size="9.5" font-weight="750" fill="${color}">${glyph}</text></svg>`
-  return new H.map.Icon(svg, { anchor: new H.math.Point(12, 30) })
+  const glyph = PLACE_CATEGORY_GLYPH[category]
+  const svg = `<svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><rect width="18" height="18" fill="${ROUTE_HALO}"/><rect x="2" y="2" width="14" height="14" fill="${color}"/><text x="9" y="9.2" text-anchor="middle" dominant-baseline="central" font-family="JetBrains Mono, ui-monospace, SF Mono, Menlo, monospace" font-size="9.5" font-weight="600" fill="${ROUTE_HALO}">${glyph}</text></svg>`
+  // Centre-anchored: the mark sits ON the coordinate, like every route mark.
+  return new H.map.Icon(svg, { anchor: new H.math.Point(9, 9) })
 }

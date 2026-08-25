@@ -14,7 +14,7 @@ import type { Group } from '../lib/types'
 import { groupLabel, groupPreview, isUnread, tractorPlate, trailerPlate } from '../lib/types'
 import { useDraft } from '../lib/draftStorage'
 import { getOps, tripSummary } from '../lib/vehicleOps'
-import { RowActionsTrigger, RowMeta, RowStateIcon } from './sidebarBits'
+import { RowActionsTrigger, RowMeta, RowStateIcon, UnreadBadge, unreadLabel } from './sidebarBits'
 import { initials } from '../components/messages/messageUtils'
 import { MENU_GLYPH } from '../components/menuStyles'
 import { statusMeta } from '../lib/availability'
@@ -454,31 +454,30 @@ export default function GroupRow({
             <span className={`flex items-center gap-2 shrink-0 ${metaShift}`}>
               {pinned && <RowStateIcon icon={Pin} label="Pinned" />}
               {hasUnreadMention && (
-                <span
-                  aria-label="You were mentioned"
-                  title="You were mentioned"
-                  style={{
-                    height: 'var(--sidebar-badge-size)',
-                    minWidth: 'var(--sidebar-badge-size)',
-                    fontSize: 'var(--sidebar-meta-font-size)',
-                  }}
-                  className="px-1 rounded-full bg-active/20 text-active font-bold leading-none flex items-center justify-center"
-                >
+                <UnreadBadge tone="mention" label="You were mentioned">
                   @
-                </span>
+                </UnreadBadge>
               )}
               {unread && hasCount && unreadCount > 0 && (
+                <UnreadBadge label={`${unreadCount} unread`}>
+                  {unreadLabel(unreadCount)}
+                </UnreadBadge>
+              )}
+              {/* Unread, but the server sent no number to put in a badge (see
+                  `hasCount`). The fallback the comment up there always promised
+                  and the row never actually drew: without it an older server
+                  left the row with NO unread mark at all, only a slightly
+                  bolder name. A dot, not an empty chip — a chip's whole shape
+                  is "there is a figure in here". Round, and the one round mark
+                  the rail keeps beside the presence disc it is sized to match:
+                  a dot is exactly what the radius scale still allows one for. */}
+              {unread && !hasCount && (
                 <span
-                  aria-label={`${unreadCount} unread`}
-                  style={{
-                    minWidth: 'var(--sidebar-badge-size)',
-                    height: 'var(--sidebar-badge-size)',
-                    fontSize: 'var(--sidebar-meta-font-size)',
-                  }}
-                  className="px-1.5 rounded-full bg-text text-bg font-semibold leading-none flex items-center justify-center"
-                >
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </span>
+                  role="img"
+                  aria-label="Unread"
+                  title="Unread"
+                  className="h-1.5 w-1.5 shrink-0 rounded-full bg-text"
+                />
               )}
               {mutedIcon}
             </span>

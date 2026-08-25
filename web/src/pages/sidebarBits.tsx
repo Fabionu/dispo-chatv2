@@ -1,7 +1,8 @@
-// Small presentational bits for the workspace sidebar: the unified-list filter
-// pill, the empty-list hint, and the two menu-item styles (user menu + the
-// create/options menu). Kept together so the rail's row/menu chrome lives in one
-// place; behaviour is identical to the previous inline definitions.
+// Small presentational bits for the workspace sidebar: the unread mark, the
+// unified-list filter pill, the empty-list hint, and the two menu-item styles
+// (user menu + the create/options menu). Kept together so the rail's row/menu
+// chrome lives in one place — which is also what lets the rail's three unread
+// readouts share one mark instead of drifting into three.
 
 import { Fragment, type ReactNode } from 'react'
 import { useTravellingMarker } from '../components/useTravellingMarker'
@@ -70,6 +71,84 @@ export function RowActionsTrigger({
       />
     </button>
   )
+}
+
+// ── The unread mark ─────────────────────────────────────────────────────────
+// The rail reports unread in three places — the Unread filter tab, a row's
+// count, a row's @-mention — and they were three unrelated shapes: a square sans
+// chip on the tab, a 23px WHITE DISC on the row, a tinted disc for the mention.
+// Three marks for one idea, and the two on the row were the only circles in a
+// rail otherwise drawn entirely from squares and hairlines (see the radius scale
+// in tailwind.config.js: `rounded-full` survives for photos, presence dots and
+// sliding tracks — a count is none of those).
+//
+// So: ONE mark, square, set in the mono voice with tabular figures, in three
+// tones and two sizes.
+//   count   — the neutral solid. The loudest thing in the rail, which is correct:
+//             it is the only element whose whole job is to be noticed.
+//   mention — the same block in the accent. Being named outranks ordinary
+//             traffic, and colour is what says so; it used to be a 20%-alpha
+//             tint, which read as quieter than the plain count sitting next to
+//             it and inverted the hierarchy.
+//   quiet   — the tab's count while that tab is not selected.
+//
+// Letter-spacing is reset to NORMAL on the badge itself — the same call
+// `.eyebrow-time` makes in index.css and for the same reason: a count is one
+// value, not a word being spelled out. On the element rather than left to
+// inherit, because the tab badge's parent IS an `.eyebrow` (0.14em), and tracked
+// figures both read as separate things and sit off the centre of their box —
+// tracking adds its space AFTER the last glyph, so `12` would hang left.
+const BADGE_TONE = {
+  count: 'bg-text text-bg',
+  mention: 'bg-active text-bg',
+  quiet: 'bg-white/10 text-muted',
+} as const
+
+export function UnreadBadge({
+  tone = 'count',
+  size = 'row',
+  label,
+  children,
+}: {
+  tone?: keyof typeof BADGE_TONE
+  /** `row` sizes off the density token; `tab` off the type scale it sits in. */
+  size?: 'row' | 'tab'
+  /** Accessible name. Omitted on the tab, where the tab's own label says it. */
+  label?: string
+  children: ReactNode
+}) {
+  const row = size === 'row'
+  return (
+    <span
+      // Labelled or hidden, never in between: a bare `aria-label` on a <span>
+      // with no role is not announced (the same trap RowStateIcon documents),
+      // and an unlabelled badge is decoration next to a tab that already reads
+      // "Unread".
+      role={label ? 'img' : undefined}
+      aria-hidden={label ? undefined : true}
+      aria-label={label}
+      title={label}
+      className={`shrink-0 inline-flex items-center justify-center font-mono font-semibold leading-none tabular-nums tracking-normal ${
+        row ? 'px-1' : 'h-4 min-w-4 px-1 text-2xs'
+      } ${BADGE_TONE[tone]}`}
+      style={
+        row
+          ? {
+              height: 'var(--sidebar-badge-size)',
+              minWidth: 'var(--sidebar-badge-size)',
+              fontSize: 'var(--sidebar-badge-font-size)',
+            }
+          : undefined
+      }
+    >
+      {children}
+    </span>
+  )
+}
+
+// Counts past three figures stop being a count and start being a column width.
+export function unreadLabel(count: number): string {
+  return count > 99 ? '99+' : String(count)
 }
 
 // The rail's segmented control as a whole — the Archived toggle plus the type
@@ -164,14 +243,9 @@ export function FilterTab({
     >
       {children}
       {badge !== undefined && (
-        <span
-          aria-hidden
-          className={`min-w-[1.25em] px-1 text-center text-2xs font-semibold leading-[1.35] tabular-nums ${
-            active ? 'bg-text text-bg' : 'bg-white/10 text-muted'
-          }`}
-        >
-          {badge > 99 ? '99+' : badge}
-        </span>
+        <UnreadBadge size="tab" tone={active ? 'count' : 'quiet'}>
+          {unreadLabel(badge)}
+        </UnreadBadge>
       )}
     </button>
   )
