@@ -7,7 +7,8 @@ import ReadReceipts, { type Reader } from './ReadReceipts'
 import ReplyQuote from './ReplyQuote'
 import { DELETE_WINDOW_MS, formatTime } from './messageUtils'
 import DayDivider from './DayDivider'
-import { Attribution, ThreadAction, ThreadActions } from '../thread/threadChrome'
+import { Attribution, ThreadAction, ThreadActions, ThreadStamp } from '../thread/threadChrome'
+import Avatar from '../Avatar'
 import { renderBody } from './messageBody'
 import { buildMessageActions } from './messageActionItems'
 import type { LocalMessage } from './types'
@@ -70,11 +71,37 @@ function claimStaggerStep(): number {
 // burst. A new group also starts on an author change, a system row, or a date
 // divider. ~7 min reads as "same burst".
 //
-// Grouping now controls SPACING ONLY. Every message keeps its own attribution
-// row, because in this layout the label is what identifies a message at all —
-// suppress it on a follow-up and that message has no author, no time and no
-// visible owner, just an unexplained second block of text under the first.
+// Grouping controls the ATTRIBUTION ROW as well as the spacing, which is the
+// opposite of what it did before author photos existed.
+//
+// The old rule was that every message keeps its own label, on the reasoning
+// that in a layout with no avatars the label is the only thing identifying a
+// message at all — suppress it and you have an unexplained second block of text
+// under the first. That reasoning was sound while the head of a run was itself
+// only a small mono label. It stops holding once the head carries a FACE: a
+// burst then opens with a photo, a name and a clock, and the messages under it
+// are visibly the same person still talking.
+//
+// So the head of a burst pays for the tile with its extra height, and every
+// follow-up gets that height back and more by dropping the row entirely. A
+// follow-up keeps the row only when it still has live state to report — see
+// `hasLiveMeta` — and its clock moves to the hover strip either way.
 const GROUP_WINDOW_MS = 7 * 60 * 1000
+
+// The author photo at the head of a burst. Design-px; `Avatar` renders it as
+// rem, so it tracks --ui-scale like every other sized component — which is why
+// --msg-lane is rem too, so the lane and the thing in it grow together.
+//
+// It sits in the LANE, outside the message's rule, not inline in the label row.
+// Inline it had to stay small enough not to dominate an 11px mono label, and at
+// that size a face is a smudge; out here it answers only to the lane, so it can
+// be the size a photo needs to be to actually be recognised. 30px against a
+// 2.5rem lane leaves 0.625rem of air before the rule.
+//
+// Top-aligned with the attribution row rather than centred on the message: a
+// burst head can be one line or twenty, and a tile that floats to the middle of
+// a long one stops pointing at the name it belongs to.
+const AUTHOR_TILE_PX = 30
 
 type Props = {
   message: LocalMessage
@@ -98,6 +125,13 @@ type Props = {
   // information: someone else's message, in a room with more than two people.
   // Undefined everywhere else, which leaves the neutral `line` rule in place.
   ruleColor?: string
+  // Whether this message's author has a profile photo, read from the roster.
+  // Passed rather than discovered by letting the <img> 404, so a room full of
+  // people who never uploaded one costs no failed requests. Undefined for an
+  // author who has left the room and is no longer in the roster — then we ask,
+  // which is the old behaviour and the right one for a person we know nothing
+  // about.
+  authorHasAvatar?: boolean
   highlighted: boolean
   onRetry: (localId: string, body: string, file: File | null) => void
   // This row is among the newest in the thread — load its image attachments
@@ -138,6 +172,7 @@ function MessageRow({
   conversationStart,
   groupType,
   ruleColor,
+  authorHasAvatar,
   highlighted,
   onRetry,
   imagePriority,
@@ -324,6 +359,32 @@ function MessageRow({
   // wraps still sets ragged-right inside its own box, so nothing about reading
   // it changes. Absolutely positioned children (the hover actions, the actions
   // panel) are not flex items and keep their own anchoring.
+  // BURST SPACING IS PADDING, NOT MARGIN. A follow-up carries its gap as `pt-2`
+  // INSIDE its own box rather than as a margin above it, because the rule is
+  // drawn by the row's border and a margin would break it: three unlabelled
+  // bodies hanging off three separate rule stubs read as three orphans, which is
+  // exactly the failure the old "every message keeps its label" rule was
+  // guarding against. As padding, one border runs the whole height of the gap
+  // and the burst reads as one continuous edge. (The message list's own flex gap
+  // is 0 for the same reason — see ChatView.) A NEW group keeps its margin,
+  // since a break between two speakers is what `mt-7` is for.
+  //
+  // 8px, and nothing in the gap is allowed to set that number (user,
+  // 2026-08-26). It was 20px while the hover action strip was revealed into it,
+  // because the strip is ~17px tall and had to fit — which meant the gap between
+  // two lines of ONE person's burst was being sized by a control, not by how
+  // closely those two lines belong together. The strip no longer reveals on
+  // hover (see ThreadAction) and a follow-up's clock moved to the author lane,
+  // so the gap answers only to the reading now.
+  //
+  // THE AUTHOR LANE. An incoming row is pushed right by `--msg-lane` so the
+  // burst-head photo and the follow-up stamp have somewhere to hang OUTSIDE the
+  // rule — a message keeps its own left edge at the rule, exactly as before, and
+  // the lane is empty space beside it. The max-width has to give the lane back,
+  // or a full-width child (a wide attachment) would run past the column. My own
+  // rows are `ml-auto` against the right edge and have no lane: no tile, and
+  // their follow-up clocks stay in the attribution row with their ticks.
+  //
   // Jump-to-original pulse. A wash, not a ring: there is no shape here to ring.
   // It runs to the row's edges so the highlighted band starts AT the rule.
   // RULE WEIGHT. Structural hairlines in this app are 1px and stay 1px. This
@@ -357,6 +418,58 @@ function MessageRow({
   const highlightSkin = highlighted ? 'bg-active/10' : ''
   const authorLabel = (mine ? message.authorName || 'You' : message.authorName) || 'Member'
   const time = formatTime(message.createdAt)
+
+  // WHO gets a photo. Gated exactly like `ruleColor`, and for the same reason:
+  // a face answers "which of the people in this room is talking", and a direct
+  // message does not ask that — it has one other person in it and the side of
+  // the column has already said which side of the conversation this is. My own
+  // rows never carry one either; a portrait of myself on my own words is the
+  // one face in a thread that tells nobody anything.
+  const showTile = !mine && groupType !== 'direct'
+
+  // What the attribution row still has to say once the name is suppressed.
+  //
+  // The flags are rare, so the overwhelming majority of follow-ups drop the row
+  // outright. My own rows are the standing exception: the delivery ticks are
+  // LIVE state and the note on `attributionTrailing` is explicit that those are
+  // never hover-revealed, so a burst of my own messages keeps a clock-and-ticks
+  // row per message — it just stops repeating my name at me.
+  const hasLiveMeta = pinned || forwarded || edited || failed || (mine && !deleted)
+
+  // The photo, drawn square and IN ITS OWN COLOURS.
+  //
+  // SQUARE because every radius token in this app is 0 and a disc here would be
+  // the only rounded object on the screen.
+  //
+  // FULL COLOUR, always (user, 2026-08-26). It was briefly greyscale-until-hover
+  // on the reasoning that a photo is the one filled colour object in a field
+  // that has none — but that reasoning protects the field at the expense of the
+  // thing the field is now being asked to carry. A desaturated face is a worse
+  // face: skin, hi-vis, a company polo and a cab window are most of what makes
+  // one photo tell itself apart from another at 30px, and greyscale throws
+  // exactly that away. It also made the tile change appearance under the cursor,
+  // which reads as a control rather than as a person. Don't reintroduce the
+  // filter — the restraint here is the tile's SIZE and its square, unringed
+  // edge, not its saturation.
+  const authorTile =
+    startNewGroup && showTile ? (
+      <button
+        type="button"
+        onClick={() => onOpenProfile(message.authorId, authorLabel)}
+        aria-label={`Open ${authorLabel}'s profile`}
+        className="absolute left-[calc(-1*var(--msg-lane))] top-0.5 focus-visible:outline-none focus-visible:opacity-80"
+      >
+        <Avatar
+          userId={message.authorId}
+          name={authorLabel}
+          hasAvatar={authorHasAvatar}
+          size={AUTHOR_TILE_PX}
+          shape="square"
+          fallback="initials"
+          tint={ruleColor}
+        />
+      </button>
+    ) : undefined
 
   const actions = buildMessageActions({
     message,
@@ -434,21 +547,40 @@ function MessageRow({
         // `--color-line-msg` set by the class, so every other rule on the row
         // is untouched.
         style={ruleColor && !mine ? { borderLeftColor: ruleColor } : undefined}
-        className={`group/msg relative w-fit max-w-full py-0.5 transition-colors duration-500 ${
+        className={`group/msg relative w-fit pb-0.5 transition-colors duration-500 ${
           mine
-            ? 'ml-auto flex flex-col items-end border-r-2 border-[rgb(var(--color-line-own))] pr-[var(--msg-indent)] pl-2'
-            : 'mr-auto border-l-2 border-[rgb(var(--color-line-msg))] pl-[var(--msg-indent)] pr-2'
-        } ${startNewGroup ? 'mt-7' : 'mt-4'} ${highlightSkin} ${
+            ? 'ml-auto flex max-w-full flex-col items-end border-r-2 border-[rgb(var(--color-line-own))] pr-[var(--msg-indent)] pl-2'
+            : `mr-auto border-l-2 border-[rgb(var(--color-line-msg))] pl-[var(--msg-indent)] pr-2 ${
+                showTile
+                  ? 'ml-[var(--msg-lane)] max-w-[calc(100%-var(--msg-lane))]'
+                  : 'max-w-full'
+              }`
+        } ${startNewGroup ? 'mt-7 pt-0.5' : 'pt-2'} ${highlightSkin} ${
           justArrived ? 'message-enter' : ''
         }`}
       >
-        <Attribution
-          name={authorLabel}
-          time={time}
-          trailing={attributionTrailing}
-          alignEnd={mine}
-          onNameClick={mine ? undefined : () => onOpenProfile(message.authorId, authorLabel)}
-        />
+        {/* Both hang in the author lane, outside the rule — never in the gap
+            below the message, which is what has to stay tight for a burst to
+            read as one person. The tile heads the burst; the stamp is the
+            suppressed clock of a follow-up under it, and only for a row that
+            drew no attribution at all (a pinned/edited/own one still has its
+            clock up there). */}
+        {authorTile}
+        {!startNewGroup && !hasLiveMeta && showTile && <ThreadStamp>{time}</ThreadStamp>}
+
+        {(startNewGroup || hasLiveMeta) && (
+          <Attribution
+            // Suppressed on a follow-up. The row can still be here without it —
+            // a pinned or edited message inside a burst keeps its flags, and my
+            // own keep their ticks — and in that case it shows the state and the
+            // clock, not the name again.
+            name={startNewGroup ? authorLabel : undefined}
+            time={time}
+            trailing={attributionTrailing}
+            alignEnd={mine}
+            onNameClick={mine ? undefined : () => onOpenProfile(message.authorId, authorLabel)}
+          />
+        )}
 
         {!deleted && message.replyTo && (
           <ReplyQuote replyTo={message.replyTo} onJump={onJumpToMessage} neutral={mine} />
@@ -558,6 +690,7 @@ function propsEqual(a: Props, b: Props): boolean {
     // A plain string, so this is a real comparison — it only changes when the
     // roster does, which is exactly when a row's rule should be repainted.
     a.ruleColor === b.ruleColor &&
+    a.authorHasAvatar === b.authorHasAvatar &&
     a.highlighted === b.highlighted &&
     a.imagePriority === b.imagePriority &&
     // Active-trip reference — rows re-tokenize their `#ref` trip mentions when

@@ -1,5 +1,5 @@
 import type { GroupInvite } from '../../lib/types'
-import { RowMeta } from '../../pages/sidebarBits'
+import { RowMeta, RowTile } from '../../pages/sidebarBits'
 
 type Props = {
   invite: GroupInvite
@@ -7,9 +7,11 @@ type Props = {
   onClick: () => void
 }
 
-// One pending vehicle-group invite in the sidebar. Same two-line shape as a real
-// vehicle-room row — the tractor plate on the mono meta line is what makes it
-// read as a room rather than a person, now that no row carries an identity slot.
+// One pending vehicle-group invite in the sidebar. Same shape as a real
+// vehicle-room row, tile included — but the tile is always the generic room
+// glyph: `hasAvatar` is deliberately not passed, because you are not a member of
+// this group yet and the avatar endpoint is member-gated. Asking would buy a
+// guaranteed 403 for every invite in the list.
 export default function GroupInviteRow({ invite, selected, onClick }: Props) {
   return (
     <button
@@ -28,6 +30,7 @@ export default function GroupInviteRow({ invite, selected, onClick }: Props) {
           : 'border-transparent text-muted hover:bg-white/8 hover:text-text'
       }`}
     >
+      <RowTile kind="group" id={invite.groupId} />
       <span className="flex-1 min-w-0 flex flex-col gap-px">
         <span
           className="truncate leading-tight text-text font-semibold"

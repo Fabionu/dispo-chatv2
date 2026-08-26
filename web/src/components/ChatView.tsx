@@ -438,6 +438,19 @@ export default function ChatView({
     [group.type, members],
   )
 
+  // Who in this room has a profile photo. Read from the roster so a burst head
+  // can draw its author tile without a speculative request per author — a room
+  // where nobody has uploaded one would otherwise 404 once for every speaker.
+  // Only members the roster actually answered for go in. An author who has LEFT
+  // the room, and an older API response that omits the field, both come back
+  // undefined and fall back to asking — which is all we can do for someone the
+  // roster does not describe.
+  const authorHasAvatar = useMemo(() => {
+    const byId = new Map<string, boolean>()
+    for (const m of members) if (m.hasAvatar !== undefined) byId.set(m.id, m.hasAvatar)
+    return byId
+  }, [members])
+
   const composerHandleRef = useRef<ChatComposerHandle>(null)
   const highlightTimer = useRef<number | undefined>(undefined)
   const noticeTimer = useRef<number | undefined>(undefined)
@@ -1271,6 +1284,7 @@ export default function ChatView({
         <AttachmentTabView
           attachment={activeAttachmentTab.attachment}
           message={activeAttachmentTab.message}
+          currentUserId={currentUserId}
           onReply={(message) => {
             if (activeAttachmentTab.groupId === group.id) {
               replyFromPreview(message)
@@ -1288,6 +1302,7 @@ export default function ChatView({
         <InlinePdfPreview
           attachment={pdfPreview.attachment}
           message={pdfPreview.message}
+          currentUserId={currentUserId}
           onReply={replyFromPreview}
           onForward={forwardFromPreview}
           onClose={() => setPdfPreview(null)}
@@ -1365,7 +1380,14 @@ export default function ChatView({
                   // MessageRow) which removes the immediate re-render pressure,
                   // and virtualization here is a behavioral risk best taken on
                   // its own.
-                  <div className="flex flex-col gap-0.5">
+                  /* No flex gap. A message's rule is its own border, and a
+                     burst's follow-ups suppress their attribution row, so any
+                     gap here would cut that rule into stubs between messages
+                     that are meant to read as one person still speaking. The
+                     rows carry their own spacing instead (margin between
+                     groups, padding within one — see MessageRow), and the day
+                     divider and system rows already owned theirs. */
+                  <div className="flex flex-col">
                     {!searchContext && nextCursor && (
                       <div className="flex justify-center pb-3">
                         <button
@@ -1413,6 +1435,7 @@ export default function ChatView({
                               ? ruleColorFor(m.authorId)
                               : undefined
                           }
+                          authorHasAvatar={authorHasAvatar.get(m.authorId)}
                           highlighted={highlightedMessageId === m.id}
                           onRetry={retry}
                           imagePriority={i >= visibleMessages.length - RECENT_IMAGE_WINDOW}
@@ -1586,6 +1609,7 @@ export default function ChatView({
         onReplacePendingFile={setPendingFile}
         onCancelPendingFile={() => setPendingFile(null)}
         onSendPendingFile={sendPendingFile}
+        currentUserId={currentUserId}
         imagePreview={imagePreview}
         onCloseImagePreview={() => setImagePreview(null)}
         docPreview={docPreview}

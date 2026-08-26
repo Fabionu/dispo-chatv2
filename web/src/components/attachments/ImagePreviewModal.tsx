@@ -1,20 +1,23 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Image as ImageIcon, Maximize, ZoomIn, ZoomOut } from 'lucide-react'
+import { Maximize, ZoomIn, ZoomOut } from 'lucide-react'
 import type { Attachment } from '../../lib/types'
 import type { LocalMessage } from '../messages/types'
 import PreviewActionBar from './PreviewActionBar'
+import { PreviewCaption, PreviewIdentity } from './PreviewChrome'
 import { IconButton } from './IconAction'
 
 type Props = {
   attachment: Attachment
   message: LocalMessage
+  currentUserId: string
   onReply: (m: LocalMessage) => void
   onForward: (m: LocalMessage) => void
   onClose: () => void
   onOpenInTab?: () => void
   // Render INLINE inside a chat-window tab instead of as a fullscreen modal: no
-  // backdrop, no filename banner (it's in the tab label), no Esc/click-away
-  // close — but the full zoom/pan + action bar are kept identical.
+  // backdrop, no filename (it's in the tab label), no Esc/click-away close — but
+  // the full zoom/pan, the sender line, the caption and the action bar are all
+  // kept identical.
   embedded?: boolean
 }
 
@@ -34,6 +37,7 @@ const FIT: View = { scale: 1, tx: 0, ty: 0 }
 export default function ImagePreviewModal({
   attachment,
   message,
+  currentUserId,
   onReply,
   onForward,
   onClose,
@@ -215,54 +219,46 @@ export default function ImagePreviewModal({
       className={
         embedded
           ? 'flex-1 min-h-0 flex flex-col bg-bg'
-          : 'fixed inset-0 z-50 bg-black/85 flex flex-col p-4'
+          : 'fixed inset-0 z-50 bg-black/95 flex flex-col p-4'
       }
       onClick={embedded ? undefined : onClose}
     >
-      {/* Modal-only top bar: image glyph + filename on the left, actions on the
-          right, on an inset card-rounded strip (TripBar language — shared `card`
-          radius, faint fill, no border/shadow; slightly stronger fill so it reads
-          over the black backdrop). The modal's own p-4 keeps the radius clear of
-          the screen edges. In a tab the filename is in the tab label and the
-          actions FLOAT over the image (below), so no height is reserved here. */}
-      {!embedded && (
-        <div
-          className="shrink-0 mb-2 h-11 flex items-center justify-between gap-3 px-3.5 rounded-card bg-white/6"
-          onClick={stop}
-        >
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <ImageIcon size="0.9375rem" strokeWidth={1.6} className="text-muted shrink-0" />
-            <div className="text-base text-text truncate min-w-0">
-              {attachment.originalName}
-            </div>
-          </div>
-          <PreviewActionBar
-            attachment={attachment}
-            message={message}
-            onReply={onReply}
-            onForward={onForward}
-            onClose={onClose}
-            onOpenInTab={onOpenInTab}
-          />
-        </div>
-      )}
+      {/* Top bar: WHO sent the picture on the left, actions on the right.
+          In a modal it is an inset card-rounded strip (TripBar language — shared
+          `card` radius, faint fill, no border/shadow; slightly stronger fill so
+          it reads over the black backdrop) and the modal's own p-4 keeps the
+          radius clear of the screen edges. In a tab it is the same row separated
+          by the app's hairline instead, and it drops the filename — that is the
+          tab's own label.
+
+          The bar is no longer modal-only. It used to be, because in a tab the
+          only thing it carried was a filename the tab already showed; now it
+          carries the sender and the time, which a tab label does NOT show and
+          which a tab needs MORE than a modal does — an attachment tab outlives
+          the conversation it was opened from. */}
+      <div
+        className={`shrink-0 flex items-center justify-between gap-3 ${
+          embedded
+            ? 'border-b border-line bg-bg px-4 py-2'
+            : 'mb-2 rounded-card border border-line bg-bg px-3.5 py-2'
+        }`}
+        onClick={stop}
+      >
+        <PreviewIdentity attachment={attachment} message={message} showFile={!embedded} />
+        <PreviewActionBar
+          attachment={attachment}
+          message={message}
+          onReply={onReply}
+          onForward={onForward}
+          onClose={onClose}
+          onOpenInTab={onOpenInTab}
+        />
+      </div>
 
       <div
         ref={containerRef}
         className="flex-1 min-h-0 relative overflow-hidden flex items-center justify-center select-none"
       >
-        {/* Floating action cluster (tab mode) — top-right over the image. The pill
-            carries its own dark surface, so it stays readable without any scrim. */}
-        {embedded && (
-          <PreviewActionBar
-            attachment={attachment}
-            message={message}
-            onReply={onReply}
-            onForward={onForward}
-            onClose={onClose}
-            floating
-          />
-        )}
         <img
           src={attachment.url}
           alt={attachment.originalName}
@@ -287,15 +283,18 @@ export default function ImagePreviewModal({
         />
 
         {/* Floating zoom controls — icon-only, themed tooltips. Clicks here
-            mustn't close the modal. In a tab they sit on a dark translucent pill
-            so they stay readable over a light image. */}
+            mustn't close the modal.
+
+            They carry a solid pill on BOTH surfaces now. In the modal they used
+            to have no ground at all, which meant three grey glyphs sitting
+            directly on whatever the photograph happened to show under them —
+            fine over a dark corner, invisible over a pale one, and the one
+            control you reach for while looking at a bright screenshot. A
+            control that floats over arbitrary content has to bring its own
+            background; that is the same reason the tab variant always had one. */}
         <div
           onClick={stop}
-          className={`absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 ${
-            embedded
-              ? 'rounded-full bg-bg/[0.92] px-1 py-0.5 shadow-raised'
-              : ''
-          }`}
+          className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 rounded-full border border-line bg-bg px-1 py-0.5 shadow-raised"
         >
           <IconButton
             label="Zoom out"
@@ -318,6 +317,14 @@ export default function ImagePreviewModal({
           </IconButton>
         </div>
       </div>
+
+      {/* What the sender actually said with the picture. Renders nothing when
+          the image was sent bare, so a caption-less photo keeps the whole pane. */}
+      <PreviewCaption
+        message={message}
+        currentUserId={currentUserId}
+        variant={embedded ? 'tab' : 'modal'}
+      />
     </div>
   )
 }

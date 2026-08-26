@@ -1,5 +1,5 @@
 import type { WorkspaceMember } from '../lib/types'
-import { RowMeta } from './sidebarBits'
+import { RowMeta, RowTile } from './sidebarBits'
 
 // One company colleague who has no open DM yet, shown inline in the unified rail
 // list (All + Direct filters). Name over their role in the mono meta line,
@@ -30,6 +30,10 @@ export default function ContactRow({
       }}
       className="w-full flex items-center border-l-2 border-transparent text-left text-muted hover:bg-white/8 hover:text-text transition-colors"
     >
+      {/* No `hasAvatar`: WorkspaceMember (the /workspace/members payload) does
+          not carry the flag, so this asks and lets a 404 flip it to the
+          initials. `avatarCache` remembers the miss per person per session. */}
+      <RowTile kind="user" id={member.id} name={member.displayName} />
       <span className="min-w-0 flex-1 flex flex-col gap-px">
         <span
           className="truncate leading-tight text-text/90 font-medium"

@@ -1,20 +1,22 @@
 import { useEffect } from 'react'
-import { FileText } from 'lucide-react'
 import type { Attachment } from '../../lib/types'
 import type { LocalMessage } from '../messages/types'
 import DocumentCard from './DocumentCard'
 import PreviewActionBar from './PreviewActionBar'
+import { PreviewCaption, PreviewIdentity } from './PreviewChrome'
 import { PdfDocumentView } from './PdfRender'
 
 type Props = {
   attachment: Attachment
   message: LocalMessage
+  currentUserId: string
   onReply: (m: LocalMessage) => void
   onForward: (m: LocalMessage) => void
   onClose: () => void
   onOpenInTab?: () => void
-  // Rendered inside a chat-window tab: drop the gray filename banner (the name is
-  // already in the tab label) and keep just the action bar; no Esc close.
+  // Rendered inside a chat-window tab: drop the filename (the name is already in
+  // the tab label) and no Esc close, but keep the sender line, the caption and
+  // the action bar.
   embedded?: boolean
 }
 
@@ -24,6 +26,7 @@ type Props = {
 export default function InlinePdfPreview({
   attachment,
   message,
+  currentUserId,
   onReply,
   onForward,
   onClose,
@@ -41,29 +44,28 @@ export default function InlinePdfPreview({
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      {/* Modal-only top bar: PDF glyph + filename on the left, icon-only actions
-          on the right. An inset, card-rounded strip in the TripBar language (the
-          shared `card` radius, faint fill, no border/shadow) rather than an
-          edge-to-edge band. In a tab the filename is in the tab label and the
-          actions FLOAT over the page (below), so no banner height is reserved. */}
-      {!embedded && (
-        <div className="shrink-0 mx-3 mt-2 h-11 flex items-center justify-between gap-3 px-3.5 rounded-card bg-white/4">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <FileText size="0.9375rem" strokeWidth={1.6} className="text-muted shrink-0" />
-            <div className="text-base text-text truncate min-w-0">
-              {attachment.originalName}
-            </div>
-          </div>
-          <PreviewActionBar
-            attachment={attachment}
-            message={message}
-            onReply={onReply}
-            onForward={onForward}
-            onClose={onClose}
-            onOpenInTab={onOpenInTab}
-          />
-        </div>
-      )}
+      {/* Top bar: WHO sent the PDF on the left, icon-only actions on the right.
+          An inset, card-rounded strip in the TripBar language (the shared `card`
+          radius, faint fill, no border/shadow) rather than an edge-to-edge band;
+          in a tab the same row on a hairline, without the filename that the tab
+          label already carries. */}
+      <div
+        className={`shrink-0 flex items-center justify-between gap-3 ${
+          embedded
+            ? 'border-b border-line bg-bg px-4 py-2'
+            : 'mx-3 mt-2 rounded-card border border-line bg-bg px-3.5 py-2'
+        }`}
+      >
+        <PreviewIdentity attachment={attachment} message={message} showFile={!embedded} />
+        <PreviewActionBar
+          attachment={attachment}
+          message={message}
+          onReply={onReply}
+          onForward={onForward}
+          onClose={onClose}
+          onOpenInTab={onOpenInTab}
+        />
+      </div>
 
       {/* Page content rendered by pdf.js into a themed, scrollable surface — our
           own canvas + scrollbar, never the browser's PDF toolbar. Falls back to
@@ -81,19 +83,15 @@ export default function InlinePdfPreview({
             }
           />
         </div>
-        {/* Floating action cluster (tab mode) — top-right over the page. The pill
-            carries its own dark surface, so it stays readable without any scrim. */}
-        {embedded && (
-          <PreviewActionBar
-            attachment={attachment}
-            message={message}
-            onReply={onReply}
-            onForward={onForward}
-            onClose={onClose}
-            floating
-          />
-        )}
       </div>
+
+      {/* The note the PDF was sent with — a CMR or a rate confirmation almost
+          always arrives with the sentence that says which run it belongs to. */}
+      <PreviewCaption
+        message={message}
+        currentUserId={currentUserId}
+        variant={embedded ? 'tab' : 'pane'}
+      />
     </div>
   )
 }

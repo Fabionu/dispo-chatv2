@@ -8,6 +8,73 @@ import { Fragment, type ReactNode } from 'react'
 import { useTravellingMarker } from '../components/useTravellingMarker'
 import { ChevronDown, type LucideIcon } from 'lucide-react'
 import { menuIconClass, menuItemClass } from '../components/menuStyles'
+import Avatar from '../components/Avatar'
+import GroupAvatar from '../components/GroupAvatar'
+
+// ── Row identity tile ───────────────────────────────────────────────────────
+// The picture at the head of a rail row: a person's photo for a DM or a
+// colleague, the room's image for a vehicle group.
+//
+// The rail carried no picture at all between 2026-08-20 and 2026-08-26. The
+// argument then was that a 40px portrait cost ~50px of a rail that had just
+// narrowed to 380px, and that the mono meta line under the name (`SV 14 HLS │
+// RO→IT`) identifies a room better than a silhouette does. The second half of
+// that is still true and the meta line stays — but it was answering the wrong
+// question. A plate tells you WHICH TRUCK; a face tells you WHO, and it does it
+// pre-attentively, before any text is read. In a list you scan dozens of times
+// an hour that is the difference between reading the rail and glancing at it.
+//
+// SQUARE, like the thread's author tile. `tailwind.config.js` does still allow
+// `rounded-full` for a photo, so a disc here would not be a violation — but the
+// same person's photo appears in the rail and in the message timeline, often at
+// the same moment, and one object with two silhouettes is worse than one
+// deviation from a general rule.
+//
+// 38px (user, 2026-08-26 — "can be bigger"). It started at 30 to match the
+// thread tile and cost the row nothing, since a two-line row is already ~33px of
+// text inside a 44px minimum. 38 does grow the row by a few pixels, which is the
+// trade being made deliberately: the rail is a SCANNING surface read dozens of
+// times an hour and the thread is a reading one, so the picture that has to be
+// recognisable at a glance is this one, not the message tile. The rail also
+// widened at the same time, so the extra width the tile takes is width the row
+// just gained.
+export const SIDEBAR_TILE_PX = 38
+
+export function RowTile(
+  props:
+    // `hasAvatar` is optional on purpose. The roster types that carry it
+    // (WorkspaceMember, Group) pass it and skip a doomed request; DirectPeer and
+    // ConnectionUser do not carry it, and those fall back to asking and letting
+    // the 404 flip them to the fallback. `avatarCache` remembers the failure, so
+    // that costs one request per person per session, not one per render.
+    | { kind: 'user'; id: string; name: string; hasAvatar?: boolean }
+    | { kind: 'group'; id: string; hasAvatar?: boolean },
+) {
+  if (props.kind === 'group') {
+    return (
+      <GroupAvatar
+        groupId={props.id}
+        hasAvatar={props.hasAvatar}
+        shape="rounded"
+        size={SIDEBAR_TILE_PX}
+      />
+    )
+  }
+  return (
+    <Avatar
+      userId={props.id}
+      name={props.name}
+      hasAvatar={props.hasAvatar}
+      size={SIDEBAR_TILE_PX}
+      shape="square"
+      // INITIALS, not the contact glyph. This is a LIST of people, which is the
+      // case Avatar's `fallback` prop documents the opt-in for: a column of
+      // identical silhouettes tells the eye nothing, whereas initials at least
+      // name which person the row is about.
+      fallback="initials"
+    />
+  )
+}
 
 // ── Conversation-row glyph spec ─────────────────────────────────────────────
 // Pinned, muted and the actions trigger used to each carry their own size and

@@ -1,5 +1,5 @@
 import type { Connection } from '../../lib/types'
-import { RowMeta } from '../../pages/sidebarBits'
+import { RowMeta, RowTile } from '../../pages/sidebarBits'
 
 type Props = {
   connection: Connection
@@ -30,6 +30,7 @@ export default function ConnectionRequestRow({ connection, selected, onClick }: 
           : 'border-transparent text-muted hover:bg-white/8 hover:text-text'
       }`}
     >
+      <RowTile kind="user" id={peer.id} name={peer.displayName} />
       <span className="flex-1 min-w-0 flex flex-col gap-px">
         <span
           className="truncate leading-tight text-text font-semibold"

@@ -157,20 +157,28 @@ html[data-density='comfortable'] {
 
   /* ── Display density tokens ──────────────────────────────────────────────
      The UI scales by swapping a small set of variables — NOT by transform:
-     scale() or fluid vw units — so layout stays crisp and predictable. Three
-     discrete tiers (compact / default / comfortable) are applied via a
-     `data-density` attribute on <html> (lib/density.ts), auto-selected by
-     viewport width and overridable. `:root` carries the `default` tier so the
-     app is correct even before the density script runs.
+     scale() — so layout stays crisp and predictable. Three discrete tiers
+     (compact / default / comfortable) are applied via a `data-density`
+     attribute on <html> (lib/density.ts), auto-selected by viewport width and
+     overridable. `:root` carries the `default` tier so the app is correct even
+     before the density script runs.
 
        --app-font-size      base body text
        --chat-msg-font-size message bubble + composer text
        --header-height      main-pane header & sidebar switcher seam (aligned)
-       --sidebar-width      left rail
        --composer-size      composer send control size
        --chat-gutter        message-column horizontal padding (L/R)
-     The centred message column itself is --thread-width, which is NOT a tier
-     token — see the thread-geometry block below.
+
+     TYPE AND CONTROLS ARE TIERED; THE TWO LAYOUT WIDTHS ARE NOT. A font size
+     has a small number of values that read well and no business being 14.37px,
+     so it steps. A pane width has no such thing — every pixel between 1400 and
+     2100 is a legitimate rail width — so --sidebar-width and --thread-width are
+     single fluid clamp() expressions defined once in :root and never restated
+     per tier. They still answer to the density preference, through --ui-scale.
+     See their definitions below; do not re-enumerate them here.
+
+     The reading measure inside the thread is --msg-body, also not a tier token:
+     it is in `ch`, so it tracks --chat-msg-font-size by itself.
 
      The sidebar scales with the SAME tiers so the rail never reads as a
      miniature next to the scaled chat. These tokens are subtle by design — the
@@ -223,19 +231,57 @@ html[data-density='comfortable'] {
   --sidebar-badge-font-size: calc(var(--sidebar-meta-font-size) - 2px);
   --header-height: 56px;
   --workspace-nav-width: 3.25rem;
-  --sidebar-width: 380px;
+  /* FLUID, and defined exactly once (2026-08-26, user: the widths should scale
+     with CSS rather than be managed per resolution). This token used to be
+     enumerated in eight places — three density tiers, three no-JS media
+     fallbacks and four Auto bands — which meant every width decision had to be
+     made eight times, the app jumped between fixed sizes at 1280 / 2200 / 3000,
+     and a window dragged from 1400 to 2100 got no wider a rail at all.
+
+     `calc(base + Nvw)` is the standard fluid pattern: the fixed part is what
+     survives on a small window, the vw part is the share of the display it may
+     grow by, and the pair gives a SUB-LINEAR curve — the rail gains less and
+     less of each extra pixel, which is what stops it eating a 4K screen. The
+     clamp bounds are the only hard numbers: below 320px the rail can't hold a
+     two-line row, and past 680px it is furniture.
+
+     `* var(--ui-scale)` is what keeps the density PREFERENCE working. Viewport
+     size and stated preference are different questions — someone on a 1920
+     display who picks `compact` is asking for less chrome, not for a different
+     screen — and multiplying by the tier's own scale answers both with one
+     expression instead of a matrix of them.
+
+     Safe as a calc: nothing reads these two from JS (only --composer-reserve is
+     parsed, in MessageActionsPanel). Don't add a JS reader without converting
+     it to `getBoundingClientRect` — getPropertyValue hands back the unevaluated
+     clamp() text, not a pixel number. */
+  --sidebar-width: clamp(320px, calc((250px + 14vw) * var(--ui-scale)), 680px);
   --composer-size: 32px;
   --chat-gutter: 16px;
 
   /* ── Thread geometry ─────────────────────────────────────────────────────
-     Deliberately NOT part of the density tiers. --thread-width is a reading
-     measure, not a pane width: widening it on a 4K display would only produce
-     longer lines, so it stays put while the chrome around it scales.
-       --thread-width  the centred message column
-       --msg-body      reading measure for message body text
-       --msg-indent    gap between a message's rule and its text */
-  --thread-width: 772px;
-  --msg-body: 62ch;
+     TWO widths, and the difference between them is the whole reason this block
+     can be tiered at all (it is, as of 2026-08-26 — it used to be one fixed
+     number for every display).
+
+     The old rule was that --thread-width IS the reading measure, so widening it
+     on a big display buys nothing but longer lines. That was never quite true:
+     line length is capped by --msg-body, a SEPARATE token, and the column
+     around it holds the composer, the day dividers, the header seam and any
+     data block a message renders. Those were all being held to a 772px band on
+     a 4K display to protect a measure they do not set. Tiering the column and
+     leaving the text cap to do its own job is what lets the app use the screen
+     without a single line getting longer than --msg-body allows.
+
+       --thread-width  the centred message column — composer included, so both
+                       align exactly (see .chat-column). Tier token.
+       --msg-body      the reading measure, in ch of the body font, so it tracks
+                       --chat-msg-font-size per tier on its own. THIS is the
+                       number to change if lines feel long; never --thread-width.
+       --msg-indent    gap between a message's rule and its text
+       --msg-lane      the author lane left of an incoming message's rule */
+  --thread-width: clamp(640px, calc((480px + 36vw) * var(--ui-scale)), 1320px);
+  --msg-body: 72ch;
   /* ~1em of body text. At 20px the rule stood too far off the words to read as
      THEIR edge — it looked like a divider that happened to be nearby, and the
      block drifted away from the column edge it is supposed to hang from. One em
@@ -243,6 +289,18 @@ html[data-density='comfortable'] {
      mono label's 0.14em tracking. It also sets where the hover action strip and
      the actions panel sit, so all three stay on the same line. */
   --msg-indent: 14px;
+  /* The AUTHOR LANE — the strip to the left of an incoming message's rule that
+     the burst-head photo hangs in, and that a follow-up's hover timestamp sits
+     in under it. Incoming rows carry it as a left margin; the tile and the
+     stamp are absolutely positioned back into it.
+
+     REM, not px, and that is the whole reason this is a token rather than a
+     number in MessageRow. The tile is drawn by `Avatar`, which renders its
+     design-px size as rem so it tracks --ui-scale — a px lane would stay put
+     while the tile inside it grew, and on the 4K tier the photo would run into
+     the rule it is supposed to hang beside. 2.5rem against a 1.875rem (30px)
+     tile leaves 0.625rem of air, at every scale. */
+  --msg-lane: 2.5rem;
   /* The mono voice's two sizes. Like the chat/sidebar tokens these are px, not
      rem steps off the type scale, because they are optical: a 0.14em-tracked
      uppercase mono label and a tabular stat value each have exactly one size
@@ -363,7 +421,6 @@ html[data-theme='light'] {
   --app-font-size: 13px;
   --chat-msg-font-size: 13.5px;
   --header-height: 52px;
-  --sidebar-width: 330px;
   --composer-size: 30px;
   --chat-gutter: 14px;
 
@@ -385,7 +442,6 @@ html[data-theme='light'] {
   --app-font-size: 14px;
   --chat-msg-font-size: 14.5px;
   --header-height: 56px;
-  --sidebar-width: 380px;
   --composer-size: 32px;
   --chat-gutter: 16px;
 
@@ -414,7 +470,6 @@ html[data-theme='light'] {
   --app-font-size: 16px;
   --chat-msg-font-size: 17px;
   --header-height: 72px;
-  --sidebar-width: 560px;
   --composer-size: 40px;
   --chat-gutter: 28px;
 
@@ -440,7 +495,6 @@ html[data-theme='light'] {
     --app-font-size: 13px;
     --chat-msg-font-size: 13.5px;
     --header-height: 52px;
-    --sidebar-width: 330px;
     --composer-size: 30px;
     --chat-gutter: 14px;
 
@@ -462,7 +516,6 @@ html[data-theme='light'] {
     --app-font-size: 16px;
     --chat-msg-font-size: 17px;
     --header-height: 72px;
-    --sidebar-width: 560px;
     --composer-size: 40px;
     --chat-gutter: 28px;
 
@@ -492,7 +545,6 @@ html[data-theme='light'] {
     --app-font-size: 17px;
     --chat-msg-font-size: 18px;
     --header-height: 76px;
-    --sidebar-width: 620px;
     --composer-size: 42px;
     --chat-gutter: 32px;
 
@@ -524,7 +576,17 @@ html[data-theme='light'] {
      the rework removed. */
   gap: 0;
   grid-template-columns: var(--workspace-nav-width) var(--sidebar-width) minmax(0, 1fr);
-  transition: grid-template-columns 300ms cubic-bezier(0.22, 1, 0.36, 1);
+  /* NO transition on the tracks. There was a 300ms ease here, and it was right
+     while --sidebar-width was a fixed number per tier: the only time the track
+     changed was a tier boundary or a density toggle, and easing that reads as
+     the rail settling into its new size.
+     The rail is fluid now (a vw-based clamp), so the track changes on EVERY
+     resize frame. A transition there re-targets itself every frame and the rail
+     trails the window edge by a third of a second for the whole drag, which
+     reads as the app lagging rather than as polish. Instant tracking of the
+     cursor is the correct behaviour for a width that follows the window; the
+     cost is that switching the density preference now snaps, which is a rare,
+     deliberate action where a snap is honest. */
 }
 
 .workspace-shell--collapsed {
@@ -581,7 +643,6 @@ html[data-density-mode='auto'] {
   --app-font-size: 15px;
   --chat-msg-font-size: 15px;
   --header-height: 56px;
-  --sidebar-width: clamp(360px, 22vw, 460px);
   --composer-size: 34px;
   --chat-gutter: 18px;
 
@@ -598,14 +659,18 @@ html[data-density-mode='auto'] {
   --sidebar-section-gap: 30px;
 }
 
-/* Note for anyone re-adding a per-tier column width here: don't. The thread is
-   capped at --thread-width, a fixed reading measure, in EVERY mode — Auto
-   included. Auto used to widen it with the display (clamp(720px, 74cqw, 980px)
-   and wider again at 2K/4K), which made sense when messages aligned to the
-   column's two edges and a narrow column crushed them together. Nothing aligns
-   right any more: every message starts at the same left rule, so extra width
-   buys nothing but longer lines. The pane still grows on big displays; the
-   thread inside it deliberately doesn't. */
+/* Auto sets no width of its own any more, and neither does any tier: both
+   --sidebar-width and --thread-width are one fluid clamp() in :root that all
+   four modes share (see there). Auto's contribution is its --ui-scale of 1,
+   which the formula multiplies through — so Auto still lands between compact
+   and comfortable at the same viewport, without restating a single width.
+
+   The old note here said not to re-add a per-tier column width, on the argument
+   that extra width buys nothing but longer lines. That conflated the column
+   with the measure: line length is --msg-body's job, it is in `ch`, and a wider
+   column cannot lengthen a line by one character. What the column actually sets
+   is the composer, the day dividers and any data block inside a message — and
+   holding those to 772px on a 2560px display letterboxed the app for nothing. */
 
 @media (max-width: 1280px) {
   html[data-density-mode='auto'] {
@@ -613,7 +678,6 @@ html[data-density-mode='auto'] {
     --app-font-size: 13.5px;
     --chat-msg-font-size: 13.5px;
     --header-height: 50px;
-    --sidebar-width: clamp(300px, 26vw, 360px);
     --composer-size: 30px;
     --chat-gutter: 13px;
 
@@ -637,7 +701,6 @@ html[data-density-mode='auto'] {
     --app-font-size: 15.5px;
     --chat-msg-font-size: 15.5px;
     --header-height: 60px;
-    --sidebar-width: clamp(440px, 20vw, 520px);
     --composer-size: 35px;
     --chat-gutter: 20px;
 
@@ -661,7 +724,6 @@ html[data-density-mode='auto'] {
     --app-font-size: 16px;
     --chat-msg-font-size: 16px;
     --header-height: 64px;
-    --sidebar-width: clamp(500px, 19vw, 580px);
     --composer-size: 37px;
     --chat-gutter: 24px;
   }

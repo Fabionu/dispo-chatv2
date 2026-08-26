@@ -6,7 +6,9 @@
 // breakdown, a trip — is drawn with the pieces below rather than by inventing
 // another bordered div per feature. Three parts:
 //
-//   Attribution  the mono uppercase name + time row that leads every message.
+//   Attribution  the name + time row that heads a BURST of messages — with the
+//                author's photo when the room has enough people for a face to
+//                answer something. Follow-ups in the same burst suppress it.
 //   DataBlock    a bordered block INSIDE a message: header row → content →
 //                stats → notices, each separated by a hairline.
 //   ThreadAction the mono uppercase text buttons (copy, send to driver, …)
@@ -53,7 +55,12 @@ export function Attribution({
   onNameClick,
   alignEnd = false,
 }: {
-  name: string
+  // Omitted on a burst FOLLOW-UP. The head of a run names its author (and shows
+  // their photo); repeating that on every message of the run is what made a
+  // six-message burst read as six unrelated statements. A follow-up renders
+  // this row at all only when it still has live state to report — see the
+  // grouping note in MessageRow.
+  name?: string
   time?: string
   // Status glyphs (edited, pinned, delivery ticks) — anything that belongs to
   // the message's identity rather than to its content.
@@ -91,7 +98,7 @@ export function Attribution({
         alignEnd ? 'justify-end' : ''
       }`}
     >
-      {onNameClick ? (
+      {name === undefined ? null : onNameClick ? (
         <button
           type="button"
           onClick={onNameClick}
@@ -241,14 +248,64 @@ export function DataChip({
   )
 }
 
+// ── Lane stamp ──────────────────────────────────────────────────────────────
+// The clock for a burst follow-up, whose attribution row has been suppressed.
+//
+// It sits in the AUTHOR LANE — the same strip the burst head's photo hangs in,
+// directly under that photo — right-aligned against the rule and vertically
+// centred on the message's first line. Two things follow from that position,
+// and both are the point:
+//
+//  1. It costs NO vertical space. It sits BESIDE the first line rather than
+//     above it, so suppressing the attribution row stays free. Anything that
+//     hangs in the gap BELOW a message instead forces that gap to be tall
+//     enough to hold it, which is what made a burst read as a list of separate
+//     messages rather than one person talking.
+//  2. It has somewhere to be at all. Before the photo moved out to the lane
+//     there was no such strip, and the only free space was that gap.
+//
+// Hover-revealed, because a column of repeating clocks down the edge of every
+// burst is noise: within a burst every message is minutes from the head, whose
+// time is already on screen. `group-hover/msg`, NOT `group-hover` — the row is
+// `group/msg`, and Tailwind compiles a named group to a class literally called
+// `group/msg`, which does not match the bare `.group` selector `group-hover:`
+// emits.
+//
+// `leading` matches the body's own line box so `items-center` lands the label on
+// the first line's optical centre rather than on its top edge.
+export function ThreadStamp({ children }: { children: ReactNode }) {
+  return (
+    <span
+      aria-hidden
+      className="eyebrow eyebrow-time pointer-events-none absolute left-[calc(-1*var(--msg-lane))] flex w-[var(--msg-lane)] items-center justify-end pr-2.5 leading-[calc(var(--chat-plain-font-size)*1.6)] opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100"
+    >
+      {children}
+    </span>
+  )
+}
+
 // ── Action ──────────────────────────────────────────────────────────────────
-// Message actions are mono uppercase TEXT, never icon buttons on a fill. They
-// are invisible until the message is hovered or something inside it is
-// keyboard-focused, so a quiet thread stays quiet.
+// Message actions are mono uppercase TEXT, never icon buttons on a fill.
+//
+// THEY DO NOT REVEAL ON HOVER (user, 2026-08-26). The strip is absolutely
+// positioned in the gap BELOW a message, so anything that makes it visible also
+// makes that gap have to be tall enough to hold it — and a ~17px reserve
+// between every pair of messages is what stopped a burst from one person
+// reading as one person. Shown on hover it was the most repeated mark on the
+// screen, sitting exactly where the eye travels from one line of a burst to the
+// next. The mouse route to these actions is RIGHT-CLICK on the row (see
+// MessageRow's onContextMenu), which opens the full MessageActionsPanel — every
+// verb here and more — with no standing cost to the timeline at all.
+//
+// It was never actually revealing on hover before either, though not on
+// purpose: the class was the unnamed `group-hover:`, and the row is `group/msg`
+// — Tailwind compiles a named group to a class literally called `group/msg`,
+// which does not match the `.group` selector `group-hover:` emits. Restoring
+// hover now would be a change, not a fix. Don't "fix" it back.
 //
 // opacity-0 (not hidden) is deliberate: they stay reachable by Tab, and
-// `focus-visible:opacity-100` brings them back for keyboard users, who get no
-// hover event at all.
+// `focus-visible:opacity-100` brings them back for keyboard users, who get
+// neither a hover event nor a right-click.
 export function ThreadAction({
   icon: Icon,
   children,
@@ -265,7 +322,7 @@ export function ThreadAction({
       type="button"
       onClick={onClick}
       title={title}
-      className="eyebrow inline-flex items-center gap-1.5 whitespace-nowrap opacity-0 transition-opacity duration-150 hover:text-text focus-visible:opacity-100 focus-visible:outline-none focus-visible:underline focus-visible:underline-offset-4 group-hover:opacity-100"
+      className="eyebrow inline-flex items-center gap-1.5 whitespace-nowrap opacity-0 transition-opacity duration-150 hover:text-text focus-visible:opacity-100 focus-visible:outline-none focus-visible:underline focus-visible:underline-offset-4"
     >
       {Icon ? <Icon size="0.75rem" strokeWidth={1.7} className="shrink-0" /> : null}
       {children}

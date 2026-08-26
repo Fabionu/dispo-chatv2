@@ -25,6 +25,8 @@ const DocumentPreviewModal = lazy(() => import('../attachments/DocumentPreviewMo
 type Props = {
   group: Group
   members: GroupMember[]
+  // Drives @mention highlighting in the attachment previews' captions.
+  currentUserId: string
   // Pre-send file preview (staged via picker, drag-drop, or paste).
   pendingFile: File | null
   pendingCaption: string
@@ -62,6 +64,7 @@ type Props = {
 export default function ChatModals({
   group,
   members,
+  currentUserId,
   pendingFile,
   pendingCaption,
   onReplacePendingFile,
@@ -108,6 +111,7 @@ export default function ChatModals({
         <ImagePreviewModal
           attachment={imagePreview.attachment}
           message={imagePreview.message}
+          currentUserId={currentUserId}
           onReply={onReplyFromPreview}
           onForward={onForwardFromPreview}
           onClose={onCloseImagePreview}
@@ -121,6 +125,7 @@ export default function ChatModals({
         <DocumentPreviewModal
           attachment={docPreview.attachment}
           message={docPreview.message}
+          currentUserId={currentUserId}
           onReply={onReplyFromPreview}
           onForward={onForwardFromPreview}
           onClose={onCloseDocPreview}

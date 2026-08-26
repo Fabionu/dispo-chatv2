@@ -14,7 +14,14 @@ import type { Group } from '../lib/types'
 import { groupLabel, groupPreview, isUnread, tractorPlate, trailerPlate } from '../lib/types'
 import { useDraft } from '../lib/draftStorage'
 import { getOps, tripSummary } from '../lib/vehicleOps'
-import { RowActionsTrigger, RowMeta, RowStateIcon, UnreadBadge, unreadLabel } from './sidebarBits'
+import {
+  RowActionsTrigger,
+  RowMeta,
+  RowStateIcon,
+  RowTile,
+  UnreadBadge,
+  unreadLabel,
+} from './sidebarBits'
 import { initials } from '../components/messages/messageUtils'
 import { MENU_GLYPH } from '../components/menuStyles'
 import { statusMeta } from '../lib/availability'
@@ -54,14 +61,15 @@ function relTime(iso: string | null): string {
   return `${day}/${month}`
 }
 
-// One conversation in the unified rail — two lines, no avatar.
+// One conversation in the unified rail — an identity tile and two lines.
 //
-// The identity slot (circular Avatar for a DM, squircle GroupAvatar for a
-// vehicle room) was removed 2026-08-20: it encoded TYPE by shape, but it cost
-// ~50px of a rail that is now 380px wide, and it said nothing a dispatcher
-// scans for. Line 2 does that job instead — for a vehicle room with a trip it
-// reads `SV 14 HLS │ RO→IT` (plate, then the trip's country corridor), which
-// identifies the room AND tells you what it's doing.
+// The tile came back on 2026-08-26 (user) after six days without one. What it
+// is NOT is the old identity slot: that one encoded the conversation's TYPE by
+// its shape (circle = person, squircle = room), and line 2 does that job now —
+// for a vehicle room with a trip it reads `SV 14 HLS │ RO→IT` (plate, then the
+// trip's country corridor), which identifies the room AND tells you what it's
+// doing, in less space than a silhouette. The tile is back for the thing the
+// meta line CAN'T do: a face is recognised before it is read. See RowTile.
 //
 // Line 2 falls back to the last-message preview when there are no operational
 // facts to show, and DMs keep the preview outright: between a colleague's
@@ -364,9 +372,17 @@ export default function GroupRow({
           selected ? 'bg-white/10 text-text' : 'text-muted hover:bg-white/8 hover:text-text'
         }`}
       >
+        {/* The picture: the peer for a DM, the room's own image for a vehicle
+            group. It rides the button's existing `--sidebar-row-gap`, which has
+            been the identity slot's gutter all along. */}
+        {isDirect ? (
+          <RowTile kind="user" id={peer?.id ?? ''} name={groupLabel(group)} />
+        ) : (
+          <RowTile kind="group" id={group.id} hasAvatar={group.hasAvatar} />
+        )}
         {/* Two-line body. Line 1: name + vehicle trip status + timestamp. Line 2:
             last-message preview + conversation-state icons. Tight line-height
-            groups the two lines into one block, vertically centred by the avatar. */}
+            groups the two lines into one block, vertically centred by the tile. */}
         <span className="flex-1 min-w-0 flex flex-col gap-px">
           {/* Line 1 — name/status take the flexible space; timestamp stays at the
               far right, aligned with the identity rather than the preview. */}
