@@ -366,7 +366,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
   // it matches the field: the thread scrolls UNDER this. `relative` anchors the
   // mention picker.
   return (
-    <div className="relative border bg-bg transition-colors focus-within:border-strong">
+    <div className="chat-composer relative border bg-bg transition-colors focus-within:border-strong">
       {pickerOpen && (
         <MentionPicker
           members={matches}
@@ -426,7 +426,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           --composer-size and are vertically centred against the textarea, so
           they stay aligned with the middle of the input whether it's one line or
           grown to several (items-center tracks the textarea's height). */}
-      <div className="flex items-center gap-1.5 px-1.5 py-1.5">
+      <div className="composer-bar flex items-center gap-1.5 px-1.5 py-1.5">
         <input
           ref={fileInputRef}
           type="file"

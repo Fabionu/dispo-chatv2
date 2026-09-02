@@ -150,7 +150,12 @@ export default function MessageActionsPanel({ actions, open, side, onClose }: Pr
       //
       // `origin-top`/`origin-bottom` rather than a corner: the same component is
       // anchored left under an incoming message and right under one of mine.
-      className={`${
+      //
+      // `msg-anchored` + `data-side`: the bubble message style pulls this back
+      // to the box's own edge — same anchor, and the same reason, as the hover
+      // action strip (see ThreadActions in thread/threadChrome).
+      data-side={side}
+      className={`msg-anchored ${
         open
           ? above
             ? 'action-strip-enter-up'

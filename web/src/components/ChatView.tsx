@@ -77,6 +77,7 @@ import { VehicleRoomPicker } from './inbox/InboxView'
 import { toReplyPreview, attachmentTabLabel } from './chatViewUtils'
 import { useTypingIndicator } from '../hooks/useTypingIndicator'
 import { authorRuleColors } from '../lib/authorColor'
+import { useMessageStyle } from '../lib/messageStyle'
 import { usePinnedMessages } from '../hooks/usePinnedMessages'
 
 // Stable empty list so a group with no cached thread doesn't hand a fresh
@@ -404,6 +405,10 @@ export default function ChatView({
   // Who else is currently typing in this conversation (excludes self). The whole
   // emit/receive cadence lives in useTypingIndicator, driven by the composer text.
   const typingUsers = useTypingIndicator(group.id, currentUserId, text)
+  // ONE subscription to the message style for the whole thread — see the note
+  // on MessageRow's `messageStyle` prop for why the rows don't each take their
+  // own.
+  const messageStyle = useMessageStyle()
   // Members of this conversation — the source for the @-mention picker, @Name
   // resolution at send time, and the sent-message read receipts. Read from the
   // session cache (not local state) so it's preserved across conversation
@@ -1430,6 +1435,7 @@ export default function ChatView({
                           prev={visibleMessages[i - 1]}
                           conversationStart={i === 0 && !nextCursor}
                           groupType={group.type}
+                          messageStyle={messageStyle}
                           ruleColor={
                             ruleColorFor && m.authorId !== currentUserId
                               ? ruleColorFor(m.authorId)

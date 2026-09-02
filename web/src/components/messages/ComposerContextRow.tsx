@@ -24,7 +24,11 @@ export default function ComposerContextRow({ tone, label, snippet, attachment, o
       <Pencil size="0.75rem" strokeWidth={1.8} />
     )
   return (
-    <div className={`flex items-center gap-2.5 border-b border-l-2 border-b-line px-3 py-2 ${accent}`}>
+    // `composer-context`: the bubble message style rounds the composer, and this
+    // row sits at the top of it — see the note in index.css.
+    <div
+      className={`composer-context flex items-center gap-2.5 border-b border-l-2 border-b-line px-3 py-2 ${accent}`}
+    >
       <div className="flex-1 min-w-0">
         <div
           className={`eyebrow flex items-center gap-1.5 leading-tight ${

@@ -41,7 +41,11 @@ import type { ReactNode } from 'react'
 // at equal specificity the later rule took it — so the name had been rendering
 // at exactly the same `faint` as the clock next to it. Now it sits a step
 // brighter, which is the hierarchy the row was written for.
-const NAME_TYPE = 'text-[length:var(--msg-author-size)] font-medium text-muted'
+//
+// `msg-name` is the hook the BUBBLE style paints the per-author colour onto.
+// With no rule to carry that hue it moves to the word you actually read —
+// see --author-color in MessageRow and the bubble block in index.css.
+const NAME_TYPE = 'msg-name text-[length:var(--msg-author-size)] font-medium text-muted'
 
 // ── Attribution ─────────────────────────────────────────────────────────────
 // The row that identifies a message. Sits above the body, inside the indent,
@@ -94,7 +98,9 @@ export function Attribution({
       // happened to land on the same line. The same gap carries the status
       // flags and the delivery ticks after them, which want to sit close to the
       // time they qualify rather than drift toward the middle of the row.
-      className={`flex items-center gap-1.5 mb-1 leading-none select-none ${
+      // `msg-attribution`: in the bubble style this row is lifted OUT of the
+      // block and captions it from above, so it owns the gap down to it.
+      className={`msg-attribution flex items-center gap-1.5 mb-1 leading-none select-none ${
         alignEnd ? 'justify-end' : ''
       }`}
     >
@@ -109,7 +115,7 @@ export function Attribution({
       ) : (
         <span className={NAME_TYPE}>{name}</span>
       )}
-      {time ? <span className="eyebrow eyebrow-time">{time}</span> : null}
+      {time ? <span className="timestamp">{time}</span> : null}
       {trailing}
     </div>
   )
@@ -277,7 +283,7 @@ export function ThreadStamp({ children }: { children: ReactNode }) {
   return (
     <span
       aria-hidden
-      className="eyebrow eyebrow-time pointer-events-none absolute left-[calc(-1*var(--msg-lane))] flex w-[var(--msg-lane)] items-center justify-end pr-2.5 leading-[calc(var(--chat-plain-font-size)*1.6)] opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100"
+      className="msg-stamp timestamp pointer-events-none absolute left-[calc(-1*var(--msg-lane))] flex w-[var(--msg-lane)] items-center justify-end pr-2.5 leading-[calc(var(--chat-plain-font-size)*1.6)] opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100"
     >
       {children}
     </span>
@@ -351,9 +357,14 @@ export function ThreadActions({
 }) {
   return (
     <div
-      className={`absolute top-full z-10 mt-1 flex items-center gap-x-5 ${
+      // `msg-anchored` + `data-side` let the bubble style pull this back to the
+      // box's edge — in the timeline the message's edge is its TEXT's, one
+      // --msg-indent in from the rule; in a bubble it is the box's own. See the
+      // bubble block in index.css.
+      className={`msg-anchored absolute top-full z-10 mt-1 flex items-center gap-x-5 ${
         side === 'right' ? 'right-[var(--msg-indent)]' : 'left-[var(--msg-indent)]'
       }`}
+      data-side={side}
     >
       {children}
     </div>

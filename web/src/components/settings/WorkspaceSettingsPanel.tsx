@@ -22,6 +22,7 @@ import {
   clearDensityOverride,
   type Density,
 } from '../../lib/density'
+import { setMessageStyle, useMessageStyle, type MessageStyle } from '../../lib/messageStyle'
 import { useAuth } from '../../auth/AuthContext'
 import { setTheme, useTheme, type Theme } from '../../lib/theme'
 import { api, ApiError } from '../../lib/api'
@@ -185,6 +186,7 @@ function AppearanceSettings() {
       <div className="rounded-card border border-line bg-white/2 px-4 divide-y divide-line">
         <ThemeSetting />
         <DensitySetting />
+        <MessageStyleSetting />
       </div>
       <p className="text-xs text-faint mt-2.5 px-1 leading-[1.5]">
         Saved in this browser — applies to this device only.
@@ -341,6 +343,36 @@ function ThemeSetting() {
           { value: 'light', label: 'Light' },
         ]}
         onChange={(value) => setTheme(value as Theme)}
+      />
+    </SettingBlock>
+  )
+}
+
+// How a message is DRAWN in the thread (lib/messageStyle.ts). Two readings of
+// the same vocabulary rather than two skins: Timeline hangs a message off a
+// coloured side rule; Bubbles sets it in a rounded block of quiet fill with the
+// name lifted out above it. Both say whose a message is with the SIDE it's on,
+// and which of the room's people sent it with the same per-author colour — the
+// rule wears it in one, the name wears it in the other — so switching doesn't
+// change what any mark in the thread MEANS.
+function MessageStyleSetting() {
+  const style = useMessageStyle()
+  return (
+    <SettingBlock
+      label="Message style"
+      description={
+        style === 'bubble'
+          ? 'Each message sits in a rounded block, with the sender above it.'
+          : 'Each message hangs off a coloured rule, with no block around it.'
+      }
+    >
+      <Segmented
+        value={style}
+        options={[
+          { value: 'timeline', label: 'Timeline' },
+          { value: 'bubble', label: 'Bubbles' },
+        ]}
+        onChange={(value) => setMessageStyle(value as MessageStyle)}
       />
     </SettingBlock>
   )

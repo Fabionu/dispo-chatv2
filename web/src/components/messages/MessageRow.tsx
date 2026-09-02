@@ -1,4 +1,12 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react'
+import {
+  memo,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+} from 'react'
 import { Copy, Forward, MoreHorizontal, Pin, Reply } from 'lucide-react'
 import type { Attachment, GroupType } from '../../lib/types'
 import AttachmentBlock from '../attachments/AttachmentBlock'
@@ -12,6 +20,7 @@ import Avatar from '../Avatar'
 import { renderBody } from './messageBody'
 import { buildMessageActions } from './messageActionItems'
 import type { LocalMessage } from './types'
+import type { MessageStyle } from '../../lib/messageStyle'
 
 // Message body type — the same for EVERY message, whoever sent it.
 //
@@ -120,6 +129,21 @@ type Props = {
   // to load) — the day divider then reads "Conversation started · <date>".
   conversationStart?: boolean
   groupType: GroupType
+  // Which message style is on (lib/messageStyle.ts). Almost everything about
+  // the two styles is CSS off a root attribute — this prop exists for the ONE
+  // thing CSS cannot do, which is put an element in a different PARENT. In the
+  // timeline the clock captions the message from above, beside the name; in the
+  // bubble style it sits inside the block's bottom-right corner (user,
+  // 2026-09-02), and no rule can move a node between two parents.
+  //
+  // Read ONCE in ChatView and passed down, never per row: a hundred rows each
+  // subscribing to the root attribute is a hundred MutationObservers. Putting
+  // it in propsEqual re-renders those hundred rows when the setting changes,
+  // which is fine — that is a deliberate once-in-a-while action, not a hot
+  // path. (The note in lib/messageStyle.ts used to say a prop was the wrong
+  // answer outright; it was overstating the cost of the re-render, and the
+  // observers were the real argument.)
+  messageStyle: MessageStyle
   // Colour for this row's left rule, identifying WHICH of the room's members
   // sent it (see lib/authorColor.ts). Supplied only where it carries
   // information: someone else's message, in a room with more than two people.
@@ -171,6 +195,7 @@ function MessageRow({
   prev,
   conversationStart,
   groupType,
+  messageStyle,
   ruleColor,
   authorHasAvatar,
   highlighted,
@@ -205,6 +230,10 @@ function MessageRow({
     prev.kind !== 'system' &&
     prev.authorId === message.authorId &&
     new Date(message.createdAt).getTime() - new Date(prev.createdAt).getTime() < GROUP_WINDOW_MS
+
+  // The only branch this prop drives. Everything else that separates the two
+  // styles is CSS off the root attribute — see the bubble block in index.css.
+  const bubble = messageStyle === 'bubble'
 
   const showDayDivider =
     prev === undefined ||
@@ -457,7 +486,7 @@ function MessageRow({
         type="button"
         onClick={() => onOpenProfile(message.authorId, authorLabel)}
         aria-label={`Open ${authorLabel}'s profile`}
-        className="absolute left-[calc(-1*var(--msg-lane))] top-0.5 focus-visible:outline-none focus-visible:opacity-80"
+        className="msg-author-tile absolute left-[calc(-1*var(--msg-lane))] top-0.5 focus-visible:outline-none focus-visible:opacity-80"
       >
         <Avatar
           userId={message.authorId}
@@ -501,7 +530,11 @@ function MessageRow({
   //
   // Read ticks are the exception that stays a glyph: they carry live delivery
   // state, so they're always visible rather than hover-revealed.
-  const attributionTrailing = (
+  // Split in two, because the bubble style puts the TIME between them: flags
+  // lead the cluster, the clock sits in the middle, the delivery ticks close it
+  // — `Edited · 14:32 ✓✓`. The timeline renders the pair straight through and
+  // keeps its clock earlier in the row, beside the name.
+  const messageFlags = (
     <>
       {pinned && (
         <span className="eyebrow inline-flex items-center gap-1 text-active">
@@ -512,14 +545,23 @@ function MessageRow({
       {forwarded && <span className="eyebrow">Forwarded</span>}
       {edited && <span className="eyebrow">Edited</span>}
       {failed && <span className="eyebrow text-alert">Failed</span>}
-      {mine && !failed && !deleted && (
-        <ReadReceipts
-          others={readers ?? []}
-          createdAt={message.createdAt}
-          pending={pending}
-          onOpen={() => onOpenReadReceipts(message)}
-        />
-      )}
+    </>
+  )
+
+  const deliveryTicks =
+    mine && !failed && !deleted ? (
+      <ReadReceipts
+        others={readers ?? []}
+        createdAt={message.createdAt}
+        pending={pending}
+        onOpen={() => onOpenReadReceipts(message)}
+      />
+    ) : null
+
+  const attributionTrailing = (
+    <>
+      {messageFlags}
+      {deliveryTicks}
     </>
   )
 
@@ -541,13 +583,35 @@ function MessageRow({
           // contextmenu), then opens there — one strip open at a time.
           setMenuOpen((open) => !open)
         }}
+        // The hooks the BUBBLE message style reads (lib/messageStyle.ts). They
+        // are data attributes rather than more classes in the template below
+        // because they are this row's STATE — whose it is, whether it opens a
+        // burst, whether it is being pointed at — and the two styles spend those
+        // facts differently: the timeline on utilities, the bubble on a block.
+        //
+        // `|| undefined` so React omits the attribute entirely when false: the
+        // CSS selects on presence ([data-own]), and data-own="false" is present.
+        data-own={mine || undefined}
+        data-head={startNewGroup || undefined}
+        data-highlighted={highlighted || undefined}
         // Inline, because the value is per-author data rather than one of a
         // fixed set of states — a utility class per member is not a thing
-        // Tailwind can generate. It overrides only the left edge of the
-        // `--color-line-msg` set by the class, so every other rule on the row
-        // is untouched.
-        style={ruleColor && !mine ? { borderLeftColor: ruleColor } : undefined}
-        className={`group/msg relative w-fit pb-0.5 transition-colors duration-500 ${
+        // Tailwind can generate. `borderLeftColor` overrides only the left edge
+        // of the `--color-line-msg` set by the class, so every other rule on the
+        // row is untouched.
+        //
+        // The same hue also goes out as a VARIABLE, because the two styles spend
+        // IT differently too: the timeline paints its rule with it, and the
+        // bubble style — which has no rule — paints the author's NAME with it
+        // (see index.css). One value, set once, read by whichever style is on,
+        // and undefined in a DM or a two-person room where a colour would have
+        // nobody to tell apart from nobody.
+        style={
+          ruleColor && !mine
+            ? ({ borderLeftColor: ruleColor, '--author-color': ruleColor } as CSSProperties)
+            : undefined
+        }
+        className={`msg-row group/msg relative w-fit pb-0.5 transition-colors duration-500 ${
           mine
             ? 'ml-auto flex max-w-full flex-col items-end border-r-2 border-[rgb(var(--color-line-own))] pr-[var(--msg-indent)] pl-2'
             : `mr-auto border-l-2 border-[rgb(var(--color-line-msg))] pl-[var(--msg-indent)] pr-2 ${
@@ -566,65 +630,94 @@ function MessageRow({
             drew no attribution at all (a pinned/edited/own one still has its
             clock up there). */}
         {authorTile}
-        {!startNewGroup && !hasLiveMeta && showTile && <ThreadStamp>{time}</ThreadStamp>}
+        {/* The lane clock gives a follow-up its time back after the attribution
+            row was suppressed. The bubble style has no use for it: every block
+            carries its own clock in its corner, so a second one behind a hover
+            would be the same fact twice. */}
+        {!bubble && !startNewGroup && !hasLiveMeta && showTile && (
+          <ThreadStamp>{time}</ThreadStamp>
+        )}
 
-        {(startNewGroup || hasLiveMeta) && (
+        {(bubble ? startNewGroup : startNewGroup || hasLiveMeta) && (
           <Attribution
-            // Suppressed on a follow-up. The row can still be here without it —
-            // a pinned or edited message inside a burst keeps its flags, and my
-            // own keep their ticks — and in that case it shows the state and the
-            // clock, not the name again.
+            // Suppressed on a follow-up. In the TIMELINE the row can still be
+            // here without a name — a pinned or edited message inside a burst
+            // keeps its flags, and my own keep their ticks — and it then shows
+            // the state and the clock rather than the name again. In the bubble
+            // style every one of those has moved into the block below, so this
+            // row is the NAME or it is nothing.
             name={startNewGroup ? authorLabel : undefined}
-            time={time}
-            trailing={attributionTrailing}
+            time={bubble ? undefined : time}
+            trailing={bubble ? undefined : attributionTrailing}
             alignEnd={mine}
             onNameClick={mine ? undefined : () => onOpenProfile(message.authorId, authorLabel)}
           />
         )}
 
-        {!deleted && message.replyTo && (
-          <ReplyQuote replyTo={message.replyTo} onJump={onJumpToMessage} neutral={mine} />
-        )}
+        {/* The message itself — everything that was SAID, and nothing that
+            describes it. In the timeline this wrapper is not in the box tree
+            at all (`display: contents`); in the bubble style it IS the bubble,
+            which is why the attribution row above stays outside it. */}
+        <div className="msg-content">
+          {!deleted && message.replyTo && (
+            <ReplyQuote replyTo={message.replyTo} onJump={onJumpToMessage} neutral={mine} />
+          )}
 
-        {!deleted && message.attachments && message.attachments.length > 0 && (
-          <div className="my-2 flex max-w-body flex-col gap-1.5">
-            {message.attachments.map((a, i) => (
-              <AttachmentBlock
-                key={i}
-                attachment={a}
-                uploading={pending}
-                priority={imagePriority}
-                captioned={Boolean(message.body)}
-                onActivate={(a) => onActivateAttachment(message, a)}
-                onImageLoad={onImageLoad}
-              />
-            ))}
-          </div>
-        )}
+          {!deleted && message.attachments && message.attachments.length > 0 && (
+            <div className="msg-attachments my-2 flex max-w-body flex-col gap-1.5">
+              {message.attachments.map((a, i) => (
+                <AttachmentBlock
+                  key={i}
+                  attachment={a}
+                  uploading={pending}
+                  priority={imagePriority}
+                  captioned={Boolean(message.body)}
+                  onActivate={(a) => onActivateAttachment(message, a)}
+                  onImageLoad={onImageLoad}
+                />
+              ))}
+            </div>
+          )}
 
-        {/* The body, and nothing else. Capped at --msg-body (62ch) — the cap is
-            on the TEXT, not on the row, so an attachment or a data block inside
-            the same message can still use the column's full width. */}
-        {deleted ? (
-          <p className="max-w-body text-[length:var(--chat-plain-font-size)] italic leading-[1.6] text-faint">
-            {mine ? 'You deleted this message' : 'This message was deleted'}
-          </p>
-        ) : message.body ? (
-          <div
-            className={`max-w-body text-[length:var(--chat-plain-font-size)] leading-[1.6] whitespace-pre-wrap break-words ${BODY_TYPE}`}
-          >
-            {renderBody(message.body, message.mentions, currentUserId, tripCtx)}
-          </div>
-        ) : null}
+          {/* The body, and nothing else. Capped at --msg-body (62ch) — the cap
+              is on the TEXT, not on the row, so an attachment or a data block
+              inside the same message can still use the column's full width. */}
+          {deleted ? (
+            <p className="msg-body max-w-body text-[length:var(--chat-plain-font-size)] italic leading-[1.6] text-faint">
+              {mine ? 'You deleted this message' : 'This message was deleted'}
+            </p>
+          ) : message.body ? (
+            <div
+              className={`msg-body max-w-body text-[length:var(--chat-plain-font-size)] leading-[1.6] whitespace-pre-wrap break-words ${BODY_TYPE}`}
+            >
+              {renderBody(message.body, message.mentions, currentUserId, tripCtx)}
+            </div>
+          ) : null}
 
-        {failed && mine && message.localId && (
-          <button
-            onClick={() => onRetry(message.localId!, message.body, message.pendingFile ?? null)}
-            className="eyebrow mt-2 block text-alert transition-colors hover:text-text"
-          >
-            Tap to retry
-          </button>
-        )}
+          {failed && mine && message.localId && (
+            <button
+              onClick={() => onRetry(message.localId!, message.body, message.pendingFile ?? null)}
+              className="eyebrow mt-2 block text-alert transition-colors hover:text-text"
+            >
+              Tap to retry
+            </button>
+          )}
+
+          {/* The block signs itself off (user, 2026-09-02): state, clock and
+              delivery ticks in the bottom-right corner, inside the block, under
+              the message. It is what lets a burst follow-up carry its own time
+              at no cost — the timeline had to hide that clock out in the lane
+              behind a hover, because in a column of bare text a repeated
+              timestamp per line is noise. In the corner of a block it is
+              somewhere the eye skips until it wants it. */}
+          {bubble && (
+            <div className="msg-meta">
+              {messageFlags}
+              <span className="timestamp">{time}</span>
+              {deliveryTicks}
+            </div>
+          )}
+        </div>
 
         {/* Mono uppercase text buttons, invisible until the message is hovered
             or one of them is focused. The three verbs that carry most of the
@@ -687,6 +780,7 @@ function propsEqual(a: Props, b: Props): boolean {
     a.currentUserId === b.currentUserId &&
     a.readers === b.readers &&
     a.groupType === b.groupType &&
+    a.messageStyle === b.messageStyle &&
     // A plain string, so this is a real comparison — it only changes when the
     // roster does, which is exactly when a row's rule should be repainted.
     a.ruleColor === b.ruleColor &&

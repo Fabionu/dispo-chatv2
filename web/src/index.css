@@ -82,7 +82,21 @@ html[data-density='comfortable'] {
   --color-panel: var(--color-bg);
   --color-rail: var(--color-bg);
   --color-composer: var(--color-bg);
-  --color-bubble-own: var(--color-bg);
+  /* The two message-block fills of the bubble style (lib/messageStyle.ts).
+     There are no borders anywhere in that style, so these ARE the shape: one
+     step off the field for someone else's message, two for my own.
+
+     Deliberately close together, because they are not what tells the two apart
+     — the side of the column does that, and it does it perfectly. The fills
+     only have to make a block legible as a block. And deliberately dark: a
+     thread of bright slabs is the one thing an OLED panel should not be asked
+     to draw, and it is the reason the app's field is pure black to begin with.
+
+     (--color-bubble-own aliased --color-bg until the bubble style existed — a
+     leftover of the pre-rework bubbles, and an alias that made the token a
+     no-op, which is how it survived the de-bubbling unnoticed.) */
+  --color-bubble: 18 18 18;
+  --color-bubble-own: 31 31 31;
   --color-surface: 17 17 17;
   --color-surface-2: 26 26 26;
 
@@ -306,6 +320,10 @@ html[data-density='comfortable'] {
      uppercase mono label and a tabular stat value each have exactly one size
      that reads right, and neither wants to grow with the display. */
   --msg-label-size: 11px;
+  /* Timestamps (`.timestamp`). Half a pixel over the mono label beside them:
+     Inter's x-height is smaller than JetBrains Mono's, so matched numerically
+     the clock read a size smaller than the name and the flags it sits with. */
+  --timestamp-size: 11.5px;
   --stat-value-size: 15px;
   /* Weight of message body copy. A TOKEN rather than a `font-light` on the row,
      because the right weight is not a property of the text — it is a property
@@ -327,6 +345,38 @@ html[data-density='comfortable'] {
      number: an activity line and an author's name are the same class of small
      thread chrome, and they should never drift a pixel apart. */
   --msg-system-size: var(--msg-author-size);
+  /* ── Bubble style geometry ───────────────────────────────────────────────
+     The box, and ONLY the box. Everything inside a message — the type, the
+     72ch measure, the mono labels, the author lane — is identical in both
+     message styles by design, so nothing else here is per-style.
+
+       --bubble-pad-x  the box's side padding. It IS --msg-indent, not a number
+                       that happens to match it: the whole idea of the bubble
+                       style is the timeline's indent closed into a box, so the
+                       words have to land at exactly the same distance from the
+                       message's edge in both.
+       --bubble-pad-y  the box's own breathing room above and below the text
+       --bubble-gap    between two bubbles of ONE burst — small enough that a
+                       run from one person still reads as one person talking
+       --bubble-group-gap  between bursts. Tighter than the timeline's 1.75rem
+                       because a bubble already carries --bubble-pad-y at each
+                       end, so the same margin reads much wider between two
+                       boxes than it does between two blocks of bare text. */
+  /* THE one radius in the app (user, 2026-09-02). Every token on the radius
+     scale is 0 and stays 0 — see tailwind.config.js — so this is deliberately
+     NOT one of them: it belongs to the bubble message style and to the chat
+     surface that style owns (the blocks, the typing row, the composer under
+     them), and it does not leak into the rest of the app. Pick Timeline and
+     every corner in the product is square again.
+
+     10px against a block with 10px of vertical padding: enough curve to read
+     as soft on a 40px bubble, short of the 16px+ that reads as a toy. It is a
+     token so it is one number to argue with, not thirty. */
+  --soft-radius: 10px;
+  --bubble-pad-x: var(--msg-indent);
+  --bubble-pad-y: 10px;
+  --bubble-gap: 3px;
+  --bubble-group-gap: 1.5rem;
   /* Width of our custom scrollbar — reserved on the scroller AND added to the
      composer's right so both centred columns share the exact same content box
      (see .chat-column). Constant across tiers. */
@@ -355,11 +405,17 @@ html[data-density='comfortable'] {
 /* Light theme — the same flat field, inverted. White everywhere, with both
    hairlines re-tuned so a rule reads as the same WEIGHT on white as it does on
    black (a straight numeric inversion would make them far too heavy). Only the
-   tokens that actually differ are restated; sidebar/chat/panel/rail/composer/
-   bubble-own resolve through --color-bg and follow automatically. */
+   tokens that actually differ are restated; sidebar/chat/panel/rail/composer
+   resolve through --color-bg and follow automatically. --color-bubble-own does
+   NOT — it is a fill, so it has to step the other way here. */
 html[data-theme='light'] {
   color-scheme: light;
   --color-bg: 255 255 255;
+  /* The same two steps, the other way off white. Wider apart than the dark
+     pair by a hair: a light field gives a fill less room to be quiet in before
+     it stops being visible at all. */
+  --color-bubble: 246 246 246;
+  --color-bubble-own: 236 236 236;
   --color-surface: 250 250 250;
   --color-surface-2: 242 242 242;
   --color-line: 221 221 221;
@@ -808,6 +864,330 @@ html[data-density-mode='auto'] {
   }
 }
 
+/* ── Bubble message style ───────────────────────────────────────────────────
+   The optional message style (Settings → Appearance → Message style; see
+   lib/messageStyle.ts for why it is an attribute on <html> rather than a prop).
+
+   ONE DEVICE, NOT THREE. The first cut of this drew a fill, a hairline on three
+   sides and a 2px accent on the fourth, and boxed the name in with the words.
+   Every one of those marks was answering the same two questions — is this a
+   message, and whose — so they argued rather than accumulated, and a two-word
+   message came out as a label stacked on a sentence inside a frame.
+
+   What is left answers each question exactly once:
+
+     the FILL     is the message. No border, no accent edge, no shadow, no
+                  radius — a square block of quiet colour, and the only mark
+                  the style adds to the thread.
+     the SIDE     is whose it is. It always was. The accent edge was repeating
+                  what the column had already said.
+     the CAPTION  is who and when, and it sits ABOVE the block in the open, so
+                  the block holds nothing but what was actually said. This is
+                  the change the whole rework hangs off: a bubble that contains
+                  its own label isn't a bubble, it is a card.
+     the NAME's   is which of the room's people is talking — the same per-author
+     COLOUR       hue the timeline paints its rule with, moved onto the word you
+                  actually read. A burst follow-up drops the caption entirely
+                  and is identified by the run it sits in, which is the same
+                  reasoning that lets it drop the name in the timeline.
+
+   Everything INSIDE the block is untouched in both styles: the same 62ch
+   measure, the same body token and weight, the same mono voice, the same author
+   photo out in the lane.
+
+   Specificity note: every rule here is at least (0,2,0) and the Tailwind
+   utilities it overrides are all (0,1,0), so this block wins wherever the two
+   meet regardless of source order. */
+
+/* The wrapper around a message's content (see MessageRow). `display: contents`
+   takes it OUT of the box tree entirely, so in the timeline its children are
+   laid out as direct children of the row exactly as they were before it existed
+   — which is what lets one DOM serve both styles without the timeline
+   inheriting a stray block to argue with. */
+.msg-content {
+  display: contents;
+}
+
+[data-msg-style='bubble'] .msg-content {
+  display: block;
+  padding: var(--bubble-pad-y) var(--bubble-pad-x);
+  background: rgb(var(--color-bubble));
+  border-radius: var(--soft-radius);
+  /* Clips the attachment bleed below to the rounded shape. Safe on this box
+     specifically: everything that has to escape a message — the author photo,
+     the hover clock, the action strip, the actions panel — hangs off the ROW,
+     not off this block, and the block draws no border, so its padding box is
+     its border box and a child pulled flush to the edge is not clipped away. */
+  overflow: hidden;
+}
+
+/* ── An attached picture or document fills the block ────────────────────────
+   Media is not a paragraph. Padded like one it reads as a picture that has been
+   placed in a message, and the block's fill becomes a mount around it; run to
+   the edges it reads as the message itself, and the shape stops being a frame
+   and starts being the medium (user, 2026-09-02: "the gap of the top, left and
+   right should be as minimal as possible" — so it is zero, not small).
+
+   Negative margins rather than a padding exception, because the block holds
+   OTHER children — a caption under the picture, a reply quote over it, the
+   sign-off — and every one of those still wants the ordinary inset. The bleed
+   belongs to the one child that asked for it.
+
+   It also sizes the block. A shrink-to-fit box measures a child at its width
+   PLUS its margins, so -14px each side makes the stack contribute (picture −
+   28px), the padding adds 28px back, and the block comes out exactly as wide as
+   the picture. No rule has to know the picture's width — which is as well,
+   because AttachmentBlock computes it per image.
+
+   The corners are the reason for `overflow: hidden` above: the picture is drawn
+   square and would otherwise cut the block's radius off at all four corners. */
+[data-msg-style='bubble'] .msg-attachments {
+  margin-left: calc(-1 * var(--bubble-pad-x));
+  margin-right: calc(-1 * var(--bubble-pad-x));
+}
+
+/* The top only closes when the media OPENS the block. Under a reply quote it
+   keeps the ordinary gap — the quote is what it needs distance from. The gap
+   BELOW is left alone on purpose: a caption or the sign-off follows, and that
+   is a gap between two different things rather than a frame around one. */
+[data-msg-style='bubble'] .msg-content > .msg-attachments:first-child {
+  margin-top: calc(-1 * var(--bubble-pad-y));
+}
+
+[data-msg-style='bubble'] .msg-row[data-own] .msg-content {
+  background: rgb(var(--color-bubble-own));
+}
+
+/* The SAME leading problem as the sign-off, at the other end of the block
+   (user, 2026-09-02: "the gap between the top of the bubble message and the
+   text, it seems too big").
+
+   A line of 13.5px Inter in a 21.6px line box carries ~2.6px of half-leading
+   above its content area, and another ~3.3px between that area's top and the
+   top of a capital — ~6px of air before the text visibly starts. Added to a
+   10px pad the block looked ~16px indented at the top while its sign-off sat
+   ~5px off the bottom, and the shape read as top-heavy however the padding was
+   tuned. Padding cannot fix it: the number is right, the glyphs just start
+   late.
+
+   So the trim goes on the TEXT, which is what carries the leading — not on the
+   block, which also holds attachments and reply quotes whose boxes start where
+   they say they do and want the full inset. `:first-child` is the whole
+   condition: a body under a reply quote is spaced by the quote, not by this. */
+[data-msg-style='bubble'] .msg-content > .msg-body:first-child {
+  margin-top: -5px;
+}
+
+/* The row becomes a column of two blocks — caption, then message — each sized
+   to its own content, and the row stripped of the rule and indent it wears in
+   the timeline.
+
+   `align-items` is the load-bearing line. Without it an incoming row is a plain
+   block and the message block stretches to the width of the NAME above it: a
+   long name over the word "Hi" gave a block four times the width of its
+   message. (My own rows are already flex/items-end from the timeline; this adds
+   the incoming side and leaves that one where it was.) */
+[data-msg-style='bubble'] .msg-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  border-width: 0;
+  padding: 0;
+  margin-top: var(--bubble-gap);
+}
+
+[data-msg-style='bubble'] .msg-row[data-own] {
+  align-items: flex-end;
+}
+
+[data-msg-style='bubble'] .msg-row[data-head] {
+  margin-top: var(--bubble-group-gap);
+}
+
+/* The caption sits on the BLOCK's edge rather than on its text — name and block
+   share a left edge, and that shared edge is the line the eye runs down a burst
+   on. Its own gap to the block, too: `mb-1` reads as touching once the block
+   below it has a fill to be touched by. */
+[data-msg-style='bubble'] .msg-attribution {
+  margin-bottom: 5px;
+}
+
+/* The block's sign-off: flags, clock and delivery ticks in its bottom-right
+   corner (see MessageRow — the element only exists in this style, so the rule
+   needs no attribute scope).
+
+   `justify-end` and nothing else: no absolute positioning, no float, no
+   reserved gap cut into the last line of the text. The clock sits on its own
+   line under the message, which is what the user asked for — and it is also the
+   version that cannot go wrong, because the alternative (tucking it into the
+   end of the last line) needs an invisible spacer inside the body text that
+   every emoji, every RTL run and every long unbroken URL gets a vote on.
+
+   It sets the block's minimum width: "Hi" is narrower than `14:32 ✓✓`, so a
+   two-letter message is as wide as its own sign-off. That is correct — the
+   corner is part of the shape now, not a label that happens to be nearby. */
+.msg-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  /* 3px, not 5. The clock and the ticks are ONE statement — sent at this time,
+     delivered — and at 5px they read as two things that happened to land on
+     the same line (user, 2026-09-02). */
+  gap: 3px;
+  /* THE GAP IS MOSTLY LEADING, not margin (user, 2026-09-02: "don't leave such
+     a great gap"). Measured on a real row: 2px of it was this margin and the
+     other ~8px was line box — ~4px of half-leading under the body's last line
+     (13.5px text in a 21.6px line box) and ~4.4px above the digits (11.5px text
+     inheriting the app's 1.5). Tuning the margin alone could never fix that; it
+     is the same trap the attribution row hit and documents in threadChrome.
+
+     `line-height: 1` makes the row's box its glyphs — safe here because the
+     content is digits, a tick glyph and uppercase mono flags, none of which have
+     descenders to clip — and the negative margin then eats into the empty
+     half-leading the body leaves under its last line.
+
+     +1px, after a pass at -1px: with the line box out of the way the margin is
+     finally the honest control, and the user asked for the gap back "a bit" —
+     ~3px read as collided. This lands it at ~5px of visible air. */
+  line-height: 1;
+  margin-top: 1px;
+
+  /* INTO the corner, not merely inside it. The block pads its text by 10/14, and
+     a sign-off held to that same inset reads as a third line of the message that
+     happens to be right-aligned. Pulled 6px past it on both edges (8px and ~5px
+     of visible inset) it reads as what it is — a mark in the corner of the
+     shape. That is as far as it goes: the corner is rounded at 10px, and the
+     curve is what it would hit next. */
+  margin-right: -6px;
+  margin-bottom: -6px;
+}
+
+/* Which of the room's people is talking. `--author-color` is set inline on the
+   row by MessageRow — the same value it hands the timeline's rule — and is
+   absent in a DM or a two-person room, where the fallback keeps the name at the
+   ordinary muted step. */
+[data-msg-style='bubble'] .msg-name {
+  color: var(--author-color, rgb(var(--color-muted)));
+}
+
+/* A burst follow-up's hover clock hangs in the author lane, centred on the
+   message's first line. In the timeline that line starts at the top of the row;
+   in a block it starts one --bubble-pad-y lower. */
+[data-msg-style='bubble'] .msg-stamp {
+  margin-top: var(--bubble-pad-y);
+}
+
+/* Jump-to-original washes the BLOCK, not the row. The row now includes the
+   caption and the empty column beside a short message, and lighting those up
+   draws a bright rectangle around mostly nothing. */
+[data-msg-style='bubble'] .msg-row[data-highlighted] {
+  background: transparent;
+}
+
+[data-msg-style='bubble'] .msg-row[data-highlighted] .msg-content {
+  background: rgb(var(--color-active) / 0.14);
+}
+
+/* A scheduled message that failed to send. `outline` rather than a border so the
+   mark costs no layout — a block must not resize when a send fails. */
+[data-msg-style='bubble'] .msg-row[data-alert] .msg-content {
+  outline: 1px solid rgb(var(--color-alert) / 0.6);
+  outline-offset: -1px;
+}
+
+/* The hover action strip and the actions panel hang off the message's own edge.
+   In the timeline that edge is the text's, --msg-indent in from the rule; here
+   it is the block's, so the offset goes to zero. (An absolutely positioned child
+   is laid out against its ancestor's PADDING box, so 0 is flush with the block,
+   not with the text inside it.) */
+[data-msg-style='bubble'] .msg-anchored[data-side='left'] {
+  left: 0;
+}
+
+[data-msg-style='bubble'] .msg-anchored[data-side='right'] {
+  right: 0;
+}
+
+/* Nothing crosses the block. An image reserves a FIXED px box (AttachmentBlock
+   sizes it from the picture's own dimensions, up to 520px), and in a pane
+   narrower than that box it overflows the message — which the timeline simply
+   lets run to the edge of the pane, because it has no edge there to cross. A
+   block does, and the same overflow reads as a broken shape rather than as a
+   wide picture. Scoped to the attachment stack: the row's other overhanging
+   children — the author photo in the lane, the hover action strip, the actions
+   panel — are absolutely positioned outside the block on purpose.
+
+   DESCENDANTS ONLY. It used to name the container too, and that quietly ate
+   half the bleed above: `100%` on the container resolves against the block's
+   CONTENT box, so the -14px margins moved its left edge out and the cap held
+   its right edge in — a picture flush left and 28px short on the right. The
+   container is bounded anyway (it can only be as wide as the block, which the
+   row's max-width caps), and capping its children against IT is what the guard
+   was actually for. */
+[data-msg-style='bubble'] .msg-attachments * {
+  max-width: 100%;
+}
+
+/* The typing row is a message that hasn't arrived yet, so it takes the incoming
+   block: same fill, same padding, hugging its content. The margin replaces the
+   `pb-3` its own padding shorthand overrides — that padding was the gap to the
+   composer, and the gap still has to be there. */
+[data-msg-style='bubble'] .typing-row {
+  width: fit-content;
+  border-width: 0;
+  background: rgb(var(--color-bubble));
+  padding: var(--bubble-pad-y) var(--bubble-pad-x);
+  border-radius: var(--soft-radius);
+  margin-bottom: 12px;
+}
+
+/* ── The composer, under a thread of rounded blocks ────────────────────────
+   The field the messages are typed into takes the same corner as the messages
+   themselves, because it is the same surface — a square input bar under a
+   column of soft blocks reads as an unfinished part of the screen rather than
+   as a deliberate contrast. Scoped to the bubble style with everything else:
+   in the timeline the composer is a drawn rectangle like every other field in
+   the app, and it stays one. */
+[data-msg-style='bubble'] .chat-composer {
+  border-radius: var(--soft-radius);
+}
+
+/* The reply/edit context row sits at the top of the composer with a 2px accent
+   down its left edge. Left square inside a rounded box, the top of that accent
+   runs straight past the corner the box curves away on — a 10px nub hanging
+   outside the shape. It takes the corner too, one pixel tighter for the
+   composer's own border, so the two curves sit concentric rather than crossing.
+   (The alternative — clipping the composer with `overflow: hidden` — would
+   also clip the @-mention picker and the format bar, which are absolutely
+   positioned to float ABOVE it.) */
+[data-msg-style='bubble'] .composer-context {
+  border-top-left-radius: calc(var(--soft-radius) - 1px);
+  border-top-right-radius: calc(var(--soft-radius) - 1px);
+}
+
+/* The three controls in the input bar: attach, schedule, send. The send button
+   is the one FILLED control in the composer (the fill is its enabled state),
+   and filled square it drives a hard 90° corner into the curve of the field
+   6px away from it — the two shapes read as belonging to different designs.
+   The other two only show a hover wash, which has the same problem the moment
+   the pointer is on it. A step tighter than the field around them, the way an
+   inner corner has to be to sit inside an outer one. */
+[data-msg-style='bubble'] .composer-bar button {
+  border-radius: calc(var(--soft-radius) - 3px);
+}
+
+/* The author photo in the lane. It is drawn square (see Avatar's `shape` prop,
+   and the note in MessageRow) on the reasoning that a disc there would be the
+   only rounded object on the screen — which was true of the timeline and is
+   not true here: it now hangs between a rounded block and a rounded composer,
+   and it is the one hard corner left in the column. Same step as the composer
+   controls, not a disc: this rework softened the app's corners, it did not
+   start drawing circles. */
+[data-msg-style='bubble'] .msg-author-tile span,
+[data-msg-style='bubble'] .msg-author-tile img {
+  border-radius: calc(var(--soft-radius) - 3px);
+}
+
 /* ── Structured data blocks ─────────────────────────────────────────────────
    A route, a load, a cost breakdown or a trip renders INSIDE the message as a
    bordered block rather than as its own card: a header row carrying a mono
@@ -1118,17 +1498,38 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
-/* A timestamp still speaks mono — it is structure, and tabular figures are what
-   stop the column jittering as the digits change width — but it does NOT take
-   the eyebrow's 0.14em. That tracking is for words used as labels, where the
-   letters are a code to be picked apart one at a time; `15:42` is a single
-   value, and spacing it out made the hour, the colon and the minute read as
-   three separate things sitting near each other.
+/* ── Timestamps ─────────────────────────────────────────────────────────────
+   THE recipe for a clock value anywhere in the app — the thread, the rail, a
+   search result, an attachment preview. One class so a time reads the same
+   everywhere; before this each surface reached for its own combination of
+   size, colour and `tabular-nums` and they had drifted apart.
 
-   Two class names in the selector, not one: `.eyebrow` sets letter-spacing too,
-   and a single-class utility would only win this on file order. */
-.eyebrow.eyebrow-time {
+   It is set in INTER, not the mono face (user, 2026-09-02: "I don't really
+   like how the numbers look"). Everything else small in this app is mono, and
+   a timestamp looks like it should be — but JetBrains Mono is a CODE face: its
+   digits are drawn to be told apart from each other at a glance in a stack of
+   identifiers, with the wide even rhythm and the dotted zero that come with
+   that job. A clock is not an identifier. It is two numbers you read as one
+   value, and Inter sets them as one.
+
+   `tabular-nums` is the part that has to survive the change of face: it is
+   what stops the rail's column of times from jittering as the digits change
+   width, and it is why this cannot simply be "no class at all".
+
+   No tracking and no uppercase, unlike `.eyebrow`: that tracking is for words
+   used as labels, where the letters are a code to be picked apart one at a
+   time; `15:42` is a single value, and spacing it out made the hour, the colon
+   and the minute read as three separate things sitting near each other. */
+.timestamp {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: var(--timestamp-size);
+  /* 500, where the mono ran at 500 too. Inter at this size on a faint colour
+     goes weedy at 400, and the timestamp has to hold its own beside a name. */
+  font-weight: 500;
   letter-spacing: normal;
+  text-transform: none;
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--color-faint));
 }
 
 /* Rail filter tabs (Archived · All · Groups · Direct · Unread) ---------------

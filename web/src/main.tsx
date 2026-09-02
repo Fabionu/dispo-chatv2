@@ -4,6 +4,7 @@ import App from './App'
 import './index.css'
 import { initDensity } from './lib/density'
 import { initTheme } from './lib/theme'
+import { initMessageStyle } from './lib/messageStyle'
 import { initNotificationSound } from './lib/notificationSound'
 import { initBrowserNotifications } from './lib/browserNotifications'
 
@@ -13,7 +14,9 @@ initTheme()
 // Pick the display-density tier (compact/default/comfortable) before first
 // paint so large monitors render at a comfortable scale with no flash.
 initDensity()
-// Apply the saved message display style (bubble/plain) before first paint.
+// Apply the saved message style (timeline/bubble) before first paint, so the
+// thread is never drawn one way and then repainted the other.
+initMessageStyle()
 // Unlock Web Audio on the first user gesture so later socket notifications can
 // play even when they arrive while the app is in the background.
 initNotificationSound()

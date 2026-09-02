@@ -73,7 +73,7 @@ export function PreviewIdentity({
           // day is carried by the DayDivider you scrolled past to get here; a
           // preview has no such context — it can be opened from a tab days later,
           // in a different conversation — so it has to say the day itself.
-          <span className="shrink-0 uppercase tabular-nums">
+          <span className="timestamp shrink-0">
             {formatDay(at)} · {formatTime(at)}
           </span>
         )}

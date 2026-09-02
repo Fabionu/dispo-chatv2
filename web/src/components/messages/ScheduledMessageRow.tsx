@@ -70,7 +70,17 @@ export default function ScheduledMessageRow({
       // `SCHEDULED · <time> · Cancel` header, which is longer than most of what
       // gets queued — and without it a short body would sit at the far LEFT of
       // that width while its rule ran down the right.
-      className={`group/sched relative mt-7 ml-auto flex w-fit max-w-full flex-col items-end ${
+      // Borrows the message row's box as well as its geometry, so it follows
+      // whichever message style is on (lib/messageStyle.ts) — a queued message
+      // drawn as a rule under a thread of bubbles would read as a different
+      // KIND of row rather than as one that hasn't been sent yet, which is the
+      // same argument the rule weight below is already making. `data-head`
+      // because it is always the head of its own one-row group: it needs the
+      // gap that opens a burst, not the one that continues it.
+      data-own
+      data-head
+      data-alert={failed || undefined}
+      className={`msg-row group/sched relative mt-7 ml-auto flex w-fit max-w-full flex-col items-end ${
         groupType === 'direct' ? 'border-r' : 'border-r-2'
       } pr-[var(--msg-indent)] pl-2 ${
         failed ? 'border-alert/60' : 'border-[rgb(var(--color-line-own))]'
@@ -91,7 +101,7 @@ export default function ScheduledMessageRow({
         </button>
       </div>
 
-      <div className="max-w-body opacity-60">
+      <div className="msg-content max-w-body opacity-60">
         {item.replyToMessageId && (
           <span className="eyebrow mb-1 flex items-center gap-1">
             <CornerUpLeft size="0.6875rem" strokeWidth={1.8} />

@@ -425,7 +425,7 @@ export default function GroupRow({
               {/* Mono: the timestamp is structure, not content, and the rework
                   sets all structure in the mono face. Tabular figures also stop
                   the column jittering as times change width. */}
-              {time && <span className="eyebrow shrink-0 leading-tight">{time}</span>}
+              {time && <span className="timestamp shrink-0 leading-tight">{time}</span>}
             </span>
           </span>
           {/* Line 2 — operational facts in mono, or human text in sans. Live

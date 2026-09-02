@@ -82,7 +82,7 @@ export default function ConversationSearch({ query, groupId, currentUserId, onJu
                       : message.authorName || 'Member'}
                   </span>
                   <span
-                    className="text-xs text-faint tabular-nums shrink-0"
+                    className="timestamp shrink-0"
                     title={new Date(message.createdAt).toLocaleString()}
                   >
                     {resultTimestamp(message.createdAt)}

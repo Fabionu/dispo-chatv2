@@ -66,7 +66,7 @@ export default function TypingIndicator({ users }: { users: TypingUser[] }) {
       role="status"
       aria-live="polite"
       aria-atomic="true"
-      className={`${
+      className={`typing-row ${
         leaving ? 'typing-indicator-exit' : 'typing-indicator-enter'
       } border-l bg-bg pl-[var(--msg-indent)] pb-3`}
     >
