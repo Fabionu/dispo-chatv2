@@ -253,7 +253,7 @@ const snapCandidatesSchema = z.object({
 // cachedAsync), so a HERE hiccup can't pin a bad answer for the TTL.
 const GEO_TTL_MS = 6 * 60 * 60 * 1000 // street/snap geometry: very stable
 const ROUTE_TTL_MS = 60 * 60 * 1000 // leg lengths: traffic-independent (routingMode base geometry), still refreshed hourly
-const nearestStreetCache = new TtlCache<Promise<NearestStreetResult | null>>(10_000, GEO_TTL_MS)
+const nearbyStreetsCache = new TtlCache<Promise<StreetCandidate[]>>(10_000, GEO_TTL_MS)
 const streetSnapCache = new TtlCache<Promise<SnapResult | null>>(5_000, GEO_TTL_MS)
 const routeSnapCache = new TtlCache<Promise<HerePosition | null>>(10_000, GEO_TTL_MS)
 const routeLengthCache = new TtlCache<Promise<number | null>>(5_000, ROUTE_TTL_MS)
@@ -330,27 +330,44 @@ function metersBetween(a: HerePosition, b: HerePosition): number {
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)))
 }
 
-// Heuristic "is this a major road?" from the street name / title. HERE Reverse
-// Geocode does NOT expose functional class, so we approximate road importance
-// from common motorway / expressway / trunk-road naming across European + English
-// locales. Critically this must cover CENTRAL/EASTERN Europe too — the symptom
-// that motivated widening it was a Czech "D1" (Dálnice) motorway being treated as
-// a minor road, so a closer local lane won the snap.
-//   • Designations: A1 (DE/FR/IT/PL/HU/RO), M1 (HU/UK), E50 (Euroroute),
-//     D1 (CZ/SK), S8 (PL expressway), R1 (SK expressway), B27 (DE), SS1 (IT),
-//     N10 (FR/BE).
-//   • Words: dálnice/diaľnica (CZ/SK), autópálya (HU), autostrada (PL/IT),
-//     autobahn, autoroute, autovía, autopista, motorway, freeway, expressway,
-//     highway, snelweg, bundesstraße, trunk, ring road, tangenziale, périph,
-//     droga ekspresowa / szybkiego ruchu (PL).
-// A true road-class signal would need HERE routing spans (functionalClass), which
-// aren't available for a single reverse-geocode snap.
-const MAJOR_ROAD_RE =
-  /\b([AMESDR]\s?\d+|B\s?\d{2,}|SS\s?\d+|N\s?\d{2,})\b|d[aá]lnice|dia[lľ]nica|autostr|autobahn|autoroute|autov[ií]a|autopista|autop[aá]ly|motorway|freeway|expressway|highway|snelweg|bundesstra|\btrunk\b|ring\s?road|tangenziale|p[ée]riph|ekspresow|szybkiego/i
+// Heuristic road importance from the street name / title. HERE Reverse Geocode
+// does NOT expose functional class, so we approximate it from common motorway /
+// expressway / trunk-road naming across European + English locales. Critically
+// this must cover CENTRAL/EASTERN Europe too — the symptom that motivated
+// widening it was a Czech "D1" (Dálnice) motorway being treated as a minor road,
+// so a closer local lane won the snap.
+//
+// Two tiers rather than one flag, because "is this bigger than that?" is the
+// question the zoomed-out snap actually has to answer: releasing beside a
+// motorway that runs past a Staatsstraße must land on the MOTORWAY, and a single
+// "major" bucket holding both cannot say which. A true road-class signal would
+// need HERE routing spans (functionalClass), unavailable for a reverse geocode.
+//   • Motorway grade: A1 (DE/FR/IT/PL/HU/RO), D1 (CZ/SK), M1 (HU/UK),
+//     E50 (Euroroute); dálnice/diaľnica, autópálya, autostrada, autobahn,
+//     autoroute, autovía, autopista, motorway/freeway/expressway, snelweg,
+//     droga ekspresowa / szybkiego ruchu.
+//   • Through road: S8 (PL), R1 (SK), N10 (FR/BE), B27 (DE), SS1 (IT),
+//     Bundesstraße, trunk, ring road, tangenziale, périphérique, "… Highway".
+// (A designation letter can mean different classes in different countries — a
+// French D road is departmental, a Czech D road is a motorway — and a reverse
+// geocode alone can't disambiguate. Ranking them together as motorway grade is
+// what the old single "major" bucket already did.)
+const MOTORWAY_ROAD_RE =
+  /\b([ADME]\s?\d+)\b|d[aá]lnice|dia[lľ]nica|autostr|autobahn|autoroute|autov[ií]a|autopista|autop[aá]ly|motorway|freeway|expressway|snelweg|ekspresow|szybkiego/i
+const THROUGH_ROAD_RE =
+  /\b([SRN]\s?\d+|B\s?\d{2,}|SS\s?\d+)\b|bundesstra|\btrunk\b|ring\s?road|tangenziale|p[ée]riph|highway/i
+
+/** 2 = motorway grade, 1 = other through road, 0 = ordinary street. */
+function roadTier(item: HereRevgeocodeItem): 0 | 1 | 2 {
+  const name = `${item.address?.street ?? ''} ${item.title ?? ''}`.trim()
+  if (name.length === 0) return 0
+  if (MOTORWAY_ROAD_RE.test(name)) return 2
+  if (THROUGH_ROAD_RE.test(name)) return 1
+  return 0
+}
 
 function isMajorRoad(item: HereRevgeocodeItem): boolean {
-  const name = `${item.address?.street ?? ''} ${item.title ?? ''}`.trim()
-  return name.length > 0 && MAJOR_ROAD_RE.test(name)
+  return roadTier(item) > 0
 }
 
 // Opt-in snap tracing: set ROUTE_SNAP_DEBUG=1 to log the candidate roads, their
@@ -388,8 +405,33 @@ function parseCourse(raw: unknown): number | undefined {
 // under the cursor sits within a few pixels of the release, which is a small
 // distance zoomed in and a large one zoomed out.
 function metresPerPixel(lat: number, zoom: number): number {
-  return (156543.03392 * Math.cos((lat * Math.PI) / 180)) / 2 ** zoom
+  // Guarded so a near-polar latitude can't collapse the scale to zero and make
+  // every pixel distance infinite.
+  return Math.max(0.01, (156543.03392 * Math.cos((lat * Math.PI) / 180)) / 2 ** zoom)
 }
+
+// "Zoomed-out-ness" in [0,1]: 0 at zoom >= 13 (a precise release, every side
+// street is drawn and aimable), 1 at zoom <= 7 (only the big through roads are
+// drawn at all, so only they can be what the user pointed at).
+function zoomedOutFactor(zoom: number): number {
+  return Math.max(0, Math.min(1, (13 - zoom) / 6))
+}
+
+// Major-road score multiplier: a major road's distance from the cursor counts as
+// this fraction when comparing candidates. 0.7 zoomed in (mild — distance
+// dominates, so you can still drop on a specific minor road) → ~0.22 zoomed out
+// (a motorway up to ~4.5x farther than the nearest local lane still wins). This
+// is the lever that makes a zoomed-out release land on the visible motorway
+// rather than a closer field lane.
+function majorRoadFactor(zoom: number): number {
+  return 0.7 - 0.48 * zoomedOutFactor(zoom)
+}
+
+// How many streets each reverse-geocode probe asks for. Both snap paths want the
+// roads AROUND a point, not the single nearest one: zoomed out the nearest road
+// to the released pixel is routinely a field lane, while the motorway the user
+// was aiming at is third or tenth in the list.
+const STREET_LOOKUP_LIMIT = 20
 
 // Pixel radius around the release we treat as "the user was aiming here". The
 // snap radius is this many pixels' worth of ground distance, so it scales with
@@ -412,19 +454,12 @@ async function streetSnap(apiKey: string, at: HerePosition, zoom: number): Promi
 }
 
 async function fetchStreetSnap(apiKey: string, at: HerePosition, zoom: number): Promise<SnapResult | null> {
-  // "Zoomed-out-ness" in [0,1]: 0 at zoom ≥13 (precise), 1 at zoom ≤7 (only big
-  // roads visible/aimable).
-  const out = Math.max(0, Math.min(1, (13 - zoom) / 6))
+  const out = zoomedOutFactor(zoom)
   // Visible-scale radius: SNAP_PIXEL_TOLERANCE pixels of ground distance at this
   // zoom, clamped so it's never absurdly tight or wide. The wider cap (6 km) lets
   // a fully zoomed-out release still reach a motorway a few km off.
   const maxSnapMeters = Math.max(40, Math.min(metresPerPixel(at.lat, zoom) * SNAP_PIXEL_TOLERANCE, 6000))
-  // Major-road score multiplier: a major road's distance counts as this fraction
-  // when comparing candidates. 0.7 zoomed in (mild — distance dominates, so you
-  // can still drop on a specific minor road) → ~0.22 zoomed out (a motorway up to
-  // ~4.5× farther than the nearest local lane still wins). This is the lever that
-  // makes a zoomed-out drag land on the visible motorway, not a closer field lane.
-  const majorFactor = 0.7 - 0.48 * out
+  const majorFactor = majorRoadFactor(zoom)
 
   const url = new URL(revgeocodeBase)
   url.searchParams.set('apiKey', apiKey)
@@ -432,7 +467,7 @@ async function fetchStreetSnap(apiKey: string, at: HerePosition, zoom: number): 
   url.searchParams.set('lang', 'en-US')
   // Ask for many nearby streets so HERE effectively samples every road around the
   // release — we then choose among them rather than trusting the single nearest.
-  url.searchParams.set('limit', '20')
+  url.searchParams.set('limit', String(STREET_LOOKUP_LIMIT))
   // Always snap to STREET geometry (the road centreline) rather than a house
   // number or POI entrance — a route waypoint belongs on the road.
   url.searchParams.set('types', 'street')
@@ -544,41 +579,46 @@ async function fetchRouteSnap(apiKey: string, at: HerePosition, course?: number)
   return loc ?? null
 }
 
-// The single NEAREST street to a point (reverse geocode, limit 1), with its name
-// (for grouping), label, snapped position, distance and major-road flag. This is
-// the per-pixel probe behind the screen-space candidate snap: one call per
-// sampled candidate, run in parallel. Returns null when HERE has no street there.
-// THROWS on a HERE failure (unlike before, which swallowed it) so cachedAsync
-// never caches a transient error as "no street" — the /snap/candidates caller
-// catches per-candidate and degrades to null exactly as it used to. Caching the
-// promise also dedupes the parallel samples of one request that round to the
-// same ~1 m cell.
-type NearestStreetResult = {
+// The streets AROUND a point (reverse geocode, nearest first) — each with its
+// name (for grouping), label, position and major-road flag. This is the
+// per-pixel probe behind the screen-space candidate snap: one call per sampled
+// candidate, run in parallel.
+//
+// It asks for STREET_LOOKUP_LIMIT streets rather than the single nearest one,
+// which is the difference between "the road under the cursor" and "the road
+// nearest one raw coordinate". Zoomed out a screen pixel spans a kilometre, so
+// the release inevitably lands a few hundred metres BESIDE the motorway it was
+// aimed at — with a limit of 1 every probe answered with whatever village lane
+// or field track happened to be closer and the motorway never entered the
+// candidate pool at all. Returns [] when HERE has no street there.
+// THROWS on a HERE failure so cachedAsync never caches a transient error as
+// "no street" — the /snap/candidates caller catches per-candidate and degrades
+// to an empty list. Caching the promise also dedupes the parallel samples of one
+// request that round to the same ~1 m cell.
+type StreetCandidate = {
   name: string
   label: string
   pos: HerePosition
-  dist: number
-  major: boolean
+  tier: 0 | 1 | 2
 }
 
-async function nearestStreet(apiKey: string, at: HerePosition): Promise<NearestStreetResult | null> {
-  return cachedAsync(nearestStreetCache, coordKey(at), async () => {
+async function nearbyStreets(apiKey: string, at: HerePosition): Promise<StreetCandidate[]> {
+  return cachedAsync(nearbyStreetsCache, coordKey(at), async () => {
     const url = new URL(revgeocodeBase)
     url.searchParams.set('apiKey', apiKey)
     url.searchParams.set('at', `${at.lat},${at.lng}`)
     url.searchParams.set('lang', 'en-US')
-    url.searchParams.set('limit', '1')
+    url.searchParams.set('limit', String(STREET_LOOKUP_LIMIT))
     url.searchParams.set('types', 'street')
     const data = await hereJson<HereRevgeocodeResponse>(url)
-    const item = data?.items?.find((i) => i.position)
-    if (!item?.position) return null
-    return {
-      name: (item.address?.street ?? item.title ?? '').trim(),
-      label: item.address?.label ?? item.title ?? '',
-      pos: item.position,
-      dist: item.distance ?? metersBetween(at, item.position),
-      major: isMajorRoad(item),
-    }
+    return (data?.items ?? [])
+      .filter((i): i is HereRevgeocodeItem & { position: HerePosition } => Boolean(i.position))
+      .map((i) => ({
+        name: (i.address?.street ?? i.title ?? '').trim(),
+        label: i.address?.label ?? i.title ?? '',
+        pos: i.position,
+        tier: roadTier(i),
+      }))
   })
 }
 
@@ -710,91 +750,141 @@ hereRouter.get(
   }),
 )
 
-// ── Screen-space candidate scoring weights (see /snap/candidates) ────────────
-// All expressed in "screen-pixel equivalents" so they trade off directly against
-// each candidate road's closest sampled pixel (minPx).
-//   VOTE_WEIGHT  — each EXTRA sampled pixel that landed on a road counts as this
-//                  many px closer. Votes ≈ how much of the cursor's neighbourhood
-//                  the road covers on screen = its visual prominence. This is the
-//                  signal that makes a wide visible highway beat a thin parallel
-//                  lane that happens to sit a hair nearer the exact release pixel.
-//   MAJOR_BONUS  — a major/through road counts as this many px closer (a mild
-//                  class preference on top of the prominence vote).
-//   DETOUR_WEIGHT— score added per KM a candidate lengthens prev→here→next, so a
-//                  parallel road that would force a U-turn/detour loses.
-const VOTE_WEIGHT = 2
-const MAJOR_BONUS = 14
-const DETOUR_WEIGHT = 6
+// ── Screen-space candidate scoring (see /snap/candidates) ────────────────────
+// Scores are SCREEN PIXELS at the release zoom, because "how far from my cursor
+// is this road drawn?" is the question the user is actually asking — and the
+// answer changes completely with zoom. Zoomed out, a motorway 1.5 km away and a
+// farm track 8 m away are BOTH under the cursor (0.01 px vs 2 px at 750 m/px):
+// distance cannot separate them, and it is the drawn width of the line the user
+// aimed at that decides. Zoomed in, the same 1.5 km is a kilometre off screen.
+//
+//   AIM_TOLERANCE_PX — the release is this many pixels of aim slop (cursor
+//                  precision + the drawn width of a route line) away from what
+//                  the user meant. Every road inside that window is equally
+//                  "under the cursor", so the BIGGEST one there wins; only
+//                  outside it does distance start deciding again. Also capped in
+//                  ground distance (AIM_TOLERANCE_METERS), so a fully zoomed-out
+//                  release can't reach a motorway in the next province.
+//   CLASS_PENALTY_PX — a road's handicap by tier, in pixels, applied inside the
+//                  aim window. Scaled down zoomed in (where a precise release
+//                  really does mean the specific side street it landed on) and up
+//                  zoomed out (where the roads it outranks aren't drawn at all).
+//   TIE_BREAK_PX — a whisper of distance so two roads of the same tier inside the
+//                  window are separated by which is nearer, never by map order.
+//   MAX_SNAP_PIXELS — a road drawn further than this from the release was not the
+//                  one under the cursor. Ignored when nothing is in range, so a
+//                  release over open country still lands on a road.
+//   DETOUR_WEIGHT/DETOUR_MAX_PX — score added per KM a candidate lengthens
+//                  prev→here→next, so a parallel road that would force a U-turn
+//                  loses. Deliberately small and hard-capped BELOW the smallest
+//                  class gap: routing via a point costs a whole junction-to-
+//                  junction round trip when HERE picks the far carriageway, which
+//                  is a ~17 km penalty on a motorway and a ~0 km one on the field
+//                  lane beside it. Left unbounded it doesn't rank the roads, it
+//                  systematically rejects the big ones. So it may order equals —
+//                  never overrule which road the user pointed at.
+const AIM_TOLERANCE_PX = 6
+const AIM_TOLERANCE_METERS = 5000
+const CLASS_PENALTY_PX: Record<0 | 1 | 2, number> = { 0: 9, 1: 4, 2: 0 }
+const TIE_BREAK_PX = 0.01
+const MAX_SNAP_PIXELS = 40
+const DETOUR_WEIGHT = 0.5
+const DETOUR_MAX_PX = 1.5
 
 // ── POST /api/here/snap/candidates ───────────────────────────────────────────
 // The screen-space road-snap. The client samples the pixels around the cursor,
 // converts each to lat/lng, and posts them here (first = the exact release
-// pixel). We snap EACH to its nearest road in parallel, group the results by
-// road, and pick the road that is (a) closest to the cursor in screen space,
-// (b) most prominent (the most sampled pixels fell on it), and (c) ideally a
-// major/through road — i.e. the road the user actually SEES under the cursor,
-// not just the nearest road to one raw coordinate. An optional detour check
-// across the top roads (prev→here→next length) and a direction-aware routing
-// refinement (correct carriageway) finish the choice. `place` is null only when
-// nothing routable is near any candidate, so the client keeps the raw point.
+// pixel). We look up the roads around EVERY sample in parallel, pool them, and
+// pick the road the user was POINTING AT: within the aim window (a few pixels of
+// cursor slop) the biggest road wins, and only outside it does distance take over
+// — so a motorway two pixels away beats the field lane under the cursor when the
+// map is zoomed out, and a precise release still lands on the side street it was
+// dropped on. An optional detour check across the top roads
+// (prev→here→next length) and a direction-aware routing refinement (correct
+// carriageway) finish the choice. `place` is null only when nothing routable
+// is near any candidate, so the client keeps the raw point.
 hereRouter.post(
   '/snap/candidates',
   asyncHandler(async (req, res) => {
     const apiKey = requireHereKey()
     const body = snapCandidatesSchema.parse(req.body)
     const course = body.course
-    const center = body.candidates[0]
+    const release = body.candidates[0]
+    // Zoom is what turns metres back into what the user SAW: the same 300 m gap
+    // is half a screen zoomed in and a fifth of a pixel zoomed out.
+    const zoom = body.zoom ?? 18
+    const mpp = metresPerPixel(release.lat, zoom)
+    // The window the release could plausibly have meant, and how hard a smaller
+    // road is handicapped inside it.
+    const aimPx = Math.min(AIM_TOLERANCE_PX, AIM_TOLERANCE_METERS / mpp)
+    const classScale = 0.45 + 0.55 * zoomedOutFactor(zoom)
 
-    // 1) Snap EVERY sampled pixel to its nearest road, in parallel. Pixels that
-    //    landed on the visible highway snap onto it; pixels over a field/parallel
-    //    lane snap there — so the full set captures every road near the cursor.
-    const snaps = (
-      await Promise.all(
-        body.candidates.map(async (c) => {
-          // A single failed probe degrades to "no road at this pixel" rather
-          // than failing the whole snap (nearestStreet throws on HERE errors
-          // so they're never cached — see its comment).
-          const s = await nearestStreet(apiKey, { lat: c.lat, lng: c.lng }).catch(() => null)
-          return s ? { ...s, px: c.px } : null
-        }),
-      )
-    ).filter((s): s is NonNullable<typeof s> => Boolean(s))
+    // 1) Look up the roads around EVERY sampled pixel, in parallel. Each probe
+    //    returns its whole neighbourhood rather than just its nearest road, so
+    //    the pool holds every road near the cursor — including the motorway that
+    //    is the nearest road to none of the sampled pixels.
+    const probes = await Promise.all(
+      body.candidates.map((c) =>
+        // A single failed probe degrades to "no roads at this pixel" rather than
+        // failing the whole snap (nearbyStreets throws on HERE errors so they're
+        // never cached — see its comment).
+        nearbyStreets(apiKey, { lat: c.lat, lng: c.lng }).catch(() => [] as StreetCandidate[]),
+      ),
+    )
+    const streets = probes.flat()
 
     // No road near ANY sample → guarantee an on-road point from the release via
     // routing, else hand back null so the client keeps the raw coordinate.
-    if (snaps.length === 0) {
-      const routed = await routeSnap(apiKey, { lat: center.lat, lng: center.lng }, course)
+    if (streets.length === 0) {
+      const routed = await routeSnap(apiKey, { lat: release.lat, lng: release.lng }, course)
       return res.json({ place: routed ? { label: '', position: routed, major: false } : null })
     }
 
-    // 2) Group snaps by road (street name; position-cluster fallback when a road
-    //    has no name). votes = how many sampled pixels hit the road; the closest
-    //    sampled pixel to the cursor gives the road's best on-road point.
-    type Group = { key: string; label: string; pos: HerePosition; minPx: number; votes: number; major: boolean }
+    // 2) Group by road (street name; position-cluster fallback when a road has no
+    //    name). A long road is probed at several points along it, so keep the one
+    //    CLOSEST TO THE RELEASE — that is the point on that road the user pointed
+    //    at, and the only one worth measuring the road's distance by.
+    type Group = { key: string; label: string; pos: HerePosition; meters: number; votes: number; tier: 0 | 1 | 2 }
     const groups = new Map<string, Group>()
-    for (const s of snaps) {
+    for (const s of streets) {
       const key = s.name
         ? s.name.toLowerCase().replace(/\s+/g, ' ')
         : `@${s.pos.lat.toFixed(3)},${s.pos.lng.toFixed(3)}`
+      const meters = metersBetween(release, s.pos)
       const g = groups.get(key)
       if (!g) {
-        groups.set(key, { key, label: s.label, pos: s.pos, minPx: s.px, votes: 1, major: s.major })
+        groups.set(key, { key, label: s.label, pos: s.pos, meters, votes: 1, tier: s.tier })
       } else {
         g.votes += 1
-        g.major = g.major || s.major
-        if (s.px < g.minPx) {
-          g.minPx = s.px
+        if (s.tier > g.tier) g.tier = s.tier
+        if (meters < g.meters) {
+          g.meters = meters
           g.pos = s.pos
           g.label = s.label
         }
       }
     }
 
-    // 3) Score (lower = better): the closest sampled pixel dominates, then visual
-    //    prominence (votes) and major-road class pull toward the big visible road.
+    // 3) Score (lower = better) in screen pixels. Distance only counts BEYOND the
+    //    aim window — inside it every road is under the cursor and the road class
+    //    decides, which is the whole zoomed-out case: a motorway 2 px away beats
+    //    the farm track 0.01 px away, because at 750 m/px the user was pointing at
+    //    the only line of the two that is drawn. Measuring each road's OWN
+    //    position (not the offset of whichever sampled pixel found it) is what
+    //    makes that comparison mean anything.
     const scored = [...groups.values()]
-      .map((g) => ({ g, score: g.minPx - VOTE_WEIGHT * (g.votes - 1) - (g.major ? MAJOR_BONUS : 0) }))
+      .map((g) => {
+        const px = g.meters / mpp
+        const score =
+          Math.max(0, px - aimPx) + CLASS_PENALTY_PX[g.tier] * classScale + px * TIE_BREAK_PX
+        return { g, px, score }
+      })
       .sort((a, b) => a.score - b.score)
+
+    // Roads drawn well outside the cursor's neighbourhood weren't aimed at; the
+    // NEAREST one stays as a fallback so open country still snaps to a road.
+    const inRange = scored.filter((s) => s.px <= MAX_SNAP_PIXELS)
+    const nearest = scored.reduce((a, b) => (b.px < a.px ? b : a))
 
     // 4) Detour-aware tiebreaker across the top roads: prefer the one that adds
     //    the least to prev→here→next (so a parallel carriageway that forces a big
@@ -802,9 +892,9 @@ hereRouter.post(
     //    additive — a routing hiccup just leaves the screen-space ranking intact.
     const prev = body.prev
     const next = body.next
-    let ranked = scored
-    if (prev && next && scored.length >= 2) {
-      const top = scored.slice(0, 3)
+    let ranked = inRange.length ? inRange : [nearest]
+    if (prev && next && ranked.length >= 2) {
+      const top = ranked.slice(0, 3)
       const [base, ...lens] = await Promise.all([
         routeLength(apiKey, prev, [], next),
         ...top.map((s) => routeLength(apiKey, prev, [s.g.pos], next)),
@@ -813,10 +903,11 @@ hereRouter.post(
         const withDetour = top
           .map((s, i) => {
             const added = lens[i] != null ? Math.max(0, (lens[i] as number) - base) : 0
-            return { g: s.g, score: s.score + DETOUR_WEIGHT * (added / 1000) }
+            const detour = Math.min(DETOUR_MAX_PX, DETOUR_WEIGHT * (added / 1000))
+            return { ...s, score: s.score + detour }
           })
           .sort((a, b) => a.score - b.score)
-        ranked = [...withDetour, ...scored.slice(3)]
+        ranked = [...withDetour, ...ranked.slice(3)]
       }
     }
 
@@ -836,22 +927,26 @@ hereRouter.post(
 
     if (SNAP_DEBUG) {
       console.log('[snap] candidates', {
-        zoom: body.zoom,
+        zoom,
         course,
-        samples: snaps.length,
-        groups: scored.map((s) => ({
+        probes: body.candidates.length,
+        streets: streets.length,
+        mpp: Math.round(mpp),
+        aimPx: aimPx.toFixed(2),
+        groups: scored.slice(0, 8).map((s) => ({
           road: s.g.key,
           votes: s.g.votes,
-          minPx: s.g.minPx,
-          major: s.g.major,
-          score: Math.round(s.score),
+          meters: Math.round(s.g.meters),
+          px: Number(s.px.toFixed(2)),
+          tier: s.g.tier,
+          score: Number(s.score.toFixed(2)),
         })),
         chosen: chosen.key,
         position,
       })
     }
 
-    res.json({ place: { label: chosen.label, position, major: chosen.major } })
+    res.json({ place: { label: chosen.label, position, major: chosen.tier > 0 } })
   }),
 )
 

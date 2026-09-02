@@ -39,6 +39,21 @@ export function snapDebug(): boolean {
   }
 }
 
+// Ground metres covered by ONE screen pixel at a Web-Mercator zoom + latitude —
+// the conversion between what the user aimed at (pixels) and what the snap
+// searches in (metres).
+function metresPerPixel(lat: number, zoom: number): number {
+  return Math.max(0.01, (156543.03392 * Math.cos((lat * Math.PI) / 180)) / 2 ** zoom)
+}
+
+// The ring of probes around the cursor, in SCREEN pixels — the space the user
+// actually aims in — but capped in GROUND distance. At zoom 5 a 12 px ring is
+// 20 km wide, and probing roads 20 km from the cursor spends HERE lookups on
+// roads nobody could have been pointing at; past the cap the ring settles into
+// "sample the couple of kilometres the release could plausibly have meant".
+const SAMPLE_RING_PX = 12
+const SAMPLE_RING_MAX_METERS = 2000
+
 // Convert the release pixel — and a ring of nearby pixels — back to geo
 // coordinates, so the snap can weigh the roads actually rendered AROUND the
 // cursor instead of only the single release point. The user aims at a road drawn
@@ -49,8 +64,8 @@ export function snapDebug(): boolean {
 // The first entry is always the exact release pixel (px 0). Near-duplicate geos
 // (common when zoomed in, where the ring is sub-metre) are de-duplicated.
 export function sampleScreenCandidates(map: any, vx: number, vy: number, zoom: number): ScreenGeoCandidate[] {
-  // 8 compass directions; diagonals unit-normalised so every sample on a ring is
-  // the same pixel distance from the cursor.
+  // 8 compass directions; diagonals unit-normalised so every sample on the ring
+  // is the same pixel distance from the cursor.
   const D = 0.7071
   const dirs: [number, number][] = [
     [1, 0],
@@ -62,11 +77,14 @@ export function sampleScreenCandidates(map: any, vx: number, vy: number, zoom: n
     [-D, D],
     [-D, -D],
   ]
-  // Zoomed in the release is already precise → one tight ring. Zoomed out it's
-  // imprecise and the visible roads are far apart → sample wider, on two rings.
-  const radii = zoom >= 13 ? [10] : [12, 24]
+  const center = map.screenToGeo(vx, vy)
+  const mpp = center && typeof center.lat === 'number' ? metresPerPixel(center.lat, zoom) : 0
+  // One ring, not two: each probe now reports the roads around it rather than its
+  // single nearest road, so a second, wider ring would buy coverage the first one
+  // already has — at double the billable lookups.
+  const radius = mpp > 0 ? Math.min(SAMPLE_RING_PX, SAMPLE_RING_MAX_METERS / mpp) : SAMPLE_RING_PX
   const offsets: [number, number][] = [[0, 0]]
-  for (const r of radii) for (const [ux, uy] of dirs) offsets.push([ux * r, uy * r])
+  for (const [ux, uy] of dirs) offsets.push([ux * radius, uy * radius])
 
   const out: ScreenGeoCandidate[] = []
   const seen = new Set<string>()
@@ -76,7 +94,7 @@ export function sampleScreenCandidates(map: any, vx: number, vy: number, zoom: n
     const key = `${g.lat.toFixed(6)},${g.lng.toFixed(6)}`
     if (seen.has(key)) continue
     seen.add(key)
-    out.push({ lat: g.lat, lng: g.lng, px: Math.round(Math.hypot(ox, oy)) })
+    out.push({ lat: g.lat, lng: g.lng, px: Math.round(Math.hypot(ox, oy) * 10) / 10 })
   }
   return out
 }
