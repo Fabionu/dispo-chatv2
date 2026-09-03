@@ -132,7 +132,7 @@ export default function StopForm({
             type="button"
             onClick={() => (editing ? setPhase('form') : setPhase('idle'))}
             aria-label="Back"
-            className="h-6 w-6 flex items-center justify-center text-faint hover:text-text hover:bg-white/6 transition-colors"
+            className="rounded-btn h-6 w-6 flex items-center justify-center text-faint hover:text-text hover:bg-white/6 transition-colors"
           >
             <X size="0.8125rem" strokeWidth={1.8} />
           </button>
@@ -175,7 +175,7 @@ export default function StopForm({
           type="button"
           onClick={cancel}
           aria-label={editing ? 'Cancel editing stop' : 'Cancel adding stop'}
-          className="h-6 w-6 flex items-center justify-center text-faint hover:text-text hover:bg-white/6 transition-colors"
+          className="rounded-btn h-6 w-6 flex items-center justify-center text-faint hover:text-text hover:bg-white/6 transition-colors"
         >
           <X size="0.8125rem" strokeWidth={1.8} />
         </button>
@@ -245,7 +245,7 @@ export default function StopForm({
               onClick={pickOnMap}
               aria-label="Find coordinates on map"
               title="Find on map"
-              className="h-9 w-9 shrink-0 flex items-center justify-center border border-line bg-white/4 text-muted hover:text-text hover:bg-white/8 transition-colors"
+              className="h-9 w-9 shrink-0 flex items-center justify-center rounded-tile border border-line bg-white/4 text-muted hover:text-text hover:bg-white/8 transition-colors"
             >
               <MapPinned size="1rem" strokeWidth={1.8} />
             </button>

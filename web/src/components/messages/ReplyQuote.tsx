@@ -18,7 +18,7 @@ function ReplyMedia({ replyTo }: { replyTo: ReplyToPreview }) {
   }
 
   return (
-    <span className="h-11 w-11 shrink-0 flex items-center justify-center border text-muted">
+    <span className="h-11 w-11 shrink-0 flex items-center justify-center rounded-tile border text-muted">
       {image ? (
         <ImageIcon size="1rem" strokeWidth={1.8} />
       ) : (
@@ -45,7 +45,7 @@ export default function ReplyQuote({
       (replyTo.hasAttachments ? 'Attachment' : 'Message')
 
   // The quote is a message nested inside a message, so it is drawn the same
-  // way the outer one is: a left rule, an indent, a mono attribution over the
+  // way the outer one is: a left rule, an indent, an attribution over the
   // body. No fill and no corner radius — a filled card here would be the only
   // solid block inside a thread built from rules, and it read as heavier than
   // the message actually quoting it.

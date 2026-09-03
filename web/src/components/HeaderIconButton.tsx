@@ -2,18 +2,22 @@ import type { ReactNode } from 'react'
 
 // ── Shared icon-button style ────────────────────────────────────────────────
 // ONE source of truth for the app's borderless 36×36 icon action button:
-// SQUARE, muted glyph that warms on hover, a subtle hover fill, an on-theme
-// focus ring, no border, no shadow. It was `rounded-full` until 2026-08-21, on
-// the reasoning that a round hover target is a control affordance rather than a
-// card corner — but the affordance a user actually reads is the fill appearing,
-// and a circle appearing inside a UI whose every other corner is mitred just
-// looked like a leftover. Squareness is the app's one visual rule; a control is
-// not the place to make an exception to it. Exported so non-button preview
+// muted glyph that warms on hover, a subtle hover fill, an on-theme focus ring,
+// no border, no shadow.
+//
+// Its corners have been round → square → round. It was `rounded-full` until
+// 2026-08-21, when it was squared on the reasoning that "squareness is the app's
+// one visual rule; a control is not the place to make an exception to it". That
+// premise is simply gone as of 2026-09-03 — the app is rounded now — so the
+// button follows at `--control-radius` (6px), the same step every other control
+// takes. Not back to `rounded-full`: the 2026-08-21 point that a CIRCLE reads as
+// a leftover next to mitred corners still stands, and 6px is a corner rather
+// than a shape. Exported so non-button preview
 // surfaces that can't use this component directly — e.g. the download <a> link
 // and the tooltip-wrapped buttons in the attachment preview action bar — render
 // the IDENTICAL control instead of a one-off class string.
 export const ICON_ACTION_BASE =
-  'h-9 w-9 flex items-center justify-center transition-colors ' +
+  'rounded-btn h-9 w-9 flex items-center justify-center transition-colors ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ' +
   'disabled:opacity-30 disabled:cursor-default'
 export const ICON_ACTION_IDLE = 'text-muted hover:text-text hover:bg-white/6'
@@ -26,7 +30,7 @@ export const ICON_ACTION_ACTIVE = 'text-text bg-white/6'
 // each caller keeps its own (some fade opacity on row hover). The caller supplies
 // the glyph and any resting-visibility utilities.
 export const ICON_ACTION_SMALL =
-  'h-6 w-6 flex items-center justify-center text-muted ' +
+  'rounded-btn h-6 w-6 flex items-center justify-center text-muted ' +
   'hover:text-text hover:bg-white/6 ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ' +
   'disabled:opacity-30 disabled:cursor-default'

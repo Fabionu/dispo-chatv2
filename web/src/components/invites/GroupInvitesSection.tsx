@@ -50,7 +50,7 @@ export default function GroupInvitesSection({ invites, selectedId, onSelect }: P
         >
           Group invites
         </span>
-        <span className="font-mono text-2xs font-semibold bg-text text-bg rounded-full min-w-[0.9375rem] h-[0.9375rem] px-1 flex items-center justify-center shrink-0">
+        <span className="text-2xs font-semibold tabular-nums bg-text text-bg rounded-full min-w-[0.9375rem] h-[0.9375rem] px-1 flex items-center justify-center shrink-0">
           {count}
         </span>
       </button>

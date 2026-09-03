@@ -381,7 +381,7 @@ function ScheduledRow({
         disabled={deleting}
         aria-label="Remove scheduled message"
         title="Remove scheduled message"
-        className="flex h-7 w-7 shrink-0 items-center justify-center text-faint transition-colors hover:bg-white/6 hover:text-alert disabled:opacity-40"
+        className="rounded-btn flex h-7 w-7 shrink-0 items-center justify-center text-faint transition-colors hover:bg-white/6 hover:text-alert disabled:opacity-40"
       >
         {deleting ? (
           <Loader2 size="0.875rem" strokeWidth={2.2} className="animate-spin" />

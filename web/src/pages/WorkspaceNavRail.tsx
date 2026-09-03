@@ -90,7 +90,7 @@ function CollapseButton({
       aria-label={label}
       aria-expanded={!collapsed}
       onClick={onClick}
-      className="relative flex h-9 w-9 shrink-0 items-center justify-center text-muted transition-colors hover:bg-white/8 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+      className="rounded-btn relative flex h-9 w-9 shrink-0 items-center justify-center text-muted transition-colors hover:bg-white/8 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
     >
       <PanelLeftClose
         size="1.0625rem"
@@ -128,7 +128,7 @@ function NavButton({
       aria-label={label}
       aria-current={active ? 'page' : undefined}
       onClick={onClick}
-      className={`flex h-9 w-9 shrink-0 items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+      className={`rounded-btn flex h-9 w-9 shrink-0 items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
         active
           ? 'bg-white/10 text-text'
           : 'text-muted hover:bg-white/8 hover:text-text'

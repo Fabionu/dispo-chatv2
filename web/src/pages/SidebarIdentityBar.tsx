@@ -24,7 +24,7 @@ type Props = {
 //
 // Neither half carries a picture any more (2026-08-20): the rail dropped every
 // avatar, and a 37px portrait plus a company logo were most of this row's
-// height in a rail that is now 380px wide. Name over a mono label carries the
+// height in a rail that is now 380px wide. Name over a small label carries the
 // same information. The availability dot stays — it is live state, not
 // decoration — and TRAILS the name, on the name's own line. In front of the
 // name it was a child of the two-line cell, so it centred itself between the
@@ -121,9 +121,10 @@ function IdentityText({
           />
         )}
       </span>
-      {/* Mono: role and "Company" are labels for the name above them, not
-          content of their own. `capitalize` is now redundant against the
-          eyebrow's uppercase, so it only survives for non-role secondaries. */}
+      {/* `.eyebrow`: role and "Company" are labels for the name above them, not
+          content of their own. `capitalize` is what title-cases the raw role
+          (`driver` → `Driver`); it was dead weight while `.eyebrow` uppercased
+          everything and does real work again since 2026-09-03. */}
       <span className={`eyebrow block truncate leading-tight ${capitalize ? 'capitalize' : ''}`}>
         {secondary}
       </span>

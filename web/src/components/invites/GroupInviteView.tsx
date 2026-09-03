@@ -51,7 +51,7 @@ export default function GroupInviteView({ invite, onAccepted, onDeclined }: Prop
           <div className="text-lg font-semibold truncate">{title}</div>
           <div className="text-xs text-muted truncate">Vehicle group invitation</div>
         </div>
-        <span className="font-mono text-xs text-muted border border-line rounded-chip px-2 py-0.5 shrink-0">
+        <span className="text-xs text-muted border border-line rounded-chip px-2 py-0.5 shrink-0">
           Pending
         </span>
       </header>
@@ -114,7 +114,7 @@ function PlateCard({ label, value }: { label: string; value?: string }) {
   return (
     <div className="rounded-card border border-line bg-white/2 px-3 py-2 text-left">
       <div className="eyebrow text-faint mb-1">{label}</div>
-      <div className="font-mono text-base text-text truncate">{value || '—'}</div>
+      <div className="text-base text-text tabular-nums truncate">{value || '—'}</div>
     </div>
   )
 }

@@ -109,7 +109,7 @@ export default function InviteRegister({ token }: Props) {
   return (
     <div className="min-h-screen w-full bg-bg text-text flex flex-col">
       <div className="px-8 sm:px-12 lg:px-16 py-8 flex items-center gap-3">
-        <div className="h-9 w-9 rounded-card border border-line bg-white/4 flex items-center justify-center">
+        <div className="h-9 w-9 rounded-tile border border-line bg-white/4 flex items-center justify-center">
           <Box size="1.0625rem" strokeWidth={1.5} />
         </div>
         <div className="text-xl font-semibold tracking-[-0.2px]">Dispo-chat</div>

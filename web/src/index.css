@@ -232,7 +232,7 @@ html[data-density='comfortable'] {
   --sidebar-conv-meta-font-size: calc(var(--sidebar-meta-font-size) - 1px);
   /* The unread / mention badge box, and the count set inside it. DERIVED, and
      the only sidebar box that is: the badge is not an object with a size of its
-     own, it is a square drawn around one or two mono figures, so its size is a
+     own, it is a square drawn around one or two tabular figures, so its size is a
      fact about --sidebar-meta-font-size rather than a tenth number to hand-tune
      per tier. It used to be one, and the tiers had drifted to 22/23/24/25/28/29px
      — a 23px DISC on a 13.5px figure, the largest solid object in a rail built
@@ -299,8 +299,8 @@ html[data-density='comfortable'] {
   /* ~1em of body text. At 20px the rule stood too far off the words to read as
      THEIR edge — it looked like a divider that happened to be nearby, and the
      block drifted away from the column edge it is supposed to hang from. One em
-     is close enough that rule and text read as one object, and still clears the
-     mono label's 0.14em tracking. It also sets where the hover action strip and
+     is close enough that rule and text read as one object. It also sets where
+     the hover action strip and
      the actions panel sit, so all three stay on the same line. */
   --msg-indent: 14px;
   /* The AUTHOR LANE — the strip to the left of an incoming message's rule that
@@ -315,15 +315,18 @@ html[data-density='comfortable'] {
      the rule it is supposed to hang beside. 2.5rem against a 1.875rem (30px)
      tile leaves 0.625rem of air, at every scale. */
   --msg-lane: 2.5rem;
-  /* The mono voice's two sizes. Like the chat/sidebar tokens these are px, not
-     rem steps off the type scale, because they are optical: a 0.14em-tracked
-     uppercase mono label and a tabular stat value each have exactly one size
-     that reads right, and neither wants to grow with the display. */
+  /* The label voice's two sizes. Like the chat/sidebar tokens these are px,
+     not rem steps off the type scale, because they are optical: a small label
+     and a tabular stat value each have exactly one size that reads right, and
+     neither wants to grow with the display. */
   --msg-label-size: 11px;
-  /* Timestamps (`.timestamp`). Half a pixel over the mono label beside them:
-     Inter's x-height is smaller than JetBrains Mono's, so matched numerically
-     the clock read a size smaller than the name and the flags it sits with. */
-  --timestamp-size: 11.5px;
+  /* Timestamps (`.timestamp`). An ALIAS now, not a number. This used to be
+     11.5px — half a pixel over the label beside it, because the label was
+     JetBrains Mono and the clock was Inter, and Inter's smaller x-height made
+     the two read a size apart when matched numerically. `.eyebrow` is Inter as
+     of 2026-09-03, so that compensation would now be half a pixel of drift
+     between two labels in the same face sitting in the same row. */
+  --timestamp-size: var(--msg-label-size);
   --stat-value-size: 15px;
   /* Weight of message body copy. A TOKEN rather than a `font-light` on the row,
      because the right weight is not a property of the text — it is a property
@@ -335,11 +338,11 @@ html[data-density='comfortable'] {
      field are eaten into rather than spread, so 300 there is not "the same text,
      calmer", it is thin and washed out. See the light block. */
   --msg-body-weight: 300;
-  /* The author's name in a message's attribution row, which is NOT on the mono
-     scale above — it is set in the sans face (see Attribution). A point larger
-     than the 11px mono beside it, because the name has to hold the same optical
-     weight in the row without the uppercase and the 0.14em tracking that were
-     doing that job before. */
+  /* The author's name in a message's attribution row, which is NOT on the
+     label scale above (see Attribution). A point larger than the 11px label
+     beside it, because the name has to hold the row on size alone — it never
+     had the uppercase and the 0.14em tracking that were doing that job for the
+     labels, and as of 2026-09-03 neither do they. */
   --msg-author-size: 12px;
   /* Activity rows (joins, trip status, route edits). An alias, not a second
      number: an activity line and an author's name are the same class of small
@@ -347,7 +350,7 @@ html[data-density='comfortable'] {
   --msg-system-size: var(--msg-author-size);
   /* ── Bubble style geometry ───────────────────────────────────────────────
      The box, and ONLY the box. Everything inside a message — the type, the
-     72ch measure, the mono labels, the author lane — is identical in both
+     72ch measure, the small labels, the author lane — is identical in both
      message styles by design, so nothing else here is per-style.
 
        --bubble-pad-x  the box's side padding. It IS --msg-indent, not a number
@@ -362,17 +365,64 @@ html[data-density='comfortable'] {
                        because a bubble already carries --bubble-pad-y at each
                        end, so the same margin reads much wider between two
                        boxes than it does between two blocks of bare text. */
-  /* THE one radius in the app (user, 2026-09-02). Every token on the radius
-     scale is 0 and stays 0 — see tailwind.config.js — so this is deliberately
-     NOT one of them: it belongs to the bubble message style and to the chat
-     surface that style owns (the blocks, the typing row, the composer under
-     them), and it does not leak into the rest of the app. Pick Timeline and
-     every corner in the product is square again.
+  /* The chat surface's radius (user, 2026-09-02). It belongs to the bubble
+     message style and to the surface that style owns (the blocks, the typing
+     row, the composer under them), and it does not leak into the rest of the
+     app — every rule using it is scoped `[data-msg-style='bubble']`. Pick
+     Timeline and the whole chat surface is square again.
+
+     It was THE one radius in the app until 2026-09-03, when the app's chrome
+     got `--chrome-radius` below. Two curves, two owners, two tokens — a shared
+     one would mean changing the chat to change a settings table.
 
      10px against a block with 10px of vertical padding: enough curve to read
      as soft on a 40px bubble, short of the 16px+ that reads as a toy. It is a
      token so it is one number to argue with, not thirty. */
   --soft-radius: 10px;
+  /* THE app's chrome curve — ONE number, arrived at over three passes on
+     2026-09-03 as the user rounded one surface family at a time:
+       the TABLE  — "the design of the tables can be rounded as well"
+       the TILE   — "the same radius as the table has in the moment"
+       the PLATE  — "can you round the buttons also in the workspace"
+     Each asked for the same curve as the last, so this is one value carrying
+     three Tailwind names (`rounded-list` / `rounded-tile` / `rounded-soft` —
+     see the borderRadius block). The class name says WHICH surface is being
+     rounded; this token says what the curve is. It started as three separate
+     vars, collapsed once the third consumer proved they were all the same
+     number being restated.
+
+     Deliberately NOT merged with --soft-radius above, even though the value
+     matches: that one belongs to the bubble message style and is scoped to
+     `[data-msg-style='bubble']`. Changing the chat must not change a settings
+     table, and vice versa.
+
+     If a surface ever needs a step off this — the way an inner corner has to
+     sit inside an outer one — the idiom is `calc(var(--chrome-radius) - 3px)`,
+     which is what the composer's controls already do against --soft-radius.
+
+     10px: enough curve to read as soft on a 32px tile, short of the 16px+ that
+     turns a 300px card into a toy. */
+  --chrome-radius: 10px;
+  /* The step for a CONTROL — something that sits inside one of those surfaces
+     rather than being one: a segment in the theme/density/message-style picker,
+     a Group Info tab pill, the notification tick box, the Send invite button,
+     the rail's + button, a chip.
+     Smaller because an inner corner has to sit inside an outer one, and because
+     these are small: 10px on a 20px tick box is 50% of its side and reads as a
+     lozenge, where 6px reads as a rounded square. 6/10 also holds roughly the
+     proportion a 32px tile has at 10px, so a control and a surface look like
+     they were drawn by the same hand at different sizes. */
+  --control-radius: 6px;
+  /* The step for a CONTROL — something that sits inside one of those surfaces
+     rather than being one: a segment in the theme/density/message-style picker,
+     a Group Info tab pill, the notification tick box, the Send invite button,
+     the rail's + button, a chip.
+     Smaller because an inner corner has to sit inside an outer one, and because
+     these are small: 10px on a 20px tick box is 50% of its side and reads as a
+     lozenge, where 6px reads as a rounded square. 6/10 also holds roughly the
+     proportion a 32px tile has at 10px, so a control and a surface look like
+     they were drawn by the same hand at different sizes. */
+  --control-radius: 6px;
   --bubble-pad-x: var(--msg-indent);
   --bubble-pad-y: 10px;
   --bubble-gap: 3px;
@@ -892,8 +942,8 @@ html[data-density-mode='auto'] {
                   reasoning that lets it drop the name in the timeline.
 
    Everything INSIDE the block is untouched in both styles: the same 62ch
-   measure, the same body token and weight, the same mono voice, the same author
-   photo out in the lane.
+   measure, the same body token and weight, the same label voice, the same
+   author photo out in the lane.
 
    Specificity note: every rule here is at least (0,2,0) and the Tailwind
    utilities it overrides are all (0,1,0), so this block wins wherever the two
@@ -1042,7 +1092,7 @@ html[data-density-mode='auto'] {
      is the same trap the attribution row hit and documents in threadChrome.
 
      `line-height: 1` makes the row's box its glyphs — safe here because the
-     content is digits, a tick glyph and uppercase mono flags, none of which have
+     content is digits, a tick glyph and the status flags, none of which have
      descenders to clip — and the negative margin then eats into the empty
      half-leading the body leaves under its last line.
 
@@ -1141,15 +1191,22 @@ html[data-density-mode='auto'] {
   margin-bottom: 12px;
 }
 
-/* ── The composer, under a thread of rounded blocks ────────────────────────
-   The field the messages are typed into takes the same corner as the messages
-   themselves, because it is the same surface — a square input bar under a
-   column of soft blocks reads as an unfinished part of the screen rather than
-   as a deliberate contrast. Scoped to the bubble style with everything else:
-   in the timeline the composer is a drawn rectangle like every other field in
-   the app, and it stays one. */
-[data-msg-style='bubble'] .chat-composer {
-  border-radius: var(--soft-radius);
+/* ── The composer ──────────────────────────────────────────────────────────
+   NOT scoped to a message style (user, 2026-09-03: "when the message style is
+   selected as timeline, the composer and everything needs to be the same").
+
+   It used to be, on the reasoning that "in the timeline the composer is a drawn
+   rectangle like every other field in the app". That was true when every field
+   in the app WAS a rectangle; since the rounding passes they all take
+   `--chrome-radius`, so the scoped rule had stopped meaning "matches the app"
+   and started meaning "the only square box on the screen".
+
+   `--chrome-radius`, not `--soft-radius`: the composer is app chrome that
+   happens to sit under the thread, not part of the bubble style's vocabulary.
+   The two tokens hold the same 10px, and pointing this at the chrome one is
+   what stops a future change to the CHAT's curve from moving the composer. */
+.chat-composer {
+  border-radius: var(--chrome-radius);
 }
 
 /* The reply/edit context row sits at the top of the composer with a 2px accent
@@ -1160,37 +1217,32 @@ html[data-density-mode='auto'] {
    (The alternative — clipping the composer with `overflow: hidden` — would
    also clip the @-mention picker and the format bar, which are absolutely
    positioned to float ABOVE it.) */
-[data-msg-style='bubble'] .composer-context {
-  border-top-left-radius: calc(var(--soft-radius) - 1px);
-  border-top-right-radius: calc(var(--soft-radius) - 1px);
+.composer-context {
+  border-top-left-radius: calc(var(--chrome-radius) - 1px);
+  border-top-right-radius: calc(var(--chrome-radius) - 1px);
 }
 
-/* The three controls in the input bar: attach, schedule, send. The send button
-   is the one FILLED control in the composer (the fill is its enabled state),
-   and filled square it drives a hard 90° corner into the curve of the field
-   6px away from it — the two shapes read as belonging to different designs.
-   The other two only show a hover wash, which has the same problem the moment
-   the pointer is on it. A step tighter than the field around them, the way an
-   inner corner has to be to sit inside an outer one. */
-[data-msg-style='bubble'] .composer-bar button {
-  border-radius: calc(var(--soft-radius) - 3px);
-}
+/* The three controls in the input bar (attach, schedule, send) used to be
+   rounded here, a step tighter than the field around them. That rule is GONE:
+   they carry `rounded-btn` like every other control in the app now, and
+   `--control-radius` (6px against the field's 10px) already IS the step tighter
+   an inner corner wants. A bubble-scoped override would only have made them
+   disagree with themselves between the two message styles. */
 
 /* The author photo in the lane. It is drawn square (see Avatar's `shape` prop,
-   and the note in MessageRow) on the reasoning that a disc there would be the
-   only rounded object on the screen — which was true of the timeline and is
-   not true here: it now hangs between a rounded block and a rounded composer,
-   and it is the one hard corner left in the column. Same step as the composer
-   controls, not a disc: this rework softened the app's corners, it did not
-   start drawing circles. */
-[data-msg-style='bubble'] .msg-author-tile span,
-[data-msg-style='bubble'] .msg-author-tile img {
-  border-radius: calc(var(--soft-radius) - 3px);
+   and the note in MessageRow) rather than as a disc — this rework softened the
+   app's corners, it did not start drawing circles.
+   Unscoped 2026-09-03 with the composer: the argument for leaving it square in
+   the timeline was that a curve there would be "the only rounded object on the
+   screen", and the timeline is not that screen any more. */
+.msg-author-tile span,
+.msg-author-tile img {
+  border-radius: var(--control-radius);
 }
 
 /* ── Structured data blocks ─────────────────────────────────────────────────
    A route, a load, a cost breakdown or a trip renders INSIDE the message as a
-   bordered block rather than as its own card: a header row carrying a mono
+   bordered block rather than as its own card: a header row carrying an
    eyebrow, the content, then an optional stats grid.
 
    The grid is the reason this lives in CSS rather than in Tailwind on the
@@ -1211,8 +1263,8 @@ html[data-density-mode='auto'] {
 /* Deliberately ONE row at any width. The cells truncate (see DataStat) rather
    than wrap, because the alternative — reflowing to two-up — needs a per-cell
    first-row rule to avoid a doubled border, and that rule has to know the
-   column count, which this component doesn't. Three to five short mono values
-   fit the 772px thread and the info panel alike. */
+   column count, which this component doesn't. Three to five short tabular
+   values fit the 772px thread and the info panel alike. */
 
 html, body, #root {
   height: 100%;
@@ -1287,14 +1339,22 @@ input, button, textarea, select {
   }
 }
 
+/* A wave of BRIGHTNESS, not a bounce. The dots used to travel 2px vertically
+   while they pulsed, which was fine under the label but not beside it: since
+   2026-09-03 they sit on the same line as the words, and three things hopping
+   next to a phrase reads as jitter rather than as activity. Opacity alone still
+   travels left-to-right (the delays do that), and a hair of scale keeps the lit
+   dot from looking flat — but nothing moves off its baseline.
+   Slower, too: 1.1s → 1.4s. A bounce can be quick because the motion carries it;
+   a fade at that speed strobes. */
 @keyframes typing-dot-compose {
-  0%, 55%, 100% {
-    opacity: 0.35;
-    transform: translateY(1px) scale(0.8);
+  0%, 60%, 100% {
+    opacity: 0.3;
+    transform: scale(0.85);
   }
   25% {
     opacity: 1;
-    transform: translateY(-1px) scale(1);
+    transform: scale(1);
   }
 }
 
@@ -1370,6 +1430,102 @@ input, button, textarea, select {
   will-change: opacity, transform;
 }
 
+/* ── Composer ink ──────────────────────────────────────────────────────────
+   Newly typed characters fade in (user, 2026-09-03). The characters that
+   animate belong to a MIRROR layer over the textarea, whose own glyphs are
+   transparent — see the note in ChatComposer for why a textarea cannot do this
+   itself and what keeps the two layers aligned.
+
+   OPACITY ONLY, and that is a constraint rather than a preference. `transform`
+   does not apply to inline boxes, so a rise would need `display:inline-block`
+   on every character — which turns each one into an atomic box and lets
+   `pre-wrap` break a line between ANY two letters. The mirror would then wrap
+   mid-word while the textarea underneath did not, and the caret would land away
+   from the glyphs. A fade needs no box, so the mirror wraps exactly like plain
+   text.
+
+   120ms: long enough to read as a fade at typing speed, short enough that a
+   fast typist is never looking at a trail of half-lit letters. */
+@keyframes composer-ink-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.composer-ink {
+  animation: composer-ink-in 120ms ease-out both;
+}
+
+/* ── Composer pulse ────────────────────────────────────────────────────────
+   The second composer effect (Settings → Appearance → Animations): on each
+   keystroke a line runs out from the MIDDLE of the composer's border to both
+   edges and fades.
+
+   It is drawn as an overlay that reproduces the composer's own border and is
+   REVEALED by `clip-path`, rather than a box that scales. Scaling a bordered
+   box from the centre would stretch its corners and drag the two vertical edges
+   through the field; clipping leaves the border exactly where the real one is
+   and only uncovers more of it, so what travels is the reveal, not the shape.
+
+   `border-radius: inherit` matters: the composer is square in the timeline
+   style and rounded under the bubble style, and this has to follow it without
+   knowing which.
+
+   EACH KEYSTROKE GETS ITS OWN WAVE (user, 2026-09-03: "it restarts the
+   animation every time I type"). The first version was one element restarted by
+   remounting, so a second keystroke inside 420ms yanked the line back to the
+   middle — the faster you typed, the less it ever travelled. Now the composer
+   holds a LIST of live pulses and each one runs its 420ms out undisturbed, so
+   typing sends waves rather than resetting one.
+
+   Peak opacity is 0.55 rather than 0.85 because of that: three or four waves
+   are commonly on screen together at typing speed, and they add up. */
+@keyframes composer-pulse {
+  0% {
+    clip-path: inset(0 50% 0 50%);
+    opacity: 0.55;
+  }
+  60% {
+    clip-path: inset(0 0 0 0);
+    opacity: 0.28;
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+    opacity: 0;
+  }
+}
+
+.composer-pulse {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border: 1px solid rgb(var(--color-text) / 0.55);
+  border-radius: inherit;
+  pointer-events: none;
+  animation: composer-pulse 420ms ease-out both;
+}
+
+/* Two things the mirror would otherwise take with it when the textarea's glyphs
+   go transparent. Both are the same trap: they inherit from `color`.
+
+   THE CARET. `caret-color` defaults to `currentColor`, so `text-transparent`
+   makes the caret transparent too — the composer looked like it had lost focus
+   and there was no way to see where you were typing. It has to be stated.
+
+   THE SELECTION. Dragging across the composer highlighted a band of nothing,
+   because the highlighted glyphs were still transparent. `::selection` re-inks
+   the real text on top of the highlight. */
+.composer-input {
+  caret-color: rgb(var(--color-text));
+}
+
+.composer-input::selection {
+  color: rgb(var(--color-text));
+}
+
 .typing-indicator-enter {
   animation: typing-indicator-enter 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -1384,11 +1540,37 @@ input, button, textarea, select {
 }
 
 .typing-dot {
-  animation: typing-dot-compose 1.1s ease-in-out infinite;
+  animation: typing-dot-compose 1.4s ease-in-out infinite;
 }
 
+/* ── Stillness ──────────────────────────────────────────────────────────────
+   TWO ways the app stops moving, and they are not the same thing:
+
+     prefers-reduced-motion   the operating system's answer. Honoured always,
+                              before any of our JS has run.
+     [data-animations='off']  Settings → Appearance → Animations (2026-09-03).
+
+   Both switch off the same set, so the set is written ONCE as a class list and
+   the two conditions each point at it. Adding a new entrance means adding its
+   class here and nowhere else. `:where()` keeps the specificity of the
+   attribute selector at zero, so these rules stay as easy to override as the
+   media query's are.
+
+   A setting may turn motion OFF; it must never turn it back ON against the
+   system, which is why these are two independent conditions and not one
+   resolved value. */
 @media (prefers-reduced-motion: reduce) {
-  .panel-fade-in {
+  .panel-fade-in,
+  .typing-indicator-enter,
+  .typing-indicator-exit,
+  .typing-avatar-enter,
+  .typing-dot,
+  .action-strip-enter,
+  .action-strip-enter-up,
+  .action-strip-exit,
+  .action-strip-exit-up,
+  .composer-ink,
+  .composer-pulse {
     animation: none;
   }
 
@@ -1396,20 +1578,6 @@ input, button, textarea, select {
   .workspace-sidebar-panel,
   .workspace-main {
     transition: none;
-  }
-
-  .typing-indicator-enter,
-  .typing-indicator-exit,
-  .typing-avatar-enter,
-  .typing-dot {
-    animation: none;
-  }
-
-  .action-strip-enter,
-  .action-strip-enter-up,
-  .action-strip-exit,
-  .action-strip-exit-up {
-    animation: none;
   }
 
   .action-strip-exit,
@@ -1420,6 +1588,42 @@ input, button, textarea, select {
   .typing-dot {
     opacity: 0.8;
   }
+}
+
+:root[data-animations='off'] :where(
+  .panel-fade-in,
+  .typing-indicator-enter,
+  .typing-indicator-exit,
+  .typing-avatar-enter,
+  .typing-dot,
+  .action-strip-enter,
+  .action-strip-enter-up,
+  .action-strip-exit,
+  .action-strip-exit-up,
+  .composer-ink,
+  .composer-pulse
+) {
+  animation: none;
+}
+
+:root[data-animations='off'] :where(
+  .workspace-shell,
+  .workspace-sidebar-panel,
+  .workspace-main
+) {
+  transition: none;
+}
+
+/* An exit that no longer animates has to be hidden outright, or it would sit
+   there at full opacity until its unmount timer fires. */
+:root[data-animations='off'] :where(.action-strip-exit, .action-strip-exit-up) {
+  opacity: 0;
+}
+
+/* The dots are the whole content of the typing row — stopped, they still have
+   to read as three dots rather than three different greys. */
+:root[data-animations='off'] :where(.typing-dot) {
+  opacity: 0.8;
 }
 
 /* Custom scrollbar — slim, dark, in keeping with the operations-tool feel.
@@ -1476,25 +1680,54 @@ button {
   cursor: pointer;
 }
 
-/* ── The mono voice ─────────────────────────────────────────────────────────
-   Every small uppercase label in the app is set in the mono face: section
-   eyebrows, message attribution rows, stat labels, chips, composer hints,
-   sidebar row meta. It is what separates STRUCTURE (mono, tracked, faint) from
-   CONTENT (Inter, untracked, text/muted) now that no tone step or shadow does
-   that job any more.
+/* ── The label voice ────────────────────────────────────────────────────────
+   Every small label in the app runs through here: section eyebrows, message
+   attribution rows, stat labels, chips, composer hints, sidebar row meta. It
+   separates STRUCTURE (small, faint) from CONTENT (larger, text/muted) now
+   that no tone step or shadow does that job any more.
 
    `.eyebrow` is the recipe. It was already the section-label class in ~20
-   places, so those all pick up the mono voice without being touched. */
+   places, so those all pick up the voice without being touched.
+
+   It is set in INTER, and in sentence case (user, 2026-09-03: "I don't like
+   the font used for the text under the SV01HLC"). This voice used to be
+   JetBrains Mono, uppercase, tracked 0.14em — the same three-part treatment
+   the timestamp shed on 2026-09-02 for the same reason. Mono is a CODE face:
+   it draws every glyph to be told apart from its neighbours in a stack of
+   identifiers, and set at 11px, capitalised and spaced out it turned an
+   ordinary phrase like `Trailer SV21AKR · 6 members` into something to be
+   decoded rather than read. Inter at sentence case reads it as a phrase.
+
+   SIZE and COLOUR are what mark the voice now, not face and case, which is
+   why nothing here got bigger to compensate. A label is small and faint; body
+   copy is neither. That contrast survived the change of face intact — the
+   tracking and the capitals were never what carried it.
+
+   `tabular-nums` is the part that has to outlive the mono face: it is what
+   holds `6 members` and a column of plates from jittering as digits change
+   width, and Inter's proportional figures do not do that on their own. */
 .eyebrow {
-  font-family:
-    'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  font-family: 'Inter', system-ui, sans-serif;
   font-size: var(--msg-label-size);
+  /* 500, where the mono ran at 500 too. Inter at this size on a faint colour
+     goes weedy at 400, exactly as the timestamp beside it does. */
   font-weight: 500;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  /* `letter-spacing` IS declared — both because nothing overrides it and
+     because it inherits, so without it a label nested under a `tracking-tight`
+     heading would quietly pick that heading's negative tracking up. */
+  letter-spacing: normal;
+  /* `text-transform` is NOT declared, and that is deliberate. Every property
+     this class names it also OVERRIDES: `.eyebrow` and a `text-*`/`tracking-*`/
+     `capitalize` utility are both (0,1,0), so the later rule in the sheet wins
+     and the utility on the element loses. That has bitten this file twice —
+     `.filter-tab-active` below, and the `normal-case` that SystemMessageRow
+     spent months not applying — and a third time on 2026-09-03: with the
+     uppercase gone, `text-transform: none` beat the `capitalize` that
+     title-cases the identity bar's role, and `admin` started rendering in
+     lowercase where it used to render as `ADMIN`.
+     Sentence case is what an undeclared `text-transform` already gives, so the
+     declaration bought nothing and cost the one override that needs to win. */
   color: rgb(var(--color-faint));
-  /* Mono digits in a tracked label look best evenly spaced rather than
-     kerned against the letters around them. */
   font-variant-numeric: tabular-nums;
 }
 
@@ -1504,27 +1737,21 @@ button {
    everywhere; before this each surface reached for its own combination of
    size, colour and `tabular-nums` and they had drifted apart.
 
-   It is set in INTER, not the mono face (user, 2026-09-02: "I don't really
-   like how the numbers look"). Everything else small in this app is mono, and
-   a timestamp looks like it should be — but JetBrains Mono is a CODE face: its
-   digits are drawn to be told apart from each other at a glance in a stack of
-   identifiers, with the wide even rhythm and the dotted zero that come with
-   that job. A clock is not an identifier. It is two numbers you read as one
-   value, and Inter sets them as one.
+   This class went to Inter FIRST (user, 2026-09-02: "I don't really like how
+   the numbers look"), back when every other small label in the app was still
+   JetBrains Mono. `.eyebrow` followed it on 2026-09-03 for the same reason, so
+   the face and the case no longer distinguish a clock from a label — but the
+   two rules stay separate, because a clock and a label still want different
+   things and only happen to agree at the moment.
 
-   `tabular-nums` is the part that has to survive the change of face: it is
+   `tabular-nums` is the part that has to survive any change of face: it is
    what stops the rail's column of times from jittering as the digits change
-   width, and it is why this cannot simply be "no class at all".
-
-   No tracking and no uppercase, unlike `.eyebrow`: that tracking is for words
-   used as labels, where the letters are a code to be picked apart one at a
-   time; `15:42` is a single value, and spacing it out made the hour, the colon
-   and the minute read as three separate things sitting near each other. */
+   width, and it is why this cannot simply be "no class at all". */
 .timestamp {
   font-family: 'Inter', system-ui, sans-serif;
   font-size: var(--timestamp-size);
-  /* 500, where the mono ran at 500 too. Inter at this size on a faint colour
-     goes weedy at 400, and the timestamp has to hold its own beside a name. */
+  /* Inter at this size on a faint colour goes weedy at 400, and the timestamp
+     has to hold its own beside a name. */
   font-weight: 500;
   letter-spacing: normal;
   text-transform: none;
@@ -1532,7 +1759,30 @@ button {
   color: rgb(var(--color-faint));
 }
 
-/* Rail filter tabs (Archived · All · Groups · Direct · Unread) ---------------
+/* Rail filter tabs — SIZE (user, 2026-09-03: "can be made bigger").
+   `.eyebrow` sets 11px (`--msg-label-size`), which is an OPTICAL size: it is
+   deliberately fixed, because a label riding a message or a stat has one size
+   that reads right and must not grow with the display. A rail control is the
+   opposite kind of object. The sidebar's own doc block up in `:root` already
+   says the rail's controls — "the search field, filter tabs, or footer profile"
+   — sit on the shared `--sidebar-*` tokens and scale per density tier; the tabs
+   just stopped doing so when they picked up `.eyebrow` in the 2026-08-20
+   rework, and 11px is what that drift looked like.
+
+   `--sidebar-meta-font-size` (13.5px at the base tier) is the token for the
+   rail's secondary text, and it puts the tabs a step ABOVE the conversation
+   rows' meta line (`--sidebar-conv-meta-font-size`, 12.5px) rather than two
+   steps below it — the controls should be the quiet-but-legible layer over a
+   list that is quieter still.
+
+   Written as `.eyebrow.filter-tab` (0,2,0) rather than a `text-*` utility for
+   the reason `.filter-tab-active` documents below: a utility ties with
+   `.eyebrow` on specificity and loses on file order. */
+.eyebrow.filter-tab {
+  font-size: var(--sidebar-meta-font-size);
+}
+
+/* Rail filter tabs — SELECTION (Archived · All · Groups · Direct · Unread) ---
    TWO classes, deliberately. `.eyebrow` above sets this label's colour, and a
    `text-*` utility is also one class — a tie that the later rule wins, which is
    how the selected tab ended up the same grey as the unselected ones. Naming
@@ -1625,6 +1875,10 @@ button {
   flex-direction: column;
   align-items: center;
   border: 1px solid rgb(var(--color-line));
+  border-radius: var(--chrome-radius);
+  /* The two buttons are edge-to-edge inside this box, so their hover fill would
+     square the corners off without the clip. */
+  overflow: hidden;
   background: rgb(var(--color-surface));
   color: rgb(var(--color-text));
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
@@ -1668,6 +1922,7 @@ button {
   margin-left: auto;
   place-items: center;
   border: 1px solid rgb(var(--color-line));
+  border-radius: var(--chrome-radius);
   background: rgb(var(--color-surface));
   color: rgb(var(--color-text));
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
@@ -1695,17 +1950,19 @@ button {
   width: min(17.5rem, calc(100vw - 2rem));
   padding: 0.875rem;
   border: 1px solid rgb(var(--color-line));
+  border-radius: var(--chrome-radius);
   background: rgb(var(--color-surface));
   box-shadow: 0 16px 48px rgb(0 0 0 / 0.34);
 }
+/* Hand-rolled `.eyebrow` (it predates the class) — kept in step with it. */
 .here-map-style-title {
   margin-bottom: 0.6875rem;
-  font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  font-family: 'Inter', system-ui, sans-serif;
   font-size: var(--msg-label-size);
   font-weight: 500;
-  letter-spacing: 0.14em;
+  letter-spacing: normal;
   line-height: 1.2;
-  text-transform: uppercase;
+  text-transform: none;
   color: rgb(var(--color-faint));
 }
 .here-map-style-grid {
@@ -1732,6 +1989,7 @@ button {
   aspect-ratio: 5 / 3;
   margin-bottom: 0.375rem;
   border: 2px solid transparent;
+  border-radius: var(--control-radius);
   background: rgb(var(--color-surface-2));
   transition: border-color 140ms ease;
 }
@@ -1759,6 +2017,7 @@ button {
   width: 1.25rem;
   height: 1.25rem;
   place-items: center;
+  border-radius: var(--control-radius);
   background: rgb(var(--color-text));
   color: rgb(var(--color-bg));
 }
@@ -1809,6 +2068,7 @@ button {
   width: 3.25rem;
   height: 2.375rem;
   border: 1px solid rgb(var(--color-line));
+  border-radius: var(--control-radius);
   object-fit: cover;
   user-select: none;
 }
@@ -1865,25 +2125,15 @@ button {
   opacity: 0.42;
   cursor: not-allowed;
 }
-/* While the cursor is over (or right next to) the drawn route line, HereMap
-   adds `.route-hover` to the container. The route line is draggable (drag it to
-   add a stop), so the cursor says grab. More specific than the default rule
-   above, so it wins despite the shared !important.
-
-   DRAWN, not the platform's `grab`. The system hand is a flat white silhouette
-   on most desktops, and the one surface it has to be legible on is a map: over
-   a white road casing, a pale vector basemap or bright satellite imagery it
-   simply disappears — which is what this replaces. So it is drawn the way the
-   route line itself is (see hereMapIcons): a near-black glyph inside a white
-   halo, legible against any basemap because it carries both tones with it.
-   The glyph is lucide's `grab`, the app's own icon set, so the cursor and the
-   toolbar speak the same language. `grab` stays as the fallback. */
-.here-map-surface.route-hover,
-.here-map-surface.route-hover canvas {
-  cursor:
-    url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2230%22%20height=%2230%22%20viewBox=%22-3%20-3%2030%2030%22%3E%3Cg%20fill=%22none%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22%3E%3Cg%20stroke=%22%23ffffff%22%20stroke-width=%224%22%3E%3Cpath%20d=%22M18%2011.5V9a2%202%200%200%200-2-2a2%202%200%200%200-2%202v1.4%22/%3E%3Cpath%20d=%22M14%2010V8a2%202%200%200%200-2-2a2%202%200%200%200-2%202v2%22/%3E%3Cpath%20d=%22M10%209.9V9a2%202%200%200%200-2-2a2%202%200%200%200-2%202v5%22/%3E%3Cpath%20d=%22M6%2014a2%202%200%200%200-2-2a2%202%200%200%200-2%202%22/%3E%3Cpath%20d=%22M18%2011a2%202%200%201%201%204%200v3a8%208%200%200%201-8%208h-4a8%208%200%200%201-8-8%202%202%200%201%201%204%200%22/%3E%3C/g%3E%3Cg%20stroke=%22%23171717%22%20stroke-width=%222%22%3E%3Cpath%20d=%22M18%2011.5V9a2%202%200%200%200-2-2a2%202%200%200%200-2%202v1.4%22/%3E%3Cpath%20d=%22M14%2010V8a2%202%200%200%200-2-2a2%202%200%200%200-2%202v2%22/%3E%3Cpath%20d=%22M10%209.9V9a2%202%200%200%200-2-2a2%202%200%200%200-2%202v5%22/%3E%3Cpath%20d=%22M6%2014a2%202%200%200%200-2-2a2%202%200%200%200-2%202%22/%3E%3Cpath%20d=%22M18%2011a2%202%200%201%201%204%200v3a8%208%200%200%201-8%208h-4a8%208%200%200%201-8-8%202%202%200%201%201%204%200%22/%3E%3C/g%3E%3C/g%3E%3C/svg%3E') 15 18,
-    grab !important;
-}
+/* NOTE: hovering the route line no longer changes the cursor (user,
+   2026-09-03). It used to swap in a drawn `grab` — the line is draggable, and a
+   drawn glyph was used because the platform's white hand disappears over a road
+   casing or bright satellite imagery. The rule is gone rather than replaced:
+   the base `.here-map-surface` rule above already mandates `default` across the
+   whole drawing surface, so deleting the exception IS the fix, and the map now
+   does what that rule's own comment says it does ("never grab/grabbing/
+   pointer/move"). `.route-hover` is still toggled by HereMap — the hover
+   READOUT below keys off it — it just no longer touches the cursor. */
 
 /* Route distance badge: a compact, dark pill anchored at the route midpoint
    (HERE DomMarker). It sits just ABOVE the line — `translate(-50%, calc(-100% -

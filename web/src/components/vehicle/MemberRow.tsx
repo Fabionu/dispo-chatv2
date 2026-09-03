@@ -249,7 +249,7 @@ export default function MemberRow({
               aria-label={`Manage ${member.displayName}`}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
-              className="flex h-7 w-7 items-center justify-center text-muted transition-colors hover:bg-white/10 hover:text-text disabled:cursor-default disabled:opacity-30"
+              className="rounded-btn flex h-7 w-7 items-center justify-center text-muted transition-colors hover:bg-white/10 hover:text-text disabled:cursor-default disabled:opacity-30"
             >
               <MoreVertical size="0.875rem" strokeWidth={1.8} />
             </button>

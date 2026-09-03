@@ -81,7 +81,7 @@ export function fieldClass(opts?: {
 }
 
 // The label above a control. Identical position and metrics everywhere, and in
-// the mono voice — a field label names a slot, which is structure.
+// the label voice — a field label names a slot, which is structure.
 export const FIELD_LABEL = 'eyebrow block leading-tight'
 
 // The value line of a READ-ONLY row — deliberately not a disabled input, which

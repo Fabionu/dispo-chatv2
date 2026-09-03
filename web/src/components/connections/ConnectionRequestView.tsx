@@ -57,7 +57,7 @@ export default function ConnectionRequestView({ connection, onAccepted, onDeclin
           <div className="text-lg font-semibold truncate">Connection invitation</div>
           <div className="text-xs text-muted truncate">from {u.workspace.name}</div>
         </div>
-        <span className="font-mono text-xs text-muted border border-line rounded-chip px-2 py-0.5 shrink-0">
+        <span className="text-xs text-muted border border-line rounded-chip px-2 py-0.5 shrink-0">
           Pending
         </span>
       </header>

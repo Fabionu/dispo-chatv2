@@ -138,7 +138,7 @@ export default function FleetStatus({ rooms, onOpenRoom, onBack }: Props) {
           type="button"
           onClick={onBack}
           aria-label="Back to workspace"
-          className="flex h-8 w-8 shrink-0 items-center justify-center text-muted transition-colors hover:bg-white/6 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+          className="rounded-btn flex h-8 w-8 shrink-0 items-center justify-center text-muted transition-colors hover:bg-white/6 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
         >
           <ArrowLeft size="1rem" strokeWidth={1.8} />
         </button>
@@ -166,7 +166,7 @@ export default function FleetStatus({ rooms, onOpenRoom, onBack }: Props) {
                   type="button"
                   onClick={() => setQuery('')}
                   aria-label="Clear fleet search"
-                  className="flex h-5 w-5 shrink-0 items-center justify-center text-faint transition-colors hover:bg-white/6 hover:text-text"
+                  className="rounded-btn flex h-5 w-5 shrink-0 items-center justify-center text-faint transition-colors hover:bg-white/6 hover:text-text"
                 >
                   <X size="0.75rem" strokeWidth={1.8} />
                 </button>
@@ -290,7 +290,7 @@ function FleetRow({ item, onOpenRoom }: { item: FleetRoom; onOpenRoom: (groupId:
 function EmptyFleet() {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-10 text-center">
-      <span className="mb-2.5 flex h-10 w-10 items-center justify-center border border-line text-faint">
+      <span className="mb-2.5 flex h-10 w-10 items-center justify-center rounded-tile border border-line text-faint">
         <Truck size="1.125rem" strokeWidth={1.5} />
       </span>
       <p className="text-base text-muted">No vehicles in the fleet yet</p>

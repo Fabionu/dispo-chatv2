@@ -152,7 +152,7 @@ export default function GroupRow({
   const preview = groupPreview(group, currentUserId)
   const time = relTime(group.lastMessageAt)
 
-  // The mono meta line's facts, in scan order: what this vehicle IS, then what
+  // The meta line's facts, in scan order: what this vehicle IS, then what
   // it is DOING. Only vehicle rooms produce any — a DM's most useful second
   // line is still the last thing the person said, not their company name.
   //
@@ -388,10 +388,10 @@ export default function GroupRow({
               far right, aligned with the identity rather than the preview. */}
           <span className="flex items-baseline gap-2 min-w-0">
             <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
-              {/* Sans. The name is the row's CONTENT; the plate and corridor
-                  under it are its structure, and only structure speaks mono.
-                  Setting the name in mono too made every row read as a serial
-                  number instead of a conversation. */}
+              {/* The name is the row's CONTENT; the plate and corridor under
+                  it are its structure, and structure is what the small faint
+                  label voice is for. Setting the name in that voice too made
+                  every row read as a serial number instead of a conversation. */}
               <span
                 className={`min-w-0 shrink truncate leading-tight ${
                   unread ? 'text-text font-semibold' : 'text-text/90 font-medium'
@@ -422,14 +422,13 @@ export default function GroupRow({
             {/* The timestamp shares line 2's shift, so the actions arrow always
                 has a clear column between the two metadata clusters. */}
             <span className={`flex items-center gap-2 shrink-0 ${metaShift}`}>
-              {/* Mono: the timestamp is structure, not content, and the rework
-                  sets all structure in the mono face. Tabular figures also stop
-                  the column jittering as times change width. */}
+              {/* `.timestamp`: structure, not content. Tabular figures stop the
+                  column jittering as times change width. */}
               {time && <span className="timestamp shrink-0 leading-tight">{time}</span>}
             </span>
           </span>
-          {/* Line 2 — operational facts in mono, or human text in sans. Live
-              states win, then the mono meta, then the message preview. State
+          {/* Line 2 — operational facts in the label voice, or human text at
+              reading size. Live states win, then the meta, then the preview. State
               icons sit inline at the right and slide left on hover/open,
               exposing the arrow menu. */}
           <span className="flex items-center gap-2">

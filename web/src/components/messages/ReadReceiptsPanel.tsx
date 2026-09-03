@@ -112,11 +112,11 @@ function ReceiptSection({
     <section className="mb-5">
       <div className="mb-2 flex items-center gap-2 px-1">
         {icon}
-        <span className="text-xs font-semibold uppercase tracking-badge text-muted">
+        <span className="text-xs font-semibold text-muted">
           {title}
         </span>
       </div>
-      <div className="overflow-hidden rounded-card bg-white/2 divide-y divide-line">
+      <div className="overflow-hidden rounded-list bg-white/2 divide-y divide-line">
         {readers.length === 0 ? (
           <div className="px-3 py-4 text-center text-sm text-muted">Nobody yet</div>
         ) : (

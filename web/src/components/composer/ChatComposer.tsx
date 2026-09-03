@@ -11,9 +11,16 @@ import type { GroupMember, ReplyToPreview } from '../../lib/types'
 import { DOC_ACCEPT, IMAGE_ACCEPT, fileError } from '../attachments/attachmentUtils'
 import ComposerContextRow from '../messages/ComposerContextRow'
 import { useComposerAutosize } from '../../hooks/useComposerAutosize'
+import { useActiveComposerEffect } from '../../lib/animations'
 import AttachMenu from './AttachMenu'
 import MentionPicker from './MentionPicker'
 import TripMentionPicker from './TripMentionPicker'
+
+// The ONE typography string the textarea and its ink mirror both wear. Size,
+// leading and padding have to be identical between the two layers or the
+// visible glyphs and the real caret stop agreeing — so they are stated once
+// here rather than twice in the JSX.
+const COMPOSER_TYPE = 'text-[length:var(--chat-msg-font-size)] leading-[1.5] px-2 py-1'
 
 export type EditContext = { id: string; originalBody: string }
 
@@ -123,6 +130,127 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
   // Whether a non-empty selection exists in the textarea — drives the floating
   // bold/italic format bar above the input.
   const [hasSelection, setHasSelection] = useState(false)
+
+  // ── Ink: newly typed characters fade in ───────────────────────────────────
+  // A <textarea> has no per-character DOM, so the characters that animate are
+  // NOT the textarea's — they belong to a mirror layer drawn over it while the
+  // textarea's own glyphs are transparent. Everything below exists to keep the
+  // two layers indistinguishable; if any of it drifts, you get ghosting.
+  //
+  //   `animFrom`  index of the first character still animating; null = at rest.
+  //               Only a pure APPEND arms it. A delete, a mid-string edit or a
+  //               programmatic replace (mention insert, edit-message load) sets
+  //               it back to null, because in those cases the tail's absolute
+  //               indices shift and every span would remount and re-animate.
+  //   the KEY     each animating character is keyed by its ABSOLUTE index, so a
+  //               character that is already on screen keeps its finished
+  //               animation while only the newly-typed one mounts and runs.
+  //               That is what makes fast typing look like a wave instead of a
+  //               strobe — no shared timer, no stagger to get wrong.
+  //   `composing` IME and dead keys (á, ä, ș — this app's users type all three)
+  //               draw their pre-edit INSIDE the textarea, where the mirror
+  //               cannot see it. While composing, the real text goes visible
+  //               and the mirror hides, so composing never types blind.
+  // Which effect is live — the stored choice, already silenced if interface
+  // animations are off (see lib/animations). It decides what DOM exists: the
+  // ink mirror is a real element and the pulse is another, so neither is
+  // rendered at all unless it is the selected one.
+  const effect = useActiveComposerEffect()
+  // Live pulses. A LIST, not a counter: each keystroke adds a wave that runs its
+  // own animation to completion and then removes itself (`onAnimationEnd`), so
+  // typing sends overlapping ripples instead of yanking one line back to the
+  // middle. The first version remounted a single element per keystroke, which
+  // meant the faster you typed the less it ever travelled.
+  //
+  // Capped at 6. At typing speed three or four are usually alive at once; the
+  // cap only bites during a key-repeat burst, where dropping the oldest — which
+  // is by then almost transparent — is invisible.
+  const [pulses, setPulses] = useState<number[]>([])
+  const pulseIdRef = useRef(0)
+  const pulseTimersRef = useRef<number[]>([])
+  const [animFrom, setAnimFrom] = useState<number | null>(null)
+  const [composing, setComposing] = useState(false)
+  const mirrorRef = useRef<HTMLDivElement>(null)
+  const prevTextRef = useRef(text)
+  const settleRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    const prev = prevTextRef.current
+    prevTextRef.current = text
+    const appended = text.length > prev.length && text.startsWith(prev)
+    // The pulse fires on any GROWTH, including a paste: it marks "something was
+    // added", where the ink marks which characters those were.
+    if (effect === 'pulse' && text.length > prev.length) {
+      pulseIdRef.current += 1
+      const id = pulseIdRef.current
+      setPulses((list) => [...list, id].slice(-6))
+      // A TIMER retires the wave, not `animationend`. A browser does not advance
+      // animations in a background tab, so `animationend` never fires there —
+      // every keystroke typed while the tab is hidden would stay mounted (the
+      // cap bounds it at 6) and then all run at once the moment you came back.
+      // A timeout fires regardless of visibility, so the composer is clean when
+      // you return to it.
+      const timer = window.setTimeout(() => {
+        setPulses((list) => list.filter((x) => x !== id))
+        pulseTimersRef.current = pulseTimersRef.current.filter((t) => t !== timer)
+      }, 520)
+      pulseTimersRef.current.push(timer)
+    }
+    if (effect !== 'ink' || !appended) {
+      if (settleRef.current) window.clearTimeout(settleRef.current)
+      settleRef.current = null
+      setAnimFrom(null)
+      return
+    }
+    // First keystroke of a burst arms the window at the old length; the rest of
+    // the burst extends it rather than resetting it, so nothing already lit
+    // starts over.
+    if (settleRef.current === null) setAnimFrom(prev.length)
+    else window.clearTimeout(settleRef.current)
+    settleRef.current = window.setTimeout(() => {
+      settleRef.current = null
+      setAnimFrom(null)
+    }, 400)
+  }, [text, effect])
+
+  // Leaving the pulse effect (or turning animations off) drops any wave still
+  // in flight; without this they would hang at their last frame, because an
+  // unmounted-from-view element never fires `animationend`.
+  useEffect(() => {
+    if (effect !== 'pulse') setPulses([])
+  }, [effect])
+
+  useEffect(() => () => {
+    pulseTimersRef.current.forEach(window.clearTimeout)
+    pulseTimersRef.current = []
+  }, [])
+
+  useEffect(() => () => {
+    if (settleRef.current) window.clearTimeout(settleRef.current)
+  }, [])
+
+  // The mirror has to sit on the textarea's CONTENT box, not its border box:
+  // once the text passes `max-h-[9em]` the textarea grows a 10px scrollbar and
+  // its line-breaking width changes. Matching `clientWidth` (which excludes it)
+  // is what keeps the two from wrapping differently, and the scroll offset has
+  // to follow for the same reason.
+  useEffect(() => {
+    const ta = textareaRef.current
+    const mirror = mirrorRef.current
+    if (!ta || !mirror) return
+    const sync = () => {
+      mirror.style.width = `${ta.clientWidth}px`
+      mirror.scrollTop = ta.scrollTop
+    }
+    sync()
+    ta.addEventListener('scroll', sync)
+    const ro = new ResizeObserver(sync)
+    ro.observe(ta)
+    return () => {
+      ta.removeEventListener('scroll', sync)
+      ro.disconnect()
+    }
+  }, [text])
 
   useComposerAutosize(textareaRef, text)
 
@@ -367,6 +495,16 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
   // mention picker.
   return (
     <div className="chat-composer relative border bg-bg transition-colors focus-within:border-strong">
+      {/* The pulses ride the COMPOSER's border, not the textarea's box, which is
+          why they are mounted here and not down in the input. Each is keyed by
+          its own id so React never reuses one element for two waves — reuse is
+          exactly what would restart an animation instead of starting a second.
+          The list is empty until the first keystroke, so opening a conversation
+          never flashes. */}
+      {effect === 'pulse' &&
+        pulses.map((id) => (
+          <span key={id} aria-hidden="true" className="composer-pulse" />
+        ))}
       {pickerOpen && (
         <MentionPicker
           members={matches}
@@ -435,26 +573,61 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           className="hidden"
         />
         <AttachMenu disabled={Boolean(editContext)} onPickKind={pickKind} onAddTrip={onAddTrip} />
-        <textarea
-          ref={textareaRef}
-          value={text}
-          onChange={handleChange}
-          onKeyDown={onKeyDown}
-          onPaste={onPaste}
-          onSelect={syncSelection}
-          onMouseUp={syncSelection}
-          onKeyUp={syncSelection}
-          onBlur={() => setHasSelection(false)}
-          rows={1}
-          placeholder={editContext ? 'Edit message…' : placeholder}
-          className="flex-1 min-w-0 bg-transparent text-[length:var(--chat-msg-font-size)] leading-[1.5] outline-none resize-none placeholder:text-faint overflow-y-auto max-h-[9em] px-2 py-1"
-        />
+        {/* The textarea and its mirror share ONE typography string
+             (COMPOSER_TYPE). That is not tidiness — it is the correctness
+             condition: any difference in size, leading, padding or wrapping
+             between the two puts the visible glyphs somewhere the caret isn't. */}
+        <div className="relative flex-1 min-w-0">
+          {effect === 'ink' && (
+          <div
+            ref={mirrorRef}
+            aria-hidden="true"
+            className={`composer-ink-layer ${COMPOSER_TYPE} pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words ${
+              composing ? 'invisible' : ''
+            }`}
+          >
+            {animFrom === null ? (
+              text
+            ) : (
+              <>
+                {text.slice(0, animFrom)}
+                {Array.from(text.slice(animFrom)).map((ch, i) => (
+                  <span key={animFrom + i} className="composer-ink">
+                    {ch}
+                  </span>
+                ))}
+              </>
+            )}
+          </div>
+          )}
+          <textarea
+            ref={textareaRef}
+            value={text}
+            onChange={handleChange}
+            onKeyDown={onKeyDown}
+            onPaste={onPaste}
+            onSelect={syncSelection}
+            onMouseUp={syncSelection}
+            onKeyUp={syncSelection}
+            onBlur={() => setHasSelection(false)}
+            onCompositionStart={() => setComposing(true)}
+            onCompositionEnd={() => setComposing(false)}
+            rows={1}
+            placeholder={editContext ? 'Edit message…' : placeholder}
+            // `relative` keeps it over the mirror so it still takes the pointer.
+            // The glyphs are transparent, never the caret and never a selection
+            // (see .composer-input::selection in index.css).
+            className={`composer-input ${COMPOSER_TYPE} relative block w-full bg-transparent outline-none resize-none placeholder:text-faint overflow-y-auto max-h-[9em] ${
+              effect === 'ink' && !composing ? 'text-transparent' : ''
+            }`}
+          />
+        </div>
         <button
           type="button"
           onClick={onSchedule}
           aria-label="Schedule message"
           title="Schedule message"
-          className={`h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 items-center justify-center text-muted hover:bg-white/6 hover:text-text transition-colors ${
+          className={`rounded-btn h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 items-center justify-center text-muted hover:bg-white/6 hover:text-text transition-colors ${
             editContext ? 'hidden' : 'flex'
           }`}
         >
@@ -472,7 +645,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           // without a colour. It used to keep a hairline while disabled, so the
           // empty state looked like an outlined button that had been switched
           // off rather than an action that isn't available yet.
-          className={`h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 flex items-center justify-center transition-colors ${
+          className={`rounded-btn h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 flex items-center justify-center transition-colors ${
             disabled ? 'text-faint cursor-default' : 'bg-text text-bg hover:bg-white'
           }`}
         >
@@ -503,7 +676,7 @@ function FormatButton({
       title={`${label} (${shortcut})`}
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
-      className="h-7 w-7 flex items-center justify-center text-muted hover:text-text hover:bg-white/8 transition-colors"
+      className="rounded-btn h-7 w-7 flex items-center justify-center text-muted hover:text-text hover:bg-white/8 transition-colors"
     >
       {children}
     </button>

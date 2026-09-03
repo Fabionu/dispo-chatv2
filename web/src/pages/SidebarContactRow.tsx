@@ -2,7 +2,7 @@ import type { WorkspaceMember } from '../lib/types'
 import { RowMeta, RowTile } from './sidebarBits'
 
 // One company colleague who has no open DM yet, shown inline in the unified rail
-// list (All + Direct filters). Name over their role in the mono meta line,
+// list (All + Direct filters). Name over their role in the meta line,
 // matching the conversation-row metrics; clicking it opens the user's profile
 // modal, whose Message action opens or creates a DM. No unread/presence
 // affordances — it's a directory entry. Once a DM exists the colleague renders

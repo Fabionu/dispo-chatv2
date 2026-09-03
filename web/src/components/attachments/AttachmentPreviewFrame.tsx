@@ -49,7 +49,7 @@ export function AttachmentIdentity({
   const label = typeLabel(name, mimeType)
   return (
     <div className="flex items-center gap-2.5 min-w-0">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-card border border-line bg-white/4">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-tile border border-line bg-white/4">
         <DocIcon mime={mimeType} size={18} className="text-muted" />
       </span>
       <div className="min-w-0 flex-1">
@@ -79,7 +79,7 @@ export function AttachmentGlyphStage({
 }) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 px-4 py-8 text-center">
-      <span className="flex h-16 w-16 items-center justify-center rounded-card border border-line bg-white/4">
+      <span className="flex h-16 w-16 items-center justify-center rounded-tile border border-line bg-white/4">
         <DocIcon mime={mimeType} size={30} className="text-muted" />
       </span>
       {note && <span className="text-sm leading-snug text-faint">{note}</span>}

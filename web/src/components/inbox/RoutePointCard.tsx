@@ -54,7 +54,13 @@ export function RoleBadge({
   /** Empty slots draw the badge quietly — nothing is set there yet. */
   muted?: boolean
 }) {
-  const base = 'h-6 w-6 shrink-0 border flex items-center justify-center'
+  // ROUND, tracking the map marks (see here/hereMapIcons). This badge and the
+  // pin are deliberately the same object drawn twice — the panel is the map's
+  // legend — so the shape has to move with them; leaving these square when the
+  // pins went round on 2026-09-03 would break the only thing tying the list to
+  // the map. It is a deliberate exception to "rounded-full means content, not
+  // chrome" (see the radius scale in tailwind.config.js).
+  const base = 'h-6 w-6 shrink-0 rounded-full border flex items-center justify-center'
   if (role === 'start') {
     return (
       <span

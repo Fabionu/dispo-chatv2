@@ -198,7 +198,7 @@ export default function TripTab({
 
       {/* Summary — the scannable overview, drawn with the shared data-block
           vocabulary (threadChrome) rather than as its own card, so a trip reads
-          the same way here as a route or a load does anywhere else: a mono
+          the same way here as a route or a load does anywhere else: an
           header row, the journey, then a stats grid split by hairlines.
 
           It stays a <button> — the whole block toggles the editable detail

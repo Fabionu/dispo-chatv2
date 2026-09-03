@@ -23,6 +23,14 @@ import {
   type Density,
 } from '../../lib/density'
 import { setMessageStyle, useMessageStyle, type MessageStyle } from '../../lib/messageStyle'
+import {
+  useAnimations,
+  setAnimations,
+  useComposerEffect,
+  setComposerEffect,
+  type InterfaceAnimations,
+  type ComposerEffect,
+} from '../../lib/animations'
 import { useAuth } from '../../auth/AuthContext'
 import { setTheme, useTheme, type Theme } from '../../lib/theme'
 import { api, ApiError } from '../../lib/api'
@@ -183,10 +191,19 @@ export default function WorkspaceSettingsPanel({ onBack, backLabel = 'Back' }: P
 function AppearanceSettings() {
   return (
     <div>
-      <div className="rounded-card border border-line bg-white/2 px-4 divide-y divide-line">
+      <div className="rounded-list border border-line bg-white/2 px-4 divide-y divide-line">
         <ThemeSetting />
         <DensitySetting />
         <MessageStyleSetting />
+      </div>
+      {/* Animations are their own card rather than three more rows in the one
+          above: the group has an internal dependency (the typing effect is
+          governed by the switch over it) and a card is what says those two
+          belong together and the theme/density/style rows do not. */}
+      <div className="eyebrow mt-5 mb-2">Animations</div>
+      <div className="rounded-list border border-line bg-white/2 px-4 divide-y divide-line">
+        <InterfaceAnimationsSetting />
+        <ComposerEffectSetting />
       </div>
       <p className="text-xs text-faint mt-2.5 px-1 leading-[1.5]">
         Saved in this browser — applies to this device only.
@@ -264,10 +281,10 @@ function NotificationSettings() {
           </button>
         </div>
       </div>
-      <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-[0.12em] text-faint">
+      <div className="mb-2 px-1 text-xs font-semibold text-faint">
         Notification sound
       </div>
-      <div className="rounded-card border border-line bg-white/2 divide-y divide-line overflow-hidden">
+      <div className={PANEL_GROUP_CARD}>
         {NOTIFICATION_SOUNDS.map((sound) => {
           const active = sound.value === selected
           return (
@@ -288,7 +305,7 @@ function NotificationSettings() {
                     native radio, and a lone round control in this UI reads as
                     something borrowed. */}
                 <span
-                  className={`h-5 w-5 shrink-0 border flex items-center justify-center transition-colors ${
+                  className={`h-5 w-5 shrink-0 rounded-chip border flex items-center justify-center transition-colors ${
                     active
                       ? 'border-text bg-text text-bg'
                       : 'border-line-2 text-transparent'
@@ -311,7 +328,7 @@ function NotificationSettings() {
                   onClick={() => void playNotificationSound(sound.value as NotificationSound)}
                   aria-label={`Preview ${sound.label}`}
                   title={`Preview ${sound.label}`}
-                  className="h-8 w-8 shrink-0 flex items-center justify-center text-muted hover:text-text hover:bg-white/8 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                  className="rounded-btn h-8 w-8 shrink-0 flex items-center justify-center text-muted hover:text-text hover:bg-white/8 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
                 >
                   <Play size="0.875rem" strokeWidth={1.9} fill="currentColor" />
                 </button>
@@ -378,6 +395,69 @@ function MessageStyleSetting() {
   )
 }
 
+// ── Animations ─────────────────────────────────────────────────────────────
+// Two settings, and the order is the point: the universal switch first, the
+// composer's choice under it. The second is disabled while the first is off,
+// because a picker that cannot change anything is worse than one that is
+// visibly unavailable — and the stored choice is kept, so turning animations
+// back on restores it rather than resetting to a default.
+function InterfaceAnimationsSetting() {
+  const animations = useAnimations()
+  return (
+    <SettingBlock
+      label="Interface animations"
+      description={
+        animations === 'on'
+          ? 'Panels, menus and message actions ease in when they open.'
+          : 'Everything appears instantly. Your system\u2019s reduced-motion setting still applies either way.'
+      }
+    >
+      <Segmented
+        value={animations}
+        options={[
+          { value: 'on', label: 'On' },
+          { value: 'off', label: 'Off' },
+        ]}
+        onChange={(value) => setAnimations(value as InterfaceAnimations)}
+      />
+    </SettingBlock>
+  )
+}
+
+const COMPOSER_FX_DESCRIPTION: Record<ComposerEffect, string> = {
+  ink: 'Each letter fades in as you type it.',
+  pulse: 'A line runs out from the middle of the composer to both edges on each keystroke.',
+  none: 'The composer stays still while you type.',
+}
+
+function ComposerEffectSetting() {
+  const effect = useComposerEffect()
+  const animations = useAnimations()
+  const off = animations === 'off'
+  return (
+    <SettingBlock
+      label="Typing effect"
+      description={
+        off
+          ? 'Turned off with interface animations above.'
+          : COMPOSER_FX_DESCRIPTION[effect]
+      }
+    >
+      <div className={off ? 'pointer-events-none opacity-40' : ''} aria-disabled={off || undefined}>
+        <Segmented
+          value={effect}
+          options={[
+            { value: 'none', label: 'None' },
+            { value: 'ink', label: 'Fade' },
+            { value: 'pulse', label: 'Pulse' },
+          ]}
+          onChange={(value) => setComposerEffect(value as ComposerEffect)}
+        />
+      </div>
+    </SettingBlock>
+  )
+}
+
 const DENSITY_LABEL: Record<Density, string> = {
   compact: 'Compact',
   default: 'Standard',
@@ -439,7 +519,7 @@ function AboutSettings() {
       <FieldRow label="App version" value={APP_VERSION} />
       <FieldRow label="Environment" value={environment} />
       <FieldRow label="Build date" value={buildDate} />
-      <FieldRow label="Commit" value={commit} mono />
+      <FieldRow label="Commit" value={commit} tabular />
     </div>
   )
 }
@@ -610,13 +690,13 @@ function CompanyMembersSettings() {
         ) : loadError ? (
           <div className="text-sm text-alert px-1 py-1">Could not load invites.</div>
         ) : invites.length === 0 ? (
-          <div className="rounded-card border border-line bg-white/2 px-3.5 py-3 text-sm text-faint leading-[1.45]">
+          <div className="rounded-list border border-line bg-white/2 px-3.5 py-3 text-sm text-faint leading-[1.45]">
             No invites yet — generate a link above to add your first member.
           </div>
         ) : (
           // No overflow-hidden — the row role dropdown must be able to open past
           // the card edge; first/last rows round their own hover corners instead.
-          <div className="rounded-card border border-line bg-white/2 divide-y divide-line">
+          <div className="rounded-list border border-line bg-white/2 divide-y divide-line">
             {invites.map((inv) => (
               <InviteListRow
                 key={inv.id}
@@ -703,7 +783,7 @@ function FreshInviteLink({ invite }: { invite: WorkspaceInviteCreated }) {
           readOnly
           value={invite.url}
           onFocus={(e) => e.currentTarget.select()}
-          className="flex-1 min-w-0 h-9 bg-white/4 border border-line rounded-btn px-2.5 text-sm text-text font-mono truncate outline-none transition-colors focus:border-line-2"
+          className="flex-1 min-w-0 h-9 bg-white/4 border border-line rounded-btn px-2.5 text-sm text-text tabular-nums truncate outline-none transition-colors focus:border-line-2"
         />
         <button
           onClick={copy}
@@ -778,7 +858,7 @@ function InviteListRow({
       : `Expired · not used${by}`
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2.5 hover:bg-white/2 transition-colors first:rounded-t-card last:rounded-b-card">
+    <div className="flex items-center gap-3 px-3 py-2.5 hover:bg-white/2 transition-colors first:rounded-t-list last:rounded-b-list">
       <div className="relative shrink-0">
         <span className="h-[2.125rem] w-[2.125rem] flex items-center justify-center rounded-full border border-line bg-white/2 text-muted">
           {invite.status === 'used' ? (
@@ -831,7 +911,7 @@ function InviteListRow({
               onClick={() => setConfirming(true)}
               title="Revoke link"
               aria-label="Revoke link"
-              className="shrink-0 h-7 w-7 flex items-center justify-center rounded-full text-muted hover:text-alert hover:bg-alert/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+              className="shrink-0 h-7 w-7 flex items-center justify-center rounded-btn text-muted hover:text-alert hover:bg-alert/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
             >
               <Trash2 size="0.875rem" strokeWidth={1.8} />
             </button>
@@ -943,7 +1023,7 @@ function RoleSelect({
 // A quiet, read-only role pill for used/expired invites and the fresh-link card.
 function RoleBadge({ role }: { role: Role }) {
   return (
-    <span className="shrink-0 text-2xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border border-line bg-white/4 text-muted">
+    <span className="shrink-0 text-2xs font-semibold px-2 py-0.5 rounded-full border border-line bg-white/4 text-muted">
       {ROLE_LABEL[role]}
     </span>
   )
@@ -951,14 +1031,14 @@ function RoleBadge({ role }: { role: Role }) {
 
 // A compact label/value line: label muted on the left, value on the right.
 // Rows are separated by a hairline divider (none after the last).
-function FieldRow({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+function FieldRow({ label, value, tabular = false }: { label: string; value: string; tabular?: boolean }) {
   return (
     <div className="flex items-center justify-between gap-3 py-2.5 border-b border-line last:border-0">
       <span className="shrink-0 text-sm text-muted">{label}</span>
       <span
         title={value}
         className={`min-w-0 truncate text-right text-text ${
-          mono ? 'font-mono text-sm tabular-nums' : 'text-base'
+          tabular ? 'text-sm tabular-nums' : 'text-base'
         }`}
       >
         {value}

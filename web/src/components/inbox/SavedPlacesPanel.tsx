@@ -18,7 +18,7 @@ type Props = {
 }
 
 // The saved-place mark, as it is drawn on the map: a solid square of category
-// ink with a white mono glyph (see here/hereMapIcons savedPlaceIconFor).
+// ink with a single white glyph (see here/hereMapIcons savedPlaceIconFor).
 //
 // It is the SAME mark here on purpose. This list is the map's legend, and a
 // legend that draws its own thing — the swatch used to be a lucide pictogram in
@@ -40,7 +40,7 @@ export function PlaceMark({
       title={PLACE_CATEGORY_LABEL[category]}
       aria-label={PLACE_CATEGORY_LABEL[category]}
       role="img"
-      className="shrink-0 inline-flex items-center justify-center font-mono font-semibold leading-none text-pure-white"
+      className="shrink-0 inline-flex items-center justify-center font-semibold leading-none text-pure-white"
       style={{
         // Design px through `rem()`, not raw px: the mark then tracks --ui-scale
         // with the rest of the panel's chrome instead of staying 32 physical
@@ -83,7 +83,7 @@ export default function SavedPlacesPanel({ places, loading, error, onClose, onSe
           type="button"
           onClick={onClose}
           aria-label="Close saved places"
-          className="flex h-7 w-7 items-center justify-center text-muted transition-colors hover:bg-white/6 hover:text-text"
+          className="rounded-btn flex h-7 w-7 items-center justify-center text-muted transition-colors hover:bg-white/6 hover:text-text"
         >
           <X size="0.9375rem" strokeWidth={1.9} />
         </button>

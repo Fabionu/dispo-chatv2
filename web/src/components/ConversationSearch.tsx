@@ -64,7 +64,7 @@ export default function ConversationSearch({ query, groupId, currentUserId, onJu
           <div className="px-3 py-4 text-base text-faint">No messages found</div>
         ) : (
           <div className="py-1">
-            <div className="px-3 pt-1 pb-1 text-xs uppercase tracking-wide text-faint">
+            <div className="px-3 pt-1 pb-1 text-xs tabular-nums text-faint">
               {results.length}
               {results.length === 50 ? '+' : ''} {results.length === 1 ? 'result' : 'results'}
             </div>

@@ -46,7 +46,8 @@ export type EditableFieldProps = {
 //   saved     Save flashes a check, then the row closes
 //   invalid   alert edge + the message under the control
 //   error     the save failed: the row stays open, the text is kept, retry
-//   discard   cancelling with unsaved edits arms an inline confirm first
+//   discard   cancelling with unsaved edits relabels Cancel to "Discard" in
+//             the alert tone; the second press is what actually drops them
 export default function EditableField({
   label,
   value,
@@ -210,15 +211,15 @@ export default function EditableField({
         <FieldError id={errorId}>{shownError}</FieldError>
 
         {/* Actions sit UNDER the control, identically for input, textarea and
-            select — the one layout that works for every control type. */}
+            select — the one layout that works for every control type.
+            The discard confirm is carried by the Cancel button's own label
+            rather than by a line beside it (see FormActions). */}
         <div className="mt-1.5 flex items-center justify-end gap-1.5">
-          {confirmDiscard && (
-            <span className="mr-auto text-xs leading-tight text-muted">Discard changes?</span>
-          )}
           <FormActions
             label={label}
             state={state}
             disabled={!canSave}
+            confirmDiscard={confirmDiscard}
             onSave={() => void commit()}
             onCancel={cancel}
           />

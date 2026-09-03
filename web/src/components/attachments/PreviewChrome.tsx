@@ -18,14 +18,14 @@ import { formatBytes, typeLabel } from './attachmentUtils'
 // meant closing the preview.
 //
 // So a preview now carries the message's own attribution. The file's identity
-// steps down to where it belongs: a mono meta line under the name.
+// steps down to where it belongs: a meta line under the name.
 //
 // It does NOT reuse the timeline's `Attribution` component, though it did at
 // first. That component is tuned to sit ABOVE A BODY — a muted name over a faint
 // time, deliberately quiet so the words underneath carry the row. A preview
 // header has no body under it; the identity IS the content of that row, and
 // borrowing the thread's quiet tones made a header nobody could read against a
-// bright photo. The vocabulary is kept (a name, then a mono meta line); the
+// bright photo. The vocabulary is kept (a name, then a meta line); the
 // tones are a header's.
 //
 // No avatar, deliberately. The 2026-08-20 rework took avatars out of the
@@ -60,14 +60,16 @@ export function PreviewIdentity({
       </div>
       {/* Meta: when, and (modal only) which file.
 
-          Written with the mono tokens directly instead of the `.eyebrow` class.
-          `.eyebrow` is a LABEL recipe — uppercase, tracked, and `faint` — and all
-          three are wrong here. Faint is ~3.5:1 on the black strip, which is what
-          made this line vanish; uppercase rewrites a filename into a string the
-          user cannot match against their own folder (`.jpeg` is not `.JPEG`);
-          and the tracking spaces out a value that is read whole. Mono is the one
-          part of the recipe that belongs, so it is the one part kept. */}
-      <div className="mt-1 flex items-baseline gap-1.5 font-mono text-[length:var(--msg-label-size)] text-muted">
+          Written with the label token directly instead of the `.eyebrow` class,
+          for the COLOUR: `.eyebrow` is `faint`, which is ~3.5:1 on the black
+          strip and is what made this line vanish.
+
+          `.eyebrow` also used to be uppercase and tracked, which were wrong here
+          for reasons worth keeping on file even though the class dropped both on
+          2026-09-03: uppercase rewrites a filename into a string the user cannot
+          match against their own folder (`.jpeg` is not `.JPEG`), and tracking
+          spaces out a value that is read whole. */}
+      <div className="mt-1 flex items-baseline gap-1.5 text-[length:var(--msg-label-size)] tabular-nums text-muted">
         {at && (
           // Day AND clock, unlike the thread's bare `14:32`. In the timeline the
           // day is carried by the DayDivider you scrolled past to get here; a
@@ -81,7 +83,7 @@ export function PreviewIdentity({
           <span className="min-w-0 truncate" title={attachment.originalName}>
             <span className="text-faint">· </span>
             {attachment.originalName}
-            <span className="uppercase text-faint">
+            <span className="text-faint">
               {' · '}
               {typeLabel(attachment.originalName, attachment.mimeType)} ·{' '}
               {formatBytes(attachment.byteSize)}

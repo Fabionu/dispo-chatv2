@@ -48,7 +48,7 @@ export default function ComposerContextRow({ tone, label, snippet, attachment, o
             className="h-9 w-9 shrink-0 object-cover bg-black/30"
           />
         ) : (
-          <span className="h-9 w-9 shrink-0 border flex items-center justify-center text-muted">
+          <span className="h-9 w-9 shrink-0 rounded-tile border flex items-center justify-center text-muted">
             {attachment.mimeType.startsWith('image/') ? (
               <ImageIcon size="0.9375rem" strokeWidth={1.8} />
             ) : (
@@ -61,7 +61,7 @@ export default function ComposerContextRow({ tone, label, snippet, attachment, o
         type="button"
         onClick={onCancel}
         aria-label={tone === 'reply' ? 'Cancel reply' : 'Cancel edit'}
-        className="h-7 w-7 shrink-0 flex items-center justify-center text-muted hover:text-text hover:bg-white/8 transition-colors"
+        className="rounded-btn h-7 w-7 shrink-0 flex items-center justify-center text-muted hover:text-text hover:bg-white/8 transition-colors"
       >
         <X size="0.875rem" strokeWidth={1.9} />
       </button>

@@ -17,7 +17,7 @@ import GroupAvatar from '../components/GroupAvatar'
 //
 // The rail carried no picture at all between 2026-08-20 and 2026-08-26. The
 // argument then was that a 40px portrait cost ~50px of a rail that had just
-// narrowed to 380px, and that the mono meta line under the name (`SV 14 HLS │
+// narrowed to 380px, and that the meta line under the name (`SV 14 HLS │
 // RO→IT`) identifies a room better than a silhouette does. The second half of
 // that is still true and the meta line stays — but it was answering the wrong
 // question. A plate tells you WHICH TRUCK; a face tells you WHO, and it does it
@@ -125,7 +125,7 @@ export function RowActionsTrigger({
         e.preventDefault()
         onToggle()
       }}
-      className={`h-5 w-5 flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+      className={`h-5 w-5 flex items-center justify-center rounded-btn transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
         open ? 'bg-white/8 text-text' : 'text-muted hover:text-text hover:bg-white/6'
       }`}
     >
@@ -149,7 +149,7 @@ export function RowActionsTrigger({
 // in tailwind.config.js: `rounded-full` survives for photos, presence dots and
 // sliding tracks — a count is none of those).
 //
-// So: ONE mark, square, set in the mono voice with tabular figures, in three
+// So: ONE mark, square, set in the label voice with tabular figures, in three
 // tones and two sizes.
 //   count   — the neutral solid. The loudest thing in the rail, which is correct:
 //             it is the only element whose whole job is to be noticed.
@@ -159,12 +159,12 @@ export function RowActionsTrigger({
 //             it and inverted the hierarchy.
 //   quiet   — the tab's count while that tab is not selected.
 //
-// Letter-spacing is reset to NORMAL on the badge itself — the same call
-// `.eyebrow-time` makes in index.css and for the same reason: a count is one
-// value, not a word being spelled out. On the element rather than left to
-// inherit, because the tab badge's parent IS an `.eyebrow` (0.14em), and tracked
-// figures both read as separate things and sit off the centre of their box —
-// tracking adds its space AFTER the last glyph, so `12` would hang left.
+// `tracking-normal` on the badge is a leftover guard: the label voice was
+// tracked 0.14em until 2026-09-03 and the tab badge's parent IS an `.eyebrow`,
+// so the figures inherited it — tracked digits read as separate things and sit
+// off the centre of their box, since tracking adds its space AFTER the last
+// glyph and `12` would hang left. Nothing tracks it now, but letter-spacing
+// inherits, so the guard costs nothing and survives the next reintroduction.
 const BADGE_TONE = {
   count: 'bg-text text-bg',
   mention: 'bg-active text-bg',
@@ -195,7 +195,7 @@ export function UnreadBadge({
       aria-hidden={label ? undefined : true}
       aria-label={label}
       title={label}
-      className={`shrink-0 inline-flex items-center justify-center font-mono font-semibold leading-none tabular-nums tracking-normal ${
+      className={`shrink-0 inline-flex items-center justify-center font-semibold leading-none tabular-nums tracking-normal ${
         row ? 'px-1' : 'h-4 min-w-4 px-1 text-2xs'
       } ${BADGE_TONE[tone]}`}
       style={
@@ -275,13 +275,15 @@ export function FilterTabBar({
 
 // One item in the rail's segmented control (All / Groups / Direct / Unread).
 //
-// A mono uppercase TEXT tab, not a pill: filters are chrome, and chrome speaks
-// mono in this UI. The active option is marked by full-brightness text under
+// A TEXT tab, not a pill: filters are chrome, and chrome is set in the small
+// label voice in this UI. The active option is marked by full-brightness under
 // the shared travelling bar rather than by a fill — a filled pill would be the
-// only solid shape in a rail made entirely of rules. Sized off the shared
-// eyebrow recipe. The Archived STATE lives on its own toggle (ArchiveToggle) —
-// never mixed in, though it shares the bar, since exactly one of the five is
-// live at a time.
+// only solid shape in a rail made entirely of rules. The Archived STATE lives on
+// its own toggle (ArchiveToggle) — never mixed in, though it shares the bar,
+// since exactly one of the five is live at a time.
+//
+// `.filter-tab` carries the SIZE, off the rail's density tokens rather than
+// `.eyebrow`'s fixed 11px — see the note in index.css.
 //
 // The transparent `border-b` stays on every tab in every state: it reserves the
 // row the bar is drawn into, so switching tabs cannot shift the text by a
@@ -304,7 +306,7 @@ export function FilterTab({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`eyebrow inline-flex items-center gap-1.5 border-b border-transparent py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+      className={`eyebrow filter-tab inline-flex items-center gap-1.5 border-b border-transparent py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
         active ? 'filter-tab-active' : 'hover:text-text'
       }`}
     >
@@ -352,7 +354,7 @@ export function ArchiveToggle({
 }
 
 // A rail row's second line: the conversation's operational facts, set in the
-// mono voice and split by a vertical hairline — `SV 14 HLS │ RO→IT`.
+// label voice and split by a vertical hairline — `SV 14 HLS │ RO→IT`.
 //
 // This is what replaced the avatar. Type used to be encoded by the identity
 // slot's SHAPE (circle = person, squircle = vehicle room); now it's encoded by

@@ -99,7 +99,7 @@ export default function AccountSidebarPanel({
           onClick={onSignOut}
           className="w-full flex items-center gap-3 rounded-card border border-line bg-white/2 px-3.5 py-3 text-left transition-colors hover:bg-alert/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
         >
-          <span className="h-8 w-8 shrink-0 flex items-center justify-center rounded-btn border border-alert/20 bg-alert/[0.06] text-alert">
+          <span className="h-8 w-8 shrink-0 flex items-center justify-center rounded-tile border border-alert/20 bg-alert/[0.06] text-alert">
             <LogOut size="1rem" strokeWidth={1.8} />
           </span>
           <span className="min-w-0 flex-1">

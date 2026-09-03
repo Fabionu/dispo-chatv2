@@ -54,7 +54,7 @@ export default function VerificationNotice({
       {/* A square hairline box, not a filled disc. The state marker is the
           glyph and its colour; the box is only there to give it an edge, the
           way every other box in the app gets one. */}
-      <div className="mb-6 flex h-11 w-11 items-center justify-center border border-line">
+      <div className="mb-6 flex h-11 w-11 items-center justify-center rounded-tile border border-line">
         {sent ? (
           <Check size="1.25rem" strokeWidth={1.8} className="text-done" />
         ) : (

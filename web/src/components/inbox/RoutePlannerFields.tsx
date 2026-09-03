@@ -66,7 +66,7 @@ export function CopyCoordButton({ text }: { text: string }) {
       onClick={copy}
       aria-label="Copy coordinates"
       title={state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : 'Copy coordinates'}
-      className="h-5 w-5 shrink-0 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+      className="rounded-btn h-5 w-5 shrink-0 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
     >
       {state === 'copied' ? (
         <Check size="0.75rem" strokeWidth={2.4} className="text-done" />
@@ -93,7 +93,7 @@ type PresetOption = { id: string | null; name: string; specs: string }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="px-2.5 pt-2 pb-1 text-2xs font-semibold uppercase tracking-badge text-faint">
+    <div className="px-2.5 pt-2 pb-1 text-2xs font-semibold text-faint">
       {children}
     </div>
   )
@@ -254,7 +254,7 @@ export function PresetSelect({
 export function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 flex flex-col gap-0.5 px-2.5 py-1.5">
-      <span className="text-2xs uppercase tracking-badge text-faint">{label}</span>
+      <span className="text-2xs text-faint">{label}</span>
       <span className="text-lg font-semibold tracking-[-0.2px] tabular-nums truncate" title={value}>
         {value}
       </span>

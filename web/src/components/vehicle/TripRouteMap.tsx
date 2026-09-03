@@ -885,7 +885,7 @@ export default function TripRouteMap({
             className={`absolute z-30 min-w-[10rem] ${MENU_CONTAINER}`}
             style={{ left: menu.x, top: menu.y }}
           >
-            <div className="px-3 py-1.5 text-2xs uppercase tracking-wide text-muted border-b border-line mb-1">
+            <div className="px-3 py-1.5 text-2xs tabular-nums text-muted border-b border-line mb-1">
               {menu.lat.toFixed(5)}, {menu.lng.toFixed(5)}
             </div>
             <button type="button" onClick={addStopFromMenu} className={menuItemClass()}>
@@ -905,7 +905,7 @@ export default function TripRouteMap({
             className={`absolute z-30 min-w-[10rem] ${MENU_CONTAINER}`}
             style={{ left: markerMenu.x, top: markerMenu.y }}
           >
-            <div className="px-3 py-1.5 text-2xs uppercase tracking-wide text-muted border-b border-line mb-1">
+            <div className="px-3 py-1.5 text-2xs text-muted border-b border-line mb-1">
               {markerMenu.kind === 'origin'
                 ? 'Start'
                 : markerMenu.kind === 'destination'

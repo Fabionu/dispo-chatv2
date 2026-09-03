@@ -110,8 +110,10 @@ export function useTravellingMarker(
     [measure],
   )
 
-  // Labels are mono and the mono face loads late, so the widths measured on the
-  // first pass can be the fallback font's. Re-measure once it lands. This was
+  // Inter is a webfont and lands after first paint, so the widths measured on
+  // the first pass can be the fallback font's. Re-measure once it lands. (This
+  // outlived the mono face it was written for — the label voice went to Inter
+  // on 2026-09-03 and the hazard is unchanged, only the family.) This was
   // FilterTabBar's fix and PanelTabs never got it; it belongs to the mechanism,
   // not to one of its users.
   useEffect(() => {

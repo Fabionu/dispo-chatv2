@@ -57,7 +57,7 @@ export default function TripBar({ trip, onOpen }: { trip: TripSummary; onOpen: (
       {/* Order / client + open affordance stay in the right track. */}
       <span className="flex items-center gap-2 min-w-0 justify-self-end text-faint">
         {orderClient && (
-          <span className="eyebrow hidden lg:block max-w-[14rem] truncate normal-case tracking-badge">
+          <span className="eyebrow hidden lg:block max-w-[14rem] truncate">
             {orderClient}
           </span>
         )}

@@ -87,7 +87,7 @@ function claimStaggerStep(): number {
 // that in a layout with no avatars the label is the only thing identifying a
 // message at all — suppress it and you have an unexplained second block of text
 // under the first. That reasoning was sound while the head of a run was itself
-// only a small mono label. It stops holding once the head carries a FACE: a
+// only a small label. It stops holding once the head carries a FACE: a
 // burst then opens with a photo, a name and a clock, and the messages under it
 // are visibly the same person still talking.
 //
@@ -102,7 +102,7 @@ const GROUP_WINDOW_MS = 7 * 60 * 1000
 // --msg-lane is rem too, so the lane and the thing in it grow together.
 //
 // It sits in the LANE, outside the message's rule, not inline in the label row.
-// Inline it had to stay small enough not to dominate an 11px mono label, and at
+// Inline it had to stay small enough not to dominate an 11px label, and at
 // that size a face is a smudge; out here it answers only to the lane, so it can
 // be the size a photo needs to be to actually be recognised. 30px against a
 // 2.5rem lane leaves 0.625rem of air before the rule.
@@ -522,7 +522,7 @@ function MessageRow({
   })
 
   // The attribution row's trailing slot — the message's own state, spoken in the
-  // same mono voice as the name and time beside it. These used to be scattered:
+  // same label voice as the name and time beside it. These used to be scattered:
   // a pin tag above the body, `Forwarded` italics under it, `edited` floating in
   // the bubble's corner. They all describe the message rather than say anything,
   // so they belong on the label row, and putting them there is what lets the
@@ -719,7 +719,7 @@ function MessageRow({
           )}
         </div>
 
-        {/* Mono uppercase text buttons, invisible until the message is hovered
+        {/* Small text buttons, invisible until the message is hovered
             or one of them is focused. The three verbs that carry most of the
             traffic are inline; MORE opens the full menu below, so nothing that
             was reachable before stops being reachable. */}

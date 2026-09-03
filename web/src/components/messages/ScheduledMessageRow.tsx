@@ -12,7 +12,7 @@ import { Attribution } from '../thread/threadChrome'
 // forward, receipts, retry — and none of it may apply to a row with no message
 // id behind it. Rather than mount it with seventeen no-op handlers and hope
 // nothing leaks, this borrows only the row's GEOMETRY: the same left rule, the
-// same indent, the same mono attribution.
+// same indent, the same attribution.
 //
 // Scheduled messages are always the signed-in user's own, so the rule is the
 // own-message --color-line-own, and always text-only (the schema stores a body and an

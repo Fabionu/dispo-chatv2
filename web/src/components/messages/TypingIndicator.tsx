@@ -2,10 +2,18 @@ import { useEffect, useState } from 'react'
 import { typingStatusText, type TypingUser } from '../../lib/typing'
 
 // Live composing state, drawn as a message that hasn't arrived yet: the same
-// left rule, the same indent, the same mono attribution row, and three dots
-// where the body will be. It used to be an avatar stack plus an incoming-style
-// bubble — neither of which exists in the timeline any more, so it would have
-// been the one bubble left on the screen.
+// left rule, the same indent, and one line reading `••• Fabio is typing`. It
+// used to be an avatar stack plus an incoming-style bubble — neither of which
+// exists in the timeline any more, so it would have been the one bubble left on
+// the screen.
+//
+// ONE LINE, dots first (reworked 2026-09-03). It used to be two: the label, then
+// a row of dots under it. That said the same thing twice — the words "is
+// typing…" and the dots are the same message — and it cost real space, because
+// this row lives in the composer lane whose height is RESERVED out of the
+// thread's scroller (see below). Two lines of status meant two lines fewer of
+// conversation. Leading with the dots also puts the moving part where the eye
+// already is when a new row appears at the bottom of the thread.
 //
 // It sits in the composer lane, immediately above the input. That lane FLOATS
 // over the message list — the thread scrolls underneath it — and what keeps the
@@ -61,6 +69,12 @@ export default function TypingIndicator({ users }: { users: TypingUser[] }) {
 
   if (displayedUsers.length === 0) return null
 
+  // The shared copy ends in an ellipsis ("Fabio is typing…") because the header
+  // and the rail row have no other way to say "still happening". Here the DOTS
+  // say it, and an ellipsis in front of them read as a stutter — three dots,
+  // then three more. The other two call sites keep theirs.
+  const label = typingStatusText(displayedUsers).replace(/…$/, '')
+
   return (
     <div
       role="status"
@@ -68,14 +82,18 @@ export default function TypingIndicator({ users }: { users: TypingUser[] }) {
       aria-atomic="true"
       className={`typing-row ${
         leaving ? 'typing-indicator-exit' : 'typing-indicator-enter'
-      } border-l bg-bg pl-[var(--msg-indent)] pb-3`}
+      } flex items-center gap-2 border-l bg-bg pl-[var(--msg-indent)] pb-3`}
     >
-      <span className="eyebrow block truncate">{typingStatusText(displayedUsers)}</span>
-      <span className="mt-2 flex h-4 items-center gap-1" aria-hidden="true">
+      {/* Dots LEAD, on the label's own line. They used to sit on a second row
+          under it, which made this the tallest thing in the composer lane for a
+          status that is one short phrase — and the lane's height is reserved out
+          of the thread, so those pixels were taken from the conversation. */}
+      <span className="flex shrink-0 items-center gap-1" aria-hidden="true">
         <Dot delay="0ms" />
-        <Dot delay="160ms" />
-        <Dot delay="320ms" />
+        <Dot delay="180ms" />
+        <Dot delay="360ms" />
       </span>
+      <span className="eyebrow min-w-0 truncate">{label}</span>
     </div>
   )
 }
@@ -88,3 +106,4 @@ function Dot({ delay }: { delay: string }) {
     />
   )
 }
+

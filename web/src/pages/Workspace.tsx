@@ -788,7 +788,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               // new user what the square does.
               aria-label="New thread"
               title="New thread"
-              className={`h-[var(--sidebar-search-height)] w-[var(--sidebar-search-height)] flex items-center justify-center border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+              className={`h-[var(--sidebar-search-height)] w-[var(--sidebar-search-height)] flex items-center justify-center rounded-btn border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
                 newMenuOpen
                   ? 'border-strong bg-white/6 text-text'
                   : 'text-muted hover:border-strong hover:bg-white/4 hover:text-text'

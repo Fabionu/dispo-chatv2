@@ -19,12 +19,12 @@ import { FIELD_EDGE } from '../forms/fieldStyles'
 // a light source.
 //
 // Everything below is on the shared scales: `line` for every rule, `.eyebrow`
-// for the mono voice, the rem type steps, the field recipe's own hover/focus
+// for the label voice, the rem type steps, the field recipe's own hover/focus
 // progression (FIELD_EDGE), and the square radius tokens. No literal colours,
 // no fills, no shadows.
 
 // What the left column says about the product. Deliberately written as three
-// RAIL ROWS — a name over a mono meta line, split by a hairline, which is the
+// RAIL ROWS — a name over a meta line, split by a hairline, which is the
 // exact row the sidebar draws for a conversation (see SidebarGroupRow: the
 // avatars came off and line 2 took over the identifying job). RowMeta is the
 // real component, imported rather than re-drawn, so if that idiom ever changes
@@ -88,7 +88,7 @@ function AuthIdentity() {
 }
 
 // Eyebrow → title → lede. The eyebrow is what the old tab strip used to do: it
-// names which flow you are in, in the mono voice the app uses for structure
+// names which flow you are in, in the label voice the app uses for structure
 // everywhere else, and it costs one line instead of a second control that
 // duplicates the switch at the bottom of the form.
 export function AuthHeading({

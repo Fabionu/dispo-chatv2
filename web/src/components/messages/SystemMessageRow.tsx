@@ -14,13 +14,15 @@ import { TRIP_STATUSES, labelOf, type TripStatus } from '../../lib/vehicleOps'
 // the middle they belong to the timeline instead, which is where the date
 // breaks already are.
 //
-// SANS, in its own case. This row is a SENTENCE — "Fabio Tofan edited the trip
-// route" — and the mono voice is for structure: plates, times, stat values,
-// labels. Note it was already written that way (`normal-case tracking-badge`
-// were on this span) and never rendered: `.eyebrow` sets text-transform and
-// letter-spacing too, and at equal specificity the later rule won, so the row
-// came out uppercase at 0.14em regardless. Leaving `.eyebrow` is what finally
-// applies the intent that was already here.
+// In its own case. This row is a SENTENCE — "Fabio Tofan edited the trip
+// route" — not a label. It was already written that way (`normal-case
+// tracking-badge` were on this span) and never rendered: `.eyebrow` was mono,
+// uppercase and tracked back then and sets text-transform and letter-spacing
+// itself, so at equal specificity the later rule won and the row came out
+// uppercase at 0.14em regardless. Dropping those overrides and leaving
+// `.eyebrow` alone is what finally applied the intent that was already here —
+// and since 2026-09-03 the class agrees with it by default and no longer
+// declares `text-transform` at all, so an override here would work now too.
 //
 // Pin/unpin carry a target message, rendered as a button that jumps to it.
 export default function SystemMessageRow({

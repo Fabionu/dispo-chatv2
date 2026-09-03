@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Check, X } from 'lucide-react'
 import { DateField, TimeField, joinPlannedAt, splitPlannedAt } from '../DateTimeField'
+import { FormActions } from '../forms/FormActions'
 import {
   STOP_STATUSES,
   STOP_TYPES,
@@ -196,26 +196,17 @@ export default function StopEditor({
         className={AREA_PILL}
       />
       {error && <div className="text-xs text-alert">Could not save. Try again.</div>}
-      {/* Circular Save/Cancel — same integrated icon buttons as the inline fields. */}
+      {/* The SHARED Save/Cancel pair, not a copy of it. This used to be a
+          hand-rolled circular ✓/✕ whose own comment claimed it was "the same
+          integrated icon buttons as the inline fields" — it was a duplicate, and
+          it stayed circular when FormActions was reworked on 2026-09-03. */}
       <div className="flex items-center justify-end gap-1.5">
-        <button
-          onClick={onCancel}
-          disabled={saving}
-          aria-label="Cancel"
-          title="Cancel"
-          className="h-8 w-8 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 disabled:opacity-50 transition-colors"
-        >
-          <X size="0.875rem" strokeWidth={2} />
-        </button>
-        <button
-          onClick={() => void commit()}
-          disabled={saving}
-          aria-label="Save stop"
-          title="Save"
-          className="h-8 w-8 flex items-center justify-center rounded-full bg-text text-bg hover:bg-text/90 disabled:opacity-50 transition-colors"
-        >
-          <Check size="0.875rem" strokeWidth={2.2} />
-        </button>
+        <FormActions
+          label="stop"
+          state={saving ? 'saving' : 'idle'}
+          onSave={() => void commit()}
+          onCancel={onCancel}
+        />
       </div>
     </div>
   )

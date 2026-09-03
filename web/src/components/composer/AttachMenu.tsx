@@ -60,16 +60,38 @@ export default function AttachMenu({ disabled, onPickKind, onAddTrip }: Props) {
         // second rectangle inside the composer's own rectangle for a control
         // that is already unmistakably a `+`. The hover wash is the affordance,
         // exactly as it is for the schedule button beside it.
-        className={`h-[var(--composer-size)] w-[var(--composer-size)] flex items-center justify-center transition-colors disabled:opacity-30 disabled:cursor-default ${
+        className={`rounded-btn h-[var(--composer-size)] w-[var(--composer-size)] flex items-center justify-center transition-colors disabled:opacity-30 disabled:cursor-default ${
           open ? 'text-text bg-white/10' : 'text-muted hover:text-text hover:bg-white/6'
         }`}
       >
-        <Plus size="1.125rem" strokeWidth={1.8} />
+        {/* The glyph ROTATES 45° into a close mark while the menu is open
+            (user, 2026-09-03: "an animation when you action the button"). It is
+            the one piece of feedback that says the same control closes what it
+            opened, and it costs no second icon — a `+` turned an eighth of a
+            turn IS an `×`. Same idiom as the rail's collapse button, which
+            cross-fades its two chevrons through a rotate.
+            `motion-reduce` drops it to a straight state swap, matching the
+            reduced-motion handling everywhere else in the app. */}
+        <Plus
+          size="1.125rem"
+          strokeWidth={1.8}
+          className={`transition-transform duration-200 ease-out motion-reduce:transition-none ${
+            open ? 'rotate-45' : 'rotate-0'
+          }`}
+        />
       </button>
       {open && (
         <div
           role="menu"
-          className={`absolute bottom-[calc(100%+6px)] left-0 w-[11.25rem] ${MENU_CONTAINER} z-20`}
+          // Materialises UP out of the + it belongs to (user: "an animation when
+          // the list appears?"). `action-strip-enter-up` is the app's existing
+          // recipe for a popover that has to open above its trigger — 170ms,
+          // four pixels of lift and a hair of scale — reused rather than
+          // reinvented so this menu and the message action strip move
+          // identically. `origin-bottom-left` anchors the scale to the corner
+          // nearest the button, so it grows out of the control instead of out of
+          // its own middle. Reduced motion is already handled by the class.
+          className={`action-strip-enter-up origin-bottom-left absolute bottom-[calc(100%+6px)] left-0 w-[11.25rem] ${MENU_CONTAINER} z-20`}
         >
           <AttachMenuItem
             icon={<ImageIcon {...MENU_GLYPH} />}

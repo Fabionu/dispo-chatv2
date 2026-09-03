@@ -43,9 +43,11 @@ export const PLACE_CATEGORY_COLOR: Record<WorkspacePlaceCategory, string> = {
   other: '#5c626a',
 }
 
-// The single character stencilled into a pin. One glyph, mono, uppercase — the
-// same voice the route's numbered stops speak in, so a place and a waypoint
-// read as members of one family.
+// The single character stencilled into a pin. One uppercase letter — the same
+// voice the route's numbered stops speak in, so a place and a waypoint read as
+// members of one family. (The letters are written uppercase here, in the data;
+// no `text-transform` is involved, which is why this survived the app dropping
+// uppercase labels on 2026-09-03.)
 //
 // Customs is B, for border: C is spoken for by customer, and a border crossing
 // is what a customs point is on a truck route.

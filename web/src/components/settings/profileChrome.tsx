@@ -67,7 +67,12 @@ export const SIDEBAR_PANEL_SURFACE = 'bg-sidebar'
 
 // A grouped card of rows — the same recipe as Account's settings groups. Rows
 // inside carry their own hairline (EditableRow), so this only draws the box.
-export const PANEL_FIELD_CARD = 'rounded-card border border-line bg-white/2 px-3.5'
+//
+// No `overflow-hidden` next to the radius, unlike PANEL_GROUP_CARD: the `px-3.5`
+// insets every row from the card's edge, so nothing reaches a corner to square
+// it off — and rows here open popovers (status, role, date pickers) that have to
+// be able to escape the card.
+export const PANEL_FIELD_CARD = 'rounded-list border border-line bg-white/2 px-3.5'
 
 // One labelled block: eyebrow over a grouped card. `action` is an optional
 // trailing control on the label line (e.g. "Invite" in the members list).

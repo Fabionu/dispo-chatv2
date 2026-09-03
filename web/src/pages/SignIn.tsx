@@ -32,7 +32,7 @@ type Tab = 'signin' | 'signup'
 //   The bottom line is the survivor: it sits where you end up after reading the
 //   form, which is when "I don't have a workspace" actually occurs to you. What
 //   the tab strip was also doing — saying which flow you are in — is now the
-//   mono eyebrow above the heading, at the cost of one line and no control.
+//   eyebrow above the heading, at the cost of one line and no control.
 export default function SignIn() {
   const { refresh } = useAuth()
   const [tab, setTab] = useState<Tab>('signin')
@@ -273,14 +273,14 @@ function passwordStrength(password: string): { score: number; label: string } {
   return { score, label }
 }
 
-// Four square segments and one mono readout. The segments used to be pills on a
+// Four square segments and one readout. The segments used to be pills on a
 // `white/8` wash; they are squared like every other corner in the app now, and
 // the empty ones are drawn in `line` — the same hairline colour as the field
 // they sit under, so an unfilled segment reads as the track rather than as a
 // fifth tone.
 //
-// The readout is written out in mono rather than given `.eyebrow`: that class
-// sets a colour of its own, and at equal specificity a `text-alert` utility
+// The readout is spelled out rather than given `.eyebrow`: that class sets a
+// colour of its own, and at equal specificity a `text-alert` utility
 // beside it wins or loses on file order (see the `.filter-tab-active` note in
 // index.css). Spelling the recipe out keeps the state colour unambiguous.
 function StrengthMeter({ password }: { password: string }) {
@@ -315,7 +315,7 @@ function StrengthMeter({ password }: { password: string }) {
         ))}
       </div>
       <div
-        className={`mt-2 font-mono text-[length:var(--msg-label-size)] font-medium uppercase tracking-eyebrow ${textClass}`}
+        className={`mt-2 text-[length:var(--msg-label-size)] font-medium ${textClass}`}
       >
         Strength · {label}
       </div>

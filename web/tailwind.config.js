@@ -77,13 +77,21 @@ export default {
         light: 'rgb(var(--color-line) / <alpha-value>)',
       },
       fontFamily: {
+        // ONE face. There is no `mono` key and no `font-mono` utility: the app
+        // used to set every eyebrow, attribution row, chip, stat value and hint
+        // in JetBrains Mono, and dropped it on 2026-09-03 (user: "I don't like
+        // the font used for the text under the SV01HLC"). Leaving the key
+        // pointed at Inter would have kept `font-mono` working while making it
+        // a lie, so it is gone instead — `font-mono` is now an unknown class
+        // that renders nothing, which is what makes a stray one show up.
+        //
+        // What those sites actually wanted from mono was DIGIT ALIGNMENT, not
+        // the face; that is `tabular-nums`, and it is on them now.
+        //
+        // The `eyebrow` (0.14em) and `badge` (0.07em) tracking steps went with
+        // it. Nothing is tracked out any more, so `tracking-wide` on a stray
+        // element is now a visible smell rather than one of a family.
         sans: ['"Inter"', 'system-ui', 'sans-serif'],
-        // The mono face carries a real share of this UI — every eyebrow,
-        // attribution row, chip, stat value and hint is set in it — so it is a
-        // loaded webfont rather than whatever `ui-monospace` resolves to, which
-        // differs per OS and would make the same screen read differently on
-        // Windows and macOS.
-        mono: ['"JetBrains Mono"', 'ui-monospace', '"SF Mono"', 'Menlo', 'monospace'],
       },
       // ── Type scale (10 / 11 / 12 / 13 / 14 / 16 / 19 / 22 / 26) ───────────
       // The app previously carried NINETEEN hand-picked arbitrary sizes, six of
@@ -176,19 +184,60 @@ export default {
       // slides (the notification/traffic toggles, where roundness is what says
       // the knob travels). A `rounded-full` on a hover target is a regression.
       borderRadius: {
-        chip: '0',
-        btn: '0',
-        card: '0',
+        // ── Still square ─────────────────────────────────────────────────
+        // The two SHELLS. Nothing has asked for them, and they are the biggest
+        // chrome in the app — a drawer edge and a dialog edge — so they are the
+        // last thing that should follow the surfaces inside them by accident.
         modal: '0',
         panel: '0',
-        soft: '0',
-      },
-      letterSpacing: {
-        // The mono voice. Every uppercase mono label in the app — eyebrows,
-        // message attribution rows, stat labels, chips, hints — uses `eyebrow`;
-        // `badge` is the tighter step for mono set at reading size.
-        eyebrow: '0.14em',
-        badge: '0.07em',
+
+        // ── Surfaces: --chrome-radius (10px) ──────────────────────────────
+        // `card` was the careful one — 66 elements, from fields and menus to
+        // avatars, attachment blocks and rendered PDF pages — which is why the
+        // earlier passes added `list`/`tile`/`soft` rather than touching it.
+        // On 2026-09-03 the user asked for the invite fields, the sign-out
+        // card, the Group Info photo and docs card, and the action menus, and
+        // every one of those IS `rounded-card`: at that point the token itself
+        // was the ask, and patching six call sites around it would have been
+        // the wrong move.
+        card: 'var(--chrome-radius)',
+
+        // The same curve under three more names, kept separate so a future
+        // "round X" can move one family without moving the rest.
+
+        // The GROUPED ROW LIST — the "table" in Account, Workspace settings,
+        // Group Info and the modals: a hairline card whose rows are separated
+        // by `divide-y` (see PANEL_GROUP_CARD / PANEL_FIELD_CARD).
+        list: 'var(--chrome-radius)',
+
+        // The ICON TILE — the drawn box that presents a glyph as an object: the
+        // squares leading each row in Account / Workspace settings, the
+        // file-type tile on an attachment, an empty state's emblem.
+        //
+        // A tile is DRAWN — it has a border and/or a resting fill. A bare hover
+        // target with neither is an icon BUTTON: those carry no radius class at
+        // all, which is what has kept them out of every pass so far.
+        tile: 'var(--chrome-radius)',
+
+        // The PLATE — a drawn card that is one whole object rather than a
+        // container of rows: the Workspace's tool and quick-action cards, a
+        // route point, a stop editor/form, the planner's add-point button, the
+        // stop map's suggestion list.
+        //
+        // This token was already on all ten of them and had simply been `0`, so
+        // not one call site needed editing — which is exactly what the
+        // name-preserving squash on 2026-08-20 was for ("the roles stay
+        // meaningful if a surface ever wants its corners back — one value here,
+        // not ninety in components").
+        soft: 'var(--chrome-radius)',
+
+        // ── Controls: --control-radius (6px) ──────────────────────────────
+        // A control sits INSIDE one of those surfaces, so it takes the tighter
+        // step: the segments and travelling pill in Appearance, the Group Info
+        // tab pills, the notification tick box, Send invite, the rail's +
+        // button, chips.
+        btn: 'var(--control-radius)',
+        chip: 'var(--control-radius)',
       },
       maxWidth: {
         // The reading measures, mirroring --thread-width / --msg-body so a

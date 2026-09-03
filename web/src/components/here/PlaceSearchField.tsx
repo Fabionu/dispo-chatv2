@@ -12,7 +12,7 @@ import { MENU_SURFACE } from '../menuStyles'
 // Drawn, not filled — the app's field rule. `bg-white/4` at rest made this the
 // only filled control left in the planner.
 const FIELD_SURFACE =
-  'h-9 border border-line bg-transparent px-3 transition-colors hover:border-line-2'
+  'h-9 rounded-card border border-line bg-transparent px-3 transition-colors hover:border-line-2'
 const FIELD_FOCUS = 'outline-none focus:border-line-2 focus:bg-white/4'
 
 // Build a HerePlace from directly-entered coordinates so the selection flow is

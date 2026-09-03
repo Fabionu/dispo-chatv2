@@ -11,10 +11,10 @@
 //                answer something. Follow-ups in the same burst suppress it.
 //   DataBlock    a bordered block INSIDE a message: header row → content →
 //                stats → notices, each separated by a hairline.
-//   ThreadAction the mono uppercase text buttons (copy, send to driver, …)
+//   ThreadAction the small text buttons (copy, send to driver, …)
 //                that fade in on hover.
 //
-// Sizing note: everything here is on the mono tokens (--msg-label-size,
+// Sizing note: everything here is on the label tokens (--msg-label-size,
 // --stat-value-size), not the rem type scale — see the note in
 // tailwind.config.js about why chat/thread text is deliberately off it.
 
@@ -23,18 +23,18 @@ import type { ReactNode } from 'react'
 
 // A person's NAME, as opposed to everything else on the attribution row.
 //
-// It used to be an `.eyebrow` like the timestamp and the status flags beside
-// it, which meant uppercase and 0.14em of tracking — and a name is the one
-// thing on that row those two are wrong for. Tracking is for short structural
-// labels where the letters are a code to be picked apart; a name is a word you
-// read whole, and spacing it out makes you spell it instead. Uppercase throws
-// away the capital that tells you it IS a name, and takes the ascenders and
-// descenders that make one recognisable at a glance with it.
+// It used to be an `.eyebrow` back when that class meant JetBrains Mono,
+// uppercase and 0.14em of tracking — and a name is the one thing on that row
+// all three were wrong for. Tracking is for short structural labels where the
+// letters are a code to be picked apart; a name is a word you read whole, and
+// spacing it out makes you spell it instead. Uppercase throws away the capital
+// that tells you it IS a name, and takes the ascenders and descenders that make
+// one recognisable at a glance with it.
 //
-// So the name is sans, its own case, normal tracking — the same call the rail
-// made for conversation names, for the same reason: mono and tracked, every row
-// read as a serial number rather than as a person. The timestamp and the status
-// flags stay `.eyebrow`, because those ARE structure.
+// `.eyebrow` shed all three on 2026-09-03, so the ARGUMENT above is settled and
+// this rule no longer wins anything on face or case. It stays because of the
+// last paragraph: the colour. A name is `text-muted`, a label is `faint`, and
+// that is still a difference `.eyebrow` would erase.
 //
 // One more thing falls out of leaving `.eyebrow`: `text-muted` finally applies.
 // It was always on the name and never won — `.eyebrow` sets a colour too, and
@@ -85,8 +85,8 @@ export function Attribution({
   // margin was doing less than half the work, and the label read as floating
   // between two messages rather than belonging to the one under it.
   //
-  // `leading-none` makes the label's box its glyphs (uppercase mono has no
-  // descenders to clip, and the row is `items-center`, so the trailing ticks
+  // `leading-none` makes the label's box its glyphs (this label is a name and
+  // a clock, and the row is `items-center`, so the trailing ticks
   // and pin glyph are unaffected), which leaves the margin as the only spacing
   // and therefore the only thing to tune. Measured: the label's box drops from
   // 16.5px to 11px and the gap under it from 7.4px to 5px, so the distance from
@@ -135,7 +135,7 @@ export function DataBlock({
   return <div className={`border ${className}`}>{children}</div>
 }
 
-// Header row: mono eyebrow on the left (optionally glyph-led), mono meta on the
+// Header row: eyebrow on the left (optionally glyph-led), meta on the
 // right. The right slot is where a timestamp, a status or a count goes.
 export function DataBlockHead({
   icon: Icon,
@@ -174,7 +174,7 @@ export function DataStats({ children }: { children: ReactNode }) {
   return <div className="data-stats border-t">{children}</div>
 }
 
-// One cell: mono eyebrow label above a mono value. `unit` rides the value at
+// One cell: an eyebrow label above a tabular value. `unit` rides the value at
 // eyebrow size so "1 042 km" reads as one number with a unit rather than as
 // two competing figures.
 export function DataStat({
@@ -189,7 +189,7 @@ export function DataStat({
   return (
     <div className="min-w-0 px-4 py-3">
       <div className="eyebrow truncate">{label}</div>
-      <div className="mt-1.5 flex items-baseline gap-1 font-mono text-[length:var(--stat-value-size)] font-medium tabular-nums text-text">
+      <div className="mt-1.5 flex items-baseline gap-1 text-[length:var(--stat-value-size)] font-medium tabular-nums text-text">
         <span className="min-w-0 truncate">{value}</span>
         {unit ? <span className="shrink-0 text-xs lowercase text-faint">{unit}</span> : null}
       </div>
@@ -199,7 +199,7 @@ export function DataStat({
 
 // ── Notice ──────────────────────────────────────────────────────────────────
 // A warning or advisory attached to a block: glyph, sans title, muted body, and
-// an optional mono chip carrying the window/limit the notice is about.
+// an optional chip carrying the window/limit the notice is about.
 export function DataNotice({
   icon: Icon,
   title,
@@ -234,7 +234,7 @@ export function DataNotice({
 }
 
 // ── Chip ────────────────────────────────────────────────────────────────────
-// A bordered mono token: a time window, a status, an ADR class, a tag. Square,
+// A bordered token: a time window, a status, an ADR class, a tag. Square,
 // hairline, no fill — the same rule vocabulary as everything else.
 export function DataChip({
   children,
@@ -291,7 +291,7 @@ export function ThreadStamp({ children }: { children: ReactNode }) {
 }
 
 // ── Action ──────────────────────────────────────────────────────────────────
-// Message actions are mono uppercase TEXT, never icon buttons on a fill.
+// Message actions are TEXT, never icon buttons on a fill.
 //
 // THEY DO NOT REVEAL ON HOVER (user, 2026-08-26). The strip is absolutely
 // positioned in the gap BELOW a message, so anything that makes it visible also

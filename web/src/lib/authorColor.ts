@@ -6,7 +6,7 @@
 // channel with exactly two values. That is enough for a direct message and not
 // nearly enough for a vehicle room, where five other people's messages all
 // arrive as the same 1px grey rule and the only thing telling them apart is a
-// name set in a small mono label. This spends the one channel still free — the
+// name set in a small label. This spends the one channel still free — the
 // hue of that hairline — so a run of messages from one person is recognisable
 // before a single word is read.
 //

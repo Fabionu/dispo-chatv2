@@ -126,7 +126,7 @@ export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
               value={tractorPlate}
               onChange={(e) => setTractorPlate(e.target.value)}
               placeholder="B-123-ABC"
-              className={`${fieldClass()} font-mono`}
+              className={`${fieldClass()} tabular-nums`}
             />
           </ModalField>
           <ModalField label="Trailer reg. number">
@@ -134,7 +134,7 @@ export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
               value={trailerPlate}
               onChange={(e) => setTrailerPlate(e.target.value)}
               placeholder="B-456-XYZ"
-              className={`${fieldClass()} font-mono`}
+              className={`${fieldClass()} tabular-nums`}
             />
           </ModalField>
         </div>
@@ -146,7 +146,7 @@ export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
           <div>
             <div className="eyebrow mb-2">Add members</div>
             {members.length > 0 ? (
-              <div className="max-h-44 overflow-y-auto rounded-card border border-line py-1">
+              <div className="max-h-44 overflow-y-auto rounded-list border border-line py-1">
                 {members.map((m) => (
                   <label
                     key={m.id}
@@ -169,8 +169,8 @@ export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
                 ))}
               </div>
             ) : (
-              <div className="rounded-card border border-line px-3 py-4 flex flex-col items-center text-center">
-                <div className="h-8 w-8 rounded-full border border-line bg-white/4 flex items-center justify-center mb-2">
+              <div className="rounded-list border border-line px-3 py-4 flex flex-col items-center text-center">
+                <div className="h-8 w-8 rounded-tile border border-line bg-white/4 flex items-center justify-center mb-2">
                   <Users size="0.875rem" strokeWidth={1.6} className="text-faint" />
                 </div>
                 <p className="text-sm text-muted">No one else to add yet</p>

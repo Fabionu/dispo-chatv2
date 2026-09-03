@@ -314,7 +314,7 @@ export default function AttachmentBlock({
   if (isImage && imgFailed) {
     return (
       <div className="flex items-center gap-2.5 rounded-card border border-line bg-white/2 px-2.5 py-2 max-w-[22.5rem]">
-        <div className="h-9 w-9 rounded-chip border border-line bg-white/4 flex items-center justify-center shrink-0">
+        <div className="h-9 w-9 rounded-tile border border-line bg-white/4 flex items-center justify-center shrink-0">
           <ImageOff size="0.9375rem" strokeWidth={1.6} className="text-faint" />
         </div>
         <div className="min-w-0 flex-1">
@@ -360,7 +360,7 @@ export default function AttachmentBlock({
           lib/pdfThumbCache for the DOC/XLS thumbnail TODOs). */}
       <div className="relative h-[9rem] bg-bg border-b border-line flex items-center justify-center">
         <div className="absolute inset-0 opacity-[0.04] bg-gradient-to-b from-white to-transparent pointer-events-none" />
-        <div className="h-14 w-14 rounded-card border border-line bg-white/4 flex items-center justify-center">
+        <div className="h-14 w-14 rounded-tile border border-line bg-white/4 flex items-center justify-center">
           <DocIcon mime={attachment.mimeType} size={28} />
         </div>
         {isPdf && hasUrl && !uploading && (

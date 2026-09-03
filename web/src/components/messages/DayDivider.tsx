@@ -1,7 +1,7 @@
 import { formatDay } from './messageUtils'
 
 // The timeline's day break: a hairline running the width of the thread with a
-// mono label sitting in it. It was a low-weight pill, which was the right answer
+// label sitting in it. It was a low-weight pill, which was the right answer
 // when the timeline was made of filled bubbles and a divider LINE would have
 // competed with them — but the timeline is made of rules now, so the rule is the
 // quiet option and the pill would be the only floating shape on the screen.

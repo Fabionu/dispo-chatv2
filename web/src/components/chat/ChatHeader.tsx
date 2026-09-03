@@ -53,7 +53,7 @@ export default function ChatHeader({
        single hairline sealing it against the timeline.
 
        It carries NO avatar. The identity of a thread in this UI is its title
-       plus the mono line of operational facts under it (unit, trailer,
+       plus the line of operational facts under it (unit, trailer,
        departure) — that line is what a dispatcher actually scans for, and a
        56px portrait beside it was the largest object on a screen that has no
        other filled shapes. The peer's photo still lives one click away in the
@@ -78,8 +78,9 @@ export default function ChatHeader({
         ) : (
           <div className="text-lg font-medium truncate leading-tight">{groupLabel(group)}</div>
         )}
-        {/* The operational line. Mono because it is structure; `text-active`
-            when someone is typing, since that IS content arriving. */}
+        {/* The operational line — `.eyebrow`, because it is structure rather
+            than something somebody said; `text-active` when someone is typing,
+            since that IS content arriving. */}
         <div
           role={typingText ? 'status' : undefined}
           aria-live={typingText ? 'polite' : undefined}
@@ -119,7 +120,7 @@ export default function ChatHeader({
                   searchInputRef.current?.focus()
                 }}
                 aria-label="Clear search"
-                className="h-6 w-6 flex items-center justify-center text-muted hover:text-text hover:bg-white/8 transition-colors shrink-0"
+                className="rounded-btn h-6 w-6 flex items-center justify-center text-muted hover:text-text hover:bg-white/8 transition-colors shrink-0"
               >
                 <X size="0.875rem" strokeWidth={2} />
               </button>
@@ -133,7 +134,7 @@ export default function ChatHeader({
           aria-pressed={searchOpen}
           title={searchOpen ? 'Close search' : 'Search conversation'}
           onClick={() => (searchOpen ? onCloseSearch() : onOpenSearch())}
-          className={`h-9 w-9 flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+          className={`h-9 w-9 flex items-center justify-center rounded-btn transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
             searchOpen ? 'text-text bg-white/6' : 'text-muted hover:text-text hover:bg-white/6'
           }`}
         >

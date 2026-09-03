@@ -154,6 +154,12 @@ export default function MessageActionsPanel({ actions, open, side, onClose }: Pr
       // `msg-anchored` + `data-side`: the bubble message style pulls this back
       // to the box's own edge — same anchor, and the same reason, as the hover
       // action strip (see ThreadActions in thread/threadChrome).
+      //
+      // `rounded-btn` (the CONTROL step), not the 10px `MENU_SURFACE` the named
+      // action menus use: this is a 28px-tall row of buttons, and a surface
+      // radius on it reads as a lozenge rather than a strip. `overflow-hidden`
+      // is what makes the radius safe — the end buttons are edge-to-edge and
+      // their hover fill would otherwise square the corners off.
       data-side={side}
       className={`msg-anchored ${
         open
@@ -161,7 +167,7 @@ export default function MessageActionsPanel({ actions, open, side, onClose }: Pr
             ? 'action-strip-enter-up'
             : 'action-strip-enter'
           : `${above ? 'action-strip-exit-up' : 'action-strip-exit'} pointer-events-none`
-      } absolute z-20 flex w-max items-stretch border bg-bg ${
+      } absolute z-20 flex w-max items-stretch overflow-hidden rounded-btn border bg-bg ${
         side === 'right' ? 'right-[var(--msg-indent)]' : 'left-[var(--msg-indent)]'
       } ${above ? 'bottom-full mb-2 origin-bottom' : 'top-full mt-2 origin-top'}`}
     >
