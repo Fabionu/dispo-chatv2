@@ -1862,6 +1862,25 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                       <option value="24">24h · reduced</option>
                     </select>
                   </label>
+
+                  {/* Whether the rest above actually applies to THIS trip.
+                      Without it the field is silently inert whenever the cutoff
+                      falls beyond the arrival: the truck never reaches a shift
+                      end past it, no weekly rest is taken, and switching 45h to
+                      24h changes nothing — which reads exactly like a broken
+                      control. A no-op the user cannot see is worse than one that
+                      explains itself. */}
+                  {transit && (
+                    <div
+                      className={`text-2xs leading-snug ${
+                        transit.weeklyRestTaken ? 'text-muted' : 'text-amber-200/80'
+                      }`}
+                    >
+                      {transit.weeklyRestTaken
+                        ? `Applies — adds ${weeklyRestHours}h to this trip.`
+                        : `Not reached: the truck arrives before ${weekDate} ${weekTime}, so this rest changes nothing yet.`}
+                    </div>
+                  )}
                 </>
               )}
 
