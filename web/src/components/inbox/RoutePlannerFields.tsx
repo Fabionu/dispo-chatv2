@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronDown, Copy, X } from 'lucide-react'
+import { Check, ChevronDown, Copy, Star, X } from 'lucide-react'
 import { MENU_SURFACE } from '../menuStyles'
 import { truckSummary } from './routePlannerUtils'
 import type { TruckPreset } from '../../lib/here/truckPresets'
@@ -29,7 +29,7 @@ export function NumberField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="h-8 border border-line bg-transparent px-2.5 text-base outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4 placeholder:text-faint"
+        className="rounded-card h-8 border border-line bg-transparent px-2.5 text-base outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4 placeholder:text-faint"
       />
     </label>
   )
@@ -104,11 +104,16 @@ export function PresetSelect({
   saved,
   activeId,
   onSelect,
+  defaultId,
+  onSetDefault,
 }: {
   builtIn: TruckPreset[]
   saved: TruckPreset[]
   activeId: string | null
   onSelect: (id: string | null) => void
+  /** The preset the planner opens with, or null for none. */
+  defaultId: string | null
+  onSetDefault: (id: string | null) => void
 }) {
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(0)
@@ -188,7 +193,7 @@ export function PresetSelect({
         onClick={() => (open ? setOpen(false) : openMenu())}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="h-8 w-full min-w-0 flex items-center justify-between gap-1.5 border border-line bg-transparent px-2.5 text-sm outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4"
+        className="rounded-card h-8 w-full min-w-0 flex items-center justify-between gap-1.5 border border-line bg-transparent px-2.5 text-sm outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4"
       >
         <span className={`truncate ${active ? 'text-text' : 'text-faint'}`} title={active?.name}>
           {active ? active.name : 'Preset…'}
@@ -213,27 +218,62 @@ export function PresetSelect({
               <Fragment key={o.id ?? 'none'}>
                 {i === 1 && <SectionLabel>Built-in</SectionLabel>}
                 {saved.length > 0 && i === 1 + builtIn.length && <SectionLabel>Saved</SectionLabel>}
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={selected}
-                  data-highlighted={i === highlight}
+                <div
                   onMouseEnter={() => setHighlight(i)}
-                  onClick={() => choose(o.id)}
-                  className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-left transition-colors ${
+                  className={`flex items-center transition-colors ${
                     i === highlight ? 'bg-white/6' : ''
                   }`}
                 >
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm text-text truncate">{o.name}</span>
-                    <span className="block text-xs text-muted truncate mt-0.5">
-                      {o.specs}
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={selected}
+                    data-highlighted={i === highlight}
+                    onClick={() => choose(o.id)}
+                    className="min-w-0 flex-1 flex items-center gap-2 px-2.5 py-1.5 text-left"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm text-text truncate">{o.name}</span>
+                      <span className="block text-xs text-muted truncate mt-0.5">
+                        {o.specs}
+                      </span>
                     </span>
-                  </span>
-                  {selected && (
-                    <Check size="0.8125rem" strokeWidth={2.4} className="shrink-0 text-active" />
+                    {selected && (
+                      <Check size="0.8125rem" strokeWidth={2.4} className="shrink-0 text-active" />
+                    )}
+                  </button>
+                  {/* Its own control, not part of the row's click: which preset
+                      this route uses and which preset every FUTURE route starts
+                      from are two different decisions, and folding them into one
+                      gesture would make picking a profile once silently change
+                      the next twenty routes. A separate button also means the
+                      star can be a sibling rather than a button inside a button,
+                      which is invalid markup and breaks the row's own click. */}
+                  {o.id !== null && (
+                    <button
+                      type="button"
+                      onClick={() => onSetDefault(o.id === defaultId ? null : o.id)}
+                      title={
+                        o.id === defaultId
+                          ? 'Stop opening the planner with this preset'
+                          : 'Open the planner with this preset'
+                      }
+                      aria-label={
+                        o.id === defaultId ? 'Clear the default preset' : 'Set as the default preset'
+                      }
+                      aria-pressed={o.id === defaultId}
+                      className={`rounded-btn mr-1.5 h-6 w-6 shrink-0 flex items-center justify-center transition-colors hover:bg-white/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+                        o.id === defaultId ? 'text-active' : 'text-faint hover:text-text'
+                      }`}
+                    >
+                      <Star
+                        size="0.75rem"
+                        strokeWidth={2}
+                        fill={o.id === defaultId ? 'currentColor' : 'none'}
+                      />
+                    </button>
                   )}
-                </button>
+                </div>
               </Fragment>
             )
           })}

@@ -1,6 +1,7 @@
 import { Fragment, lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import { Activity, ChevronRight, Plus, Route, Truck, UserPlus } from 'lucide-react'
+import { Activity, CalendarClock, ChevronRight, Plus, Route, Truck, UserPlus } from 'lucide-react'
 import type { Group } from '../../lib/types'
+import type { RouteCountryLeg } from '../../lib/here/types'
 import { groupLabel, tractorPlate } from '../../lib/types'
 import { getOps, isTripActive } from '../../lib/vehicleOps'
 import { loadHere } from '../../lib/here/loadHere'
@@ -13,6 +14,11 @@ import FleetStatus from './FleetStatus'
 // HERE SDK loader, truck presets). Code-split so none of it ships in the initial
 // bundle — it loads only when the user opens the tool.
 const RoutePlanner = lazy(() => import('./RoutePlanner'))
+
+// Split for its own sake rather than its weight: it is pure date arithmetic and
+// a form, but it is only ever opened deliberately, so it has no business in the
+// initial bundle either.
+const RestrictionCalculator = lazy(() => import('./RestrictionCalculator'))
 
 type Props = {
   workspaceName: string
@@ -48,7 +54,11 @@ export default function InboxView({
   onAddConnection,
   onOpenVehicleRoom,
 }: Props) {
-  const [tool, setTool] = useState<'route' | 'fleet' | null>(null)
+  const [tool, setTool] = useState<'route' | 'fleet' | 'restrictions' | null>(null)
+  // The route legs the planner handed over, kept HERE rather than inside the
+  // calculator so they survive a trip back to the planner to adjust the route —
+  // which is the normal way this pair gets used, not an edge case.
+  const [restrictionLegs, setRestrictionLegs] = useState<RouteCountryLeg[] | null>(null)
   const [tripPickerOpen, setTripPickerOpen] = useState(false)
 
   // Live counts for the Fleet status card's meta line. Deliberately the SAME
@@ -95,7 +105,25 @@ export default function InboxView({
   if (tool === 'route') {
     return (
       <Suspense fallback={<PaneLoader className="h-full" />}>
-        <RoutePlanner onBack={() => setTool(null)} />
+        <RoutePlanner
+          onBack={() => setTool(null)}
+          onCalculateRestrictions={(legs) => {
+            setRestrictionLegs(legs)
+            setTool('restrictions')
+          }}
+        />
+      </Suspense>
+    )
+  }
+
+  if (tool === 'restrictions') {
+    return (
+      <Suspense fallback={<PaneLoader className="h-full" />}>
+        <RestrictionCalculator
+          legs={restrictionLegs}
+          onBack={() => setTool(null)}
+          onPlanRoute={() => setTool('route')}
+        />
       </Suspense>
     )
   }
@@ -127,6 +155,13 @@ export default function InboxView({
                 subtitle="Plan a truck route with distance, tolls and ETA."
                 meta={ROUTE_META}
                 onClick={() => setTool('route')}
+              />
+              <ToolCard
+                icon={<CalendarClock size="1.25rem" strokeWidth={1.6} />}
+                title="Restriction calculator"
+                subtitle="When the truck arrives, once bans and rests are counted."
+                meta={RESTRICTION_META}
+                onClick={() => setTool('restrictions')}
               />
               <ToolCard
                 icon={<Activity size="1.25rem" strokeWidth={1.6} />}
@@ -252,6 +287,14 @@ type MetaPart = { label: string; alert?: boolean }
 // The Route planner has nothing live to report, so its foot line names what the
 // tool covers instead — the same shape as the fleet counts, so the two cards
 // stay symmetrical.
+// Like the planner's, a foot line naming what the tool covers rather than a
+// live count — there is nothing running to report on.
+const RESTRICTION_META: MetaPart[] = [
+  { label: 'Driving bans' },
+  { label: 'Rests' },
+  { label: 'Arrival' },
+]
+
 const ROUTE_META: MetaPart[] = [
   { label: 'HGV profiles' },
   { label: 'Tolls' },

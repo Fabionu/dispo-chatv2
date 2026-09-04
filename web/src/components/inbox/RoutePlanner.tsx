@@ -4,6 +4,7 @@ import { decode } from '@here/flexpolyline'
 import {
   ArrowLeft,
   Bookmark,
+  CalendarClock,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -25,7 +26,14 @@ import { api, ApiError } from '../../lib/api'
 import { useFlipReorder } from '../../hooks/useFlipReorder'
 import { useWorkspacePlaces } from '../../hooks/useWorkspacePlaces'
 import { bestInsertionIndex, haversineMeters, nearestRouteSection, routeCourseNear } from '../../lib/here/geo'
-import { builtInPresets, deleteUserPreset, loadUserPresets, saveUserPreset } from '../../lib/here/truckPresets'
+import {
+  builtInPresets,
+  deleteUserPreset,
+  loadDefaultPresetId,
+  loadUserPresets,
+  saveUserPreset,
+  setDefaultPresetId,
+} from '../../lib/here/truckPresets'
 import type { TruckPreset } from '../../lib/here/truckPresets'
 import HereMap from '../here/HereMap'
 import PlaceSearchField from '../here/PlaceSearchField'
@@ -39,6 +47,7 @@ import type {
   RoutePointRole,
   ScreenGeoCandidate,
   TruckProfileForm,
+  RouteCountryLeg,
   TruckRoute,
 } from '../../lib/here/types'
 import type { RouteMoney, RouteTollSummary } from '../../lib/here/types'
@@ -71,6 +80,9 @@ import type { WorkspacePlace, WorkspacePlaceInput } from '../../lib/types'
 
 type Props = {
   onBack: () => void
+  // Hands the calculated route's country legs to the restriction calculator.
+  // Optional so the planner stays usable anywhere it is mounted without one.
+  onCalculateRestrictions?: (legs: RouteCountryLeg[]) => void
 }
 
 type MenuState = { x: number; y: number; lat: number; lng: number; zoom: number; candidates: ScreenGeoCandidate[] }
@@ -125,7 +137,24 @@ function readablePaymentMethod(value: string): string {
 // removing a stop from a marker popover) recalculates immediately so the route
 // follows the user's gesture. The HERE Routing v8 truck route frames clear of
 // the panel.
-export default function RoutePlanner({ onBack }: Props) {
+// How far from the route a drag may be released and still be told which way the
+// truck is travelling there.
+//
+// routeCourseNear defaults to 250m, and that default was silently wrong for a
+// DRAG: releasing a long way from the line it grabbed is the whole gesture —
+// you pull the route onto a different road. Past 250m it returned null, the
+// snap ran with no direction at all, and the undirected path has nothing to
+// stop it landing on the oncoming carriageway of a divided road. That is the
+// "wrong way of driving" case, and it got MORE likely the further you dragged.
+//
+// Within one grabbed section the nearest segment is still the right reference
+// for "which way is the truck going through here", so the window only has to
+// stay short of the distance at which that stops being true. 2km is generous
+// for a drag and still local enough that the heading means something; beyond
+// it, no direction is honestly better than a made-up one.
+const DRAG_COURSE_WINDOW_M = 2000
+
+export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props) {
   const [points, setPoints] = useState<RoutePoint[]>([])
   const [truck, setTruck] = useState<TruckProfileForm>(EMPTY_TRUCK)
   const [route, setRoute] = useState<TruckRoute | null>(null)
@@ -172,6 +201,7 @@ export default function RoutePlanner({ onBack }: Props) {
   // Presets (built-in + user/localStorage). `activePresetId` is cleared on any
   // manual field edit so the summary never claims a preset that no longer matches.
   const [userPresets, setUserPresets] = useState<TruckPreset[]>([])
+  const [defaultPresetId, setDefaultPresetIdState] = useState<string | null>(null)
   const [activePresetId, setActivePresetId] = useState<string | null>(null)
   const [savingPreset, setSavingPreset] = useState(false)
   const [presetName, setPresetName] = useState('')
@@ -187,7 +217,22 @@ export default function RoutePlanner({ onBack }: Props) {
     deletePlace,
   } = useWorkspacePlaces()
 
-  useEffect(() => setUserPresets(loadUserPresets()), [])
+  // Load the saved presets and, if one is marked default, open with it applied.
+  // One effect rather than two because the default is an ID that has to be
+  // resolved against the list — splitting them would apply the default on a
+  // second pass, after the user could already have started typing a profile.
+  useEffect(() => {
+    const saved = loadUserPresets()
+    setUserPresets(saved)
+    const id = loadDefaultPresetId()
+    setDefaultPresetIdState(id)
+    if (!id) return
+    const preset = [...builtInPresets(), ...saved].find((p) => p.id === id)
+    if (preset) {
+      setTruck(preset.values)
+      setActivePresetId(preset.id)
+    }
+  }, [])
 
   const presets = useMemo(() => [...builtInPresets(), ...userPresets], [userPresets])
   const activePreset = presets.find((p) => p.id === activePresetId) ?? null
@@ -298,7 +343,9 @@ export default function RoutePlanner({ onBack }: Props) {
     // direction-aware snap (correct carriageway, not the oncoming road) and the
     // recalc waypoint course. Computed before the snap so the snap can use it.
     const seg = sectionCoords[section]
-    const course = seg ? routeCourseNear(release, [seg]) ?? undefined : undefined
+    const course = seg
+      ? routeCourseNear(release, [seg], DRAG_COURSE_WINDOW_M) ?? undefined
+      : undefined
     // The grabbed leg's endpoints bracket the new stop → detour-aware ranking.
     const { prev, next } = neighborsForStopIndex(section)
     // OPTIMISTIC: the stop appears at the raw release point the instant the
@@ -651,7 +698,9 @@ export default function RoutePlanner({ onBack }: Props) {
     if (!release) return
     // Travel direction of the route nearest the drop — computed BEFORE the snap
     // so the snap itself lands on the correct carriageway (not just the recalc).
-    const course = sectionCoords.length ? routeCourseNear(release, sectionCoords) ?? undefined : undefined
+    const course = sectionCoords.length
+      ? routeCourseNear(release, sectionCoords, DRAG_COURSE_WINDOW_M) ?? undefined
+      : undefined
     // The dragged point's neighbours in the ordered route → detour-aware ranking.
     const idx = orderedWaypoints.findIndex((p) => p.id === id)
     const prev = idx > 0 ? orderedWaypoints[idx - 1]?.coordinates : undefined
@@ -901,8 +950,16 @@ export default function RoutePlanner({ onBack }: Props) {
     setSavingPreset(false)
   }
   function removePreset(id: string) {
+    // deleteUserPreset clears the stored default when it pointed here; mirror
+    // that in state so the star empties without a reload.
     setUserPresets(deleteUserPreset(id))
     if (activePresetId === id) setActivePresetId(null)
+    if (defaultPresetId === id) setDefaultPresetIdState(null)
+  }
+
+  function chooseDefaultPreset(id: string | null) {
+    setDefaultPresetId(id)
+    setDefaultPresetIdState(id)
   }
 
   const collapsedTruckLabel = activePreset ? `${activePreset.name} · ${truckSummary(truck)}` : truckSummary(truck)
@@ -1280,6 +1337,22 @@ export default function RoutePlanner({ onBack }: Props) {
                     <Stat label="Tolls" value={tollSummaryValue(route.tolls, dirty)} />
                   </div>
                 </div>
+                {/* The handoff to the restriction calculator. Gated on `dirty`
+                    for the same reason the toll details are: the country legs
+                    describe the DRAWN route, and sending a stale set to a
+                    calculator that reports an arrival time to the hour would be
+                    worse than not offering the button. */}
+                {onCalculateRestrictions && !dirty && route.countries.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => onCalculateRestrictions(route.countries)}
+                    className="rounded-btn flex h-8 w-full items-center justify-center gap-1.5 border border-line bg-white/4 px-3 text-sm text-text transition-colors hover:bg-white/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                  >
+                    <CalendarClock size="0.8125rem" strokeWidth={1.7} />
+                    Calculate restrictions
+                    <span className="text-faint">· {route.countries.length} countries</span>
+                  </button>
+                )}
                 {!dirty && route.tolls && (
                   <div className="border-t border-line pt-2">
                     {route.tolls.details.length > 0 ? (
@@ -1426,6 +1499,8 @@ export default function RoutePlanner({ onBack }: Props) {
                   saved={userPresets}
                   activeId={activePresetId}
                   onSelect={(id) => (id ? applyPreset(id) : setActivePresetId(null))}
+                  defaultId={defaultPresetId}
+                  onSetDefault={chooseDefaultPreset}
                 />
                 <button
                   onClick={() => setSavingPreset((s) => !s)}
@@ -1455,7 +1530,7 @@ export default function RoutePlanner({ onBack }: Props) {
                     onKeyDown={(e) => e.key === 'Enter' && commitSavePreset()}
                     placeholder="Preset name"
                     autoFocus
-                    className="h-8 flex-1 min-w-0 border border-line bg-transparent px-2.5 text-sm outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4 placeholder:text-faint"
+                    className="rounded-card h-8 flex-1 min-w-0 border border-line bg-transparent px-2.5 text-sm outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4 placeholder:text-faint"
                   />
                   <button
                     onClick={commitSavePreset}

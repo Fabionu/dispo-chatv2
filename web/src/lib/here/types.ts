@@ -57,6 +57,22 @@ export type RouteSection = {
   arrival?: LatLng | null
 }
 
+// One continuous stretch of the route inside a single country, in route order.
+// The proxy merges HERE's per-attribute spans down to one entry per country
+// ENTERED, so a route that re-enters a country carries it twice — which is the
+// point, since the two crossings happen at different times.
+//
+// `code` is ISO 3166-1 ALPHA-3 (HERE's format for spans). Trip stops elsewhere
+// in the app carry alpha-2, so converting is required before comparing the two
+// (lib/restrictions.ts has the table).
+export type RouteCountryLeg = {
+  code: string
+  /** Driving time through this country, in seconds. */
+  duration: number
+  /** Distance through this country, in metres. */
+  length: number
+}
+
 export type RouteMoney = {
   currency: string
   value: number
@@ -89,6 +105,10 @@ export type TruckRoute = {
   id?: string
   sections: RouteSection[]
   summary: { duration: number; length: number }
+  // The countries the route passes through, in order, with the time and
+  // distance spent in each. Always present — unlike tolls, country spans cost
+  // no extra HERE transaction, so even the light recalcs carry them.
+  countries: RouteCountryLeg[]
   // Undefined means the lightweight route request intentionally skipped tolls
   // (for example an automatic recalc after dragging the line on the map).
   tolls?: RouteTollSummary

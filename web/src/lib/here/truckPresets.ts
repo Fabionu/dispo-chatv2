@@ -15,6 +15,12 @@ export type TruckPreset = {
 
 const KEY = 'dispo.here.truckPresets'
 
+// The preset the planner opens with. Stored as an ID rather than a copy of the
+// values so editing the preset changes what the default means — a copy would
+// quietly go stale the first time the user corrected a dimension. Points at a
+// built-in just as happily as at a saved one.
+const DEFAULT_KEY = 'dispo.here.truckPresetDefault'
+
 const BUILT_INS: TruckPreset[] = [
   {
     id: 'builtin:artic40',
@@ -73,7 +79,29 @@ export function saveUserPreset(name: string, values: TruckProfileForm): TruckPre
   return next
 }
 
+export function loadDefaultPresetId(): string | null {
+  try {
+    const value = localStorage.getItem(DEFAULT_KEY)
+    return value ? value : null
+  } catch {
+    return null
+  }
+}
+
+export function setDefaultPresetId(id: string | null): void {
+  try {
+    if (id) localStorage.setItem(DEFAULT_KEY, id)
+    else localStorage.removeItem(DEFAULT_KEY)
+  } catch {
+    /* storage full / unavailable — the choice holds for this session only */
+  }
+}
+
 export function deleteUserPreset(id: string): TruckPreset[] {
+  // A deleted preset must not stay the default: the planner would look it up on
+  // the next open, find nothing, and silently start from an empty profile with
+  // no hint that its default had been removed.
+  if (loadDefaultPresetId() === id) setDefaultPresetId(null)
   const next = loadUserPresets().filter((p) => p.id !== id)
   try {
     localStorage.setItem(KEY, JSON.stringify(next))

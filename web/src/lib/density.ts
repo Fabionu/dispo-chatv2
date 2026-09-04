@@ -1,7 +1,9 @@
-// Display density: manual choices use the exact token sets in index.css. Auto
-// only selects a broad tier for numeric React props (avatars, logos, etc.); its
-// layout and visual sizing are CSS-first and follow logical viewport/container
-// dimensions.
+// Display density is a PREFERENCE, not a sizing system. Since 2026-09-04 every
+// size token in index.css is a fluid clamp() over the viewport, so a manual
+// choice is one multiplier (--ui-scale) applied to that curve, scoped in CSS to
+// `[data-density-mode='manual']`. In Auto the viewport is already answering
+// through the vw term, so the tier this module picks has no visual effect at
+// all — it only labels the Appearance picker ("Auto (comfortable)").
 //
 // Do not multiply the viewport by devicePixelRatio here. Browser CSS pixels
 // already account for Windows/macOS display scaling, and applying DPR again was
@@ -57,8 +59,10 @@ function isDensity(value: unknown): value is Density {
   return value === 'compact' || value === 'default' || value === 'comfortable'
 }
 
-// Tier implied by the logical viewport, ignoring any manual override. CSS does
-// the finer responsive work; this tier keeps numeric React sizes in sync.
+// Tier implied by the logical viewport, ignoring any manual override. Nothing
+// sizes off this any more (the last numeric consumers went with the tier
+// tables); it exists so the Appearance picker can show which tier Auto lands
+// on. CSS does all the responsive work, continuously.
 export function autoDensity(): Density {
   if (typeof window === 'undefined') return 'default'
   if (window.innerWidth >= 2200 && window.innerHeight >= 1100) return 'comfortable'
@@ -84,7 +88,8 @@ function apply(density: Density, mode: DensityMode) {
   clearLegacyAutoSizing()
 }
 
-// Pin an exact manual appearance. Manual CSS tokens remain unchanged.
+// Pin a manual appearance: sets data-density-mode='manual', which is the only
+// state in which CSS reads the tier at all (as the --ui-scale multiplier).
 export function setDensity(density: Density) {
   try {
     localStorage.setItem(STORAGE_KEY, density)
@@ -94,7 +99,8 @@ export function setDensity(density: Density) {
   apply(density, 'manual')
 }
 
-// Drop the manual override and return to logical-viewport Auto.
+// Drop the manual override and return to Auto — --ui-scale falls back to 1 and
+// the fluid tokens follow the viewport on their own.
 export function clearDensityOverride() {
   try {
     localStorage.removeItem(STORAGE_KEY)
