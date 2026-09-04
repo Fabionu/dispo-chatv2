@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { Calendar, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
 import { MENU_SURFACE } from './menuStyles'
 import { FIELD_BASE } from './vehicle/tripFormStyles'
@@ -41,7 +41,54 @@ const FIELD_INPUT =
   'flex-1 min-w-0 h-full bg-transparent text-base text-text placeholder:text-faint/70 outline-none'
 const FIELD_BTN =
   'rounded-btn h-6 w-6 shrink-0 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20'
-const POPOVER = `absolute z-30 mt-1.5 ${MENU_SURFACE} p-2`
+// Gap between the field and its popover, in px — the pixel value of the
+// mt-1.5/mb-1.5 below, needed as a number when measuring whether it fits.
+const POPOVER_GAP_PX = 6
+
+// The popover, opening down or up. `max-h` + scroll is the last resort for a
+// window too short for either side; without it a squeezed viewport would clip
+// the calendar instead of scrolling it.
+const popoverClass = (side: 'down' | 'up') =>
+  `absolute z-30 ${
+    side === 'up' ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+  } max-h-[calc(100vh-2rem)] overflow-y-auto ${MENU_SURFACE} p-2`
+
+/**
+ * Which way the popover opens: down by default, up when there is no room
+ * below and more of it above.
+ *
+ * MEASURED, not guessed. The same two fields sit in a scrolling page (the
+ * restriction calculator), in modals, and — the case that forced this — near
+ * the bottom of the route planner's floating panel, where a calendar opening
+ * downward ran off the screen and the last row of dates could not be clicked
+ * at all. A fixed side is wrong for at least one of those every time.
+ */
+function usePopoverSide(
+  anchorRef: RefObject<HTMLDivElement>,
+  popRef: RefObject<HTMLDivElement>,
+  open: boolean,
+): 'down' | 'up' {
+  const [side, setSide] = useState<'down' | 'up'>('down')
+  // Layout effect, not effect: the popover is already painted by the time a
+  // passive effect runs, so the user would see it flash in the wrong place.
+  useLayoutEffect(() => {
+    if (!open) {
+      setSide('down')
+      return
+    }
+    const anchor = anchorRef.current
+    const pop = popRef.current
+    if (!anchor || !pop) return
+    const rect = anchor.getBoundingClientRect()
+    const height = pop.offsetHeight
+    const below = window.innerHeight - rect.bottom
+    const above = rect.top
+    // Flip only when below genuinely cannot hold it AND above is roomier —
+    // flipping into an even tighter gap just moves the clipping.
+    setSide(below < height + POPOVER_GAP_PX && above > below ? 'up' : 'down')
+  }, [open, anchorRef, popRef])
+  return side
+}
 
 // Close a popover on outside-click or Escape.
 function usePopoverClose(ref: RefObject<HTMLDivElement>, open: boolean, close: () => void) {
@@ -91,7 +138,9 @@ export function DateField({
   ariaLabel?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
+  const popRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
+  const side = usePopoverSide(ref, popRef, open)
   const today = new Date()
   // The month currently shown in the calendar (m is 0-11).
   const [view, setView] = useState<{ y: number; m: number }>(() => {
@@ -162,7 +211,7 @@ export function DateField({
       </div>
 
       {open && (
-        <div className={`${POPOVER} w-[15.25rem]`}>
+        <div ref={popRef} className={`${popoverClass(side)} w-[15.25rem]`}>
           <div className="flex items-center justify-between mb-2 px-1">
             <button
               type="button"
@@ -245,7 +294,9 @@ export function TimeField({
   ariaLabel?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
+  const popRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
+  const side = usePopoverSide(ref, popRef, open)
   usePopoverClose(ref, open, () => setOpen(false))
 
   const parsed = parseHM(value)
@@ -284,7 +335,7 @@ export function TimeField({
       </div>
 
       {open && (
-        <div className={`${POPOVER} right-0 flex gap-2`}>
+        <div ref={popRef} className={`${popoverClass(side)} right-0 flex gap-2`}>
           <div className="flex flex-col">
             <div className="text-2xs text-faint font-medium text-center mb-1">Hour</div>
             <div className="h-44 w-12 overflow-y-auto flex flex-col gap-0.5 pr-1 [scrollbar-width:thin]">

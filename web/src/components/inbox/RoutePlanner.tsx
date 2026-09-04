@@ -20,6 +20,7 @@ import {
   Trash2,
   Truck,
   TriangleAlert,
+  Users,
   X,
 } from 'lucide-react'
 import { api, ApiError } from '../../lib/api'
@@ -54,6 +55,8 @@ import type { RouteMoney, RouteTollSummary } from '../../lib/here/types'
 import PointRow from './RoutePointRow'
 import { RoleBadge, RouteRow } from './RoutePointCard'
 import { CopyCoordButton, NumberField, PresetSelect, Stat } from './RoutePlannerFields'
+import { DateField, TimeField } from '../DateTimeField'
+import { estimateTransit } from '../../lib/transit'
 import {
   EMPTY_TRUCK,
   MAX_STOPS,
@@ -61,9 +64,9 @@ import {
   PANEL_INSET_PX,
   errorMessage,
   fmtCoord,
+  formatArrival,
   formatDistance,
   formatDuration,
-  formatEta,
   isValidCoord,
   snapDebug,
   snappedFromRoute,
@@ -154,6 +157,35 @@ function readablePaymentMethod(value: string): string {
 // it, no direction is honestly better than a made-up one.
 const DRAG_COURSE_WINDOW_M = 2000
 
+// The planner's own select surface — matches PresetSelect's trigger and the
+// truck-profile inputs, so the crew card reads as part of the same panel.
+const CREW_FIELD =
+  'rounded-card h-8 w-full min-w-0 border border-line bg-transparent px-2.5 text-sm outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4'
+
+// DD/MM/YYYY + HH:MM as the browser's local time. Local rather than the route's
+// own zone on purpose: the planner's ETA has always been "now plus the drive"
+// on the dispatcher's clock, and the crew card has to answer in the same clock
+// or the two numbers beside each other would mean different things.
+function parseLocalDateTime(dmy: string, hm: string): number | null {
+  const d = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(dmy.trim())
+  const t = /^(\d{1,2}):(\d{2})$/.exec(hm.trim())
+  if (!d || !t) return null
+  const at = new Date(Number(d[3]), Number(d[2]) - 1, Number(d[1]), Number(t[1]), Number(t[2]))
+  return Number.isNaN(at.getTime()) ? null : at.getTime()
+}
+
+function todayDmy(): string {
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`
+}
+
+function nowHm(): string {
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(now.getHours())}:${pad(now.getMinutes())}`
+}
+
 export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props) {
   const [points, setPoints] = useState<RoutePoint[]>([])
   const [truck, setTruck] = useState<TruckProfileForm>(EMPTY_TRUCK)
@@ -202,6 +234,25 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
   // manual field edit so the summary never claims a preset that no longer matches.
   const [userPresets, setUserPresets] = useState<TruckPreset[]>([])
   const [defaultPresetId, setDefaultPresetIdState] = useState<string | null>(null)
+
+  // ── Crew & hours ──────────────────────────────────────────────────────────
+  // The inputs 561/2006 needs that a route cannot supply: who is in the cab and
+  // what is left of their hours.
+  const [crewOpen, setCrewOpen] = useState(false)
+  const [crew, setCrew] = useState<1 | 2>(1)
+  // Seeded with now, then left alone. A departure that silently tracked the
+  // clock would quietly change every number on the card while the dispatcher
+  // was reading them, and a plan made for Friday 06:00 must stay made for it.
+  const [departDate, setDepartDate] = useState(todayDmy)
+  const [departTime, setDepartTime] = useState(nowHm)
+  const [fullProgram, setFullProgram] = useState(true)
+  const [programDate, setProgramDate] = useState(todayDmy)
+  const [programTime, setProgramTime] = useState('20:00')
+  const [dailyRestHours, setDailyRestHours] = useState('11')
+  const [weekEnds, setWeekEnds] = useState(false)
+  const [weekDate, setWeekDate] = useState(todayDmy)
+  const [weekTime, setWeekTime] = useState('20:00')
+  const [weeklyRestHours, setWeeklyRestHours] = useState('45')
   const [activePresetId, setActivePresetId] = useState<string | null>(null)
   const [savingPreset, setSavingPreset] = useState(false)
   const [presetName, setPresetName] = useState('')
@@ -962,6 +1013,67 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
     setDefaultPresetIdState(id)
   }
 
+  // The legal transit time for the drawn route. Recomputed from `now` whenever
+  // the route or the crew inputs change, which is the same basis the ETA stat
+  // has always used ("now plus the drive").
+  // Driving time for THIS truck rather than for HERE’s speed model. HERE’s
+  // duration is a statement about the road; an average the dispatcher enters
+  // already contains fuel stops, border queues and a governed top speed.
+  //
+  // Computed ONCE and used by every number the planner reports — Duration,
+  // ETA and the transit estimate — so the three can never disagree about how
+  // fast the truck goes.
+  const drivingSeconds = useMemo(() => {
+    if (!route) return 0
+    const kmh = Number((truck.averageSpeedKmh ?? '').replace(',', '.'))
+    if (Number.isFinite(kmh) && kmh > 0 && route.summary.length > 0) {
+      return (route.summary.length / 1000 / kmh) * 3600
+    }
+    return route.summary.duration
+  }, [route, truck.averageSpeedKmh])
+
+  const departAt = useMemo(
+    () => parseLocalDateTime(departDate, departTime) ?? Date.now(),
+    [departDate, departTime],
+  )
+
+  const transit = useMemo(() => {
+    if (!route) return null
+    return estimateTransit({
+      drivingSeconds,
+      crew,
+      departAt,
+      programUntil: fullProgram ? null : parseLocalDateTime(programDate, programTime),
+      dailyRestHours: Number(dailyRestHours.replace(',', '.')) || 11,
+      weeklyWorkUntil: weekEnds ? parseLocalDateTime(weekDate, weekTime) : null,
+      weeklyRestHours: Number(weeklyRestHours.replace(',', '.')) || 45,
+    })
+  }, [
+    route,
+    drivingSeconds,
+    departAt,
+    crew,
+    fullProgram,
+    programDate,
+    programTime,
+    dailyRestHours,
+    weekEnds,
+    weekDate,
+    weekTime,
+    weeklyRestHours,
+  ])
+
+  // Mirrors the truck card's collapsed line: what the card currently says,
+  // readable without opening it.
+  const collapsedCrewLabel = [
+    crew === 1 ? '1 driver' : '2 drivers',
+    crew === 1 ? `${dailyRestHours}h rest` : '9h rest',
+    fullProgram ? 'full program' : `until ${programTime}`,
+    weekEnds ? `week ends ${weekDate}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
   const collapsedTruckLabel = activePreset ? `${activePreset.name} · ${truckSummary(truck)}` : truckSummary(truck)
 
   // Create/Update route button state.
@@ -1330,12 +1442,43 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                 <div className="divide-y divide-line">
                   <div className="grid grid-cols-2 divide-x divide-line">
                     <Stat label="Distance" value={formatDistance(route.summary.length)} />
-                    <Stat label="Duration" value={formatDuration(route.summary.duration)} />
+                    <Stat label="Duration" value={formatDuration(drivingSeconds)} />
                   </div>
                   <div className="grid grid-cols-2 divide-x divide-line">
-                    <Stat label="ETA" value={formatEta(route.summary.duration)} />
+                    {/* ETA now answers with the LEGAL arrival, not the moment
+                        the wheels would stop if nobody slept. A driving-only ETA
+                        beside a transit time that includes two nights would have
+                        been two numbers contradicting each other on one card. */}
+                    <Stat
+                      label="Arrival"
+                      value={
+                        transit
+                          ? formatArrival(transit.arrival, departAt)
+                          : formatArrival(departAt + drivingSeconds * 1000, departAt)
+                      }
+                    />
                     <Stat label="Tolls" value={tollSummaryValue(route.tolls, dirty)} />
                   </div>
+                  {transit && (
+                    <div className="grid grid-cols-2 divide-x divide-line">
+                      <Stat label="Transit" value={formatDuration(transit.totalMs / 1000)} />
+                      <Stat
+                        label="Rests"
+                        value={
+                          transit.nights === 0 && !transit.weeklyRestTaken
+                            ? 'None needed'
+                            : [
+                                transit.nights > 0
+                                  ? `${transit.nights} night${transit.nights === 1 ? '' : 's'}`
+                                  : null,
+                                transit.weeklyRestTaken ? '+ weekly' : null,
+                              ]
+                                .filter(Boolean)
+                                .join(' ')
+                        }
+                      />
+                    </div>
+                  )}
                 </div>
                 {/* The handoff to the restriction calculator. Gated on `dirty`
                     for the same reason the toll details are: the country legs
@@ -1549,6 +1692,182 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                 <NumberField label="Gross weight (kg)" value={truck.grossWeightKg} onChange={(v) => updateTruck({ grossWeightKg: v })} placeholder="40000" />
                 <NumberField label="Axle count" value={truck.axleCount} onChange={(v) => updateTruck({ axleCount: v })} placeholder="5" />
                 <NumberField label="Trailer count" value={truck.trailerCount} onChange={(v) => updateTruck({ trailerCount: v })} placeholder="1" />
+              </div>
+
+              {/* Below the dimension grid rather than inside it, because it is
+                  not the same kind of number: the six above are sent to HERE and
+                  decide which roads the truck may use, this one never leaves the
+                  browser and only decides how long the planner says those roads
+                  take. Blank keeps HERE’s own estimate. */}
+              <NumberField
+                label="Average speed (km/h)"
+                value={truck.averageSpeedKmh}
+                onChange={(v) => updateTruck({ averageSpeedKmh: v })}
+                placeholder="HERE estimate"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Crew & hours — the third card, and the only inputs 561/2006 needs
+            that a route cannot supply. Its own card for the same reason the
+            truck profile is: it grows downward when opened instead of pushing
+            the itinerary into a scrollbar. */}
+        <div className="shrink-0 rounded-soft border border-line bg-surface shadow-overlay">
+          <button
+            onClick={() => setCrewOpen((o) => !o)}
+            aria-expanded={crewOpen}
+            className={`flex w-full items-center gap-2.5 px-2.5 py-2.5 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20 ${
+              crewOpen ? 'rounded-t-panel' : 'rounded-panel'
+            }`}
+          >
+            <span className="h-8 w-8 shrink-0 flex items-center justify-center rounded-tile border border-line bg-white/2 text-muted">
+              <Users size="0.9375rem" strokeWidth={1.8} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-base font-medium leading-tight text-text">Crew &amp; hours</span>
+              <span className="mt-0.5 block truncate text-xs leading-[1.4] text-faint" title={collapsedCrewLabel}>
+                {collapsedCrewLabel}
+              </span>
+            </span>
+            <ChevronDown
+              size="1rem"
+              strokeWidth={1.8}
+              className={`shrink-0 text-faint transition-transform motion-reduce:transition-none ${
+                crewOpen ? 'rotate-180' : ''
+              }`}
+            />
+          </button>
+
+          {crewOpen && (
+            <div className="flex flex-col gap-2.5 border-t border-line p-2.5">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-muted">Departure</span>
+                <div className="flex items-center gap-1.5">
+                  <DateField
+                    value={departDate}
+                    onChange={setDepartDate}
+                    className="flex-1"
+                    ariaLabel="Departure date"
+                  />
+                  <TimeField
+                    value={departTime}
+                    onChange={setDepartTime}
+                    className="w-[6.5rem]"
+                    ariaLabel="Departure time"
+                  />
+                </div>
+              </div>
+
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-muted">Drivers</span>
+                <select
+                  value={crew}
+                  onChange={(e) => setCrew(Number(e.target.value) === 2 ? 2 : 1)}
+                  className={CREW_FIELD}
+                >
+                  <option value={1}>1 driver · 9h driving per shift</option>
+                  <option value={2}>2 drivers · 18h driving per shift</option>
+                </select>
+              </label>
+
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
+                <input
+                  type="checkbox"
+                  checked={fullProgram}
+                  onChange={(e) => setFullProgram(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-white"
+                />
+                Starts on a full program
+              </label>
+
+              {/* The Friday-afternoon case: the same route started with a full
+                  card and started with three hours left are two different trips,
+                  and this is the input that tells them apart. */}
+              {!fullProgram && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-muted">Program until</span>
+                  <div className="flex items-center gap-1.5">
+                    <DateField
+                      value={programDate}
+                      onChange={setProgramDate}
+                      className="flex-1"
+                      ariaLabel="Program until, date"
+                    />
+                    <TimeField
+                      value={programTime}
+                      onChange={setProgramTime}
+                      className="w-[6.5rem]"
+                      ariaLabel="Program until, time"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* A crew's rest is fixed at 9h by the multi-manning rule, so there
+                  is no choice to offer; a solo driver's is 11h, reducible to 9h
+                  three times between weekly rests — which this estimator does not
+                  count, so it has to be stated rather than assumed. */}
+              {crew === 1 ? (
+                <NumberField
+                  label="Daily rest (h)"
+                  value={dailyRestHours}
+                  onChange={setDailyRestHours}
+                  placeholder="11"
+                />
+              ) : (
+                <div className="text-xs leading-snug text-faint">
+                  A two-driver crew rests 9h inside each 30h window — fixed by the rule, so there is
+                  nothing to set. Working breaks are taken in the moving vehicle.
+                </div>
+              )}
+
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
+                <input
+                  type="checkbox"
+                  checked={weekEnds}
+                  onChange={(e) => setWeekEnds(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-white"
+                />
+                Weekly rest falls in this trip
+              </label>
+
+              {weekEnds && (
+                <>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs text-muted">Can work until</span>
+                    <div className="flex items-center gap-1.5">
+                      <DateField
+                        value={weekDate}
+                        onChange={setWeekDate}
+                        className="flex-1"
+                        ariaLabel="Can work until, date"
+                      />
+                      <TimeField
+                        value={weekTime}
+                        onChange={setWeekTime}
+                        className="w-[6.5rem]"
+                        ariaLabel="Can work until, time"
+                      />
+                    </div>
+                  </div>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs text-muted">Weekly rest</span>
+                    <select
+                      value={weeklyRestHours}
+                      onChange={(e) => setWeeklyRestHours(e.target.value)}
+                      className={CREW_FIELD}
+                    >
+                      <option value="45">45h · regular</option>
+                      <option value="24">24h · reduced</option>
+                    </select>
+                  </label>
+                </>
+              )}
+
+              <div className="text-2xs leading-snug text-faint">
+                Estimated from EC 561/2006 · driving bans are not included, use the Restriction
+                calculator for those.
               </div>
             </div>
           )}

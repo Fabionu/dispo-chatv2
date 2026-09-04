@@ -7,6 +7,7 @@ export const EMPTY_TRUCK: TruckProfileForm = {
   grossWeightKg: '',
   axleCount: '',
   trailerCount: '',
+  averageSpeedKmh: '',
 }
 
 export const MAX_STOPS = 8
@@ -105,10 +106,34 @@ export function formatDuration(seconds: number): string {
   return h > 0 ? `${h} h ${m} min` : `${m} min`
 }
 
-export function formatEta(seconds: number): string {
-  const eta = new Date(Date.now() + seconds * 1000)
+/**
+ * An arrival instant, shown against the departure it belongs to.
+ *
+ * The date appears only when the trip crosses midnight — which for a truck
+ * is most of the time, and is exactly when a bare "18:06" is a trap: it
+ * reads as this evening whether it means tonight or Thursday. Same-day runs
+ * keep the bare clock, because a date there is noise.
+ *
+ * Replaced formatEta(seconds), which assumed the truck left NOW and could
+ * only ever print a time of day. Both assumptions stopped being true once
+ * the departure became an input and the estimate started counting nights.
+ */
+export function formatArrival(at: number, from: number): string {
+  const arrival = new Date(at)
+  const start = new Date(from)
   // 24-hour clock, matching message timestamps (see messageUtils.formatTime).
-  return eta.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+  const time = arrival.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  })
+  const sameDay =
+    arrival.getFullYear() === start.getFullYear() &&
+    arrival.getMonth() === start.getMonth() &&
+    arrival.getDate() === start.getDate()
+  if (sameDay) return time
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(arrival.getDate())}.${pad(arrival.getMonth() + 1)} ${time}`
 }
 
 export function errorMessage(code: string): string {

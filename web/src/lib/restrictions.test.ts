@@ -3,9 +3,9 @@ import assert from 'node:assert/strict'
 
 import {
   calculateArrival,
+  expandBanRules,
   legDurationSec,
   partsIn,
-  expandBanRules,
   resolveBans,
   zonedToUtc,
   type BanWindow,
@@ -24,13 +24,13 @@ const clock = (zone: string, ms: number): string => {
 
 const base = (overrides: Partial<CalcInput> = {}): CalcInput => ({
   departAt: zonedToUtc('Europe/Bucharest', 2026, 6, 1, 6, 0),
-  shiftEndTime: '22:00',
+  programUntil: null,
+  driverCount: 1,
+  breakHours: [],
   shiftZone: 'Europe/Bucharest',
-  maxDrivingHoursPerShift: null,
   averageSpeedKmh: null,
   legs: [{ code: 'ROU', duration: 4 * 3600, length: 320_000 }],
   bans: [],
-  rest: { defaultHours: 9, overrides: {} },
   ...overrides,
 })
 
@@ -52,43 +52,9 @@ test('an unobstructed run arrives at departure plus driving time', () => {
   const result = calculateArrival(base())
   assert.equal(clock('Europe/Bucharest', result.arrival), '2026-06-01 10:00')
   assert.equal(result.drivingMs, 4 * HOUR)
-  assert.equal(result.restMs, 0)
+  assert.equal(result.breakMs, 0)
   assert.equal(result.banMs, 0)
   assert.equal(result.segments.length, 1)
-})
-
-test('the working day ends driving and the rest resumes it', () => {
-  const result = calculateArrival(
-    base({
-      shiftEndTime: '14:00',
-      legs: [{ code: 'ROU', duration: 10 * 3600, length: 800_000 }],
-    }),
-  )
-  // 06:00 → 14:00 is 8h of the 10h; 9h of rest; the last 2h run into the night.
-  assert.deepEqual(
-    result.segments.map((s) => [s.kind, clock('Europe/Bucharest', s.start)]),
-    [
-      ['drive', '2026-06-01 06:00'],
-      ['rest', '2026-06-01 14:00'],
-      ['drive', '2026-06-01 23:00'],
-    ],
-  )
-  assert.equal(clock('Europe/Bucharest', result.arrival), '2026-06-02 01:00')
-  assert.equal(result.drivingMs, 10 * HOUR)
-  assert.equal(result.restMs, 9 * HOUR)
-})
-
-test('a driving cap ends the shift before the clock does', () => {
-  const result = calculateArrival(
-    base({
-      maxDrivingHoursPerShift: 9,
-      legs: [{ code: 'ROU', duration: 12 * 3600, length: 900_000 }],
-    }),
-  )
-  // Stops after 9h at 15:00, not at the 22:00 shift end.
-  assert.equal(clock('Europe/Bucharest', result.segments[1].start), '2026-06-01 15:00')
-  assert.equal(result.segments[1].kind, 'rest')
-  assert.equal(result.drivingMs, 12 * HOUR)
 })
 
 test('a ban window holds the truck and pushes the arrival', () => {
@@ -97,7 +63,11 @@ test('a ban window holds the truck and pushes the arrival', () => {
   ]
   const result = calculateArrival(base({ bans }))
   assert.deepEqual(
-    result.segments.map((s) => [s.kind, clock('Europe/Bucharest', s.start), clock('Europe/Bucharest', s.end)]),
+    result.segments.map((s) => [
+      s.kind,
+      clock('Europe/Bucharest', s.start),
+      clock('Europe/Bucharest', s.end),
+    ]),
     [
       ['drive', '2026-06-01 06:00', '2026-06-01 08:00'],
       ['ban', '2026-06-01 08:00', '2026-06-01 10:00'],
@@ -138,35 +108,6 @@ test('a window whose end is not after its start runs past midnight', () => {
   assert.equal(clock('Europe/Vienna', resolved[0].end), '2026-06-08 06:00')
 })
 
-test('a rest override lengthens one stop only', () => {
-  const result = calculateArrival(
-    base({
-      shiftEndTime: '14:00',
-      legs: [{ code: 'ROU', duration: 10 * 3600, length: 800_000 }],
-      rest: { defaultHours: 9, overrides: { 0: [45] } },
-    }),
-  )
-  const rest = result.segments.find((s) => s.kind === 'rest')
-  assert.ok(rest)
-  assert.equal(rest.end - rest.start, 45 * HOUR)
-  assert.equal(clock('Europe/Bucharest', result.arrival), '2026-06-03 13:00')
-})
-
-test('rest blocks at one stop are taken back to back', () => {
-  const result = calculateArrival(
-    base({
-      shiftEndTime: '14:00',
-      legs: [{ code: 'ROU', duration: 10 * 3600, length: 800_000 }],
-      // 9h and then the 45h weekly, the way a dispatcher plans it.
-      rest: { defaultHours: 9, overrides: { 0: [9, 45] } },
-    }),
-  )
-  const rest = result.segments.find((s) => s.kind === 'rest')
-  assert.ok(rest)
-  assert.equal(rest.end - rest.start, 54 * HOUR)
-  assert.equal(result.restMs, 54 * HOUR)
-})
-
 test('a rule expands over its date range and all of its windows', () => {
   // Two windows a day — the shape a country that closes 07:00–16:00 and then
   // 19:00–00:00 needs — across three consecutive days.
@@ -184,7 +125,7 @@ test('a rule expands over its date range and all of its windows', () => {
   ])
   assert.equal(windows.length, 6)
   assert.deepEqual(
-    windows.map((w) => w.date + " " + w.from + "-" + w.to),
+    windows.map((w) => w.date + ' ' + w.from + '-' + w.to),
     [
       '2026-06-05 07:00-16:00',
       '2026-06-05 19:00-00:00',
@@ -216,6 +157,68 @@ test('a range that ends before it starts expands to nothing', () => {
   )
 })
 
+test('entered rest blocks are summed onto the arrival', () => {
+  const result = calculateArrival(base({ breakHours: [9, 45] }))
+  // 4h of driving, then 54h of rest the dispatcher entered.
+  assert.equal(result.drivingMs, 4 * HOUR)
+  assert.equal(result.breakMs, 54 * HOUR)
+  assert.equal(clock('Europe/Bucharest', result.arrival), '2026-06-03 16:00')
+  assert.deepEqual(
+    result.segments.map((s) => s.kind),
+    ['drive', 'break'],
+  )
+})
+
+test('no rest blocks entered adds nothing and shows no rest segment', () => {
+  const result = calculateArrival(base({ breakHours: [] }))
+  assert.equal(result.breakMs, 0)
+  assert.ok(!result.segments.some((s) => s.kind === 'break'))
+})
+
+test('the overrun is what the crew cannot cover, in shifts', () => {
+  const departAt = zonedToUtc('Europe/Bucharest', 2026, 6, 1, 6, 0)
+  const legs = [{ code: 'ROU', duration: 30 * 3600, length: 2_400_000 }]
+  // Six hours of program left against thirty hours of driving: 24h short.
+  const programUntil = departAt + 6 * HOUR
+
+  const solo = calculateArrival(base({ departAt, legs, programUntil, driverCount: 1 }))
+  assert.equal(solo.overrunMs, 24 * HOUR)
+  assert.equal(solo.shiftHours, 9)
+  assert.equal(solo.shiftsNeeded, 3)
+
+  // The same run with a second driver: the truck keeps moving through the shift
+  // the solo driver would have had to sleep through, so it needs fewer rests.
+  const crew = calculateArrival(base({ departAt, legs, programUntil, driverCount: 2 }))
+  assert.equal(crew.overrunMs, 24 * HOUR)
+  assert.equal(crew.shiftHours, 18)
+  assert.equal(crew.shiftsNeeded, 2)
+})
+
+test('a run inside the remaining program needs no further shift', () => {
+  const departAt = zonedToUtc('Europe/Bucharest', 2026, 6, 1, 6, 0)
+  const result = calculateArrival(base({ departAt, programUntil: departAt + 5 * HOUR }))
+  assert.equal(result.overrunMs, 0)
+  assert.equal(result.shiftsNeeded, 0)
+})
+
+test('a closed border does not consume the driver hours', () => {
+  // Two hours held at a ban, four hours of driving, five hours of program. The
+  // overrun is measured on DRIVING time, so waiting costs the arrival but not
+  // the card — a truck parked at a barrier is not driving.
+  const departAt = zonedToUtc('Europe/Bucharest', 2026, 6, 1, 6, 0)
+  const result = calculateArrival(
+    base({
+      departAt,
+      programUntil: departAt + 5 * HOUR,
+      bans: [{ id: 'b', countryCode: 'ROU', date: '2026-06-01', from: '08:00', to: '10:00' }],
+    }),
+  )
+  assert.equal(result.banMs, 2 * HOUR)
+  assert.equal(clock('Europe/Bucharest', result.arrival), '2026-06-01 12:00')
+  assert.equal(result.overrunMs, 0)
+  assert.equal(result.shiftsNeeded, 0)
+})
+
 test('average speed replaces the routing engine estimate', () => {
   // 100km that HERE calls an hour takes two at 50 km/h.
   assert.equal(legDurationSec({ code: 'ROU', duration: 3600, length: 100_000 }, 50), 7200)
@@ -224,7 +227,7 @@ test('average speed replaces the routing engine estimate', () => {
   assert.equal(legDurationSec({ code: 'ROU', duration: 3600, length: 100_000 }, null), 3600)
 
   const result = calculateArrival(
-    base({ averageSpeedKmh: 40, legs: [{ code: 'ROU', duration: 4 * 3600, length: 320_000 }] })
+    base({ averageSpeedKmh: 40, legs: [{ code: 'ROU', duration: 4 * 3600, length: 320_000 }] }),
   )
   // 320km at 40 km/h is 8h, not the 4h HERE estimated.
   assert.equal(result.drivingMs, 8 * HOUR)

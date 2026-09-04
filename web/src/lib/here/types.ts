@@ -34,6 +34,20 @@ export type TruckProfileForm = {
   grossWeightKg: string
   axleCount: string
   trailerCount: string
+  /**
+   * Average speed in km/h, or empty to keep HERE’s own estimate.
+   *
+   * Deliberately part of the PROFILE and not of `TruckProfile`: it never
+   * reaches HERE. A routing parameter changes which road the truck is sent
+   * down; this changes only how long the planner says the same road takes.
+   * Keeping it out of `toTruckProfile` is what stops typing a speed from
+   * marking the drawn route outdated — nothing about the route changed.
+   *
+   * It belongs to the profile rather than to the planner because it is a
+   * fact about the vehicle and its driver: a 40t artic and a 3.5t van do
+   * not average the same, and a saved preset should carry its own figure.
+   */
+  averageSpeedKmh: string
 }
 
 // A HERE route notice/warning (e.g. a violated truck restriction on the route).

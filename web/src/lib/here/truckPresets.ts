@@ -26,19 +26,19 @@ const BUILT_INS: TruckPreset[] = [
     id: 'builtin:artic40',
     name: 'Artic 40t (EU)',
     builtIn: true,
-    values: { heightCm: '400', widthCm: '255', lengthCm: '1650', grossWeightKg: '40000', axleCount: '5', trailerCount: '1' },
+    values: { heightCm: '400', widthCm: '255', lengthCm: '1650', grossWeightKg: '40000', axleCount: '5', trailerCount: '1', averageSpeedKmh: '' },
   },
   {
     id: 'builtin:rigid18',
     name: 'Rigid 18t',
     builtIn: true,
-    values: { heightCm: '380', widthCm: '255', lengthCm: '900', grossWeightKg: '18000', axleCount: '2', trailerCount: '0' },
+    values: { heightCm: '380', widthCm: '255', lengthCm: '900', grossWeightKg: '18000', axleCount: '2', trailerCount: '0', averageSpeedKmh: '' },
   },
   {
     id: 'builtin:van35',
     name: 'Van 3.5t',
     builtIn: true,
-    values: { heightCm: '260', widthCm: '200', lengthCm: '600', grossWeightKg: '3500', axleCount: '2', trailerCount: '0' },
+    values: { heightCm: '260', widthCm: '200', lengthCm: '600', grossWeightKg: '3500', axleCount: '2', trailerCount: '0', averageSpeedKmh: '' },
   },
 ]
 
@@ -52,10 +52,19 @@ export function loadUserPresets(): TruckPreset[] {
     if (!raw) return []
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
-    return parsed.filter(
-      (p): p is TruckPreset =>
-        p && typeof p.id === 'string' && typeof p.name === 'string' && p.values && typeof p.values === 'object',
-    )
+    return parsed
+      .filter(
+        (p): p is TruckPreset =>
+          p && typeof p.id === 'string' && typeof p.name === 'string' && p.values && typeof p.values === 'object',
+      )
+      .map((p) => ({
+        ...p,
+        values: {
+          ...p.values,
+          averageSpeedKmh:
+            typeof p.values.averageSpeedKmh === 'string' ? p.values.averageSpeedKmh : '',
+        },
+      }))
   } catch {
     return []
   }

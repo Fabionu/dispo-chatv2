@@ -68,32 +68,52 @@ export type BanRule = {
   intervals: BanInterval[]
 }
 
-export type RestPlan = {
-  /** Hours of rest taken at a shift end that has no override. */
-  defaultHours: number
-  /**
-   * Stop index (0-based, in the order the stops occur) → the rest blocks taken
-   * there, summed.
-   *
-   * A LIST rather than one number because a stop is not always one rest: a
-   * driver takes 9h and then a 24h, or 9h and then the 45h weekly, and a
-   * dispatcher plans it in exactly those units. Storing 33 would compute the
-   * same arrival and lose what it was made of, which is the part they are
-   * checking against the tachograph.
-   */
-  overrides: Record<number, number[]>
-}
+// How long the truck can drive in one shift after the entered program runs out.
+//
+// EU 561/2006, and the reason the crew size is an input at all: a single driver
+// is capped at 9h of driving a day (10h twice a week), so the VEHICLE stops when
+// he does. A two-driver crew is not — each driver keeps his own 9h, but they
+// alternate, and the crew only owes 9 consecutive hours of rest inside each 30h
+// window. The truck therefore keeps moving for roughly two shifts a day.
+//
+// The conservative figure of each pair is used: 9 and 18, not the 10 and 20 the
+// extensions allow. The extension is limited to twice a week and this calculator
+// does not track a week, so planning on it would quietly promise an arrival only
+// a perfect fortnight could deliver.
+export const SHIFT_HOURS: Record<1 | 2, number> = { 1: 9, 2: 18 }
 
 export type CalcInput = {
   /** Departure instant (epoch ms). */
   departAt: number
-  /** 'HH:mm' — the clock time driving stops each day, in `shiftZone`. */
-  shiftEndTime: string
-  /** IANA zone the WORKING DAY is kept in (typically the departure country). */
+  /**
+   * The instant the crew's CURRENT program runs out — an absolute moment, not a
+   * clock time that repeats daily.
+   *
+   * It has to be absolute because neither regime it describes is daily. A driver
+   * who starts a run with four hours left on his card has a program that ends
+   * this afternoon and never recurs; a two-driver crew runs past midnight, which
+   * a time-of-day field cannot express at all. `null` means no stated limit.
+   *
+   * It does NOT stop the driving in the timeline below — see calculateArrival.
+   * It is what the rest requirement is measured against.
+   */
+  programUntil: number | null
+  /** 1 or 2 up front; picks the shift length from SHIFT_HOURS. */
+  driverCount: 1 | 2
+  /**
+   * Rest blocks the dispatcher entered by hand, in hours, summed onto the
+   * arrival.
+   *
+   * They are deliberately NOT placed at a moment. Where a truck can actually
+   * stop for 9h — never mind 45 — depends on parking, the shipper's window and
+   * where the driver happens to be when his hours run out, none of which this
+   * tool knows. Inventing a stop time would dress a guess up as a schedule. The
+   * hours are real and the dispatcher knows them; only their position is
+   * unknowable, so only their position is left out.
+   */
+  breakHours: number[]
+  /** IANA zone the operation's clock runs in (typically the departure country). */
   shiftZone: string
-  /** Maximum driving time in one shift, in hours. `null` disables the cap and
-   *  leaves `shiftEndTime` as the only thing that ends a day. */
-  maxDrivingHoursPerShift: number | null
   /**
    * Average speed in km/h. When set, driving time is recomputed from each
    * leg's DISTANCE instead of trusting HERE's own duration.
@@ -110,10 +130,9 @@ export type CalcInput = {
   averageSpeedKmh: number | null
   legs: CountryLeg[]
   bans: BanWindow[]
-  rest: RestPlan
 }
 
-export type SegmentKind = 'drive' | 'rest' | 'ban'
+export type SegmentKind = 'drive' | 'ban' | 'break'
 
 export type Segment = {
   kind: SegmentKind
@@ -121,20 +140,31 @@ export type Segment = {
   countryCode: string
   start: number
   end: number
-  /** 'rest' only: which stop this is, 0-based — the key `RestPlan.overrides`
-   *  is addressed by, so the UI can offer a control per stop. */
-  restIndex?: number
   /** 'ban' only: which window held the truck. */
   banId?: string
 }
 
 export type CalcResult = {
   segments: Segment[]
-  /** Arrival instant (epoch ms). */
+  /** Arrival instant (epoch ms), rest blocks included. */
   arrival: number
   drivingMs: number
-  restMs: number
+  /** The entered rest blocks, summed. */
+  breakMs: number
   banMs: number
+  /**
+   * Driving that falls past `programUntil` — the part of the run the crew
+   * cannot do on the hours they have now.
+   */
+  overrunMs: number
+  /**
+   * How many further shifts that overrun takes, at this crew's shift length.
+   * The number of rest blocks the trip needs, which is the one thing the
+   * calculator CAN say about rests without inventing where they happen.
+   */
+  shiftsNeeded: number
+  /** Hours per shift for this crew size, from SHIFT_HOURS. */
+  shiftHours: number
   /** Countries on the route with no known time zone — their bans were
    *  evaluated in `shiftZone` instead, which the UI must say out loud. */
   unknownZones: string[]
@@ -447,63 +477,38 @@ export function legDurationSec(leg: CountryLeg, averageSpeedKmh: number | null):
 }
 
 /**
- * Walk the route leg by leg, advancing an absolute clock and stopping the truck
- * whenever the working day ends or a ban window is in force.
+ * Walk the route leg by leg, advancing an absolute clock, and hold the truck
+ * whenever a ban window is in force.
  *
- * The loop is deliberately "resolve one blocker, then look again" rather than
- * a schedule computed up front: a rest can end inside a ban, a ban can end
- * after the shift is already over, and two bans can abut. Re-deciding after
- * every jump handles all of those without a special case for each.
+ * DRIVING IS CONTINUOUS HERE, and that is a deliberate limitation rather than a
+ * missing feature. The calculator does not place rest blocks on the timeline
+ * because it cannot know where a truck will be able to stop for nine hours; the
+ * hours are added to the arrival instead (see CalcInput.breakHours). The cost is
+ * stated plainly so nobody has to discover it: a ban that falls AFTER the first
+ * rest is evaluated at an hour the truck would not really be driving. Bans on
+ * the first leg — the ones a dispatcher is usually checking — are exact.
+ *
+ * The loop stays "resolve one blocker, then look again" rather than a schedule
+ * computed up front: two ban windows can abut, and one can end inside the next.
  */
 export function calculateArrival(input: CalcInput): CalcResult {
   const segments: Segment[] = []
   const bans = resolveBans(input.bans, input.shiftZone)
-  const shiftEnd = parseClock(input.shiftEndTime) ?? { hour: 20, minute: 0 }
-  const maxShiftMs =
-    input.maxDrivingHoursPerShift === null ? null : input.maxDrivingHoursPerShift * HOUR_MS
 
   let now = input.departAt
-  let restIndex = 0
-  let drivenThisShift = 0
   const unknownZones = new Set<string>()
-
-  // The next moment the working day ends, strictly after `at`.
-  const nextShiftEnd = (at: number): number => {
-    const local = partsIn(input.shiftZone, at)
-    let end = zonedToUtc(
-      input.shiftZone,
-      local.year,
-      local.month,
-      local.day,
-      shiftEnd.hour,
-      shiftEnd.minute,
-    )
-    if (end <= at) {
-      const next = new Date(Date.UTC(local.year, local.month - 1, local.day + 1))
-      end = zonedToUtc(
-        input.shiftZone,
-        next.getUTCFullYear(),
-        next.getUTCMonth() + 1,
-        next.getUTCDate(),
-        shiftEnd.hour,
-        shiftEnd.minute,
-      )
-    }
-    return end
-  }
 
   const push = (segment: Segment) => {
     const last = segments[segments.length - 1]
-    // Merge a segment onto the previous one when they are the same kind, the
-    // same country and the same cause — a ban split by a section boundary, or
-    // two adjacent driving stretches, should read as one row.
+    // Merge onto the previous segment when they are the same kind, the same
+    // country and the same cause — a ban split by a section boundary, or two
+    // adjacent driving stretches, should read as one row.
     if (
       last &&
       last.kind === segment.kind &&
       last.countryCode === segment.countryCode &&
       last.end === segment.start &&
-      last.banId === segment.banId &&
-      last.restIndex === segment.restIndex
+      last.banId === segment.banId
     ) {
       last.end = segment.end
       return
@@ -515,15 +520,12 @@ export function calculateArrival(input: CalcInput): CalcResult {
     if (!countryZone(leg.code)) unknownZones.add(leg.code)
     let remaining = Math.max(0, legDurationSec(leg, input.averageSpeedKmh)) * 1000
 
-    // A leg of zero driving time (HERE occasionally emits a span that rounds to
-    // nothing at a border) still counts as entering the country, but there is
-    // nothing to simulate in it.
     let guard = 0
     while (remaining > 0) {
       if (++guard > 10_000) break
 
-      // 1. Held by a ban? Wait it out and re-decide — the window may be
-      //    immediately followed by another, or by the end of the working day.
+      // Held by a ban? Wait it out and re-decide — the window may be followed
+      // immediately by another.
       const ban = banAt(bans, leg.code, now)
       if (ban) {
         push({ kind: 'ban', countryCode: leg.code, start: now, end: ban.end, banId: ban.id })
@@ -531,56 +533,50 @@ export function calculateArrival(input: CalcInput): CalcResult {
         continue
       }
 
-      // 2. How long may the truck drive before something stops it?
-      const shiftLimit = maxShiftMs === null ? Infinity : now + (maxShiftMs - drivenThisShift)
-      const dayEnd = nextShiftEnd(now)
       const banStart = nextBanStart(bans, leg.code, now) ?? Infinity
-      const stopAt = Math.min(dayEnd, shiftLimit, banStart, now + remaining)
-
-      if (stopAt > now) {
-        push({ kind: 'drive', countryCode: leg.code, start: now, end: stopAt })
-        const drove = stopAt - now
-        remaining -= drove
-        drivenThisShift += drove
-        now = stopAt
-      }
-      if (remaining <= 0) break
-
-      // 3. Stopped by the working day (either the clock or the driving cap) —
-      //    a ban stop is handled by branch 1 on the next pass, which is what
-      //    keeps a ban that begins at the exact shift end from being counted
-      //    as both.
-      if (stopAt === dayEnd || stopAt === shiftLimit) {
-        const blocks = input.rest.overrides[restIndex]
-        const hours =
-          blocks && blocks.length > 0
-            ? blocks.reduce((total, block) => total + block, 0)
-            : input.rest.defaultHours
-        const end = now + hours * HOUR_MS
-        push({ kind: 'rest', countryCode: leg.code, start: now, end, restIndex })
-        now = end
-        restIndex += 1
-        drivenThisShift = 0
-      }
+      const stopAt = Math.min(banStart, now + remaining)
+      push({ kind: 'drive', countryCode: leg.code, start: now, end: stopAt })
+      remaining -= stopAt - now
+      now = stopAt
     }
   }
 
+  // The rest blocks, as one trailing span. One block rather than several because
+  // the calculator is not claiming they happen consecutively at the end — only
+  // that these hours belong to the trip and the arrival has to carry them.
+  const breakMs = input.breakHours.reduce((total, hours) => total + Math.max(0, hours), 0) * HOUR_MS
+  const lastCountry = input.legs[input.legs.length - 1]?.code ?? ''
+  if (breakMs > 0) {
+    segments.push({ kind: 'break', countryCode: lastCountry, start: now, end: now + breakMs })
+    now += breakMs
+  }
+
   let drivingMs = 0
-  let restMs = 0
   let banMs = 0
   for (const segment of segments) {
     const span = segment.end - segment.start
     if (segment.kind === 'drive') drivingMs += span
-    else if (segment.kind === 'rest') restMs += span
-    else banMs += span
+    else if (segment.kind === 'ban') banMs += span
   }
+
+  // What the crew cannot cover on the hours it has now, and how many shifts that
+  // takes. Measured on DRIVING time rather than on elapsed time: being held at a
+  // closed border does not consume a driver's card.
+  const shiftHours = SHIFT_HOURS[input.driverCount]
+  const programMs =
+    input.programUntil === null ? Infinity : Math.max(0, input.programUntil - input.departAt)
+  const overrunMs = Number.isFinite(programMs) ? Math.max(0, drivingMs - programMs) : 0
+  const shiftsNeeded = overrunMs > 0 ? Math.ceil(overrunMs / (shiftHours * HOUR_MS)) : 0
 
   return {
     segments,
     arrival: now,
     drivingMs,
-    restMs,
+    breakMs,
     banMs,
+    overrunMs,
+    shiftsNeeded,
+    shiftHours,
     unknownZones: [...unknownZones],
   }
 }

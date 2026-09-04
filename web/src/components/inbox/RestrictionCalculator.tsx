@@ -23,15 +23,7 @@ type Props = {
   onPlanRoute: () => void
 }
 
-// The rest lengths a dispatcher actually plans around: a daily rest, a full
-// day, the weekly rest, and the two-weekly. Free-text hours were deliberately
-// not offered — these four are the ones that mean something, and a list of four
-// is faster to hit than a number field.
-const REST_CHOICES = [9, 24, 45, 66]
-
-const DEFAULT_SHIFT_END = '20:00'
-const DEFAULT_REST_HOURS = 9
-const DEFAULT_MAX_DRIVING = 9
+const DEFAULT_BREAK_HOURS = '9'
 
 // Read once. `navigator.language` inside a row component is cheap on its own,
 // but it was one more thing every row redid on every render.
@@ -47,34 +39,39 @@ function dmyToIso(value: string): string {
   return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`
 }
 
-function todayDmy(date: Date): string {
+function toDmy(date: Date): string {
   return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`
 }
 
 // A restriction as the form holds it, with dates still in DD/MM/YYYY.
 type RuleDraft = Omit<BanRule, 'dateFrom' | 'dateTo'> & { dateFrom: string; dateTo: string }
 
+type BreakBlock = { id: string; hours: number }
+
 let seq = 0
 const nextId = (prefix: string) => `${prefix}-${(seq += 1)}`
 
 export default function RestrictionCalculator({ legs, onBack, onPlanRoute }: Props) {
   const now = useMemo(() => new Date(), [])
-  const [departDate, setDepartDate] = useState(() => todayDmy(now))
+  const [departDate, setDepartDate] = useState(() => toDmy(now))
   const [departTime, setDepartTime] = useState(
     () => `${pad(now.getHours())}:${pad(now.getMinutes())}`,
   )
-  const [shiftEndTime, setShiftEndTime] = useState(DEFAULT_SHIFT_END)
-  const [capDriving, setCapDriving] = useState(true)
-  const [maxDrivingHours, setMaxDrivingHours] = useState(String(DEFAULT_MAX_DRIVING))
+  // The program runs out at an absolute moment, not at a clock time that
+  // repeats: a driver starting a run with four hours left on his card has a
+  // program that ends this afternoon and never comes back, and a two-driver
+  // crew runs straight past midnight.
+  const [programDate, setProgramDate] = useState(() => toDmy(now))
+  const [programTime, setProgramTime] = useState('20:00')
+  const [driverCount, setDriverCount] = useState<1 | 2>(1)
   const [averageSpeed, setAverageSpeed] = useState('')
-  const [defaultRestHours, setDefaultRestHours] = useState(DEFAULT_REST_HOURS)
-  const [restBlocks, setRestBlocks] = useState<Record<number, number[]>>({})
+  const [breakDraft, setBreakDraft] = useState(DEFAULT_BREAK_HOURS)
+  const [breaks, setBreaks] = useState<BreakBlock[]>([])
   const [rules, setRules] = useState<RuleDraft[]>([])
 
-  // The working day is kept in the DEPARTURE country's zone, not the browser's:
-  // a dispatcher in Bucharest planning a truck that leaves Spain is describing
-  // the driver's day, not their own. Falls back to the browser zone when the
-  // route starts somewhere the table doesn't know.
+  // The operation's clock is the DEPARTURE country's, not the browser's: a
+  // dispatcher in Bucharest planning a truck that leaves Spain is describing the
+  // driver's day, not their own.
   const shiftZone = useMemo(() => {
     const first = legs?.[0]?.code
     return (first && countryZone(first)) || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
@@ -88,6 +85,11 @@ export default function RestrictionCalculator({ legs, onBack, onPlanRoute }: Pro
   const departAt = useMemo(
     () => parseLocalInput(dmyToIso(departDate), departTime, shiftZone),
     [departDate, departTime, shiftZone],
+  )
+
+  const programUntil = useMemo(
+    () => parseLocalInput(dmyToIso(programDate), programTime, shiftZone),
+    [programDate, programTime, shiftZone],
   )
 
   // Rules → flat windows. A rule with no usable start date contributes nothing,
@@ -108,29 +110,26 @@ export default function RestrictionCalculator({ legs, onBack, onPlanRoute }: Pro
 
   const result = useMemo<CalcResult | null>(() => {
     if (!legs || legs.length === 0 || departAt === null) return null
-    const cap = Number(maxDrivingHours)
     return calculateArrival({
       departAt,
-      shiftEndTime,
+      programUntil,
+      driverCount,
+      breakHours: breaks.map((b) => b.hours),
       shiftZone,
-      maxDrivingHoursPerShift: capDriving && Number.isFinite(cap) && cap > 0 ? cap : null,
       averageSpeedKmh: speedKmh,
       legs,
       bans,
-      rest: { defaultHours: defaultRestHours, overrides: restBlocks },
     })
-  }, [
-    legs,
-    departAt,
-    shiftEndTime,
-    shiftZone,
-    capDriving,
-    maxDrivingHours,
-    speedKmh,
-    bans,
-    defaultRestHours,
-    restBlocks,
-  ])
+  }, [legs, departAt, programUntil, driverCount, breaks, shiftZone, speedKmh, bans])
+
+  const addBreak = () => {
+    const hours = Number(breakDraft.replace(',', '.'))
+    if (!Number.isFinite(hours) || hours <= 0) return
+    setBreaks((current) => [...current, { id: nextId('brk'), hours }])
+  }
+
+  const removeBreak = (id: string) =>
+    setBreaks((current) => current.filter((block) => block.id !== id))
 
   const addRule = (countryCode: string) => {
     setRules((current) => [
@@ -192,31 +191,6 @@ export default function RestrictionCalculator({ legs, onBack, onPlanRoute }: Pro
       ),
     )
 
-  const blocksFor = (index: number) => restBlocks[index] ?? [defaultRestHours]
-
-  const addBlock = (index: number, hours: number) =>
-    setRestBlocks((current) => ({ ...current, [index]: [...blocksFor(index), hours] }))
-
-  const setBlock = (index: number, at: number, hours: number) =>
-    setRestBlocks((current) => ({
-      ...current,
-      [index]: blocksFor(index).map((block, i) => (i === at ? hours : block)),
-    }))
-
-  // Dropping the last block returns the stop to the default rather than leaving
-  // it with none — a stop with zero rest is the shift never ending.
-  const removeBlock = (index: number, at: number) =>
-    setRestBlocks((current) => {
-      const next = blocksFor(index).filter((_, i) => i !== at)
-      if (next.length === 0) {
-        const { [index]: _dropped, ...rest } = current
-        return rest
-      }
-      return { ...current, [index]: next }
-    })
-
-  const restStops = result?.segments.filter((s) => s.kind === 'rest') ?? []
-
   return (
     <>
       <header className="h-[var(--header-height)] flex shrink-0 items-center gap-3 px-5">
@@ -244,7 +218,9 @@ export default function RestrictionCalculator({ legs, onBack, onPlanRoute }: Pro
             <EmptyState onPlanRoute={onPlanRoute} />
           ) : (
             <>
-              {result && <Arrival result={result} zone={shiftZone} />}
+              {result && (
+                <Arrival result={result} zone={shiftZone} breakCount={breaks.length} />
+              )}
 
               <section>
                 <div className="eyebrow mb-2">Working plan</div>
@@ -263,12 +239,30 @@ export default function RestrictionCalculator({ legs, onBack, onPlanRoute }: Pro
                       ariaLabel="Departure time"
                     />
                   </Field>
-                  <Field label="Driving until" hint="Each day">
-                    <TimeField
-                      value={shiftEndTime}
-                      onChange={setShiftEndTime}
-                      ariaLabel="Driving until"
+                  <Field label="Program until" hint="Date">
+                    <DateField
+                      value={programDate}
+                      onChange={setProgramDate}
+                      ariaLabel="Program until, date"
                     />
+                  </Field>
+                  <Field label="Program until" hint="Time">
+                    <TimeField
+                      value={programTime}
+                      onChange={setProgramTime}
+                      ariaLabel="Program until, time"
+                    />
+                  </Field>
+                  <Field label="Crew">
+                    <select
+                      value={driverCount}
+                      onChange={(e) => setDriverCount(Number(e.target.value) === 2 ? 2 : 1)}
+                      aria-label="Number of drivers"
+                      className={fieldClass()}
+                    >
+                      <option value={1}>1 driver · 9h shifts</option>
+                      <option value={2}>2 drivers · 18h shifts</option>
+                    </select>
                   </Field>
                   <Field label="Average speed" hint="km/h — blank uses HERE">
                     <input
@@ -284,45 +278,59 @@ export default function RestrictionCalculator({ legs, onBack, onPlanRoute }: Pro
                   </Field>
                 </div>
 
-                <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2.5">
-                  <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
-                    <input
-                      type="checkbox"
-                      checked={capDriving}
-                      onChange={(e) => setCapDriving(e.target.checked)}
-                      className="h-3.5 w-3.5 accent-white"
-                    />
-                    <span>Also stop after</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={24}
-                      step={0.5}
-                      value={maxDrivingHours}
-                      disabled={!capDriving}
-                      onChange={(e) => setMaxDrivingHours(e.target.value)}
-                      className={`${COMPACT_FIELD} w-14`}
-                    />
-                    <span>h of driving</span>
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-muted">
-                    <span>Default rest</span>
-                    <select
-                      value={defaultRestHours}
-                      onChange={(e) => setDefaultRestHours(Number(e.target.value))}
-                      className={COMPACT_FIELD}
+                {/* Rests are entered as HOURS and never as moments. Where a truck
+                    can actually stop for nine — never mind forty-five — depends
+                    on parking, the shipper's window and where the driver happens
+                    to be when his hours run out. The hours are real and the
+                    dispatcher knows them; only their position is unknowable, so
+                    only their position is left out. */}
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span className="text-sm text-muted">Rests</span>
+                  {breaks.map((block) => (
+                    <span
+                      key={block.id}
+                      className="rounded-chip flex h-7 items-center gap-1 border border-line pl-2.5 pr-1 text-sm"
                     >
-                      {REST_CHOICES.map((hours) => (
-                        <option key={hours} value={hours}>
-                          {hours}h
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                      {formatHours(block.hours)}
+                      <button
+                        type="button"
+                        onClick={() => removeBreak(block.id)}
+                        aria-label={`Remove the ${formatHours(block.hours)} rest`}
+                        className={`${ICON_BTN} h-5 w-5`}
+                      >
+                        <X size="0.625rem" strokeWidth={2} />
+                      </button>
+                    </span>
+                  ))}
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0.5}
+                    max={99}
+                    step={0.5}
+                    value={breakDraft}
+                    onChange={(e) => setBreakDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        addBreak()
+                      }
+                    }}
+                    aria-label="Rest length in hours"
+                    className={`${COMPACT_FIELD} w-16`}
+                  />
+                  <span className="text-sm text-faint">h</span>
+                  <button type="button" onClick={addBreak} className={SMALL_BTN}>
+                    <Plus size="0.75rem" strokeWidth={1.8} />
+                    Add rest
+                  </button>
                 </div>
+
                 <p className="mt-2.5 text-xs leading-relaxed text-faint">
-                  The working day runs on {zoneLabel(shiftZone)} time. Ban windows below are read in
-                  each country&rsquo;s own local time, which is not always the same hour.
+                  The program runs on {zoneLabel(shiftZone)} time. Ban windows below are read in each
+                  country&rsquo;s own local time, which is not always the same hour. Rest hours are
+                  added to the arrival, not placed on the timeline &mdash; so a ban falling after the
+                  first rest is timed approximately.
                 </p>
               </section>
 
@@ -345,28 +353,6 @@ export default function RestrictionCalculator({ legs, onBack, onPlanRoute }: Pro
                   ))}
                 </div>
               </section>
-
-              {restStops.length > 0 && (
-                <section>
-                  <div className="eyebrow mb-2">Rest stops</div>
-                  <div className="flex flex-col divide-y divide-line border-y border-line">
-                    {restStops.map((stop) => {
-                      const index = stop.restIndex ?? 0
-                      return (
-                        <RestRow
-                          key={index}
-                          stop={stop}
-                          zone={shiftZone}
-                          blocks={blocksFor(index)}
-                          onAdd={(hours) => addBlock(index, hours)}
-                          onSet={(at, hours) => setBlock(index, at, hours)}
-                          onRemove={(at) => removeBlock(index, at)}
-                        />
-                      )
-                    })}
-                  </div>
-                </section>
-              )}
 
               {result && (
                 <section>
@@ -446,7 +432,21 @@ function EmptyState({ onPlanRoute }: { onPlanRoute: () => void }) {
   )
 }
 
-function Arrival({ result, zone }: { result: CalcResult; zone: string }) {
+function Arrival({
+  result,
+  zone,
+  breakCount,
+}: {
+  result: CalcResult
+  zone: string
+  breakCount: number
+}) {
+  // The shift count is the one thing the calculator can honestly say about
+  // rests: it knows how much driving is left over once the current program runs
+  // out, and how long a shift is for this crew. Whether the dispatcher has
+  // entered enough rest blocks to cover them is a comparison worth surfacing —
+  // it is the difference between an arrival and a wish.
+  const short = result.shiftsNeeded > breakCount
   return (
     <section className="rounded-soft border border-line bg-white/2 p-4">
       <div className="eyebrow">Arrival</div>
@@ -455,11 +455,21 @@ function Arrival({ result, zone }: { result: CalcResult; zone: string }) {
       </div>
       <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 border-t border-line pt-2.5 text-sm text-muted">
         <span>Driving {formatSpan(result.drivingMs)}</span>
-        <span>Rest {formatSpan(result.restMs)}</span>
+        <span>Rest {formatSpan(result.breakMs)}</span>
         <span className={result.banMs > 0 ? 'text-alert' : undefined}>
           Held by bans {formatSpan(result.banMs)}
         </span>
       </div>
+      {result.shiftsNeeded > 0 && (
+        <div className={`mt-2 text-sm ${short ? 'text-alert' : 'text-muted'}`}>
+          {formatSpan(result.overrunMs)} of driving falls past the program —{' '}
+          {result.shiftsNeeded === 1
+            ? `1 more shift of ${result.shiftHours} h`
+            : `${result.shiftsNeeded} more shifts of ${result.shiftHours} h`}
+          {short &&
+            ` · ${breakCount === 0 ? 'no rest entered' : `only ${breakCount} rest${breakCount === 1 ? '' : 's'} entered`}`}
+        </div>
+      )}
     </section>
   )
 }
@@ -585,89 +595,12 @@ function CountryRow({
   )
 }
 
-function RestRow({
-  stop,
-  zone,
-  blocks,
-  onAdd,
-  onSet,
-  onRemove,
-}: {
-  stop: Segment
-  zone: string
-  blocks: number[]
-  onAdd: (hours: number) => void
-  onSet: (at: number, hours: number) => void
-  onRemove: (at: number) => void
-}) {
-  const total = blocks.reduce((sum, block) => sum + block, 0)
-  return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5">
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-base">
-          Stop {(stop.restIndex ?? 0) + 1}
-          {blocks.length > 1 && <span className="text-muted"> · {total} h total</span>}
-        </span>
-        <span className="mt-0.5 block text-xs text-faint">
-          {formatInstant(stop.start, zone)} → {formatInstant(stop.end, zone)}
-        </span>
-      </span>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {blocks.map((hours, at) => (
-          <span key={at} className="flex items-center gap-0.5">
-            <select
-              value={hours}
-              onChange={(e) => onSet(at, Number(e.target.value))}
-              aria-label={`Rest block ${at + 1}`}
-              className={COMPACT_FIELD}
-            >
-              {REST_CHOICES.map((choice) => (
-                <option key={choice} value={choice}>
-                  {choice}h
-                </option>
-              ))}
-            </select>
-            {blocks.length > 1 && (
-              <button
-                type="button"
-                onClick={() => onRemove(at)}
-                aria-label="Remove rest block"
-                className={`${ICON_BTN} h-6 w-6`}
-              >
-                <X size="0.6875rem" strokeWidth={1.8} />
-              </button>
-            )}
-          </span>
-        ))}
-        {/* Stacking rests at one stop is the normal case, not an edge one: a
-            driver takes 9h and then the 45h weekly on the same night. The
-            select falls back to its placeholder so it can be used again. */}
-        <select
-          value=""
-          onChange={(e) => {
-            if (e.target.value) onAdd(Number(e.target.value))
-          }}
-          aria-label="Add a rest block"
-          className={COMPACT_FIELD}
-        >
-          <option value="">+ Rest</option>
-          {REST_CHOICES.map((choice) => (
-            <option key={choice} value={choice}>
-              {choice}h
-            </option>
-          ))}
-        </select>
-      </div>
-    </div>
-  )
-}
-
 function TimelineRow({ segment, zone }: { segment: Segment; zone: string }) {
   const label =
     segment.kind === 'drive'
       ? `Driving · ${countryName(segment.countryCode, LOCALE)}`
-      : segment.kind === 'rest'
-        ? `Rest ${formatSpan(segment.end - segment.start)}`
+      : segment.kind === 'break'
+        ? `Rest ${formatSpan(segment.end - segment.start)} · position not fixed`
         : `Restriction · ${countryName(segment.countryCode, LOCALE)}`
   return (
     <div className="flex items-center gap-3 py-2">
@@ -740,6 +673,12 @@ function formatSpan(ms: number): string {
   if (hours === 0) return `${minutes} min`
   if (minutes === 0) return `${hours} h`
   return `${hours} h ${minutes} min`
+}
+
+// "9h", and "4,5h" for a half — a decimal comma, which is what this app's users
+// write and what the number field beside it accepts.
+function formatHours(hours: number): string {
+  return `${String(hours).replace('.', ',')}h`
 }
 
 // "Europe/Bucharest" reads as machinery in a sentence; the city does not.
