@@ -76,6 +76,15 @@ type HereRouteResponse = {
         tolls?: { total?: HereMoney }
       }
       tolls?: HereToll[]
+      // Returned only when the request asks for `spans`. A span is a stretch of
+      // the section's polyline over which the requested attributes hold; with
+      // `countryCode` the boundaries are border crossings.
+      spans?: Array<{
+        offset?: number
+        length?: number
+        duration?: number
+        countryCode?: string
+      }>
       notices?: Array<{ code?: string; title?: string; severity?: string }>
       // HERE returns the road-snapped coordinate of each section boundary in
       // `place.location` (vs the raw input in `place.originalLocation`). We
@@ -122,6 +131,46 @@ const truckRouteSchema = z.object({
   currency: z.string().regex(/^[A-Za-z]{3}$/).transform((value) => value.toUpperCase()).optional(),
   departureTime: z.literal('any').optional(),
 })
+
+// One continuous stretch of the route inside a single country, in route order.
+// `code` is HERE's ISO 3166-1 ALPHA-3 (ROU, HUN, ITA) — note that the rest of
+// the app carries alpha-2 country codes on trip stops, so anything joining the
+// two has to convert rather than compare.
+type CountryLeg = { code: string; duration: number; length: number }
+
+// Collapse HERE's country spans into one leg per country entered.
+//
+// Spans are per-SECTION and split on every attribute change, so a single
+// country routinely arrives as several consecutive spans, and a section
+// boundary (one per `via` stop) falls in the middle of a country whenever the
+// stop is not itself at a border. Merging across both is the whole job: what a
+// restriction calculation needs is "the truck is in Croatia for 3h29", not
+// forty span rows.
+//
+// A country the route RE-ENTERS keeps its own leg — driving DE → AT → DE is
+// three legs, not two, because the times matter separately. Only ADJACENT
+// same-country spans merge.
+function normalizeCountryLegs(
+  sections: NonNullable<NonNullable<HereRouteResponse['routes']>[number]['sections']>,
+): CountryLeg[] {
+  const legs: CountryLeg[] = []
+  for (const section of sections) {
+    for (const span of section.spans ?? []) {
+      const code = span.countryCode
+      if (!code) continue
+      const duration = typeof span.duration === 'number' ? span.duration : 0
+      const length = typeof span.length === 'number' ? span.length : 0
+      const last = legs[legs.length - 1]
+      if (last && last.code === code) {
+        last.duration += duration
+        last.length += length
+      } else {
+        legs.push({ code, duration, length })
+      }
+    }
+  }
+  return legs
+}
 
 type NormalizedMoney = { currency: string; value: number }
 
@@ -817,7 +866,15 @@ hereRouter.post(
     // The window the release could plausibly have meant, and how hard a smaller
     // road is handicapped inside it.
     const aimPx = Math.min(AIM_TOLERANCE_PX, AIM_TOLERANCE_METERS / mpp)
-    const classScale = 0.45 + 0.55 * zoomedOutFactor(zoom)
+    // The class handicap has to REACH ZERO when zoomed in, not floor at 0.45.
+    // It used to, and the arithmetic was the bug the user hit: a tier-0 road
+    // carried 9 * 0.45 = 4.05px of handicap even at zoom 18, and with a 6px aim
+    // window that let a bigger road up to ~10px away beat the road exactly
+    // under the cursor — about 12 metres at zoom 17. A release that precise IS
+    // the answer to which road was meant, so nothing should outrank it. The
+    // zoomed-out end is untouched (1.0 at zoom <= 7): out there the small roads
+    // genuinely aren't drawn, which is what the preference is for.
+    const classScale = 0.12 + 0.88 * zoomedOutFactor(zoom)
 
     // 1) Look up the roads around EVERY sampled pixel, in parallel. Each probe
     //    returns its whole neighbourhood rather than just its nearest road, so
@@ -975,6 +1032,13 @@ hereRouter.post(
     }
     const tollCurrency = body.currency ?? 'EUR'
     url.searchParams.set('return', body.includeTolls ? 'polyline,summary,tolls' : 'polyline,summary')
+    // Country spans, for the restriction calculator: they are what say WHEN the
+    // truck crosses each border, which is the input a driving-ban window is
+    // evaluated against. Unlike `tolls`, spans do not make this a second billed
+    // transaction — they annotate the polyline the request already returns — so
+    // they ride along on every route, including the light map-drag recalcs.
+    // Verified against the live API (alpha-3 codes, one span per attribute run).
+    url.searchParams.set('spans', 'countryCode,duration,length')
     if (body.includeTolls) {
       url.searchParams.set('currency', tollCurrency)
       url.searchParams.set('tolls[summaries]', 'total')
@@ -1020,6 +1084,7 @@ hereRouter.post(
           }),
           { duration: 0, length: 0 },
         ),
+        countries: normalizeCountryLegs(route.sections),
         ...(body.includeTolls ? { tolls: normalizeTolls(route.sections, tollCurrency) } : {}),
       },
     })
