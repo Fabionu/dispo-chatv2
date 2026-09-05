@@ -66,7 +66,17 @@ export function RowTile(
       name={props.name}
       hasAvatar={props.hasAvatar}
       size={SIDEBAR_TILE_PX}
-      shape="square"
+      // CIRCLE for a person, against the room tile’s squircle above it
+      // (user, 2026-09-05). Shape carries the type again, deliberately this
+      // time — and only across two silhouettes: quotation groups, when they
+      // arrive, get their own nav-rail section rather than a third shape,
+      // which is what stops this from repeating the August problem of a
+      // channel with no headroom.
+      //
+      // It also ends an accident: `shape="square"` returned NO radius class
+      // at all, so the DM tile was the last sharp-cornered surface left over
+      // from before the app was rounded. It read as intent and was not.
+      shape="circle"
       // INITIALS, not the contact glyph. This is a LIST of people, which is the
       // case Avatar's `fallback` prop documents the opt-in for: a column of
       // identical silhouettes tells the eye nothing, whereas initials at least

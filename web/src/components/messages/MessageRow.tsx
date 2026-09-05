@@ -498,7 +498,13 @@ function MessageRow({
           name={authorLabel}
           hasAvatar={authorHasAvatar}
           size={AUTHOR_TILE_PX}
-          shape="square"
+          // Circle, matching the rail. Shape means "person" now, and the ONE
+          // argument that squared this tile in August was that a face must not
+          // wear two silhouettes in the rail and the thread at once — which is
+          // an argument for changing both together, not for freezing either.
+          // Nothing in a thread needs the type signal: everyone in one is a
+          // person, so here the circle is only identity.
+          shape="circle"
           fallback="initials"
           tint={ruleColor}
         />
