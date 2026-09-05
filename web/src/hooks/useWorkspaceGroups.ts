@@ -137,7 +137,20 @@ export function useWorkspaceGroups({
     function onMessageNew(msg: IncomingMessage) {
       removeTyping(msg.groupId, msg.authorId)
       const targetGroup = groupsRef.current.find((group) => group.id === msg.groupId)
-      if (msg.authorId !== userId && !targetGroup?.muted) {
+      // A message landing in the conversation the user is LOOKING AT needs no
+      // announcement: it is already on screen, and the row it would alert about
+      // is the one under the cursor. The unread bump below has always known
+      // this — it checks the open group — but the sound and the banner did not,
+      // so reading a live conversation meant being pinged for every line of it.
+      //
+      // FOCUS is part of the test, not just the open group. A tab left open on a
+      // thread while the user works in another app is not being read, and going
+      // silent there would lose the message rather than de-duplicate it.
+      const watchingThisGroup =
+        openGroupIdRef.current === msg.groupId &&
+        document.visibilityState === 'visible' &&
+        document.hasFocus()
+      if (msg.authorId !== userId && !targetGroup?.muted && !watchingThisGroup) {
         // The service worker owns hidden/closed-page alerts once Web Push is
         // active. Avoid layering the custom Web Audio tone over the OS sound.
         if (document.visibilityState === 'visible' || !backgroundPushIsActive()) {

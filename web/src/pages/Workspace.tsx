@@ -42,6 +42,7 @@ import { usePresence } from '../hooks/usePresence'
 import { useConnections } from '../hooks/useConnections'
 import { useGroupInvites } from '../hooks/useGroupInvites'
 import { useWorkspaceGroups } from '../hooks/useWorkspaceGroups'
+import { useUnreadTitle } from '../hooks/useUnreadTitle'
 import {
 } from '../lib/density'
 import { getStoredSidebarCollapsed, setStoredSidebarCollapsed } from '../lib/sidebar'
@@ -243,6 +244,10 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     onOpenGroupGone: clearSelection,
     onNotificationOpen: openNotificationGroup,
   })
+
+  // The unread count in the browser tab. Fed the same list the sidebar draws,
+  // so the two can never disagree about what is unread.
+  useUnreadTitle(groups)
 
   // Cross-workspace connection requests + pending vehicle-group invitations.
   const { connections, connectionsError, refreshConnections } = useConnections()

@@ -608,6 +608,39 @@ export default function ChatView({
   // a per-ChatView listener — and stay correct even for conversations that
   // aren't currently open.
 
+  // ── The "New messages" mark ────────────────────────────────────────────
+  // Where reading left off, captured ONCE per conversation.
+  //
+  // A plain useState initialiser is enough because the parent keys this
+  // component on group.id, so it remounts per conversation — and it runs before
+  // markRead below resolves, which is the whole trick: opening a conversation
+  // marks it read, so `group.lastReadAt` becomes "now" a beat later. Reading it
+  // per render would move the divider to the bottom and then delete it, in front
+  // of the user, before their eyes reached it.
+  const [readMarkAtOpen] = useState<string | null>(() => group.lastReadAt ?? null)
+
+  // The message the divider sits above: the oldest one that arrived after the
+  // frozen mark and was not written by me.
+  //
+  // My OWN messages are skipped deliberately — sending a message updates the
+  // read mark, so without this a conversation you had just replied to would
+  // open with "New messages" pointing at your own last line.
+  //
+  // No mark at all (a conversation never opened) draws nothing: the thread
+  // already says "Conversation started" at its head, and two markers stacked
+  // on the same first message say less than one.
+  const firstUnreadId = useMemo(() => {
+    if (!readMarkAtOpen) return null
+    const since = new Date(readMarkAtOpen).getTime()
+    if (!Number.isFinite(since)) return null
+    for (const m of visibleMessages) {
+      if (m.kind === 'system') continue
+      if (m.authorId === currentUserId) continue
+      if (new Date(m.createdAt).getTime() > since) return m.id
+    }
+    return null
+  }, [readMarkAtOpen, visibleMessages, currentUserId])
+
   // ── Read receipts ──────────────────────────────────────────────────────
   const markRead = useCallback(() => {
     api.groups
@@ -1434,6 +1467,7 @@ export default function ChatView({
                           readers={m.authorId === currentUserId ? readers : undefined}
                           prev={visibleMessages[i - 1]}
                           conversationStart={i === 0 && !nextCursor}
+                          unreadStart={m.id === firstUnreadId}
                           groupType={group.type}
                           messageStyle={messageStyle}
                           ruleColor={

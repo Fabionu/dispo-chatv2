@@ -15,6 +15,7 @@ import ReadReceipts, { type Reader } from './ReadReceipts'
 import ReplyQuote from './ReplyQuote'
 import { DELETE_WINDOW_MS, formatTime } from './messageUtils'
 import DayDivider from './DayDivider'
+import UnreadDivider from './UnreadDivider'
 import { Attribution, ThreadAction, ThreadActions, ThreadStamp } from '../thread/threadChrome'
 import Avatar from '../Avatar'
 import { renderBody } from './messageBody'
@@ -128,6 +129,9 @@ type Props = {
   // True when this is the very first message of the whole thread (no older page
   // to load) — the day divider then reads "Conversation started · <date>".
   conversationStart?: boolean
+  // True for the first message that was unread when the conversation opened.
+  // Frozen for the life of the mount — see ChatView.
+  unreadStart?: boolean
   groupType: GroupType
   // Which message style is on (lib/messageStyle.ts). Almost everything about
   // the two styles is CSS off a root attribute — this prop exists for the ONE
@@ -194,6 +198,7 @@ function MessageRow({
   readers,
   prev,
   conversationStart,
+  unreadStart,
   groupType,
   messageStyle,
   ruleColor,
@@ -570,6 +575,9 @@ function MessageRow({
       {showDayDivider && (
         <DayDivider iso={message.createdAt} conversationStart={conversationStart} />
       )}
+      {/* After the day break, never before it: the date belongs to the whole
+          day below it, while this belongs to the single message under it. */}
+      {unreadStart && <UnreadDivider />}
       <article
         ref={rowRef}
         data-message-id={message.id}
@@ -776,6 +784,7 @@ function propsEqual(a: Props, b: Props): boolean {
     a.message === b.message &&
     a.prev === b.prev &&
     a.conversationStart === b.conversationStart &&
+    a.unreadStart === b.unreadStart &&
     a.mine === b.mine &&
     a.currentUserId === b.currentUserId &&
     a.readers === b.readers &&
