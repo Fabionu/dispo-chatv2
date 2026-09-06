@@ -40,6 +40,11 @@ import GroupAvatar from '../components/GroupAvatar'
 // just gained.
 export const SIDEBAR_TILE_PX = 38
 
+/** The thread header's copy of the tile. Larger, because it is not one of
+ *  thirty rows being scanned — it is the single identity of the conversation
+ *  that is open, and it sits alone in a header with room around it. */
+export const HEADER_TILE_PX = 42
+
 export function RowTile(
   props:
     // `hasAvatar` is optional on purpose. The roster types that carry it
@@ -47,17 +52,18 @@ export function RowTile(
     // ConnectionUser do not carry it, and those fall back to asking and letting
     // the 404 flip them to the fallback. `avatarCache` remembers the failure, so
     // that costs one request per person per session, not one per render.
-    | { kind: 'user'; id: string; name: string; hasAvatar?: boolean }
-    | { kind: 'group'; id: string; hasAvatar?: boolean },
+    | { kind: 'user'; id: string; name: string; hasAvatar?: boolean; size?: number }
+    | { kind: 'group'; id: string; hasAvatar?: boolean; size?: number },
 ) {
+  // `size` is a prop rather than a second component because the SHAPE RULE is
+  // the thing worth sharing — vehicle squircle, person circle, initials as the
+  // fallback. A header that reimplemented the two avatars inline would be one
+  // place to forget which of them is round, and that rule is now load-bearing:
+  // it is how a DM is told from a room at a glance.
+  const size = props.size ?? SIDEBAR_TILE_PX
   if (props.kind === 'group') {
     return (
-      <GroupAvatar
-        groupId={props.id}
-        hasAvatar={props.hasAvatar}
-        shape="rounded"
-        size={SIDEBAR_TILE_PX}
-      />
+      <GroupAvatar groupId={props.id} hasAvatar={props.hasAvatar} shape="rounded" size={size} />
     )
   }
   return (
@@ -65,7 +71,7 @@ export function RowTile(
       userId={props.id}
       name={props.name}
       hasAvatar={props.hasAvatar}
-      size={SIDEBAR_TILE_PX}
+      size={size}
       // CIRCLE for a person, against the room tile’s squircle above it
       // (user, 2026-09-05). Shape carries the type again, deliberately this
       // time — and only across two silhouettes: quotation groups, when they

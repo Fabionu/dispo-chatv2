@@ -5,10 +5,11 @@
 // Two styles, and they are two readings of ONE drawing vocabulary rather than
 // two skins:
 //
-//   timeline  the default (the 2026-08-20 rework). A message is not a shape; it
-//             is a label, a 2px side rule and an indent. Ownership is the SIDE
-//             the rule is on, identity is the rule's colour.
-//   bubble    the message set in a block instead. One mark does it: a rounded
+//   timeline  the 2026-08-20 rework. A message is not a shape; it is a label,
+//             a 2px side rule and an indent. Ownership is the SIDE the rule is
+//             on, identity is the rule's colour.
+//   bubble    THE DEFAULT (user, 2026-09-06). The message set in a block
+//             instead. One mark does it: a rounded
 //             fill, no border and no accent edge, one step off the field for
 //             someone else's message and two for my own. The attribution is
 //             lifted OUT of the block and captions it from above, so the block
@@ -20,7 +21,8 @@
 //             scale in tailwind.config.js is still 0 across the board, and the
 //             curve belongs to this style and the composer under it — see
 //             --soft-radius in index.css. Pick Timeline and every corner in the
-//             app is square again.
+//             app is square again — which is now the opt-IN rather than the
+//             starting point.
 //
 // WHY A ROOT ATTRIBUTE AND NOT A PROP. The two styles render the SAME DOM. The
 // attribution row is a sibling ABOVE the message's content in both, and the
@@ -55,9 +57,12 @@ export type MessageStyle = 'timeline' | 'bubble'
 
 const STORAGE_KEY = 'dispo:msg-style-v3'
 
-// The timeline is the default: it is the design the thread was reworked into,
-// and it stays what a new device sees.
-const FALLBACK: MessageStyle = 'timeline'
+// Bubbles are what a new device sees (user, 2026-09-06). This moves the
+// DEFAULT only — a browser that already stored 'timeline' keeps it, because the
+// stored value is a choice someone made and a default change must not overrule
+// one. Clearing site data, or picking Timeline and picking Bubbles back, is
+// what re-syncs an existing device.
+const FALLBACK: MessageStyle = 'bubble'
 
 function isMessageStyle(value: unknown): value is MessageStyle {
   return value === 'timeline' || value === 'bubble'

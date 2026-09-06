@@ -71,6 +71,13 @@ type DriverTripPayload = {
   vehicleRoomId: string
   reference: string | null
   client: string | null
+  // The load itself. Carried to the driver because a reference and a pallet
+  // count are what a warehouse asks for at the gate, and the phone was making
+  // the driver ring the dispatcher for facts the trip already held.
+  cargo: string | null
+  weight: string | null
+  pallets: string | null
+  notes: string | null
   status: string
   assignedDrivers: Array<{ id: string; name: string }>
   truckProfile: Ops['vehicle']['truckProfile'] | null
@@ -112,6 +119,10 @@ function buildDriverTrip(
     vehicleRoomId: groupId,
     reference: trip.reference ?? null,
     client: trip.client ?? null,
+    cargo: trip.cargo ?? null,
+    weight: trip.weight ?? null,
+    pallets: trip.pallets ?? null,
+    notes: trip.notes ?? null,
     status: trip.status ?? 'planned',
     assignedDrivers: assignedIds.map((id) => ({ id, name: names.get(id) ?? 'Driver' })),
     truckProfile: ops.vehicle.truckProfile ?? null,

@@ -254,7 +254,12 @@ html[data-density-mode='manual'][data-density='comfortable'] {
      the two font sizes above: define once, track the fluid curve for free. */
   --sidebar-badge-size: calc(var(--sidebar-meta-font-size) + 5px);
   --sidebar-badge-font-size: calc(var(--sidebar-meta-font-size) - 2px);
-  --header-height: clamp(53.94px, calc((42.21px + 0.823vw) * var(--ui-scale)), 70.18px);
+  /* 72px at 1920 (was 58). Raised with the thread header, which now carries a
+     42px identity tile and needs the room around it — 58px would have wrapped a
+     picture, a title and a 40px control into a bar with four pixels of air.
+     Every main-pane header and the sidebar switcher share this token, so they
+     all move together and the seam between rail and thread stays one line. */
+  --header-height: clamp(66.95px, calc((52.38px + 1.022vw) * var(--ui-scale)), 87.08px);
   --workspace-nav-width: 3.25rem;
   /* FLUID, and defined exactly once (2026-08-26, user: the widths should scale
      with CSS rather than be managed per resolution). This token used to be
