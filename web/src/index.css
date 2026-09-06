@@ -219,9 +219,15 @@ html[data-density-mode='manual'][data-density='comfortable'] {
        --sidebar-section-gap      spacing between rail sections */
   /* 15.5px at 1920 (was a flat 15px from 1280 all the way to 2200). */
   --app-font-size: clamp(14.42px, calc((11.28px + 0.22vw) * var(--ui-scale)), 18.75px);
-  /* 16px at 1920, 17.4 at 2560, 19.4 capped. The thread's reading size and the
-     composer's typing size, and the token the user asked to lift first. */
-  --chat-msg-font-size: clamp(14.88px, calc((11.64px + 0.227vw) * var(--ui-scale)), 19.36px);
+  /* 14.5px at 1920, 15.8 at 2560, 17.5 capped. The thread's reading size and
+     the composer's typing size.
+     It was lifted to 16px when the whole app was too small on a wide display;
+     with the fluid curve doing that job now, 16 was a second correction on top
+     of one that already worked, and the messages read a size too large (user,
+     2026-09-06: "make the items in the chat window smaller"). Everything else in
+     the thread follows from here — --msg-indent is a multiple of it, and the
+     reading measure is in ch units. */
+  --chat-msg-font-size: clamp(13.48px, calc((10.55px + 0.206vw) * var(--ui-scale)), 17.54px);
   /* Thread body text — the SAME size as the composer. It briefly ran +1px, then
      +2.5px chasing the reference's proportions; both read too big in the real
      app, where messages are short operational lines rather than the mockup's

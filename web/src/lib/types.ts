@@ -367,7 +367,18 @@ export type WorkspacePlace = {
   id: string
   name: string
   category: WorkspacePlaceCategory
+  /** The one-line label — what the map bubble and the Places list show. Kept
+   *  alongside the structured parts below, not replaced by them: every place
+   *  saved before 2026-09-06 has only this. */
   address: string | null
+  /** Structured address, mirroring VehicleStop so picking a place while adding
+   *  a stop fills the stop's own fields instead of dumping one line into
+   *  Street. Every part is optional — a place pinned on a motorway shoulder has
+   *  no postal code and should not be forced to invent one. */
+  street: string | null
+  country: string | null
+  postalCode: string | null
+  city: string | null
   latitude: number
   longitude: number
   notes: string | null
@@ -378,7 +389,16 @@ export type WorkspacePlace = {
 
 export type WorkspacePlaceInput = Pick<
   WorkspacePlace,
-  'name' | 'category' | 'address' | 'latitude' | 'longitude' | 'notes'
+  | 'name'
+  | 'category'
+  | 'address'
+  | 'street'
+  | 'country'
+  | 'postalCode'
+  | 'city'
+  | 'latitude'
+  | 'longitude'
+  | 'notes'
 >
 
 // A company invite link as listed in Workspace settings (admin only). The raw

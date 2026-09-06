@@ -24,7 +24,7 @@ export default function GroupInviteRow({ invite, selected, onClick }: Props) {
         paddingTop: 'var(--sidebar-row-pad-y)',
         paddingBottom: 'var(--sidebar-row-pad-y)',
       }}
-      className={`w-full flex items-center border-l-2 text-left transition-colors ${
+      className={`w-full flex items-center rounded-card border-l-2 text-left transition-colors ${
         selected
           ? 'border-text bg-white/8 text-text'
           : 'border-transparent text-muted hover:bg-white/8 hover:text-text'

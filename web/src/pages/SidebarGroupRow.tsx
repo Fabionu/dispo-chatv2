@@ -368,7 +368,13 @@ export default function GroupRow({
         // owns its wash and its text colour; only the rule moved out, because a
         // border that belongs to the row can only appear and disappear, and the
         // point is for it to travel.
-        className={`w-full flex items-center text-left transition-colors border-l-2 border-transparent ${
+        //
+        // ROUNDED as of 2026-09-06 (user). The hover/selected wash was the last
+        // sharp-cornered rectangle in a rounded app. `rounded-card` matches the
+        // identity tile inside the row, and the `<nav>` already insets the list
+        // by `px-1.5`, so the corners have background to sit against rather than
+        // dying into the rail's edge.
+        className={`w-full flex items-center rounded-card text-left transition-colors border-l-2 border-transparent ${
           selected ? 'bg-white/10 text-text' : 'text-muted hover:bg-white/8 hover:text-text'
         }`}
       >

@@ -184,11 +184,23 @@ export default {
       // slides (the notification/traffic toggles, where roundness is what says
       // the knob travels). A `rounded-full` on a hover target is a regression.
       borderRadius: {
-        // ── Still square ─────────────────────────────────────────────────
-        // The two SHELLS. Nothing has asked for them, and they are the biggest
-        // chrome in the app — a drawer edge and a dialog edge — so they are the
-        // last thing that should follow the surfaces inside them by accident.
-        modal: '0',
+        // ── The shells ───────────────────────────────────────────────────
+        // The two biggest pieces of chrome in the app — a dialog edge and a
+        // drawer edge — so they were held back from every earlier rounding pass
+        // on the grounds that they should not follow the surfaces inside them by
+        // accident.
+        //
+        // The DIALOG was asked for on 2026-09-06 (user, of the Save-place
+        // dialog: "cards ... are still with sharp corners, we need them
+        // rounded"), so it now takes the chrome radius like the surfaces it
+        // contains. This moves EVERY modal in the app, which is the point of it
+        // being a token.
+        //
+        // The DRAWER stays square: it is anchored to an edge of the viewport
+        // and rounding a panel that runs off the screen only curves the two
+        // corners that are visible, which reads as a mistake rather than a
+        // shape.
+        modal: 'var(--chrome-radius)',
         panel: '0',
 
         // ── Surfaces: --chrome-radius (10px) ──────────────────────────────

@@ -72,7 +72,7 @@ import { getDraft } from '../lib/draftStorage'
 import { devlog } from '../lib/devlog'
 import { useMessageCache } from '../hooks/useMessageCache'
 import { preloadImage } from '../lib/attachmentCache'
-import ToolTab from './ChatToolTab'
+import ToolTab, { ChatToolTabs } from './ChatToolTab'
 import { VehicleRoomPicker } from './inbox/InboxView'
 import { toReplyPreview, attachmentTabLabel } from './chatViewUtils'
 import { useTypingIndicator } from '../hooks/useTypingIndicator'
@@ -1230,7 +1230,7 @@ export default function ChatView({
           between Chat and the tool without losing either; the × closes the tool.
           No banner at all when only chat is open. */}
       {(mapPick || tripRouteOpen || attachmentTabs.length > 0) && (
-        <div className="shrink-0 h-9 px-3 flex items-center gap-1 border-b border-line overflow-x-auto [scrollbar-width:none]">
+        <ChatToolTabs activeKey={activeTool}>
           <ToolTab
             active={activeTool === 'chat'}
             icon={<MessageSquare size="0.75rem" strokeWidth={2} />}
@@ -1271,7 +1271,7 @@ export default function ChatView({
               onClose={() => closeAttachmentTab(t.attachment.id)}
             />
           ))}
-        </div>
+        </ChatToolTabs>
       )}
 
       <Suspense fallback={<PaneLoader className="flex-1" />}>

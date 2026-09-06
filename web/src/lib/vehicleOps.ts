@@ -521,6 +521,28 @@ export function nextPlannedStop(stops: VehicleStop[]): VehicleStop | undefined {
 // row. Returns null when there's no active trip, so callers fall back to their
 // existing (non-trip) subtitle. Everything here is read straight off the manual
 // ops blob — no computed routing/ETA.
+// One stop as the header track draws it. Deliberately a projection of
+// `VehicleStop` rather than the stop itself: the bar renders a label, a date and
+// a dot state, and handing it the whole ops record would invite it to start
+// reading addresses, coordinates and notes it has no room for.
+export type TripStop = {
+  id: string
+  type: StopType
+  /** "Loading" / "Customs" / … — resolved here so the view never re-does it. */
+  typeLabel: string
+  place: TripPlace
+  /** Free text, exactly as the dispatcher typed it. Never parsed into a Date:
+   *  this field has always been free text and guessing a format would silently
+   *  turn "Mon AM" into a wrong timestamp. */
+  plannedAt?: string
+  status: StopStatus
+  /** Arrival estimate. Only the FINAL stop carries one today — the trip-level
+   *  manual `eta` — and everything else is undefined, which is why the track
+   *  reserves the line whether or not a value is there. Per-stop ETAs are the
+   *  planned use of that reserved space. */
+  eta?: string
+}
+
 export type TripSummary = {
   reference?: string
   /** Client / customer name (for the header trip bar), when set. */
@@ -535,6 +557,12 @@ export type TripSummary = {
   unloadingPlaces: TripPlace[]
   /** Every active stop in dispatcher-entered route order. */
   routePlaces: TripPlace[]
+  /** The same stops, with everything the header's progress track needs to draw
+   *  one: what kind of stop it is, when it is due, and whether it is behind the
+   *  truck yet. `routePlaces` above is the flag+city pair alone and stays as it
+   *  is — FleetStatus reduces it to an origin→destination line and has no use
+   *  for the rest. */
+  stops: TripStop[]
   /** Total non-cancelled stops — lets the header bar show intermediate stops
    *  between the origin and destination. */
   stopCount: number
@@ -548,6 +576,7 @@ export type TripSummary = {
 export function tripSummary(ops: VehicleOps): TripSummary | null {
   const t = ops.trip
   if (!t) return null
+  const activeStops = ops.stops.filter((s) => s.status !== 'cancelled')
   const ns = nextPlannedStop(ops.stops)
   const nextLabel = ns
     ? [labelOf(STOP_TYPES, ns.type), stopLocationLabel(ns)].filter(Boolean).join(', ') || undefined
@@ -560,8 +589,20 @@ export function tripSummary(ops: VehicleOps): TripSummary | null {
     nextLabel,
     loadingPlaces: loadingStops(ops.stops).map(stopPlace),
     unloadingPlaces: unloadingStops(ops.stops).map(stopPlace),
-    routePlaces: ops.stops.filter((s) => s.status !== 'cancelled').map(stopPlace),
-    stopCount: ops.stops.filter((s) => s.status !== 'cancelled').length,
+    routePlaces: activeStops.map(stopPlace),
+    stops: activeStops.map((s, i) => ({
+      id: s.id,
+      type: s.type,
+      typeLabel: labelOf(STOP_TYPES, s.type) || 'Stop',
+      place: stopPlace(s),
+      plannedAt: s.plannedAt?.trim() || undefined,
+      status: s.status,
+      // The trip's manual ETA is an arrival at the LAST stop, so that is the
+      // only place it can honestly be shown. Putting it under every dot would
+      // claim an estimate for each one that nobody entered.
+      eta: i === activeStops.length - 1 ? t.eta?.trim() || undefined : undefined,
+    })),
+    stopCount: activeStops.length,
     progress: tripProgress(ops),
     route: t.route,
   }

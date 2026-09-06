@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { MapPinned, Plus, X } from 'lucide-react'
+import { MapPin, MapPinned, Plus, X } from 'lucide-react'
 import { DateField, TimeField, joinPlannedAt, splitPlannedAt } from '../DateTimeField'
 import {
   STOP_TYPES,
@@ -9,6 +9,8 @@ import {
   type VehicleStop,
 } from '../../lib/vehicleOps'
 import { AREA_CLASS, FIELD_BASE, INPUT_CLASS } from './tripFormStyles'
+import SavedPlacePicker, { stopFieldsFromPlace } from './SavedPlacePicker'
+import type { WorkspacePlace } from '../../lib/types'
 
 // Stop add/edit form. ADD mode starts as a single "Add stop" button → type
 // picker → fields (nothing is pre-created). EDIT mode (when `initial` is given)
@@ -41,6 +43,25 @@ export default function StopForm({
   const [plannedDate, setPlannedDate] = useState(initialPlanned.date)
   const [plannedTime, setPlannedTime] = useState(initialPlanned.time)
   const [notes, setNotes] = useState(initial?.notes ?? '')
+
+  const [pickingPlace, setPickingPlace] = useState(false)
+
+  // A saved place fills the three fields it can speak for and leaves the rest
+  // alone — country / postal code / city keep whatever was already typed rather
+  // than being blanked by a place that cannot supply them.
+  function applyPlace(place: WorkspacePlace) {
+    const fields = stopFieldsFromPlace(place)
+    setCompany(fields.company)
+    setCoordinates(fields.coordinates)
+    // Each address part is written only when the place HAS it. A place with no
+    // postal code must not blank one the dispatcher already typed — picking a
+    // place is meant to save typing, never to undo it.
+    if (fields.street) setStreet(fields.street)
+    if (fields.country) setCountry(fields.country)
+    if (fields.postalCode) setPostalCode(fields.postalCode)
+    if (fields.city) setCity(fields.city)
+    setPickingPlace(false)
+  }
 
   const coordParsed = parseCoordinates(coordinates)
   // Friendly hint only when there IS text that doesn't parse — never blocks save.
@@ -115,7 +136,7 @@ export default function StopForm({
       <button
         type="button"
         onClick={() => setPhase('type')}
-        className="w-full inline-flex items-center justify-center gap-1.5 border border-line bg-white/4 py-2 text-base text-muted hover:text-text hover:bg-white/6 transition-colors"
+        className="w-full inline-flex items-center justify-center gap-1.5 rounded-soft border border-line bg-white/4 py-2 text-base text-muted hover:text-text hover:bg-white/6 transition-colors"
       >
         <Plus size="0.875rem" strokeWidth={2} /> Add stop
       </button>
@@ -146,7 +167,7 @@ export default function StopForm({
                 setType(o.value)
                 setPhase('form')
               }}
-              className="h-8 border border-line bg-white/4 text-sm text-text hover:bg-white/10 transition-colors"
+              className="rounded-btn h-8 border border-line bg-white/4 text-sm text-text hover:bg-white/10 transition-colors"
             >
               {o.label}
             </button>
@@ -180,6 +201,22 @@ export default function StopForm({
           <X size="0.8125rem" strokeWidth={1.8} />
         </button>
       </div>
+
+      {/* Fill the address from a place the workspace already saved. Offered on
+          every stop, not just Loading/Unloading: a customs point, a parking or a
+          fuel station is exactly the kind of location that repeats trip after
+          trip, which is what the Places list is for. */}
+      {pickingPlace ? (
+        <SavedPlacePicker onClose={() => setPickingPlace(false)} onPick={applyPlace} />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setPickingPlace(true)}
+          className="inline-flex w-full items-center justify-center gap-1.5 rounded-btn border border-line bg-white/2 py-1.5 text-sm text-muted transition-colors hover:bg-white/6 hover:text-text"
+        >
+          <MapPin size="0.8125rem" strokeWidth={1.8} /> Use a saved place
+        </button>
+      )}
 
       {/* Planned date + time — two separate fields on one row, each with its own
           custom picker (calendar / clock). Field meaning lives in the placeholder
@@ -270,7 +307,7 @@ export default function StopForm({
         <button
           type="button"
           onClick={cancel}
-          className="h-8 px-3 inline-flex items-center text-sm text-muted hover:text-text hover:bg-white/4 transition-colors"
+          className="rounded-btn h-8 px-3 inline-flex items-center text-sm text-muted hover:text-text hover:bg-white/4 transition-colors"
         >
           Cancel
         </button>
@@ -278,7 +315,7 @@ export default function StopForm({
           type="button"
           onClick={submit}
           disabled={!canSave}
-          className="h-8 px-3.5 inline-flex items-center gap-1.5 bg-white/10 text-sm font-medium text-text hover:bg-white/16 disabled:opacity-40 disabled:cursor-default transition-colors"
+          className="rounded-btn h-8 px-3.5 inline-flex items-center gap-1.5 bg-white/10 text-sm font-medium text-text hover:bg-white/16 disabled:opacity-40 disabled:cursor-default transition-colors"
         >
           {editing ? 'Save stop' : (
             <>

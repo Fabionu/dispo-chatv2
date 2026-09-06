@@ -208,7 +208,7 @@ export default function TripTab({
         type="button"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
-        className="w-full border text-left transition-colors hover:border-strong"
+        className="w-full rounded-card overflow-hidden border text-left transition-colors hover:border-strong"
       >
         {/* Header — order reference + client, with the status on the right. */}
         <div className="flex items-start justify-between gap-2 border-b px-4 py-2.5">

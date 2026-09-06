@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { MapPin } from 'lucide-react'
 import { DateField, TimeField, joinPlannedAt, splitPlannedAt } from '../DateTimeField'
 import { FormActions } from '../forms/FormActions'
 import {
@@ -14,6 +15,8 @@ import {
 // matching the inline EditableRow / DateTimeField look. Local aliases keep the
 // JSX below readable.
 import { AREA_CLASS, FIELD_BASE, INPUT_CLASS, SELECT_CLASS } from './tripFormStyles'
+import SavedPlacePicker, { stopFieldsFromPlace } from './SavedPlacePicker'
+import type { WorkspacePlace } from '../../lib/types'
 
 const PILL = INPUT_CLASS
 const PILL_BASE = FIELD_BASE
@@ -67,6 +70,25 @@ export default function StopEditor({
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(false)
+
+  const [pickingPlace, setPickingPlace] = useState(false)
+
+  // A saved place fills the three fields it can speak for and leaves the rest
+  // alone — country / postal code / city keep whatever was already typed rather
+  // than being blanked by a place that cannot supply them.
+  function applyPlace(place: WorkspacePlace) {
+    const fields = stopFieldsFromPlace(place)
+    setCompany(fields.company)
+    setCoordinates(fields.coordinates)
+    // Each address part is written only when the place HAS it. A place with no
+    // postal code must not blank one the dispatcher already typed — picking a
+    // place is meant to save typing, never to undo it.
+    if (fields.street) setStreet(fields.street)
+    if (fields.country) setCountry(fields.country)
+    if (fields.postalCode) setPostalCode(fields.postalCode)
+    if (fields.city) setCity(fields.city)
+    setPickingPlace(false)
+  }
 
   const coordParsed = parseCoordinates(coordinates)
   const coordInvalid = coordinates.trim().length > 0 && !coordParsed
@@ -124,6 +146,22 @@ export default function StopEditor({
       </div>
       {/* Planned date + time — two separate pill fields, each with its own custom
           picker (calendar / clock). */}
+      {/* Fill the address from a place the workspace already saved. Offered on
+          every stop, not just Loading/Unloading: a customs point, a parking or a
+          fuel station is exactly the kind of location that repeats trip after
+          trip, which is what the Places list is for. */}
+      {pickingPlace ? (
+        <SavedPlacePicker onClose={() => setPickingPlace(false)} onPick={applyPlace} />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setPickingPlace(true)}
+          className="inline-flex w-full items-center justify-center gap-1.5 rounded-btn border border-line bg-white/2 py-1.5 text-sm text-muted transition-colors hover:bg-white/6 hover:text-text"
+        >
+          <MapPin size="0.8125rem" strokeWidth={1.8} /> Use a saved place
+        </button>
+      )}
+
       <div className="flex flex-col gap-1">
         <span className="text-xs text-muted">Planned date &amp; time</span>
         <div className="flex gap-2">

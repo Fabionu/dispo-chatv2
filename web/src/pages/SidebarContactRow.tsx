@@ -28,7 +28,7 @@ export default function ContactRow({
         paddingTop: 'var(--sidebar-row-pad-y)',
         paddingBottom: 'var(--sidebar-row-pad-y)',
       }}
-      className="w-full flex items-center border-l-2 border-transparent text-left text-muted hover:bg-white/8 hover:text-text transition-colors"
+      className="w-full flex items-center rounded-card border-l-2 border-transparent text-left text-muted hover:bg-white/8 hover:text-text transition-colors"
     >
       {/* No `hasAvatar`: WorkspaceMember (the /workspace/members payload) does
           not carry the flag, so this asks and lets a 404 flip it to the

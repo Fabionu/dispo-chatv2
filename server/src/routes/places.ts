@@ -22,7 +22,15 @@ const optionalText = (max: number) => z.string().trim().max(max).nullable().opti
 const createSchema = z.object({
   name: z.string().trim().min(1).max(120),
   category: categorySchema,
+  // The one-line label, kept alongside the structured fields below rather than
+  // replaced by them: it is what the map and the Places list show, every row
+  // that predates the split has one, and none of the structured parts is
+  // required to be filled.
   address: optionalText(240),
+  street: optionalText(160),
+  country: optionalText(3),
+  postalCode: optionalText(16),
+  city: optionalText(120),
   latitude: z.number().finite().min(-90).max(90),
   longitude: z.number().finite().min(-180).max(180),
   notes: optionalText(500),
@@ -34,6 +42,10 @@ type PlaceRow = {
   name: string
   category: z.infer<typeof categorySchema>
   address: string | null
+  street: string | null
+  country: string | null
+  postal_code: string | null
+  city: string | null
   latitude: number
   longitude: number
   notes: string | null
@@ -43,8 +55,8 @@ type PlaceRow = {
 }
 
 const SELECT_COLUMNS = `
-  id, name, category, address, latitude, longitude, notes,
-  created_by, created_at, updated_at`
+  id, name, category, address, street, country, postal_code, city,
+  latitude, longitude, notes, created_by, created_at, updated_at`
 
 function mapPlace(row: PlaceRow) {
   return {
@@ -52,6 +64,10 @@ function mapPlace(row: PlaceRow) {
     name: row.name,
     category: row.category,
     address: row.address,
+    street: row.street,
+    country: row.country,
+    postalCode: row.postal_code,
+    city: row.city,
     latitude: row.latitude,
     longitude: row.longitude,
     notes: row.notes,
@@ -93,8 +109,9 @@ placesRouter.post(
     const input = parsed.data
     const { rows } = await pool.query<PlaceRow>(
       `insert into workspace_places
-         (workspace_id, created_by, name, category, address, latitude, longitude, notes)
-       values ($1, $2, $3, $4, $5, $6, $7, $8)
+         (workspace_id, created_by, name, category, address, street, country,
+          postal_code, city, latitude, longitude, notes)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        returning ${SELECT_COLUMNS}`,
       [
         workspaceId,
@@ -102,6 +119,10 @@ placesRouter.post(
         input.name,
         input.category,
         nullable(input.address),
+        nullable(input.street),
+        nullable(input.country),
+        nullable(input.postalCode),
+        nullable(input.city),
         input.latitude,
         input.longitude,
         nullable(input.notes),
@@ -122,15 +143,25 @@ placesRouter.patch(
       name: 'name',
       category: 'category',
       address: 'address',
+      street: 'street',
+      country: 'country',
+      postalCode: 'postal_code',
+      city: 'city',
       latitude: 'latitude',
       longitude: 'longitude',
       notes: 'notes',
     }
+    // Every text column goes through `nullable`, so clearing a field in the
+    // dialog stores NULL rather than an empty string. Listing them by exception
+    // is how the two new address columns would have been missed.
+    const numeric = new Set(['latitude', 'longitude'])
     const sets: string[] = []
     const values: unknown[] = []
     for (const [key, raw] of Object.entries(parsed.data)) {
-      values.push(key === 'address' || key === 'notes' ? nullable(raw as string | null) : raw)
-      sets.push(`${columns[key]} = $${values.length}`)
+      values.push(
+        key === 'category' || numeric.has(key) ? raw : nullable(raw as string | null),
+      )
+      sets.push(`${columns[key]} = ${values.length}`)
     }
     sets.push('updated_at = now()')
     values.push(req.params.id, req.session!.workspaceId)

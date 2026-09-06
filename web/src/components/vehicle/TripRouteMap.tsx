@@ -5,7 +5,12 @@ import Spinner from '../Spinner'
 import HereMap from '../here/HereMap'
 import { api } from '../../lib/api'
 import { getSocket } from '../../lib/socket'
-import { bestInsertionIndex, haversineMeters, nearestPointOnPath } from '../../lib/here/geo'
+import {
+  bestInsertionIndex,
+  haversineMeters,
+  nearestPointOnPath,
+  routeCourseNear,
+} from '../../lib/here/geo'
 import { computeTripRoute, type TripRoute } from '../../lib/tripRoute'
 import { parseCoordinates, stopId, type VehicleStop } from '../../lib/vehicleOps'
 import {
@@ -90,6 +95,15 @@ function coordSig(stops: VehicleStop[]): string {
     .map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`)
     .join('|')
 }
+
+/** How far along the grabbed leg to look when reading its travel direction.
+ *  `routeCourseNear` defaults to 250 m, which the planner found is silently
+ *  wrong for exactly this gesture: on a motorway the two decoded points either
+ *  side of the release can be further apart than that, the lookup finds nothing,
+ *  and the course comes back null on the one drag that most needs it — the one
+ *  onto a divided road, where the course is what keeps the point off the
+ *  oncoming carriageway. Kept identical to the planner's. */
+const DRAG_COURSE_WINDOW_M = 2000
 
 /** A ping further than this from the planned route is a genuine detour, not a
  *  sampling artefact, and must not be dragged onto a road it never used. */
@@ -511,6 +525,92 @@ export default function TripRouteMap({
   const center = !polylines.length && routable[0] ? { lat: routable[0].lat, lng: routable[0].lng } : null
   const ok = data?.status === 'ok'
 
+  // The route's geometry split by LEG. A route drag reports which leg was
+  // grabbed, and leg i runs between routable[i] and routable[i + 1] — so this is
+  // both where the new stop belongs and where its travel direction is read.
+  const sectionCoords = useMemo<LatLng[][]>(
+    () =>
+      polylines.map((line) => {
+        try {
+          return decode(line).polyline.map(([lat, lng]) => ({ lat, lng }))
+        } catch {
+          return []
+        }
+      }),
+    [polylines],
+  )
+
+  // Snap a released point to a road, with the leg's direction and its bracketing
+  // waypoints so the choice lands on the right carriageway and the least detour.
+  // Falls back to the raw release: a point exactly where the user let go is
+  // always better than no point at all.
+  async function snapRelease(
+    candidates: ScreenGeoCandidate[],
+    zoom: number,
+    course?: number,
+    prev?: LatLng,
+    next?: LatLng,
+  ): Promise<{ pos: LatLng; label: string }> {
+    const release = candidates[0]
+    try {
+      const { place } = await api.here.snapCandidates({ candidates, zoom, course, prev, next })
+      if (place?.position) return { pos: place.position, label: place.label ?? '' }
+    } catch {
+      /* snap unavailable — keep the raw release coordinate */
+    }
+    return { pos: { lat: release.lat, lng: release.lng }, label: '' }
+  }
+
+  // DRAG THE ROUTE LINE ITSELF → a new stop on the leg that was grabbed, the
+  // planner's gesture brought over whole (user, 2026-09-06). Right-clicking to
+  // add a stop already existed here, but it has to guess which leg the point
+  // belongs on (`bestInsertionIndex`); a drag does not — the leg IS the thing the
+  // user grabbed, so the stop lands where they pulled from even when a nearer
+  // leg passes close by.
+  //
+  // OPTIMISTIC, like the planner: the stop appears at the raw release point the
+  // instant the ghost is dropped, and the road-snap patches that same stop by id
+  // when it returns. A drag that shows nothing until a network round-trip
+  // completes reads as a drag that failed.
+  async function handleRouteDragEnd(section: number, candidates: ScreenGeoCandidate[], zoom: number) {
+    const release = candidates[0]
+    if (!release) return
+    const before = routable[section + 1]
+    if (!before) return
+
+    const leg = sectionCoords[section]
+    const course = leg?.length
+      ? routeCourseNear(release, [leg], DRAG_COURSE_WINDOW_M) ?? undefined
+      : undefined
+    const from = routable[section]
+    const prev = from ? { lat: from.lat, lng: from.lng } : undefined
+    const next = { lat: before.lat, lng: before.lng }
+
+    const stop = mapStop({ lat: release.lat, lng: release.lng }, '')
+    setDraftStops((cur) => {
+      const at = cur.findIndex((s) => s.id === before.id)
+      const out = cur.slice()
+      out.splice(at < 0 ? cur.length : at, 0, stop)
+      return out
+    })
+
+    const snapped = await snapRelease(candidates, zoom, course, prev, next)
+    setDraftStops((cur) =>
+      // A no-op if the stop was removed while the snap was in flight.
+      cur.map((s) =>
+        s.id === stop.id
+          ? {
+              ...s,
+              lat: snapped.pos.lat,
+              lng: snapped.pos.lng,
+              coordinates: `${snapped.pos.lat.toFixed(5)}, ${snapped.pos.lng.toFixed(5)}`,
+              ...(snapped.label ? { location: snapped.label } : {}),
+            }
+          : s,
+      ),
+    )
+  }
+
   // Marker drag released (edit mode only) → snap the drop to a road via the SAME
   // screen-space snap the Route Planner uses, then move that stop's coordinate in
   // the draft. The recompute effect redraws the preview through the moved point.
@@ -699,6 +799,11 @@ export default function TripRouteMap({
           driverMarkers={driverMarkers}
           driverTrails={driverTrails}
           routePolylines={polylines}
+          // The planner's route drawing: a line whose width tracks the zoom
+          // instead of one fixed pixel width that is a worm across a country and
+          // a thread at a junction. The two maps draw the same trip; they should
+          // not draw it two ways.
+          scaleRouteWidthWithZoom
           routeDistanceLabel={ok ? (data?.distanceText ?? null) : null}
           truckOverlay={false}
           center={center}
@@ -706,6 +811,7 @@ export default function TripRouteMap({
           // while editing.
           objectsDraggable={editing}
           onMarkerDragEnd={editing ? handleMarkerDragEnd : undefined}
+          onRouteDragEnd={editing ? handleRouteDragEnd : undefined}
           onMapContextMenu={editing ? openMenu : undefined}
           onMarkerClick={editing ? openMarkerMenu : undefined}
           onMapViewChange={
@@ -872,7 +978,12 @@ export default function TripRouteMap({
               </div>
             ) : (
               <div className="rounded-full bg-bg/80 backdrop-blur-sm border border-line text-muted px-3 py-1.5 text-xs shadow-raised">
-                Drag a stop to move it · right-click to add · click a stop to remove.
+                {/* The route drag is listed FIRST because it is the gesture with
+                    no other affordance — a stop is visibly a thing you can grab,
+                    and a right-click is a habit, but nothing about a drawn line
+                    says it can be pulled. */}
+                Drag the route to add a stop · drag a stop to move it · right-click to add ·
+                click a stop to remove.
               </div>
             )}
           </div>
