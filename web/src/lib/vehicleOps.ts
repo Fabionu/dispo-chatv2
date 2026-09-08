@@ -306,6 +306,19 @@ export type VehicleStop = {
   plannedAt?: string
   notes?: string
   status: StopStatus
+  /**
+   * A point that SHAPES THE ROUTE rather than a place the truck stops at.
+   *
+   * Dragging the route line or right-clicking "Add stop" on the map inserts one
+   * of these to pull the road through somewhere — a specific junction, the right
+   * side of a divided carriageway, a ferry ramp. They belong in the routing
+   * request, and nowhere else: they are not loadings, nobody confirms an arrival
+   * at one, and counting them made the trip banner claim four stops for a
+   * two-stop run (user, 2026-09-08).
+   *
+   * Set by the map only. Every form writes a REAL stop.
+   */
+  via?: boolean
 }
 
 // The whole operational blob stored at `group.meta.ops`.
@@ -473,6 +486,26 @@ export function parseCountryCode(s: VehicleStop): string | null {
 // rendered by the CountryFlag SVG component) plus the address text — the full
 // "ES 11201 Algeciras" line (country code + postal + city), so the code shows
 // even where the flag can't.
+/**
+ * Is this a route-shaping point rather than a stop?
+ *
+ * The flag is the answer for anything created since 2026-09-08. Older points
+ * carry the map's other fingerprint instead: `location` is the LEGACY
+ * single-line address, and no form has written it since the structured fields
+ * arrived — `mapStop` in TripRouteMap is the only thing that still does. So a
+ * stop with that line, no structured address of any kind and no company was put
+ * there by the map, and matching on it means the trips a dispatcher already has
+ * are fixed too rather than only the ones they make next.
+ *
+ * Deliberately narrow: any one of company / street / city / postal / country
+ * disqualifies it, because all five come from a person filling in a form.
+ */
+export function isRouteVia(s: VehicleStop): boolean {
+  if (s.via) return true
+  const typed = s.company || s.street || s.city || s.postalCode || s.country || s.cityLine
+  return Boolean(!typed && s.location?.trim())
+}
+
 export type TripPlace = { code: string | null; text: string }
 
 export function stopPlace(s: VehicleStop): TripPlace {
@@ -499,7 +532,10 @@ export type TripProgress = { pct: number; done: number; total: number }
 export function tripProgress(ops: VehicleOps): TripProgress | null {
   const t = ops.trip
   if (!t || t.status === 'cancelled') return null
-  const active = ops.stops.filter((s) => s.status !== 'cancelled')
+  // Route-shaping points are not stops, so they are not progress either: a
+  // trip whose two real stops are both done is 100%, however many waypoints the
+  // dispatcher dragged the line through.
+  const active = ops.stops.filter((s) => s.status !== 'cancelled' && !isRouteVia(s))
   const total = active.length
   const done = active.filter((s) => s.status === 'done').length
   if (t.status === 'completed') return { pct: 1, done: total, total }
@@ -514,7 +550,7 @@ export function tripProgress(ops: VehicleOps): TripProgress | null {
 // The next stop a driver is heading to: the first stop still marked planned
 // (stops are kept in dispatcher-entered order). Undefined when none remain.
 export function nextPlannedStop(stops: VehicleStop[]): VehicleStop | undefined {
-  return stops.find((s) => s.status === 'planned')
+  return stops.find((s) => s.status === 'planned' && !isRouteVia(s))
 }
 
 // One-line trip summary pieces shared by the vehicle-room header and the sidebar
@@ -576,7 +612,10 @@ export type TripSummary = {
 export function tripSummary(ops: VehicleOps): TripSummary | null {
   const t = ops.trip
   if (!t) return null
-  const activeStops = ops.stops.filter((s) => s.status !== 'cancelled')
+  // The banner's stops: real ones only. The ROUTE still runs through the via
+  // points — they are in ops.stops and the router reads them from there — but
+  // the strip above the thread lists places, and a bend in a motorway is not one.
+  const activeStops = ops.stops.filter((s) => s.status !== 'cancelled' && !isRouteVia(s))
   const ns = nextPlannedStop(ops.stops)
   const nextLabel = ns
     ? [labelOf(STOP_TYPES, ns.type), stopLocationLabel(ns)].filter(Boolean).join(', ') || undefined

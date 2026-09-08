@@ -8,6 +8,7 @@ import { canRouteStops } from '../../lib/tripRoute'
 import { DataStat, DataStats } from '../thread/threadChrome'
 import {
   TRIP_STATUSES,
+  isRouteVia,
   labelOf,
   loadingStops,
   stopCityLine,
@@ -174,6 +175,8 @@ export default function TripTab({
   // Summary derivations. Loading = the first loading-type stop (falling back to
   // the first stop); Unloading = the last unloading-type stop (falling back to
   // the last stop). Dates come from the relevant stop's planned time.
+  // Stops a person entered, as opposed to points the map put on the route.
+  const realStops = stops.filter((s) => !isRouteVia(s))
   const ls = loadingStops(stops)
   const us = unloadingStops(stops)
   const loadingStop = ls[0] ?? stops[0]
@@ -235,7 +238,12 @@ export default function TripTab({
         <DataStats>
           <DataStat label="Distance" value={routeOk ? routeOk.distanceText : '—'} />
           <DataStat label="Drive time" value={routeOk ? routeOk.durationText : '—'} />
-          <DataStat label="Stops" value={stops.length || '—'} />
+          {/* REAL stops. A point dragged onto the route to steer it through a
+              junction is not one, and counting it here made this card disagree
+              with the banner above the thread, which stopped counting them on
+              2026-09-08. The list below still shows them — labelled — so they
+              stay removable. */}
+          <DataStat label="Stops" value={realStops.length || '—'} />
           <div className="flex min-w-0 items-center justify-end px-4 py-3">
             <span className="eyebrow inline-flex items-center gap-1.5">
               {expanded ? 'Less' : 'Details'}
@@ -285,7 +293,9 @@ export default function TripTab({
               is recomputed in the background by the panel's save handler. */}
           <div className="mt-3">
             <div className="flex items-center justify-between mb-2">
-              <span className="eyebrow">Stops{stops.length ? ` · ${stops.length}` : ''}</span>
+              <span className="eyebrow">
+                Stops{realStops.length ? ` · ${realStops.length}` : ''}
+              </span>
               {canManage && editingStop !== 'new' && (
                 <button
                   onClick={() => setEditingStop('new')}

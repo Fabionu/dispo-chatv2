@@ -203,11 +203,14 @@ function roadMatchedTrail(points: DriverTrailPoint[], routePath: LatLng[]): LatL
 // coordinates (+ the snapped road label as its free-text location) and the
 // neutral 'other' type — it's a routing waypoint, editable in the Trip tab like
 // any other stop afterwards.
+// A point dropped on the MAP to shape the route. `via` is what keeps it out of
+// the trip banner, the stop count and the completion ring — see isRouteVia.
 function mapStop(pos: LatLng, label: string): VehicleStop {
   return {
     id: stopId(),
     type: 'other',
     status: 'planned',
+    via: true,
     lat: pos.lat,
     lng: pos.lng,
     coordinates: `${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`,

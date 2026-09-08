@@ -4,6 +4,7 @@ import { ICON_ACTION_SMALL } from '../HeaderIconButton'
 import {
   STOP_STATUSES,
   STOP_TYPES,
+  isRouteVia,
   labelOf,
   stopCityLine,
   stopStatusTone,
@@ -35,8 +36,16 @@ export default function StopCard({
   return (
     <div className="group rounded-card border border-line bg-white/2 px-2.5 py-2">
       <div className="flex items-center gap-2">
-        <span className="text-base font-medium">{labelOf(STOP_TYPES, stop.type)}</span>
-        <StatusChip tone={stopStatusTone(stop.status)} label={labelOf(STOP_STATUSES, stop.status)} />
+        <span className="text-base font-medium">
+          {isRouteVia(stop) ? 'Route point' : labelOf(STOP_TYPES, stop.type)}
+        </span>
+        {/* A route point is named for what it is, and carries no status: it says
+            where the road goes, and nobody arrives at it. Without this the list
+            showed it as an ordinary "Other" stop and there was no way to tell
+            why it was missing from the banner above. */}
+        {!isRouteVia(stop) && (
+          <StatusChip tone={stopStatusTone(stop.status)} label={labelOf(STOP_STATUSES, stop.status)} />
+        )}
         <div className="flex-1" />
         {canManage && (
           <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">

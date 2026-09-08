@@ -126,6 +126,10 @@ export const opsSchema = z.object({
         plannedAt: opsStr(80),
         notes: opsStr(1000),
         status: z.enum(['planned', 'done', 'cancelled']),
+        // Set by the map on a route-shaping waypoint. Zod STRIPS unknown keys,
+        // so leaving this out would have silently dropped the flag on the first
+        // save and put the waypoints back in the banner.
+        via: z.boolean().optional(),
       }),
     )
     .max(50)
