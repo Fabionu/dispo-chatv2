@@ -1047,6 +1047,33 @@ html[data-theme='light'] {
    (The alternative — clipping the composer with `overflow: hidden` — would
    also clip the @-mention picker and the format bar, which are absolutely
    positioned to float ABOVE it.) */
+/* The reply/edit row opening and closing. A single grid row interpolated
+   between 0fr and 1fr — no measured height, so a two-line snippet closes as
+   cleanly as a one-line one — with the opacity running shorter than the height
+   so the text is gone before the space is, rather than being squashed on its
+   way out. See ComposerContextSlot for why the node outlives its own content. */
+.composer-context-slot {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 130ms ease-out;
+}
+
+.composer-context-slot.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+/* The row inside has to be able to be shorter than its content while the track
+   collapses; without this the grid item refuses to go below min-content and the
+   whole thing snaps. */
+.composer-context-slot > * {
+  min-height: 0;
+  overflow: hidden;
+}
+
 .composer-context {
   border-top-left-radius: calc(var(--chrome-radius) - 1px);
   border-top-right-radius: calc(var(--chrome-radius) - 1px);
@@ -1455,7 +1482,8 @@ input, button, textarea, select {
 :root[data-animations='off'] :where(
   .workspace-shell,
   .workspace-sidebar-panel,
-  .workspace-main
+  .workspace-main,
+  .composer-context-slot
 ) {
   transition: none;
 }

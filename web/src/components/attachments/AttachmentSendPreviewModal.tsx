@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUp, ImageOff, Loader2, RefreshCw, Trash2, X } from 'lucide-react'
+import { ArrowUp, ImageOff, Loader2, RefreshCw, X } from 'lucide-react'
 import {
   DOC_ACCEPT,
   IMAGE_ACCEPT,
@@ -28,8 +28,19 @@ type Props = {
 }
 
 // Pre-send preview. Opens after the user picks a file, BEFORE anything is sent:
-// a compact dialog — not a full-screen takeover — holding the bounded preview,
-// the file's identity, the caption, and the send action.
+// the picture, the file's identity, the caption, and the send action.
+//
+// IT IS NOT A DIALOG (user, 2026-09-08: "we should have the preview within the
+// chat window and not separate"). It was a centred card on a dimmed backdrop,
+// which put the photo you are about to send in a small box floating over the
+// conversation — the thing being sent read as an interruption to the room it was
+// going to. It is a LAYER inside the chat pane now: it fills exactly the area
+// the messages and the composer occupy, replaces them for as long as you are
+// deciding, and gives the picture all of that room.
+//
+// That is also why the caption bar sits at the bottom edge rather than inside a
+// card of its own: it lands where the composer was, so what you type goes on
+// looking like what you were typing before you picked the file.
 //
 // Images and documents share one structure (AttachmentPreviewFrame +
 // AttachmentIdentity): only the stage content differs, so a PDF and a photo are
@@ -137,12 +148,12 @@ export default function AttachmentSendPreviewModal({
       role="dialog"
       aria-modal="true"
       aria-label={`Send ${file.name}`}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      // ABSOLUTE, not fixed: the parent is the chat pane's relative wrapper (see
+      // ChatView), so this covers the thread and the composer and nothing else.
+      // The rail, the header and the trip bar stay put — you have not left the
+      // conversation, you are composing into it.
+      className="absolute inset-0 z-40 flex flex-col bg-bg"
     >
-      {/* Dimmed backdrop — deliberately NOT a click-away, so a typed caption
-          can't be lost by a stray click outside the dialog. */}
-      <div className="absolute inset-0 bg-black/70" aria-hidden />
-
       <input
         ref={replaceInputRef}
         type="file"
@@ -151,27 +162,48 @@ export default function AttachmentSendPreviewModal({
         className="hidden"
       />
 
-      <div
-        className="relative flex w-full max-w-[34rem] max-h-[85vh] flex-col overflow-hidden rounded-modal border border-line bg-panel shadow-modal"
-      >
-        <header className="flex shrink-0 items-center justify-between gap-2 px-4 pt-3 pb-2">
-          <h2 className="text-base font-semibold">Send attachment</h2>
-          <button
-            type="button"
-            onClick={requestClose}
-            disabled={sending}
-            aria-label="Cancel"
-            title="Cancel"
-            className={`${ICON_ACTION_SMALL} shrink-0 disabled:opacity-40`}
-          >
-            <X size="0.9375rem" strokeWidth={2} />
-          </button>
-        </header>
+      {/* The identity row IS the header now. A "Send attachment" title over a
+          picture of the attachment says nothing the picture does not; the name,
+          type and size do, and they are what someone checks before putting a
+          screenshot into a room. Its file actions — replace, cancel — ride with
+          it rather than sitting under the stage. */}
+      <header className="shrink-0 border-b border-line px-4 py-2.5">
+        <AttachmentIdentity
+          name={file.name}
+          mimeType={file.type}
+          byteSize={file.size}
+          trailing={
+            <>
+              <button
+                type="button"
+                onClick={() => replaceInputRef.current?.click()}
+                disabled={sending}
+                aria-label="Replace file"
+                title="Replace file"
+                className={`${ICON_ACTION_SMALL} disabled:opacity-40`}
+              >
+                <RefreshCw size="0.8125rem" strokeWidth={1.8} />
+              </button>
+              <button
+                type="button"
+                onClick={requestClose}
+                disabled={sending}
+                aria-label="Cancel"
+                title="Cancel"
+                className={`${ICON_ACTION_SMALL} hover:text-alert disabled:opacity-40`}
+              >
+                <X size="0.9375rem" strokeWidth={2} />
+              </button>
+            </>
+          }
+        />
+      </header>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-3">
-          {/* Stage — bounded in BOTH axes so a very tall screenshot is scaled
-              down whole (object-contain) instead of taking over the dialog. */}
-          <AttachmentPreviewFrame bleed={isPdf}>
+      <div className="flex min-h-0 flex-1 flex-col justify-center gap-3 overflow-y-auto px-4 py-4">
+        {/* Stage — the picture takes the room the thread was using. Still
+            bounded in BOTH axes, so a tall screenshot is scaled down whole
+            rather than pushing the caption bar off the bottom. */}
+        <AttachmentPreviewFrame bleed={isPdf}>
             {isImage && objectUrl ? (
               <>
                 <img
@@ -179,7 +211,7 @@ export default function AttachmentSendPreviewModal({
                   alt={file.name}
                   onLoad={() => setImageState('ready')}
                   onError={() => setImageState('failed')}
-                  className={`max-h-[20rem] max-w-full object-contain rounded-chip transition-opacity duration-200 motion-reduce:transition-none ${
+                  className={`max-h-full max-w-full object-contain rounded-chip transition-opacity duration-200 motion-reduce:transition-none ${
                     imageState === 'ready' ? 'opacity-100' : 'opacity-0'
                   }`}
                 />
@@ -202,7 +234,7 @@ export default function AttachmentSendPreviewModal({
                 )}
               </>
             ) : isPdf ? (
-              <div className="h-[20rem] w-full">
+              <div className="h-full min-h-[18rem] w-full">
                 <PdfPagePreview
                   file={file}
                   fallback={
@@ -216,50 +248,19 @@ export default function AttachmentSendPreviewModal({
             ) : (
               <AttachmentGlyphStage mimeType={file.type} />
             )}
-          </AttachmentPreviewFrame>
+        </AttachmentPreviewFrame>
 
-          {/* Identity + the two file-level actions. */}
-          <AttachmentIdentity
-            name={file.name}
-            mimeType={file.type}
-            byteSize={file.size}
-            trailing={
-              <>
-                <button
-                  type="button"
-                  onClick={() => replaceInputRef.current?.click()}
-                  disabled={sending}
-                  aria-label="Replace file"
-                  title="Replace file"
-                  className={`${ICON_ACTION_SMALL} disabled:opacity-40`}
-                >
-                  <RefreshCw size="0.8125rem" strokeWidth={1.8} />
-                </button>
-                <button
-                  type="button"
-                  onClick={onCancel}
-                  disabled={sending}
-                  aria-label="Remove file"
-                  title="Remove file"
-                  className={`${ICON_ACTION_SMALL} hover:text-alert disabled:opacity-40`}
-                >
-                  <Trash2 size="0.8125rem" strokeWidth={1.8} />
-                </button>
-              </>
-            }
-          />
-
-          {error && (
-            <p role="alert" className="text-sm leading-snug text-alert">
-              {error}
-            </p>
-          )}
-        </div>
+        {error && (
+          <p role="alert" className="text-sm leading-snug text-alert">
+            {error}
+          </p>
+        )}
+      </div>
 
         {/* Caption + send. Same capsule, spacing and circular send control as
             the chat composer, so the two read as one control. */}
-        <div className="shrink-0 border-t border-line px-4 pt-2.5 pb-3">
-          <div className="rounded-card bg-composer">
+      <div className="shrink-0 px-3 pt-2 pb-3">
+        <div className="rounded-card border border-line bg-composer">
             <div className="flex items-end gap-1.5 px-2.5 py-2">
               <textarea
                 ref={textareaRef}
@@ -317,8 +318,7 @@ export default function AttachmentSendPreviewModal({
                   Keep
                 </button>
               </span>
-            )}
-          </div>
+          )}
         </div>
       </div>
     </div>

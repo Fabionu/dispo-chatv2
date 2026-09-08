@@ -33,6 +33,7 @@ import { getSocket } from '../lib/socket'
 import ChatComposer, { type ChatComposerHandle, type EditContext } from './composer/ChatComposer'
 import ChatHeader from './chat/ChatHeader'
 import ChatModals from './chat/ChatModals'
+const AttachmentSendPreview = lazy(() => import('./attachments/AttachmentSendPreviewModal'))
 import type { AttachmentContext } from './chat/chatTypes'
 import { PaneLoader, PanelLoader } from './LazyFallback'
 
@@ -1351,8 +1352,22 @@ export default function ChatView({
           <PinnedBar messages={pinned} onJump={jumpToMessage} onUnpin={unpinMessage} />
           {/* Messages — wrapped in a relative container so the floating
               scroll-to-latest button can overlay the scroll area without
-              scrolling along with the content. */}
+              scrolling along with the content. It is also what the pre-send
+              attachment preview fills: that layer covers the thread and the
+              composer and stops there, which is the whole point of it (see
+              AttachmentSendPreviewModal). */}
           <div className="flex-1 flex flex-col relative min-h-0">
+            {pendingFile && (
+              <Suspense fallback={null}>
+                <AttachmentSendPreview
+                  file={pendingFile}
+                  initialCaption={text}
+                  onReplace={setPendingFile}
+                  onCancel={() => setPendingFile(null)}
+                  onSend={sendPendingFile}
+                />
+              </Suspense>
+            )}
             <div
               ref={scrollRef}
               onScroll={onScroll}
@@ -1650,11 +1665,6 @@ export default function ChatView({
       <ChatModals
         group={group}
         members={members}
-        pendingFile={pendingFile}
-        pendingCaption={text}
-        onReplacePendingFile={setPendingFile}
-        onCancelPendingFile={() => setPendingFile(null)}
-        onSendPendingFile={sendPendingFile}
         currentUserId={currentUserId}
         imagePreview={imagePreview}
         onCloseImagePreview={() => setImagePreview(null)}

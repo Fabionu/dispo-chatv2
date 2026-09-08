@@ -13,7 +13,6 @@ import ScheduleMessageModal from '../messages/ScheduleMessageModal'
 // Lazy modals — these carry the pdf.js / heavy preview code, so they load only
 // when actually opened (same code-splitting as before the extraction).
 const ImagePreviewModal = lazy(() => import('../attachments/ImagePreviewModal'))
-const AttachmentSendPreviewModal = lazy(() => import('../attachments/AttachmentSendPreviewModal'))
 const DocumentPreviewModal = lazy(() => import('../attachments/DocumentPreviewModal'))
 
 // The chat's modal farm, extracted from ChatView: every fixed-position overlay
@@ -28,11 +27,6 @@ type Props = {
   // Drives @mention highlighting in the attachment previews' captions.
   currentUserId: string
   // Pre-send file preview (staged via picker, drag-drop, or paste).
-  pendingFile: File | null
-  pendingCaption: string
-  onReplacePendingFile: (f: File | null) => void
-  onCancelPendingFile: () => void
-  onSendPendingFile: (caption: string) => void
   // Attachment lightboxes (image + non-previewable document card).
   imagePreview: AttachmentContext | null
   onCloseImagePreview: () => void
@@ -65,11 +59,6 @@ export default function ChatModals({
   group,
   members,
   currentUserId,
-  pendingFile,
-  pendingCaption,
-  onReplacePendingFile,
-  onCancelPendingFile,
-  onSendPendingFile,
   imagePreview,
   onCloseImagePreview,
   docPreview,
@@ -94,18 +83,6 @@ export default function ChatModals({
 }: Props) {
   return (
     <>
-      {pendingFile && (
-        <Suspense fallback={<ModalLoader />}>
-        <AttachmentSendPreviewModal
-          file={pendingFile}
-          initialCaption={pendingCaption}
-          onReplace={onReplacePendingFile}
-          onCancel={onCancelPendingFile}
-          onSend={onSendPendingFile}
-        />
-        </Suspense>
-      )}
-
       {imagePreview && (
         <Suspense fallback={<ModalLoader />}>
         <ImagePreviewModal

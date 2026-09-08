@@ -165,8 +165,25 @@ export function RowActionsTrigger({
 // in tailwind.config.js: `rounded-full` survives for photos, presence dots and
 // sliding tracks — a count is none of those).
 //
-// So: ONE mark, square, set in the label voice with tabular figures, in three
-// tones and two sizes.
+// ROUND AGAIN as of 2026-09-08 (user: "inca e square"). The paragraph above is
+// kept because its first half still holds — one mark, three tones — but its
+// conclusion belonged to the square era and outlived it twice over:
+//
+//   • the app was re-rounded on 2026-09-03, and a surface carrying no radius
+//     class at all is the thing that pass was looking for. This badge was the
+//     last one left with none;
+//   • the rail already had two round counts. The pending-connections and
+//     pending-invites headers use `rounded-full` for exactly this — a count on a
+//     solid — and they sit in the SAME list, sometimes on screen at once. The
+//     inconsistency was never square-vs-round in the app; it was this badge
+//     against its own two siblings.
+//
+// `rounded-full` and not the 6px control step, because the box is as tall as its
+// figures are: at one digit it is a disc, at two a pill, and a 6px corner on a
+// ~19px box reads as a square that someone sanded rather than as a shape.
+//
+// So: ONE mark, set in the label voice with tabular figures, in three tones and
+// two sizes.
 //   count   — the neutral solid. The loudest thing in the rail, which is correct:
 //             it is the only element whose whole job is to be noticed.
 //   mention — the same block in the accent. Being named outranks ordinary
@@ -211,8 +228,8 @@ export function UnreadBadge({
       aria-hidden={label ? undefined : true}
       aria-label={label}
       title={label}
-      className={`shrink-0 inline-flex items-center justify-center font-semibold leading-none tabular-nums tracking-normal ${
-        row ? 'px-1' : 'h-4 min-w-4 px-1 text-2xs'
+      className={`shrink-0 inline-flex items-center justify-center rounded-full font-semibold leading-none tabular-nums tracking-normal ${
+        row ? 'px-1.5' : 'h-4 min-w-4 px-1 text-2xs'
       } ${BADGE_TONE[tone]}`}
       style={
         row

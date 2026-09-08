@@ -9,7 +9,7 @@ import {
 import { ArrowUp, Bold, Clock3, Italic } from 'lucide-react'
 import type { GroupMember, ReplyToPreview } from '../../lib/types'
 import { DOC_ACCEPT, IMAGE_ACCEPT, fileError } from '../attachments/attachmentUtils'
-import ComposerContextRow from '../messages/ComposerContextRow'
+import { ComposerContextSlot } from '../messages/ComposerContextRow'
 import { useComposerAutosize } from '../../hooks/useComposerAutosize'
 import { useActiveComposerEffect } from '../../lib/animations'
 import AttachMenu from './AttachMenu'
@@ -537,29 +537,27 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-px h-2 w-2 rotate-45 border-r border-b bg-surface" />
         </div>
       )}
-      {replyContext && (
-        <ComposerContextRow
-          tone="reply"
-          label={`Replying to ${replyContext.authorName}`}
-          snippet={
-            replyContext.deleted
-              ? '(deleted message)'
-              : replyContext.body ||
-                replyContext.attachment?.originalName ||
-                (replyContext.hasAttachments ? 'Attachment' : '')
-          }
-          attachment={replyContext.attachment}
-          onCancel={onCancelReply}
-        />
-      )}
-      {editContext && (
-        <ComposerContextRow
-          tone="edit"
-          label="Editing message"
-          snippet={editContext.originalBody}
-          onCancel={onCancelEdit}
-        />
-      )}
+<ComposerContextSlot
+        contextKey={replyContext ? `reply:${replyContext.id}` : null}
+        tone="reply"
+        label={`Replying to ${replyContext?.authorName ?? ''}`}
+        snippet={
+          replyContext?.deleted
+            ? '(deleted message)'
+            : replyContext?.body ||
+              replyContext?.attachment?.originalName ||
+              (replyContext?.hasAttachments ? 'Attachment' : '')
+        }
+        attachment={replyContext?.attachment}
+        onCancel={onCancelReply}
+      />
+      <ComposerContextSlot
+        contextKey={editContext ? `edit:${editContext.id}` : null}
+        tone="edit"
+        label="Editing message"
+        snippet={editContext?.originalBody ?? ''}
+        onCancel={onCancelEdit}
+      />
       {/* Minimal input bar: add (+) · textarea · send. The controls share
           --composer-size and are vertically centred against the textarea, so
           they stay aligned with the middle of the input whether it's one line or
