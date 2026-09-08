@@ -1378,7 +1378,13 @@ export default function ChatView({
               // for all but the moment a strip is open.
               style={{
                 ['--composer-reserve' as string]: `${composerHeight + 8}px`,
-                paddingBottom: 'calc(var(--composer-reserve) + var(--strip-reserve, 0px))',
+                // The enter animation's travel is part of the reserve, not an
+                // extra on top of it: a just-sent row is drawn --msg-enter-rise
+                // BELOW its box while it animates, and the 8px design gap alone
+                // was smaller than that rise. Added in CSS rather than folded
+                // into the number above so the two stay tied to one token.
+                paddingBottom:
+                  'calc(var(--composer-reserve) + var(--msg-enter-rise, 0px) + var(--strip-reserve, 0px))',
               }}
             >
               {loading ? (

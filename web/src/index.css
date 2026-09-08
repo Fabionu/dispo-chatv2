@@ -661,10 +661,20 @@ html[data-theme='light'] {
 
    WHICH rows get it is decided in MessageRow, not here; see the note on
    FRESH_WINDOW_MS. Opening a thread must never animate its whole history. */
+/* How far a new message travels on its way in. A TOKEN, because the thread's
+   bottom reserve has to be at least this big: a row is drawn this far below its
+   own box for the length of the animation, and if the reserve does not allow
+   for it the newest message is painted underneath the composer and then rises
+   out of it (user, 2026-09-08: own bubbles "stay behind the composer" on send).
+   The gap was 8px and the rise is 10, so every send went 2px under. */
+:root {
+  --msg-enter-rise: 10px;
+}
+
 @keyframes message-enter {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(var(--msg-enter-rise));
   }
   to {
     opacity: 1;
@@ -845,10 +855,29 @@ html[data-theme='light'] {
   border-width: 0;
   padding: 0;
   margin-top: var(--bubble-gap);
+  /* THE ROW IS THE WHOLE LINE (user, 2026-09-08: reply should not need a
+     double-click on the bubble itself).
+
+     The timeline's `w-fit` shrink-wraps the row to its message, which is right
+     there — in the timeline the row IS the message, edge to edge. In the bubble
+     style the block sits on one side of a wide line, so a shrink-wrapped row
+     ends at the block's edge and every gesture the ROW owns — double-click to
+     reply, right-click for the action strip, the hover highlight — only fires
+     if you happen to land on the bubble. Stretching the row hands those
+     gestures the line they belong to.
+
+     The block does NOT stretch with it: `align-items` above keeps it at its
+     content width, which is the same line that already stops a long name from
+     widening a short message. And the auto margin has to go, because an auto
+     cross-margin suppresses stretch — the row would silently shrink-wrap
+     again. */
+  width: auto;
+  margin-right: 0;
 }
 
 [data-msg-style='bubble'] .msg-row[data-own] {
   align-items: flex-end;
+  margin-left: 0;
 }
 
 [data-msg-style='bubble'] .msg-row[data-head] {
@@ -1324,6 +1353,22 @@ input, button, textarea, select {
 }
 
 .composer-input::selection {
+  color: rgb(var(--color-text));
+}
+
+/* ── Selected text ──────────────────────────────────────────────────────────
+   The app declares every other colour it uses and left this one to the user
+   agent, which on a near-black surface paints a translucent blue you cannot
+   see — selecting a message looked like nothing happened at all (user,
+   2026-09-08: "cand dai select la text, nu se vede selectia deloc").
+
+   Stated in the app's own tokens, so it inverts with the theme for free rather
+   than being a fixed blue that only works on one of the two. The wash at 22% is
+   high enough to read on #000 and low enough that the glyphs stay legible
+   through it — which is why the text colour is forced to full brightness rather
+   than left to inherit a muted step. */
+::selection {
+  background: rgb(var(--color-wash) / 0.22);
   color: rgb(var(--color-text));
 }
 

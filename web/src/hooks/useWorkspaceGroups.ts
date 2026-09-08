@@ -221,6 +221,19 @@ export function useWorkspaceGroups({
     function onGroupAdded() {
       void refreshGroups()
     }
+    // A vehicle room's operational blob changed on someone else's screen — a
+    // trip created or replaced, stops edited, a route saved, the vehicle's
+    // details touched. The server has emitted this to the group room all along
+    // (routes/groups/update.ts) and NOTHING was listening, so a trip a colleague
+    // entered did not appear until the page was reloaded (user, 2026-09-08).
+    //
+    // Refetch rather than patch: the payload carries only the group id, and the
+    // ops blob feeds the sidebar row's trip status, the thread's trip banner and
+    // the Group Info Trip tab — three readers that must not be able to disagree
+    // about what the trip is.
+    function onTripUpdated() {
+      void refreshGroups()
+    }
     // Removed from a group (kicked by an admin): refresh the rail and, if that
     // group is the one currently open, drop the selection so we don't keep
     // showing a conversation we can no longer access.
@@ -258,6 +271,8 @@ export function useWorkspaceGroups({
     socket.on('group:added', onGroupAdded)
     socket.on('group:removed', onGroupRemoved)
     socket.on('group:prefs', onGroupPrefs)
+    socket.on('trip:updated', onTripUpdated)
+    socket.on('trip:status', onTripUpdated)
     // Socket events that occurred during an outage cannot be replayed. Once
     // transport recovers, replace the rail with the authoritative snapshot so
     // unread counts, previews, ordering, and membership cannot silently drift.
@@ -269,6 +284,8 @@ export function useWorkspaceGroups({
       socket.off('group:added', onGroupAdded)
       socket.off('group:removed', onGroupRemoved)
       socket.off('group:prefs', onGroupPrefs)
+      socket.off('trip:updated', onTripUpdated)
+      socket.off('trip:status', onTripUpdated)
       socket.io.off('reconnect', refreshGroups)
       for (const timer of Object.values(typingExpiry)) window.clearTimeout(timer)
     }
