@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check, Copy, MapPin, Pencil, X } from 'lucide-react'
-import { ICON_ACTION_SMALL } from '../HeaderIconButton'
+import { ICON_ACTION_TINY } from '../HeaderIconButton'
 import RoutePointCard, { RoleBadge, RouteRow } from './RoutePointCard'
 import { isValidCoord, splitLabel } from './routePlannerUtils'
 import type { LatLng, RoutePoint, RoutePointRole } from '../../lib/here/types'
@@ -107,18 +107,18 @@ export default function PointRow({
               type="button"
               onClick={onEdit}
               title={point.label}
-              className="block w-full truncate text-left text-base font-medium leading-snug text-text transition-colors hover:text-active focus-visible:underline focus-visible:outline-none"
+              className="block w-full truncate text-left text-base font-medium leading-[1.25] text-text transition-colors hover:text-active focus-visible:underline focus-visible:outline-none"
             >
               {head}
             </button>
           ) : (
-            <div className="truncate text-base font-medium leading-snug text-text" title={point.label}>
+            <div className="truncate text-base font-medium leading-[1.25] text-text" title={point.label}>
               {head}
             </div>
           )
         }
         meta={
-          <div className="flex min-w-0 items-center gap-1.5 text-xs leading-tight text-faint">
+          <div className="flex min-w-0 items-center gap-1.5 text-xs leading-[1.2] text-faint">
             {invalid ? (
               <span className="min-w-0 truncate text-alert">No coordinates — not routed</span>
             ) : rest ? (
@@ -219,7 +219,7 @@ function IconBtn({
       aria-label={label}
       title={label}
       onClick={onClick}
-      className={`${ICON_ACTION_SMALL} transition-colors`}
+      className={`${ICON_ACTION_TINY} transition-colors`}
     >
       {children}
     </button>

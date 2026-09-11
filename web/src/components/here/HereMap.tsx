@@ -42,6 +42,7 @@ import {
   type HereMapStyleControlHandle,
 } from './HereMapStyleControl'
 import { createHereMapZoomControl, type HereMapZoomControlHandle } from './HereMapZoomControl'
+import { renderRouteBadge, routeMotionAllowed } from '../map/routeDecor'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -121,12 +122,6 @@ function easeOutCubic(t: number): number {
   return 1 - (1 - t) ** 3
 }
 
-function prefersReducedMotion(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
-  )
-}
 
 /** A stable fingerprint of the drawn route. draw() also runs for marker and
  *  layer changes, so the animation needs to tell "the route itself changed"
@@ -1647,21 +1642,23 @@ export default function HereMap({
       markerGroup.addObject(marker)
     }
 
-    // Distance badge — a small Google-Maps-style pill near the route midpoint.
-    // Rendered as a DOM overlay (H.map.DomMarker) so its CSS `pointer-events:
-    // none` lets every press/drag fall through to the route line and markers
-    // underneath; it never intercepts a gesture. Cleared with the group on each
-    // redraw, so it follows the route as stops/legs change.
+    // Distance badge — a small pill near the route midpoint (the same element
+    // GoogleMap draws; map/routeDecor.ts builds both). Rendered as a DOM
+    // overlay (H.map.DomMarker) so its CSS `pointer-events: none` lets every
+    // press/drag fall through to the route line and markers underneath; it
+    // never intercepts a gesture. Cleared with the group on each redraw, so it
+    // follows the route as stops/legs change.
     if (routeDistanceLabel && routePath.length >= 2) {
       const mid = pathMidpoint(routePath)
       if (mid) {
         const outer = document.createElement('div')
         const pill = document.createElement('div')
         pill.className = 'route-distance-badge'
-        pill.textContent = routeDistanceLabel
-        outer.appendChild(pill)
-        const badge = new H.map.DomMarker(mid, { icon: new H.map.DomIcon(outer) })
-        markerGroup.addObject(badge)
+        if (renderRouteBadge(pill, routeDistanceLabel)) {
+          outer.appendChild(pill)
+          const badge = new H.map.DomMarker(mid, { icon: new H.map.DomIcon(outer) })
+          markerGroup.addObject(badge)
+        }
       }
     }
 
@@ -1704,7 +1701,7 @@ export default function HereMap({
     // the simplification are chosen for the zoom the user will actually see.
     // Fires for a CHANGED route as well as a new one — editing stops is exactly
     // when you want to watch where the route now goes.
-    const canAnimate = routePath.length >= 2 && !prefersReducedMotion() && !keepHandedOffView
+    const canAnimate = routePath.length >= 2 && routeMotionAllowed() && !keepHandedOffView
     if (routeChanged) {
       // A pending resume belongs to the route being replaced; drop it so it can
       // never continue onto a different line.

@@ -36,7 +36,9 @@ export type MapSurfaceProps = {
   routePolylines: string[]
   /** Scale the route stroke down at overview zooms. */
   scaleRouteWidthWithZoom?: boolean
-  /** Pre-formatted total distance for the mid-route badge. */
+  /** Pre-formatted total distance for the mid-route badge. Distance only —
+   *  the time is on the panel's cards (user, 2026-09-11), and a badge that
+   *  repeated it made the map say the same thing twice. */
   routeDistanceLabel?: string | null
   /** Whether the HGV truck-restriction overlay is on. */
   truckOverlay: boolean
@@ -89,4 +91,10 @@ export type MapSurfaceProps = {
   /** The engine's own view, reported as it changes (hot during a pan — keep
    *  the handler cheap), for that handoff. */
   onViewportChange?: (view: MapViewport) => void
+  /**
+   * Street View opened (true) or closed (false) over the map. Google engine
+   * only — HERE has no panoramas. The planner uses it to clear its own cards
+   * off the panorama.
+   */
+  onStreetViewChange?: (open: boolean) => void
 }

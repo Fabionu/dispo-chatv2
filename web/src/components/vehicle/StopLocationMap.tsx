@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Check, MapPin, Search, X } from 'lucide-react'
 import { api } from '../../lib/api'
 import { looksLikeCoordPair, parseLatLng } from '../../lib/here/geo'
 import type { HerePlace, LatLng } from '../../lib/here/types'
+import { newPlaceSession, suggestPlaces, type PlaceSession, type PlaceSuggestion } from '../../lib/google/places'
+import type { MapViewport } from '../map/mapProps'
 import MapView from '../map/MapView'
+import Spinner from '../Spinner'
 
 type Props = {
   // Seed query composed from the stop's address fields (may be empty).
@@ -26,15 +29,20 @@ function coordText(c: LatLng): string {
 }
 
 // In-chat map tool for picking ONE stop's coordinates. Opens seeded with the
-// stop's address, searches it via HERE Discover, and lets the user pick a
-// result, type a "lat, lng" pair, or right-click the map to drop a pin — then
-// confirm, which writes "lat, lng" back into that stop's field. Reuses the
-// shared map (MapView) for the pin. Never auto-confirms and never geocodes on
-// its own.
+// stop's address, searches it via Google Places (lib/google/places.ts), and
+// lets the user pick a result, type a "lat, lng" pair, or right-click the map
+// to drop a pin — then confirm, which writes "lat, lng" back into that stop's
+// field. Reuses the shared map (MapView) for the pin. Never auto-confirms and
+// never geocodes on its own.
 export default function StopLocationMap({ initialQuery, onConfirm, onCancel }: Props) {
   const [query, setQuery] = useState(initialQuery)
-  const [items, setItems] = useState<HerePlace[]>([])
+  const [items, setItems] = useState<PlaceSuggestion[]>([])
   const [loading, setLoading] = useState(false)
+  // A picked suggestion being geocoded (Google predictions carry no coordinate
+  // until they are picked). The bar shows it as chosen straight away.
+  const [pending, setPending] = useState<PlaceSuggestion | null>(null)
+  const sessionRef = useRef<PlaceSession | null>(null)
+  const viewRef = useRef<MapViewport | null>(null)
   // Coordinates entered in Add Trip are already an unambiguous location.
   // Select them immediately so the map centers the pin there on open.
   const [selected, setSelected] = useState<HerePlace | null>(() => {
@@ -45,9 +53,9 @@ export default function StopLocationMap({ initialQuery, onConfirm, onCancel }: P
   // Debounced address search. A coordinate pair is parsed locally and never sent
   // to address search; a selected value short-circuits searching.
   useEffect(() => {
-    if (selected) return
+    if (selected || pending) return
     const q = query.trim()
-    if (looksLikeCoordPair(q) || q.length < 3) {
+    if (looksLikeCoordPair(q) || q.length < 2) {
       setItems([])
       setLoading(false)
       return
@@ -56,19 +64,20 @@ export default function StopLocationMap({ initialQuery, onConfirm, onCancel }: P
     let cancelled = false
     const timer = setTimeout(async () => {
       try {
-        const res = await api.here.search(q)
-        if (!cancelled) setItems(res.items)
+        sessionRef.current ??= newPlaceSession()
+        const next = await suggestPlaces(q, sessionRef.current, viewRef.current)
+        if (!cancelled) setItems(next)
       } catch {
         if (!cancelled) setItems([])
       } finally {
         if (!cancelled) setLoading(false)
       }
-    }, 250)
+    }, 200)
     return () => {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [query, selected])
+  }, [query, selected, pending])
 
   const trimmed = query.trim()
   const coord = !selected && looksLikeCoordPair(trimmed) ? parseLatLng(trimmed) : null
@@ -76,6 +85,21 @@ export default function StopLocationMap({ initialQuery, onConfirm, onCancel }: P
   function pick(place: HerePlace) {
     setSelected(place)
     setItems([])
+    sessionRef.current = null
+  }
+
+  async function pickSuggestion(suggestion: PlaceSuggestion) {
+    setItems([])
+    setPending(suggestion)
+    try {
+      pick(await suggestion.resolve())
+    } catch {
+      // No coordinate, no pin: hand the text back so the next result can be tried.
+      setQuery(suggestion.label)
+      sessionRef.current = null
+    } finally {
+      setPending(null)
+    }
   }
 
   return (
@@ -83,12 +107,18 @@ export default function StopLocationMap({ initialQuery, onConfirm, onCancel }: P
       {/* Search bar */}
       <div className="shrink-0 px-3 pt-2.5 pb-1.5 flex flex-col gap-1.5">
         <div className="flex items-center gap-2 rounded-full border border-line bg-white/4 px-3.5 h-10 transition-colors focus-within:border-line">
-          {selected ? (
+          {pending ? (
+            <Spinner size={15} className="shrink-0" />
+          ) : selected ? (
             <MapPin size="0.9375rem" strokeWidth={1.8} className="shrink-0 text-active" />
           ) : (
             <Search size="0.9375rem" strokeWidth={1.8} className="shrink-0 text-faint" />
           )}
-          {selected ? (
+          {pending ? (
+            <span className="flex-1 truncate text-base" title={pending.label}>
+              {pending.label}
+            </span>
+          ) : selected ? (
             <>
               <span className="flex-1 truncate text-base" title={selected.label}>
                 {selected.label || selected.title}
@@ -139,25 +169,23 @@ export default function StopLocationMap({ initialQuery, onConfirm, onCancel }: P
               <button
                 key={it.id}
                 type="button"
-                onClick={() => pick(it)}
+                onClick={() => void pickSuggestion(it)}
                 className="w-full text-left px-3 py-2 hover:bg-white/6 transition-colors flex items-start gap-2"
               >
                 <MapPin size="0.875rem" className="mt-0.5 shrink-0 text-muted" strokeWidth={1.8} />
                 <span className="min-w-0">
                   <span className="block text-base truncate">{it.title}</span>
-                  {it.label && it.label !== it.title && (
-                    <span className="block text-xs text-muted truncate">{it.label}</span>
-                  )}
+                  {it.subtitle && <span className="block text-xs text-muted truncate">{it.subtitle}</span>}
                 </span>
               </button>
             ))}
           </div>
         )}
-        {!selected && !coord && !loading && items.length === 0 && (
+        {!selected && !pending && !coord && !loading && items.length === 0 && (
           <div className="text-sm text-faint px-1.5">
             {trimmed.length === 0
               ? "Search for the stop's address, or right-click a spot on the map."
-              : trimmed.length < 3
+              : trimmed.length < 2
                 ? 'Keep typing to search…'
                 : 'No matches — try a different address, or right-click the map.'}
           </div>
@@ -174,6 +202,9 @@ export default function StopLocationMap({ initialQuery, onConfirm, onCancel }: P
           routePolylines={[]}
           truckOverlay={false}
           center={selected?.position ?? null}
+          onViewportChange={(view) => {
+            viewRef.current = view
+          }}
           onMapContextMenu={async ({ lat, lng, zoom }) => {
             // Right-click drops a pin; best-effort reverse geocode for a label.
             let label = coordText({ lat, lng })

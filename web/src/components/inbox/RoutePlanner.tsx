@@ -38,6 +38,7 @@ import {
 } from '../../lib/here/truckPresets'
 import type { TruckPreset } from '../../lib/here/truckPresets'
 import MapView from '../map/MapView'
+import type { MapViewport } from '../map/mapProps'
 import PlaceSearchField from '../here/PlaceSearchField'
 import Spinner from '../Spinner'
 import { ICON_ACTION_BASE, ICON_ACTION_IDLE } from '../HeaderIconButton'
@@ -134,7 +135,8 @@ function readablePaymentMethod(value: string): string {
 }
 
 // "Route planner" workspace tool (HERE only). One shared RoutePoint[] models the
-// whole route (start → stops → destination); points come from HERE search, a
+// whole route (start → stops → destination); points come from place search
+// (Google Places, lib/google/places.ts), a
 // right-click map menu (reverse-geocoded + snapped), or dragging a marker. A
 // compact, left-collapsing floating panel holds the point list + a collapsible
 // truck profile with saveable presets. Field/text edits draw via the explicit
@@ -169,7 +171,7 @@ function routeSigOf(coords: LatLng[], truck: TruckProfileForm): string {
 // The planner's own select surface — matches PresetSelect's trigger and the
 // truck-profile inputs, so the crew card reads as part of the same panel.
 const CREW_FIELD =
-  'rounded-card h-8 w-full min-w-0 border border-line bg-transparent px-2.5 text-sm outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4'
+  'rounded-card h-7 w-full min-w-0 border border-line bg-transparent px-2 text-sm outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4'
 
 // DD/MM/YYYY + HH:MM as the browser's local time. Local rather than the route's
 // own zone on purpose: the planner's ETA has always been "now plus the drive"
@@ -232,6 +234,10 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
   const [savedPlaceMenu, setSavedPlaceMenu] = useState<SavedPlaceMenuState | null>(null)
   const [placesOpen, setPlacesOpen] = useState(false)
   const [mapCenter, setMapCenter] = useState<LatLng | null>(null)
+  // Street View is up over the map. The cards come off the panorama while it
+  // is (user, 2026-09-11) — a panorama is looked AT, and a 300px column over
+  // its left third hid exactly the kerb the dispatcher opened it to see.
+  const [streetView, setStreetView] = useState(false)
   const [placeEditor, setPlaceEditor] = useState<PlaceEditorState | null>(null)
   const [placeSaving, setPlaceSaving] = useState(false)
   const [placeError, setPlaceError] = useState<string | null>(null)
@@ -268,6 +274,10 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
 
   const regionRef = useRef<HTMLDivElement>(null)
   const reqIdRef = useRef(0)
+  // What the map is showing, for the search fields to bias their suggestions
+  // toward. A ref: it changes on every pan and nothing needs to re-render for it.
+  const viewRef = useRef<MapViewport | null>(null)
+  const currentView = () => viewRef.current
   // Live route preview while a marker or the line is being dragged.
   const dragPreview = useRouteDragPreview()
   const {
@@ -596,12 +606,24 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
 
   const markers = useMemo<RouteMarker[]>(() => {
     const out: RouteMarker[] = []
-    if (start) out.push({ id: start.id, kind: 'origin', position: activeSnap?.origin ?? start.coordinates })
+    if (start)
+      out.push({ id: start.id, kind: 'origin', position: activeSnap?.origin ?? start.coordinates, viewport: start.viewport })
     stops.forEach((s, i) =>
-      out.push({ id: s.id, kind: 'stop', position: activeSnap?.stops[i] ?? s.coordinates, label: String(i + 1) }),
+      out.push({
+        id: s.id,
+        kind: 'stop',
+        position: activeSnap?.stops[i] ?? s.coordinates,
+        label: String(i + 1),
+        viewport: s.viewport,
+      }),
     )
     if (destination)
-      out.push({ id: destination.id, kind: 'destination', position: activeSnap?.destination ?? destination.coordinates })
+      out.push({
+        id: destination.id,
+        kind: 'destination',
+        position: activeSnap?.destination ?? destination.coordinates,
+        viewport: destination.viewport,
+      })
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [start, destination, stops, activeSnap])
@@ -760,6 +782,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
     label: place.label || place.title,
     coordinates: place.position,
     source: 'search',
+    viewport: place.viewport,
   })
 
   // Edit an existing point's address in place: keep its id, role and order, just
@@ -778,6 +801,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
               source: 'search',
               snapped: undefined,
               course: undefined,
+              viewport: place.viewport,
             }
           : p,
       ),
@@ -1214,6 +1238,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
             value={null}
             initialQuery={p.label}
             autoFocus
+            view={currentView}
             onChange={(place) => {
               if (place) {
                 replacePoint(p.id, place)
@@ -1226,7 +1251,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
         <button
           onClick={() => setEditingId(null)}
           aria-label="Cancel edit"
-          className="rounded-btn h-8 w-8 shrink-0 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 transition-colors"
+          className="rounded-btn h-7 w-7 shrink-0 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 transition-colors"
         >
           <X size="0.9375rem" strokeWidth={2} />
         </button>
@@ -1285,6 +1310,10 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
           scaleRouteWidthWithZoom
           // Total route distance, mid-line badge — same value as the panel stat.
           routeDistanceLabel={route ? formatDistance(route.summary.length) : null}
+          onViewportChange={(view) => {
+            viewRef.current = view
+          }}
+          onStreetViewChange={setStreetView}
           truckOverlay={truckOverlay}
           onTruckOverlayAvailabilityChange={setOverlayAvailable}
           onMapContextMenu={openMenu}
@@ -1313,7 +1342,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
             here, and spending it on a map layer made the overlay look like a
             warning. Drawn on `surface` rather than the field colour because
             they float over the map, which is the one case that token is for. */}
-        <div className="absolute z-20 right-3 top-3 flex items-center gap-1.5">
+        <div className={`absolute z-20 right-3 top-3 flex items-center gap-1.5 ${streetView ? 'hidden' : ''}`}>
           <button
             onClick={() => setPlacesOpen((value) => !value)}
             className={`flex h-8 items-center gap-1.5 rounded-btn border px-3 text-sm font-medium shadow-overlay transition-colors ${
@@ -1344,7 +1373,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
           </button>
         </div>
 
-        {placesOpen && (
+        {placesOpen && !streetView && (
           <SavedPlacesPanel
             places={places}
             loading={placesLoading}
@@ -1362,7 +1391,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
           onClick={() => setPanelCollapsed(false)}
           aria-label="Open route panel"
           className={`absolute z-20 top-3 left-3 flex items-center gap-1.5 h-9 pl-2.5 pr-3 rounded-btn border border-line bg-surface text-text text-sm font-medium shadow-overlay transition-opacity hover:bg-surface-2 ${
-            panelCollapsed ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            panelCollapsed && !streetView ? 'opacity-100' : 'opacity-0 pointer-events-none'
           }`}
         >
           <ChevronRight size="1rem" strokeWidth={2} />
@@ -1386,12 +1415,16 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
             The route card carries the shrink (its list is the thing that SHOULD
             scroll when space runs out); the truck card never does. */}
         <div
-          className="absolute z-20 top-3 left-3 flex w-[18.75rem] max-w-[calc(100%-1.5rem)] max-h-[calc(100%-1.5rem)] flex-col gap-2 transition-transform duration-300 ease-out"
+          // `hidden` (not unmounted) in Street View, so every field keeps what
+          // was typed in it and the cards come back exactly as they were.
+          className={`absolute z-20 top-3 left-3 flex w-[18.75rem] max-w-[calc(100%-1.5rem)] max-h-[calc(100%-1.5rem)] flex-col gap-2 transition-transform duration-300 ease-out ${
+            streetView ? 'hidden' : ''
+          }`}
           style={{ transform: panelCollapsed ? 'translateX(calc(-100% - 1rem))' : 'translateX(0)' }}
-          aria-hidden={panelCollapsed}
+          aria-hidden={panelCollapsed || streetView}
         >
         <div className="flex min-h-0 flex-col rounded-soft border border-line bg-surface shadow-overlay">
-          <div className="flex h-11 shrink-0 items-center justify-between gap-2 pl-3.5 pr-2">
+          <div className="flex h-10 shrink-0 items-center justify-between gap-2 pl-3 pr-1.5">
             <div className="min-w-0">
               <div className="text-base font-semibold leading-tight tracking-[-0.1px]">Route</div>
               <div className="text-2xs text-faint leading-tight">Plan your delivery path</div>
@@ -1430,7 +1463,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                 Every row carries its point's id as `rowKey`, which is what lets
                 `rowFlip` animate the rows between slots instead of snapping
                 them. */}
-            <section ref={rowFlip.containerRef} className="flex flex-col gap-1 p-2">
+            <section ref={rowFlip.containerRef} className="flex flex-col gap-0.5 p-2">
               {plannerRows.map((row, i) => {
                 const connect = i < plannerRows.length - 1
 
@@ -1444,6 +1477,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                     >
                       <PlaceSearchField
                         value={null}
+                        view={currentView}
                         onChange={(p) => {
                           if (!p) return
                           if (row.role === 'start') setStart(fromSearch(p))
@@ -1468,6 +1502,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                             <PlaceSearchField
                               value={null}
                               autoFocus
+                              view={currentView}
                               onChange={(p) => {
                                 if (p) {
                                   // Panel "Add stop" appends the new stop in the current
@@ -1485,7 +1520,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                           <button
                             onClick={() => setAddingStop(false)}
                             aria-label="Cancel add stop"
-                            className="rounded-btn h-8 w-8 shrink-0 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 transition-colors"
+                            className="rounded-btn h-7 w-7 shrink-0 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 transition-colors"
                           >
                             <X size="0.9375rem" strokeWidth={2} />
                           </button>
@@ -1496,7 +1531,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                         // slot to fill rather than another committed point.
                         <button
                           onClick={() => setAddingStop(true)}
-                          className="h-9 w-full flex items-center gap-1.5 px-2.5 rounded-soft border border-dashed border-line text-base text-muted transition-colors hover:border-line-2 hover:bg-white/4 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                          className="h-7 w-full flex items-center gap-1.5 px-2.5 rounded-soft border border-dashed border-line text-base text-muted transition-colors hover:border-line-2 hover:bg-white/4 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
                         >
                           <Plus size="0.8125rem" strokeWidth={2} /> Add stop
                         </button>
@@ -1547,7 +1582,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
             {/* Summary + notices — the result, sitting directly above the control
                 that produced it. */}
             {route && !loading && (
-              <section className="flex flex-col gap-2 p-2">
+              <section className="flex flex-col gap-1.5 p-2 pt-1">
                 {/* 2×2, NOT a single row of four. At 270px wide, four columns
                     left each value ~47px of usable width, which truncated every
                     duration ("4 h 40 min"), every toll status ("Not calculated")
@@ -1603,7 +1638,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                   <button
                     type="button"
                     onClick={() => onCalculateRestrictions(route.countries)}
-                    className="rounded-btn flex h-8 w-full items-center justify-center gap-1.5 border border-line bg-white/4 px-3 text-sm text-text transition-colors hover:bg-white/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                    className="rounded-btn flex h-7 w-full items-center justify-center gap-1.5 border border-line bg-white/4 px-3 text-sm text-text transition-colors hover:bg-white/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
                   >
                     <CalendarClock size="0.8125rem" strokeWidth={1.7} />
                     Calculate restrictions
@@ -1611,14 +1646,14 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                   </button>
                 )}
                 {!dirty && route.tolls && (
-                  <div className="border-t border-line pt-2">
+                  <div className="border-t border-line pt-1">
                     {route.tolls.details.length > 0 ? (
                       <details className="group">
-                        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1 text-sm text-muted transition-colors hover:bg-white/4 hover:text-text">
+                        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-btn px-2 py-1 text-sm leading-tight text-muted transition-colors hover:bg-white/4 hover:text-text">
                           <span>Toll details · {route.tolls.details.reduce((count, detail) => count + detail.fares.length, 0)} charges</span>
                           <ChevronDown size="0.8125rem" className="transition-transform group-open:rotate-180" />
                         </summary>
-                        <div className="mt-1.5 flex max-h-40 flex-col gap-1 overflow-y-auto px-2">
+                        <div className="mt-1 flex max-h-40 flex-col gap-0.5 overflow-y-auto px-2">
                           {route.tolls.details.flatMap((detail, detailIndex) =>
                             detail.fares.map((fare, fareIndex) => {
                               const amount = fare.convertedPrice ?? fare.price
@@ -1632,7 +1667,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                               return (
                                 <div
                                   key={fare.id ?? `${detailIndex}-${fareIndex}`}
-                                  className="flex min-w-0 items-start justify-between gap-3 py-1"
+                                  className="flex min-w-0 items-start justify-between gap-3 py-0.5"
                                 >
                                   <span className="min-w-0">
                                     <span className="block truncate text-sm text-text">
@@ -1658,17 +1693,17 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                           : 'No toll charges were found for this route.'}
                       </div>
                     )}
-                    <div className="px-2 pt-1.5 text-2xs leading-snug text-faint">
+                    <div className="px-2 pt-1 text-2xs leading-snug text-faint">
                       Estimated by HERE · final operator charges may differ.
                     </div>
                   </div>
                 )}
                 {notices.length > 0 && (
-                  <div className="flex flex-col gap-1.5">
+                  <div className="flex flex-col gap-1 px-0.5">
                     <div className="eyebrow">Notices</div>
                     {notices.map((n, i) => (
-                      <div key={`${n.code}-${i}`} className="flex items-start gap-2 text-sm leading-snug text-amber-200/90">
-                        <TriangleAlert size="0.8125rem" className="mt-0.5 shrink-0" strokeWidth={1.8} />
+                      <div key={`${n.code}-${i}`} className="flex items-start gap-1.5 text-xs leading-snug text-amber-200/90">
+                        <TriangleAlert size="0.75rem" className="mt-px shrink-0" strokeWidth={1.8} />
                         <span>{n.title || n.code || 'Route notice'}</span>
                       </div>
                     ))}
@@ -1682,9 +1717,9 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
               scroll region: what went wrong, what is stale, and the one button
               that draws the route. `bg-white/6` (not `bg-rail`) for the inert
               states, because a rail-on-rail button would vanish into the card. */}
-          <div className="flex shrink-0 flex-col gap-1.5 border-t border-line p-2">
+          <div className="flex shrink-0 flex-col gap-1 border-t border-line p-2">
             {error && (
-              <div className="rounded-card border border-alert/20 bg-alert/10 px-2.5 py-2 text-sm leading-snug text-alert">
+              <div className="rounded-card border border-alert/20 bg-alert/10 px-2.5 py-1.5 text-sm leading-snug text-alert">
                 {error}
               </div>
             )}
@@ -1698,18 +1733,18 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
               onClick={() => void calculate(true)}
               disabled={routeButtonDisabled}
               title={!hasEndpoints ? 'Set a start and destination first' : undefined}
-              className={`flex h-10 w-full items-center justify-center gap-2 rounded-btn text-base font-semibold transition-colors ${
+              className={`flex h-8 w-full items-center justify-center gap-1.5 rounded-btn text-sm font-semibold transition-colors ${
                 routeButtonDisabled
                   ? 'bg-white/6 text-muted cursor-default'
                   : 'bg-text text-bg hover:bg-text/90'
               }`}
             >
               {loading ? (
-                <Spinner size={14} />
+                <Spinner size={13} />
               ) : routeUpToDate ? (
-                <Check size="1rem" strokeWidth={2.4} className="text-done" />
+                <Check size="0.875rem" strokeWidth={2.4} className="text-done" />
               ) : (
-                <RouteIcon size="1rem" strokeWidth={2} />
+                <RouteIcon size="0.875rem" strokeWidth={2} />
               )}
               {routeButtonLabel}
             </button>
@@ -1725,21 +1760,21 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
           <button
             onClick={() => setTruckOpen((o) => !o)}
             aria-expanded={truckOpen}
-            className={`flex w-full items-center gap-2.5 px-2.5 py-2.5 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20 ${
+            className={`flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20 ${
               truckOpen ? 'rounded-t-panel' : 'rounded-panel'
             }`}
           >
-            <span className="h-8 w-8 shrink-0 flex items-center justify-center rounded-tile border border-line bg-white/2 text-muted">
-              <Truck size="0.9375rem" strokeWidth={1.8} />
+            <span className="h-7 w-7 shrink-0 flex items-center justify-center rounded-tile border border-line bg-white/2 text-muted">
+              <Truck size="0.875rem" strokeWidth={1.8} />
             </span>
             <span className="min-w-0 flex-1">
               <span className="block text-base font-medium leading-tight text-text">Truck profile</span>
-              <span className="mt-0.5 block truncate text-xs leading-[1.4] text-faint" title={collapsedTruckLabel}>
+              <span className="block truncate text-xs leading-tight text-faint" title={collapsedTruckLabel}>
                 {collapsedTruckLabel}
               </span>
             </span>
             <ChevronDown
-              size="1rem"
+              size="0.875rem"
               strokeWidth={1.8}
               className={`shrink-0 text-faint transition-transform motion-reduce:transition-none ${
                 truckOpen ? 'rotate-180' : ''
@@ -1748,9 +1783,9 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
           </button>
 
           {truckOpen && (
-            <div className="flex flex-col gap-2.5 border-t border-line p-2.5">
+            <div className="flex flex-col gap-2 border-t border-line p-2">
               {/* Presets */}
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1">
                 <PresetSelect
                   builtIn={builtInPresets()}
                   saved={userPresets}
@@ -1763,18 +1798,18 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                   onClick={() => setSavingPreset((s) => !s)}
                   title="Save current profile as a preset"
                   aria-label="Save preset"
-                  className="rounded-btn h-8 w-8 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 transition-colors"
+                  className="rounded-btn h-7 w-7 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 transition-colors"
                 >
-                  <Bookmark size="0.875rem" strokeWidth={1.8} />
+                  <Bookmark size="0.8125rem" strokeWidth={1.8} />
                 </button>
                 {activePreset && !activePreset.builtIn && (
                   <button
                     onClick={() => removePreset(activePreset.id)}
                     title="Delete this preset"
                     aria-label="Delete preset"
-                    className="rounded-btn h-8 w-8 flex items-center justify-center text-muted hover:text-alert hover:bg-white/6 transition-colors"
+                    className="rounded-btn h-7 w-7 flex items-center justify-center text-muted hover:text-alert hover:bg-white/6 transition-colors"
                   >
-                    <Trash2 size="0.875rem" strokeWidth={1.8} />
+                    <Trash2 size="0.8125rem" strokeWidth={1.8} />
                   </button>
                 )}
               </div>
@@ -1787,19 +1822,19 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                     onKeyDown={(e) => e.key === 'Enter' && commitSavePreset()}
                     placeholder="Preset name"
                     autoFocus
-                    className="rounded-card h-8 flex-1 min-w-0 border border-line bg-transparent px-2.5 text-sm outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4 placeholder:text-faint"
+                    className="rounded-card h-7 flex-1 min-w-0 border border-line bg-transparent px-2 text-sm outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4 placeholder:text-faint"
                   />
                   <button
                     onClick={commitSavePreset}
                     disabled={!presetName.trim()}
-                    className="h-8 px-2.5 flex items-center gap-1 rounded-btn bg-active text-bg text-sm font-semibold hover:bg-active/90 disabled:opacity-40 transition-colors"
+                    className="h-7 px-2.5 flex items-center gap-1 rounded-btn bg-active text-bg text-sm font-semibold hover:bg-active/90 disabled:opacity-40 transition-colors"
                   >
                     <Check size="0.8125rem" strokeWidth={2.4} /> Save
                   </button>
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
                 <NumberField label="Height (cm)" value={truck.heightCm} onChange={(v) => updateTruck({ heightCm: v })} placeholder="400" />
                 <NumberField label="Width (cm)" value={truck.widthCm} onChange={(v) => updateTruck({ widthCm: v })} placeholder="255" />
                 <NumberField label="Length (cm)" value={truck.lengthCm} onChange={(v) => updateTruck({ lengthCm: v })} placeholder="1650" />
@@ -1831,21 +1866,21 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
           <button
             onClick={() => setCrewOpen((o) => !o)}
             aria-expanded={crewOpen}
-            className={`flex w-full items-center gap-2.5 px-2.5 py-2.5 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20 ${
+            className={`flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20 ${
               crewOpen ? 'rounded-t-panel' : 'rounded-panel'
             }`}
           >
-            <span className="h-8 w-8 shrink-0 flex items-center justify-center rounded-tile border border-line bg-white/2 text-muted">
-              <Users size="0.9375rem" strokeWidth={1.8} />
+            <span className="h-7 w-7 shrink-0 flex items-center justify-center rounded-tile border border-line bg-white/2 text-muted">
+              <Users size="0.875rem" strokeWidth={1.8} />
             </span>
             <span className="min-w-0 flex-1">
               <span className="block text-base font-medium leading-tight text-text">Crew &amp; hours</span>
-              <span className="mt-0.5 block truncate text-xs leading-[1.4] text-faint" title={collapsedCrewLabel}>
+              <span className="block truncate text-xs leading-tight text-faint" title={collapsedCrewLabel}>
                 {collapsedCrewLabel}
               </span>
             </span>
             <ChevronDown
-              size="1rem"
+              size="0.875rem"
               strokeWidth={1.8}
               className={`shrink-0 text-faint transition-transform motion-reduce:transition-none ${
                 crewOpen ? 'rotate-180' : ''
@@ -1854,27 +1889,29 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
           </button>
 
           {crewOpen && (
-            <div className="flex flex-col gap-2.5 border-t border-line p-2.5">
-              <div className="flex flex-col gap-1">
-                <span className="text-xs text-muted">Departure</span>
+            <div className="flex flex-col gap-2 border-t border-line p-2">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs leading-tight text-muted">Departure</span>
                 <div className="flex items-center gap-1.5">
                   <DateField
                     value={departDate}
                     onChange={setDepartDate}
                     className="flex-1"
                     ariaLabel="Departure date"
+                    dense
                   />
                   <TimeField
                     value={departTime}
                     onChange={setDepartTime}
                     className="w-[6.5rem]"
                     ariaLabel="Departure time"
+                    dense
                   />
                 </div>
               </div>
 
-              <label className="flex flex-col gap-1">
-                <span className="text-xs text-muted">Drivers</span>
+              <label className="flex flex-col gap-0.5">
+                <span className="text-xs leading-tight text-muted">Drivers</span>
                 <select
                   value={crew}
                   onChange={(e) => setCrew(Number(e.target.value) === 2 ? 2 : 1)}
@@ -1899,20 +1936,22 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                   card and started with three hours left are two different trips,
                   and this is the input that tells them apart. */}
               {!fullProgram && (
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted">Program until</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs leading-tight text-muted">Program until</span>
                   <div className="flex items-center gap-1.5">
                     <DateField
                       value={programDate}
                       onChange={setProgramDate}
                       className="flex-1"
                       ariaLabel="Program until, date"
+                      dense
                     />
                     <TimeField
                       value={programTime}
                       onChange={setProgramTime}
                       className="w-[6.5rem]"
                       ariaLabel="Program until, time"
+                      dense
                     />
                   </div>
                 </div>
@@ -1948,25 +1987,27 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
 
               {weekEnds && (
                 <>
-                  <div className="flex flex-col gap-1">
-                    <span className="text-xs text-muted">Can work until</span>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-xs leading-tight text-muted">Can work until</span>
                     <div className="flex items-center gap-1.5">
                       <DateField
                         value={weekDate}
                         onChange={setWeekDate}
                         className="flex-1"
                         ariaLabel="Can work until, date"
+                        dense
                       />
                       <TimeField
                         value={weekTime}
                         onChange={setWeekTime}
                         className="w-[6.5rem]"
                         ariaLabel="Can work until, time"
+                        dense
                       />
                     </div>
                   </div>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-xs text-muted">Weekly rest</span>
+                  <label className="flex flex-col gap-0.5">
+                    <span className="text-xs leading-tight text-muted">Weekly rest</span>
                     <select
                       value={weeklyRestHours}
                       onChange={(e) => setWeeklyRestHours(e.target.value)}

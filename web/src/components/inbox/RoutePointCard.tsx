@@ -60,7 +60,10 @@ export function RoleBadge({
   // pins went round on 2026-09-03 would break the only thing tying the list to
   // the map. It is a deliberate exception to "rounded-full means content, not
   // chrome" (see the radius scale in tailwind.config.js).
-  const base = 'h-6 w-6 shrink-0 rounded-full border flex items-center justify-center'
+  // 20px (was 24) since the rows went compact on 2026-09-11 — the badge has
+  // to sit on the centre of a 28px field and of a card's first text line, and
+  // 24 outweighed both.
+  const base = 'h-5 w-5 shrink-0 rounded-full border flex items-center justify-center'
   if (role === 'start') {
     return (
       <span
@@ -68,7 +71,7 @@ export function RoleBadge({
         title="Start"
         className={`${base} ${muted ? 'border-done/20 bg-done/5 text-done/60' : 'border-done/30 bg-done/10 text-done'}`}
       >
-        <Navigation size="0.6875rem" strokeWidth={2.2} />
+        <Navigation size="0.625rem" strokeWidth={2.2} />
       </span>
     )
   }
@@ -79,7 +82,7 @@ export function RoleBadge({
         title="Destination"
         className={`${base} ${muted ? 'border-alert/20 bg-alert/5 text-alert/60' : 'border-alert/30 bg-alert/10 text-alert'}`}
       >
-        <Flag size="0.6875rem" strokeWidth={2.2} />
+        <Flag size="0.625rem" strokeWidth={2.2} />
       </span>
     )
   }
@@ -98,10 +101,13 @@ export function RoleBadge({
 
 // ── Row shell ───────────────────────────────────────────────────────────────
 // Gutter metrics, in one place because three separate row shapes have to land on
-// the same axis: the 24px badge is dropped 6px (`pt-1.5`) so it centres against
-// BOTH a card's first text line and a 36px search field, and the connector's
-// −10px bottom margin is exactly the list gap (4px) plus that 6px, so the
-// hairline stops on the next badge instead of near it.
+// the same axis. Everything hangs off ONE number: the first line of every row
+// has its centre 14px below the row's top — a 28px search field / add-stop
+// button (h-7), and a card with 6px of padding over a 16px headline
+// (`py-1.5` + `leading-[1.25]` at 13px). So the 20px badge is dropped 4px
+// (`pt-1`) to put its own centre there, and the connector's −6px bottom margin
+// is exactly the list gap (2px) plus that 4px, so the hairline stops on the
+// next badge instead of near it. Change one of these and change them all.
 export function RouteRow({
   badge,
   children,
@@ -140,11 +146,11 @@ export function RouteRow({
       // the rows slide past each other it crosses OVER the ones it displaces
       // rather than disappearing behind them — the point of animating the
       // reorder is to be able to follow this row.
-      className={`group/row flex gap-2.5 transition-opacity motion-reduce:transition-none ${
+      className={`group/row flex gap-2 transition-opacity motion-reduce:transition-none ${
         draggable ? 'cursor-grab active:cursor-grabbing' : ''
       } ${dragging ? 'relative z-10 opacity-60' : ''}`}
     >
-      <div className="flex w-6 shrink-0 flex-col items-center pt-1.5">
+      <div className="flex w-5 shrink-0 flex-col items-center pt-1">
         {/* The badge doubles as the drag affordance: the whole row is
             draggable, so rather than spending ~17px of a 300px column on a grip
             glyph, the marker itself picks up the grab cursor and a hover ring. */}
@@ -155,7 +161,7 @@ export function RouteRow({
         >
           {badge}
         </span>
-        {connect && <span aria-hidden className="mt-1 -mb-2.5 w-px flex-1 bg-white/8" />}
+        {connect && <span aria-hidden className="mt-1 -mb-1.5 w-px flex-1 bg-white/8" />}
       </div>
       <div className="min-w-0 flex-1">{children}</div>
     </div>
@@ -190,15 +196,18 @@ export default function RoutePointCard({
 
   return (
     <div
-      className={`rounded-soft px-2.5 py-2 transition-colors motion-reduce:transition-none ${surface} ${
+      className={`rounded-soft px-2.5 py-1.5 transition-colors motion-reduce:transition-none ${surface} ${
         disabled ? 'pointer-events-none opacity-50' : ''
       }`}
     >
+      {/* The 20px action buttons overhang the 16px headline by 2px each way
+          (`-my-0.5`) rather than stretching the line to fit them — that is
+          what keeps the card at 42px instead of 46. */}
       <div className="flex items-start gap-1">
         <div className="min-w-0 flex-1">{headline}</div>
-        {actions && <div className="-mr-1 -mt-0.5 shrink-0 flex items-center gap-0.5">{actions}</div>}
+        {actions && <div className="-mr-1 -my-0.5 shrink-0 flex items-center gap-0.5">{actions}</div>}
       </div>
-      {meta && <div className="mt-0.5">{meta}</div>}
+      {meta && <div className="mt-px">{meta}</div>}
     </div>
   )
 }

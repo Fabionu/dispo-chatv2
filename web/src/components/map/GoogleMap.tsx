@@ -1,19 +1,38 @@
 import { useEffect, useRef, useState } from 'react'
 import { decode } from '@here/flexpolyline'
 import { loadGoogle } from '../../lib/google/loadGoogle'
+import { haversineMeters, nearestPointOnPath, simplifyPath } from '../../lib/here/geo'
 import type { LatLng, RouteMarker, ScreenGeoCandidate } from '../../lib/here/types'
 import {
+  ENDPOINT_ICON_ANCHOR,
+  ENDPOINT_ICON_SIZE,
+  ROUTE_CASING,
   ROUTE_HALO,
+  ROUTE_HOVER_BOOST,
   ROUTE_SPINE,
+  STOP_ICON_ANCHOR,
+  STOP_ICON_SIZE,
   destSvg,
   ghostSvg,
   originSvg,
+  revealHeadSvg,
   routeStrokeWidths,
   savedPlaceSvg,
   stopSvg,
 } from '../here/hereMapIcons'
-import { DEFAULT_CENTER, DEFAULT_ZOOM, sampleScreenCandidates, snapDebug } from '../here/hereMapUtils'
+import {
+  DEFAULT_CENTER,
+  DEFAULT_ZOOM,
+  HOVER_THRESHOLD_PX,
+  formatHoverDistance,
+  sampleScreenCandidates,
+  snapDebug,
+} from '../here/hereMapUtils'
 import type { MapSurfaceProps } from './mapProps'
+import { renderRouteBadge, routeMotionAllowed } from './routeDecor'
+import { createHereMapStyleControl, type HereMapStyleControlHandle } from '../here/HereMapStyleControl'
+import { createHereMapZoomControl, type HereMapZoomControlHandle } from '../here/HereMapZoomControl'
+import { createMapStreetViewControl, type MapStreetViewControlHandle } from './MapStreetViewControl'
 
 // The Google basemap, wearing the same contract as HereMap (see mapProps.ts).
 //
@@ -25,33 +44,68 @@ import type { MapSurfaceProps } from './mapProps'
 // engine cannot show — the HGV overlay, which is a HERE basemap, not a layer —
 // is what MapView switches back to HereMap for.
 //
-// Nothing here calls Google for data. Google's terms forbid showing THEIR data
-// (Places, Directions, Geocoding) on a non-Google map; the reverse — a third
-// party's route on their map — is ordinary use. Keeping this engine draw-only
-// is what keeps that line clean.
+// Nothing here calls Google for data: this engine only draws. The one Google
+// data source the app does use — Places autocomplete, in the search fields
+// (lib/google/places.ts, 2026-09-11) — lives beside the map, not in it, and its
+// results are shown next to a Google map by default. Directions and Geocoding
+// stay HERE's, because the route has to be truck-legal on the vehicle profile.
 //
 // The route line, the numbered marks, the saved-place squares and the ghost
 // dot are the SAME SVGs HereMap draws (hereMapIcons.ts). Toggling the basemap
 // must not appear to change what was planned.
-
-const LIGHT_LABEL_STYLE = 'font-family: Inter, system-ui, sans-serif'
 
 function svgUrl(svg: string): string {
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
 }
 
 function markerIcon(g: typeof google, marker: RouteMarker): google.maps.Icon {
-  if (marker.kind === 'origin') {
-    return { url: svgUrl(originSvg()), anchor: new g.maps.Point(10, 10), scaledSize: new g.maps.Size(20, 20) }
+  const endpoint = {
+    anchor: new g.maps.Point(ENDPOINT_ICON_ANCHOR, ENDPOINT_ICON_ANCHOR),
+    scaledSize: new g.maps.Size(ENDPOINT_ICON_SIZE, ENDPOINT_ICON_SIZE),
   }
-  if (marker.kind === 'destination') {
-    return { url: svgUrl(destSvg()), anchor: new g.maps.Point(10, 10), scaledSize: new g.maps.Size(20, 20) }
-  }
+  if (marker.kind === 'origin') return { url: svgUrl(originSvg()), ...endpoint }
+  if (marker.kind === 'destination') return { url: svgUrl(destSvg()), ...endpoint }
   return {
     url: svgUrl(stopSvg(marker.label ?? '')),
-    anchor: new g.maps.Point(9, 9),
-    scaledSize: new g.maps.Size(18, 18),
+    anchor: new g.maps.Point(STOP_ICON_ANCHOR, STOP_ICON_ANCHOR),
+    scaledSize: new g.maps.Size(STOP_ICON_SIZE, STOP_ICON_SIZE),
   }
+}
+
+// ── Route reveal (parameters) ──────────────────────────────────────────────
+// The sweep rebuilds three polylines every frame, so it runs on a thinned copy
+// of the route; the full-fidelity strokes take over the moment it lands.
+const REVEAL_MAX_POINTS = 700
+
+/**
+ * How long the sweep takes, in ms, for a route of `meters`. Deliberately
+ * sub-linear and hard-capped (HereMap's curve): time proportional to distance
+ * would make a Bucharest→Rotterdam route crawl for half a minute — the longer
+ * the route, the LESS patience there is for watching it draw. A 5 km delivery
+ * sweeps in ~0.65 s, 100 km in ~1.35 s, anything past ~300 km hits the cap.
+ */
+function revealDurationMs(meters: number): number {
+  const km = Math.max(0, meters) / 1000
+  return Math.min(1600, Math.max(500, 450 + Math.sqrt(km) * 90))
+}
+
+/** Ease-out cubic: the line leaves the origin fast and settles onto the
+ *  destination, rather than arriving at full speed and stopping dead. */
+function easeOutCubic(t: number): number {
+  return 1 - (1 - t) ** 3
+}
+
+// Douglas-Peucker to drop sub-pixel wobble, then a uniform cap so a 4000-point
+// international route cannot make the per-frame rebuild drop frames. Endpoints
+// are always kept.
+function thinPath(path: LatLng[], maxPoints: number): LatLng[] {
+  const simplified = simplifyPath(path, 8)
+  if (simplified.length <= maxPoints) return simplified
+  const out: LatLng[] = [simplified[0]]
+  const step = (simplified.length - 1) / (maxPoints - 1)
+  for (let i = 1; i < maxPoints - 1; i++) out.push(simplified[Math.round(i * step)])
+  out.push(simplified[simplified.length - 1])
+  return out
 }
 
 /** A live driver: a teal dot, pointed when a heading is known, muted when stale. */
@@ -170,8 +224,40 @@ export default function GoogleMap({
   className,
   initialView,
   onViewportChange,
+  onStreetViewChange,
 }: MapSurfaceProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  // The wrapper around the map surface. Google owns the surface's children, so
+  // DOM of ours that must sit over the map (the hover readout) goes here.
+  const rootRef = useRef<HTMLDivElement>(null)
+  // The app's own map controls (map view picker, zoom), in place of Google's.
+  // Google's stock controls — the "Map ▾" dropdown, the camera pad, Pegman,
+  // the zoom pair — are white Material widgets that read as a second product
+  // sitting on top of this one (user, 2026-09-11: "sa fie la fel ca cel al
+  // proiectului"). They are switched off in the map options and the SAME
+  // controls the HERE engine draws are mounted here, so toggling HGV does not
+  // change the chrome either. Street View and the camera pad have no
+  // equivalent and are simply gone.
+  const controlsHostRef = useRef<HTMLDivElement>(null)
+  const styleControlRef = useRef<HereMapStyleControlHandle | null>(null)
+  const zoomControlRef = useRef<HereMapZoomControlHandle | null>(null)
+  const trafficLayerRef = useRef<google.maps.TrafficLayer | null>(null)
+  // Street View, as a two-step gesture of our own in place of Pegman: press
+  // the button, click a road. `streetViewPickRef` is the mode; the button and
+  // hint are MapStreetViewControl's, the coverage lookup and the panorama are
+  // handled here. The panorama itself is Google's (it replaces the map inside
+  // the same surface, with its own close button) — the one piece of Google
+  // chrome that stays, because it IS the product being shown.
+  const streetViewControlRef = useRef<MapStreetViewControlHandle | null>(null)
+  const streetViewPickRef = useRef(false)
+  const streetViewServiceRef = useRef<google.maps.StreetViewService | null>(null)
+  // The blue "where Street View exists" lines, shown only while picking — the
+  // same paint Pegman gives you while you hold him.
+  const coverageLayerRef = useRef<google.maps.StreetViewCoverageLayer | null>(null)
+  // The set of marker ids drawn last time — a NEW address (an id not seen
+  // before) is what the map frames; a moved or re-created one is not.
+  const drawnMarkerIdsRef = useRef<string>('')
+  const streetViewCleanupRef = useRef<() => void>(() => {})
   const mapRef = useRef<google.maps.Map | null>(null)
   const gRef = useRef<typeof google | null>(null)
   const projectionRef = useRef<google.maps.OverlayView | null>(null)
@@ -195,6 +281,7 @@ export default function GoogleMap({
     onRouteDrag,
     onMarkerDrag,
     onViewportChange,
+    onStreetViewChange,
   })
   cb.current = {
     onMapContextMenu,
@@ -206,6 +293,7 @@ export default function GoogleMap({
     onRouteDrag,
     onMarkerDrag,
     onViewportChange,
+    onStreetViewChange,
   }
   const panelInsetRef = useRef(panelInsetPx)
   panelInsetRef.current = panelInsetPx
@@ -219,7 +307,34 @@ export default function GoogleMap({
   const placeObjsRef = useRef<google.maps.Marker[]>([])
   const driverObjsRef = useRef<google.maps.Marker[]>([])
   const trailObjsRef = useRef<google.maps.Polyline[]>([])
-  const routeObjsRef = useRef<{ casing: google.maps.Polyline; spine: google.maps.Polyline; target: google.maps.Polyline }[]>([])
+  const routeObjsRef = useRef<
+    { casing: google.maps.Polyline; spine: google.maps.Polyline; target: google.maps.Polyline }[]
+  >([])
+  // True while the cursor is on the route line — decided by the hover readout's
+  // hit-test below, which is also what thickens the line (HereMap's rule: one
+  // reach, both answers).
+  const routeHoveredRef = useRef(false)
+  // Decoded route path (whole route, travel order) + per-vertex cumulative
+  // distances (metres from the start), refreshed by the route effect. Read by
+  // the pointermove hover readout; null when there's no route so the readout
+  // stays hidden.
+  const hoverGeomRef = useRef<{ path: LatLng[]; cum: number[] } | null>(null)
+  // Hides the readout; set by the init effect so the map's own gesture
+  // listeners can call it.
+  const hideHoverRef = useRef<() => void>(() => {})
+  const hoverCleanupRef = useRef<() => void>(() => {})
+  // The sweep in flight, if any: its rAF handle, the growing strokes and the
+  // head dot, and a hook for the zoom restyle to keep its weights in step.
+  const revealRef = useRef<{
+    raf: number
+    temps: google.maps.Polyline[]
+    head: google.maps.Marker
+    restyle: (w: ReturnType<typeof routeStrokeWidths>) => void
+  } | null>(null)
+  // Fingerprint of the route currently drawn. The route effect also runs for a
+  // label change, so this is what separates "the route changed" (re-fit and
+  // sweep) from "something else did" (leave the camera and the line alone).
+  const drawnRouteSigRef = useRef<string | null>(null)
   const badgeRef = useRef<(google.maps.OverlayView & { setPosition(p: LatLng | null): void }) | null>(null)
   const badgeElRef = useRef<HTMLDivElement | null>(null)
   const routeDragRef = useRef<{
@@ -232,7 +347,6 @@ export default function GoogleMap({
   }>({ active: false, section: -1, ghost: null, snapped: false })
   const previewObjsRef = useRef<google.maps.Polyline[]>([])
   const lastPreviewPointRef = useRef<LatLng | null>(null)
-  const lastFitSigRef = useRef<string>('')
   // When the user last moved a marker or the line itself. The route that
   // arrives moments later is that edit's result, and the camera holds still
   // for it (HereMap's rule): they are looking at the junction they just
@@ -289,18 +403,13 @@ export default function GoogleMap({
         const map = new g.maps.Map(containerRef.current, {
           center: view.center,
           zoom: view.zoom,
-          // The planner's own overlay controls sit top-right; Google's live
-          // bottom-right where HERE's style/zoom controls were, so the two
-          // engines keep their chrome in the same corner.
-          mapTypeControl: true,
-          mapTypeControlOptions: {
-            position: g.maps.ControlPosition.RIGHT_BOTTOM,
-            style: g.maps.MapTypeControlStyle.DROPDOWN_MENU,
-          },
-          zoomControl: true,
-          zoomControlOptions: { position: g.maps.ControlPosition.RIGHT_BOTTOM },
-          streetViewControl: true,
-          streetViewControlOptions: { position: g.maps.ControlPosition.RIGHT_BOTTOM },
+          // None of Google's chrome: the app draws its own controls (see
+          // controlsHostRef). Only the logo and the attribution row stay,
+          // which the terms require.
+          mapTypeControl: false,
+          zoomControl: false,
+          streetViewControl: false,
+          cameraControl: false,
           fullscreenControl: false,
           // Scroll zooms without a modifier, as HERE's map does and as a
           // full-pane map should; the ctrl-to-zoom nag is for embeds.
@@ -317,6 +426,18 @@ export default function GoogleMap({
             previewCount: () => previewObjsRef.current.length,
             previewPoint: () => lastPreviewPointRef.current,
             drag: () => routeDragRef.current,
+            // The route's strokes, for probing hover and weights.
+            route: () => routeObjsRef.current,
+            // Container pixel of a coordinate, for aiming synthetic pointer
+            // events at the line.
+            toPixel: (p: LatLng) => screenAdapter().geoToScreen(p),
+            // Whether the Street View coverage lines are on the map.
+            coverage: () => coverageLayerRef.current?.getMap() != null,
+            // The sweep in flight: how far its head has got, in vertices.
+            reveal: () => {
+              const r = revealRef.current
+              return r ? { drawn: r.temps[0].getPath().getLength(), head: r.head.getPosition()?.toJSON() } : null
+            },
           }
         }
 
@@ -325,10 +446,112 @@ export default function GoogleMap({
         projection.setMap(map)
         projectionRef.current = projection
 
-        // The distance badge: DOM on the float pane, same look as HERE's.
+        // ── Route hover distance readout ──────────────────────────────────
+        // A compact floating pill that appears when the cursor is near the
+        // drawn route line, showing how far along the route (from the start)
+        // the hovered point is. HereMap's, ported (user, 2026-09-11: "la hover
+        // pe orice bucata a rutei, sa iti arate km pana in pozitia
+        // respectiva"). All imperative: a plain DOM element positioned from a
+        // single rAF-throttled pointermove, reading the cached route geometry in
+        // hoverGeomRef. No React state and no map redraw, so moving the mouse
+        // never re-renders the component or the map, and nothing calls the
+        // routing API.
+        const hoverLabel = document.createElement('div')
+        hoverLabel.className = 'route-hover-label'
+        hoverLabel.style.display = 'none'
+        rootRef.current?.appendChild(hoverLabel)
+
+        const hideHover = () => {
+          if (hoverLabel.style.display !== 'none') hoverLabel.style.display = 'none'
+          setRouteHovered(false)
+        }
+        hideHoverRef.current = hideHover
+        const showHover = (x: number, y: number, meters: number) => {
+          hoverLabel.textContent = formatHoverDistance(meters)
+          hoverLabel.style.display = 'block'
+          // The readout says WHERE on the route the cursor is; the weight says
+          // the line itself is live under it.
+          setRouteHovered(true)
+          // Flip the pill below the point near the top edge so it never clips;
+          // the CSS tail points back at the line either way.
+          hoverLabel.classList.toggle('route-hover-label--below', y < 48)
+          // Keep the centre-anchored pill within the map horizontally.
+          const half = hoverLabel.offsetWidth / 2
+          const w = el.clientWidth
+          const cx = Math.min(Math.max(x, half + 4), Math.max(half + 4, w - half - 4))
+          hoverLabel.style.left = `${cx}px`
+          hoverLabel.style.top = `${y}px`
+        }
+
+        // rAF-coalesced: the move handler only stashes the latest cursor pixel;
+        // the nearest-point maths run at most 30 times/sec.
+        let hoverRaf = 0
+        let lastHoverAt = 0
+        let hoverPx: { x: number; y: number } | null = null
+        const processHover = (now: number) => {
+          if (now - lastHoverAt < 32) {
+            hoverRaf = requestAnimationFrame(processHover)
+            return
+          }
+          hoverRaf = 0
+          lastHoverAt = now
+          const p = hoverPx
+          const geom = hoverGeomRef.current
+          if (!p || !geom || routeDragRef.current.active || map.getStreetView().getVisible()) {
+            hideHover()
+            return
+          }
+          const screen = screenAdapter()
+          const cursor = screen.screenToGeo(p.x, p.y)
+          if (!cursor) {
+            hideHover()
+            return
+          }
+          // Convert the fixed pixel threshold into ground metres at this zoom
+          // by measuring how far HOVER_THRESHOLD_PX spans, so the hit-test feels
+          // the same when zoomed in or out.
+          const edge = screen.screenToGeo(p.x + HOVER_THRESHOLD_PX, p.y)
+          const threshMeters = edge ? haversineMeters(cursor, edge) : 0
+          const near = nearestPointOnPath(cursor, geom.path, geom.cum)
+          if (near && threshMeters > 0 && near.meters <= threshMeters) showHover(p.x, p.y, near.along)
+          else hideHover()
+        }
+        const onPointerMove = (e: PointerEvent) => {
+          // A pressed pointer is a pan or a drag: the hit-test must not compete
+          // with it, and a readout that follows a pan is noise.
+          if (e.buttons !== 0 || routeDragRef.current.active) {
+            hoverPx = null
+            hideHover()
+            return
+          }
+          const rect = el.getBoundingClientRect()
+          hoverPx = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+          if (!hoverRaf) hoverRaf = requestAnimationFrame(processHover)
+        }
+        const onPointerLeave = () => {
+          hoverPx = null
+          hideHover()
+        }
+        // There is no useful hover state on touch screens. Avoid installing a
+        // high-frequency listener there while the same pointer pans the map.
+        const supportsRouteHover =
+          window.matchMedia?.('(hover: hover) and (pointer: fine)').matches ?? true
+        if (supportsRouteHover) {
+          el.addEventListener('pointermove', onPointerMove)
+          el.addEventListener('pointerleave', onPointerLeave)
+        }
+        hoverCleanupRef.current = () => {
+          if (hoverRaf) cancelAnimationFrame(hoverRaf)
+          el.removeEventListener('pointermove', onPointerMove)
+          el.removeEventListener('pointerleave', onPointerLeave)
+          hoverLabel.remove()
+          hideHoverRef.current = () => {}
+        }
+
+        // The distance badge: DOM on the float pane, the same element (and CSS)
+        // HereMap puts in its DomMarker, so the two engines' badges are one.
         const badgeEl = document.createElement('div')
-        badgeEl.className = 'google-map-badge'
-        badgeEl.style.cssText = `position:absolute;transform:translate(-50%,-50%);pointer-events:none;${LIGHT_LABEL_STYLE}`
+        badgeEl.className = 'route-distance-badge'
         badgeElRef.current = badgeEl
         const badge = new Overlay(badgeEl)
         badge.setMap(map)
@@ -349,9 +572,16 @@ export default function GoogleMap({
             candidates: candidatesAt(px.x, px.y),
           })
         })
-        map.addListener('dragstart', () => cb.current.onMapViewChange?.())
+        map.addListener('dragstart', () => {
+          cb.current.onMapViewChange?.()
+          hideHoverRef.current()
+          styleControlRef.current?.close()
+        })
         map.addListener('zoom_changed', () => {
           cb.current.onMapViewChange?.()
+          // The line moved under a resting cursor; the next pointermove
+          // re-measures. Leaving the pill where it was would label empty map.
+          hideHoverRef.current()
           restyleRoute()
         })
         // Reported from the model events, not from `idle` or `bounds_changed`:
@@ -382,6 +612,117 @@ export default function GoogleMap({
         })
         map.addListener('mouseup', (e: google.maps.MapMouseEvent) => finishRouteDrag(e.domEvent))
 
+        // ── Street View pick mode ──────────────────────────────────────────
+        const setStreetViewPick = (picking: boolean) => {
+          if (streetViewPickRef.current === picking) return
+          streetViewPickRef.current = picking
+          streetViewControlRef.current?.setActive(picking)
+          streetViewControlRef.current?.setHint(picking ? 'Click a road to open Street View' : '')
+          // The crosshair is the mode made visible on the map itself; the grab
+          // hand comes back the moment the mode ends.
+          map.setOptions({ draggableCursor: picking ? 'crosshair' : undefined })
+          if (picking) styleControlRef.current?.close()
+          // Coverage: the roads that HAVE a panorama, in Google's blue, so the
+          // click lands on one instead of guessing.
+          if (picking) {
+            coverageLayerRef.current ??= g.maps.StreetViewCoverageLayer ? new g.maps.StreetViewCoverageLayer() : null
+            coverageLayerRef.current?.setMap(map)
+          } else {
+            coverageLayerRef.current?.setMap(null)
+          }
+        }
+        const openStreetViewAt = (at: google.maps.LatLng) => {
+          streetViewServiceRef.current ??= new g.maps.StreetViewService()
+          streetViewServiceRef.current
+            .getPanorama({ location: at, radius: 60, source: g.maps.StreetViewSource.OUTDOOR })
+            .then(({ data }) => {
+              const panoId = data.location?.pano
+              const panoAt = data.location?.latLng
+              if (!panoId || !panoAt) throw new Error('no panorama')
+              const pano = map.getStreetView()
+              // Google's close button is off: it sits top-left, under the
+              // planner card. Our "Back to map" (MapStreetViewControl) is the
+              // exit, and so is Escape.
+              pano.setOptions({
+                addressControl: true,
+                // Top-right: top-left is our "Back to map", and the planner's
+                // own toggles that live top-right leave while the panorama
+                // is up (onStreetViewChange).
+                addressControlOptions: { position: g.maps.ControlPosition.TOP_RIGHT },
+                enableCloseButton: false,
+                fullscreenControl: false,
+              })
+              pano.setPano(panoId)
+              // Face the spot that was clicked, not whichever way the car was
+              // driving when the picture was taken.
+              pano.setPov({ heading: g.maps.geometry.spherical.computeHeading(panoAt, at), pitch: 0 })
+              pano.setVisible(true)
+              setStreetViewPick(false)
+            })
+            .catch(() => {
+              // Stay in the mode — the next click may land on a covered road.
+              streetViewControlRef.current?.setHint('No Street View here — try a nearby road', true)
+              window.setTimeout(() => {
+                if (streetViewPickRef.current) {
+                  streetViewControlRef.current?.setHint('Click a road to open Street View')
+                }
+              }, 1900)
+            })
+        }
+        map.addListener('click', (e: google.maps.MapMouseEvent) => {
+          if (!streetViewPickRef.current || !e.latLng) return
+          e.stop?.()
+          openStreetViewAt(e.latLng)
+        })
+        // While the panorama is up it owns the surface: the column of controls,
+        // the hint and the hover readout make no sense over it, and the only
+        // thing of ours left showing is the way back (`is-streetview` swaps the
+        // two sets — see index.css).
+        map.getStreetView().addListener('visible_changed', () => {
+          const up = map.getStreetView().getVisible()
+          controlsHostRef.current?.classList.toggle('is-streetview', up)
+          if (up) hideHoverRef.current()
+          cb.current.onStreetViewChange?.(up)
+        })
+        const onKeyDown = (e: KeyboardEvent) => {
+          if (e.key !== 'Escape') return
+          if (streetViewPickRef.current) setStreetViewPick(false)
+          else if (map.getStreetView().getVisible()) map.getStreetView().setVisible(false)
+        }
+        document.addEventListener('keydown', onKeyDown)
+        streetViewCleanupRef.current = () => document.removeEventListener('keydown', onKeyDown)
+
+        // ── The app's controls ─────────────────────────────────────────────
+        if (controlsHostRef.current) {
+          streetViewControlRef.current = createMapStreetViewControl({
+            container: controlsHostRef.current,
+            onToggle: setStreetViewPick,
+            onExit: () => map.getStreetView().setVisible(false),
+          })
+          styleControlRef.current = createHereMapStyleControl({
+            container: controlsHostRef.current,
+            satelliteAvailable: true,
+            trafficAvailable: true,
+            // "Satellite" is Google's hybrid: imagery WITH the road and place
+            // labels a dispatcher steers by. Bare satellite is unreadable at
+            // the zooms a route is planned at.
+            onBaseModeChange: (mode) => map.setMapTypeId(mode === 'satellite' ? 'hybrid' : 'roadmap'),
+            onTrafficChange: (enabled) => {
+              if (enabled) {
+                trafficLayerRef.current ??= new g.maps.TrafficLayer()
+                trafficLayerRef.current.setMap(map)
+              } else {
+                trafficLayerRef.current?.setMap(null)
+              }
+            },
+          })
+          zoomControlRef.current = createHereMapZoomControl({
+            container: controlsHostRef.current,
+            onZoomIn: () => map.setZoom((map.getZoom() ?? DEFAULT_ZOOM) + 1),
+            onZoomOut: () => map.setZoom((map.getZoom() ?? DEFAULT_ZOOM) - 1),
+          })
+        }
+
         // The HGV toggle stays enabled on this engine: pressing it is what
         // switches to the map that can draw the overlay (MapView).
         onTruckOverlayAvailabilityChange?.(true)
@@ -404,6 +745,27 @@ export default function GoogleMap({
     return () => {
       cancelled = true
       document.removeEventListener('mouseup', onDocUp, true)
+      hoverCleanupRef.current()
+      hoverCleanupRef.current = () => {}
+      styleControlRef.current?.dispose()
+      styleControlRef.current = null
+      zoomControlRef.current?.dispose()
+      zoomControlRef.current = null
+      streetViewCleanupRef.current()
+      streetViewCleanupRef.current = () => {}
+      streetViewControlRef.current?.dispose()
+      streetViewControlRef.current = null
+      streetViewPickRef.current = false
+      coverageLayerRef.current?.setMap(null)
+      coverageLayerRef.current = null
+      // A map torn down with the panorama up (an engine swap, a remount) never
+      // fires `visible_changed` for it: say "closed" ourselves, or the parent
+      // keeps its cards hidden over a map that is no longer there.
+      if (mapRef.current?.getStreetView().getVisible()) cb.current.onStreetViewChange?.(false)
+      controlsHostRef.current?.classList.remove('is-streetview')
+      trafficLayerRef.current?.setMap(null)
+      trafficLayerRef.current = null
+      cancelReveal()
       clearAll()
       projectionRef.current?.setMap(null)
       badgeRef.current?.setMap(null)
@@ -416,6 +778,7 @@ export default function GoogleMap({
   }, [])
 
   function clearAll() {
+    cancelReveal()
     for (const m of markerObjsRef.current) m.setMap(null)
     for (const m of placeObjsRef.current) m.setMap(null)
     for (const m of driverObjsRef.current) m.setMap(null)
@@ -432,8 +795,10 @@ export default function GoogleMap({
     driverObjsRef.current = []
     trailObjsRef.current = []
     routeObjsRef.current = []
-    // A fresh map has to fit the route again, whatever the last one showed.
-    lastFitSigRef.current = ''
+    // A fresh map has to fit (and sweep) the route again, whatever the last
+    // one showed.
+    drawnRouteSigRef.current = null
+    drawnMarkerIdsRef.current = ''
   }
 
   // ── Route drag ─────────────────────────────────────────────────────────────
@@ -479,58 +844,218 @@ export default function GoogleMap({
   }
 
   // ── Route line ─────────────────────────────────────────────────────────────
+  // Two visible strokes per section, drawn casing → spine (the same pair
+  // HereMap draws), plus the invisible grab target above them. A glow stroke
+  // under them lasted one iteration: it was part of what made the route look
+  // like a crayon line (user, 2026-09-11), and a thin line does not need
+  // lifting off the tiles.
+
+  // The widths every stroke is drawn at RIGHT NOW (HereMap's routeWidthsNow):
+  // the zoom-scaled ramp when the planner asked for it, the fixed trip-map
+  // weights otherwise, thickened either way while the cursor is on the line.
+  // Everything that draws or restyles the route asks here, so a zoom that
+  // lands while the line is hovered keeps its weight, and so does a redraw.
+  function routeWidthsNow() {
+    const hovered = routeHoveredRef.current
+    if (scaleWidthRef.current) {
+      return routeStrokeWidths(mapRef.current?.getZoom() ?? DEFAULT_ZOOM, hovered)
+    }
+    const main = hovered ? 4 * ROUTE_HOVER_BOOST : 4
+    return { main, casing: main + 1.5, arrow: 3, arrowsVisible: true }
+  }
+
+  // Direction, as repeated open arrows stencilled along the spine — the native
+  // equivalent of HERE's dash-image arrows. Hidden at overview zooms for the
+  // same reason HERE hides them: on a thread crossing countries they are noise,
+  // and the reveal has already shown which way the route runs.
+  function arrowIcons(g: typeof google, w: ReturnType<typeof routeWidthsNow>): google.maps.IconSequence[] {
+    if (!w.arrowsVisible) return []
+    return [
+      {
+        icon: {
+          path: g.maps.SymbolPath.FORWARD_OPEN_ARROW,
+          scale: Math.max(1.6, w.arrow * 0.5),
+          strokeColor: ROUTE_HALO,
+          strokeWeight: 1.6,
+          strokeOpacity: 0.95,
+        },
+        offset: '30px',
+        repeat: '72px',
+      },
+    ]
+  }
+
   function restyleRoute() {
     const g = gRef.current
-    const map = mapRef.current
-    if (!g || !map) return
-    const zoom = map.getZoom() ?? DEFAULT_ZOOM
-    const w = scaleWidthRef.current ? routeStrokeWidths(zoom) : { main: 7, casing: 11, arrow: 4.5, arrowsVisible: true }
+    if (!g) return
+    const w = routeWidthsNow()
     for (const r of routeObjsRef.current) {
       r.casing.setOptions({ strokeWeight: w.casing })
-      r.spine.setOptions({
-        strokeWeight: w.main,
-        // Direction, as repeated open arrows stencilled along the spine — the
-        // native equivalent of HERE's dash-image arrows. Hidden at overview
-        // zooms for the same reason HERE hides them: on a thread crossing
-        // countries they are noise.
-        icons: w.arrowsVisible
-          ? [
-              {
-                icon: {
-                  path: g.maps.SymbolPath.FORWARD_OPEN_ARROW,
-                  scale: Math.max(1.6, w.arrow * 0.55),
-                  strokeColor: ROUTE_HALO,
-                  strokeWeight: 1.6,
-                  strokeOpacity: 0.95,
-                },
-                offset: '30px',
-                repeat: '64px',
-              },
-            ]
-          : [],
-      })
+      r.spine.setOptions({ strokeWeight: w.main, icons: arrowIcons(g, w) })
     }
+    // A sweep in flight grows at the same weight the finished line will have.
+    revealRef.current?.restyle(w)
+  }
+
+  // The cursor arrived on the route line, or left it. Only the transitions cost
+  // anything — Google fires mouseover once per entry, not per move.
+  function setRouteHovered(hovered: boolean) {
+    if (routeHoveredRef.current === hovered) return
+    routeHoveredRef.current = hovered
+    restyleRoute()
+  }
+
+  function showRouteStrokes(visible: boolean) {
+    for (const r of routeObjsRef.current) {
+      r.casing.setVisible(visible)
+      r.spine.setVisible(visible)
+    }
+  }
+
+  // ── Route reveal ───────────────────────────────────────────────────────────
+  // A freshly calculated route draws itself on from the origin to the
+  // destination instead of appearing all at once. It answers "which way does
+  // this go?" — the question a static line makes you trace with your eyes — in
+  // the moment the route arrives, and it gives adding a stop a visible result.
+  // HereMap has had this since 2026-08-22; this is the same sweep on the Google
+  // engine, which had none (user, 2026-09-11: "bring back the animation").
+  //
+  // The real strokes are hidden and ONE temporary pair grows in their place —
+  // a route is a chain of sections and only the head one is ever partially
+  // drawn, so a single growing line over the concatenated path is both simpler
+  // and cheaper than re-cutting each section every frame. A ringed dot runs at
+  // the head. The arrow glyphs sit the animation out: the sweep is already
+  // showing direction far more directly.
+
+  /** Stop any in-flight sweep and drop its temporary objects. Safe to call at
+   *  any time; leaves the real strokes as they are. */
+  function cancelReveal() {
+    const reveal = revealRef.current
+    if (!reveal) return
+    revealRef.current = null
+    cancelAnimationFrame(reveal.raf)
+    for (const t of reveal.temps) t.setMap(null)
+    reveal.head.setMap(null)
+  }
+
+  /** The sweep has landed (or must land now): the full-fidelity strokes and
+   *  the badge take over. */
+  function finishReveal() {
+    cancelReveal()
+    showRouteStrokes(true)
+    badgeElRef.current?.classList.remove('is-waiting')
+  }
+
+  function startReveal(path: LatLng[]): boolean {
+    const g = gRef.current
+    const map = mapRef.current
+    if (!g || !map || path.length < 2) return false
+
+    const anim = thinPath(path, REVEAL_MAX_POINTS)
+    // Cumulative distance drives the sweep, so it advances at a constant ground
+    // speed. Stepping one VERTEX per frame instead would race through motorways
+    // (few, far-apart points) and crawl through town centres (many, close ones).
+    const cum = new Array<number>(anim.length)
+    cum[0] = 0
+    for (let i = 1; i < anim.length; i++) cum[i] = cum[i - 1] + haversineMeters(anim[i - 1], anim[i])
+    const total = cum[cum.length - 1]
+    if (!(total > 0)) return false
+
+    const w = routeWidthsNow()
+    showRouteStrokes(false)
+    badgeElRef.current?.classList.add('is-waiting')
+
+    const seed = [anim[0], anim[0]]
+    const common = { map, clickable: false, strokeOpacity: 1 }
+    const casing = new g.maps.Polyline({ ...common, path: seed, strokeColor: ROUTE_CASING, strokeWeight: w.casing, zIndex: 10 })
+    const spine = new g.maps.Polyline({ ...common, path: seed, strokeColor: ROUTE_SPINE, strokeWeight: w.main, zIndex: 11 })
+    const head = new g.maps.Marker({
+      map,
+      position: anim[0],
+      clickable: false,
+      optimized: false,
+      icon: { url: svgUrl(revealHeadSvg()), anchor: new g.maps.Point(6, 6), scaledSize: new g.maps.Size(12, 12) },
+      zIndex: 25,
+    })
+
+    const duration = revealDurationMs(total)
+    const startedAt = performance.now()
+    // The sweep only moves forward, so the vertex cursor is carried between
+    // frames — the whole animation walks the path once, not once per frame.
+    let cursor = 1
+
+    const reveal = {
+      raf: 0,
+      temps: [casing, spine],
+      head,
+      restyle: (next: ReturnType<typeof routeWidthsNow>) => {
+        casing.setOptions({ strokeWeight: next.casing })
+        spine.setOptions({ strokeWeight: next.main })
+      },
+    }
+
+    const frame = (now: number) => {
+      if (revealRef.current !== reveal) return
+      const linear = Math.min(1, (now - startedAt) / duration)
+      const reached = easeOutCubic(linear) * total
+      while (cursor < anim.length - 1 && cum[cursor] < reached) cursor++
+      const drawn: LatLng[] = anim.slice(0, cursor)
+      // Interpolate the head inside the current segment so the line grows
+      // smoothly instead of jumping from vertex to vertex.
+      const spanStart = cum[cursor - 1]
+      const spanLength = cum[cursor] - spanStart
+      const t = spanLength > 0 ? Math.min(1, Math.max(0, (reached - spanStart) / spanLength)) : 1
+      const from = anim[cursor - 1]
+      const to = anim[cursor]
+      const tip = { lat: from.lat + (to.lat - from.lat) * t, lng: from.lng + (to.lng - from.lng) * t }
+      drawn.push(tip)
+      casing.setPath(drawn)
+      spine.setPath(drawn)
+      head.setPosition(tip)
+      if (linear < 1) {
+        reveal.raf = requestAnimationFrame(frame)
+        return
+      }
+      finishReveal()
+    }
+
+    revealRef.current = reveal
+    reveal.raf = requestAnimationFrame(frame)
+    return true
   }
 
   useEffect(() => {
     const g = gRef.current
     const map = liveMap
     if (!g || !map) return
+
+    const sig = routeSignature(routePolylines)
+    const routeChanged = sig !== drawnRouteSigRef.current
+    drawnRouteSigRef.current = sig
+    // This redraw is not for a new route — a label landed, a marker moved back —
+    // while a sweep of THIS route is still in flight. Let it finish over the
+    // rebuilt strokes rather than stopping it half-drawn; it shows them when
+    // it lands.
+    const revealInFlight = !routeChanged && revealRef.current !== null
+    if (routeChanged) cancelReveal()
+
     for (const r of routeObjsRef.current) {
       r.casing.setMap(null)
       r.spine.setMap(null)
       r.target.setMap(null)
     }
     routeObjsRef.current = []
+    // A rebuilt line starts at rest; the next pointermove re-measures it.
+    routeHoveredRef.current = false
 
     const sections = routePolylines.map(decodeSection).filter((s) => s.length >= 2)
     sections.forEach((path, sectionIndex) => {
       const casing = new g.maps.Polyline({
         map,
         path,
-        strokeColor: ROUTE_HALO,
+        strokeColor: ROUTE_CASING,
         strokeOpacity: 1,
-        strokeWeight: 11,
+        strokeWeight: 5.5,
         clickable: false,
         zIndex: 10,
       })
@@ -539,19 +1064,22 @@ export default function GoogleMap({
         path,
         strokeColor: ROUTE_SPINE,
         strokeOpacity: 1,
-        strokeWeight: 7,
+        strokeWeight: 4,
         clickable: false,
         zIndex: 11,
       })
       // The grab handle: a wide, invisible copy of the section. Wide so the
       // line is comfortable to catch; invisible so it adds nothing to the
       // drawing. Its mousedown is the whole drag-to-add-stop gesture's start.
+      // (Hover is NOT read from it: the pointer hit-test that drives the
+      // distance readout also thickens the line, so the two can never
+      // disagree about whether the cursor is on the route.)
       const target = new g.maps.Polyline({
         map,
         path,
         strokeColor: '#ffffff',
         strokeOpacity: 0.001,
-        strokeWeight: 16,
+        strokeWeight: 18,
         clickable: true,
         zIndex: 12,
       })
@@ -567,51 +1095,82 @@ export default function GoogleMap({
     // The badge rides the first section past the route's midpoint, which on a
     // one-section route is simply the middle of the line.
     const all = sections.flat()
+
+    // Cache the decoded route path + per-vertex cumulative distances (metres
+    // from the start) for the hover-distance readout. Rebuilt on every redraw
+    // so it always matches the drawn line; null when there's no usable route,
+    // which keeps the readout hidden. Hover is a proximity affordance, not
+    // geometry storage: a thinned path keeps the per-move scan bounded on long
+    // routes.
+    if (all.length >= 2) {
+      const hoverPath = thinPath(all, 1200)
+      const cum = new Array<number>(hoverPath.length)
+      cum[0] = 0
+      for (let i = 1; i < hoverPath.length; i++) {
+        cum[i] = cum[i - 1] + haversineMeters(hoverPath[i - 1], hoverPath[i])
+      }
+      hoverGeomRef.current = { path: hoverPath, cum }
+    } else {
+      hoverGeomRef.current = null
+    }
     const mid = pointAlong(all, 0.5)
     const badgeEl = badgeElRef.current
     if (badgeEl) {
-      if (routeDistanceLabel && mid) {
-        badgeEl.innerHTML = `<span style="display:inline-block;padding:3px 8px;border-radius:6px;background:${ROUTE_SPINE};color:${ROUTE_HALO};font-size:12px;font-weight:600;letter-spacing:0;box-shadow:0 1px 4px rgba(0,0,0,.35);white-space:nowrap">${routeDistanceLabel}</span>`
-        badgeRef.current?.setPosition(mid)
-      } else {
-        badgeRef.current?.setPosition(null)
-      }
+      const show = mid ? renderRouteBadge(badgeEl, routeDistanceLabel) : false
+      badgeRef.current?.setPosition(show ? mid : null)
     }
+
+    // A hand edit — dragging a waypoint or the line itself — is the one case
+    // where neither the camera nor the sweep may run: the driver of that
+    // gesture is looking at a specific junction, a re-fit would take it away,
+    // and the preview already drew them the line they are about to get.
+    const isHandEdit = Date.now() - lastInteractiveDragAtRef.current < 1_500
+    // A view handed across an engine swap wins over the first fit: the route
+    // on screen is the one the user was already looking at.
+    const keepHandedOffView = handoffPendingRef.current && routeChanged
+    if (keepHandedOffView) handoffPendingRef.current = false
 
     // Auto-fit on a STRUCTURAL route change only, as HereMap does: a redraw of
     // the same geometry (a hover, a marker moved back) must not yank the view.
-    const sig = routeSignature(routePolylines)
-    if (sig !== lastFitSigRef.current) {
-      lastFitSigRef.current = sig
-      const isHandEdit = Date.now() - lastInteractiveDragAtRef.current < 1_500
-      if (handoffPendingRef.current) {
-        handoffPendingRef.current = false
-      } else if (all.length >= 2 && !isHandEdit) {
-        const bounds = new g.maps.LatLngBounds()
-        for (const p of all) bounds.extend(p)
-        const fit = () => {
-          const W = containerRef.current?.clientWidth ?? 0
-          const inset = panelInsetRef.current
-          map.fitBounds(bounds, {
-            top: 48,
-            bottom: 48,
-            right: 48,
-            // Keep the route clear of the panel that overlaps the left edge.
-            left: inset > 0 && inset < W ? inset + 32 : 48,
-          })
-          // Don't sit too close on short hops.
-          g.maps.event.addListenerOnce(map, 'idle', () => {
-            const z = map.getZoom()
-            if (typeof z === 'number' && z > 16) map.setZoom(16)
-          })
-        }
-        // A map that has not drawn yet (a background tab, a pane hidden while
-        // the route arrived) has no projection, and fitBounds on it is a
-        // silent no-op. Its first idle is the earliest it can be fitted.
-        if (map.getBounds()) fit()
-        else g.maps.event.addListenerOnce(map, 'idle', fit)
+    if (routeChanged && !keepHandedOffView && all.length >= 2 && !isHandEdit) {
+      const bounds = new g.maps.LatLngBounds()
+      for (const p of all) bounds.extend(p)
+      const fit = () => {
+        const W = containerRef.current?.clientWidth ?? 0
+        const inset = panelInsetRef.current
+        map.fitBounds(bounds, {
+          top: 48,
+          bottom: 48,
+          right: 48,
+          // Keep the route clear of the panel that overlaps the left edge.
+          left: inset > 0 && inset < W ? inset + 32 : 48,
+        })
+        // Don't sit too close on short hops.
+        g.maps.event.addListenerOnce(map, 'idle', () => {
+          const z = map.getZoom()
+          if (typeof z === 'number' && z > 16) map.setZoom(16)
+        })
       }
+      // A map that has not drawn yet (a background tab, a pane hidden while
+      // the route arrived) has no projection, and fitBounds on it is a
+      // silent no-op. Its first idle is the earliest it can be fitted.
+      if (map.getBounds()) fit()
+      else g.maps.event.addListenerOnce(map, 'idle', fit)
     }
+
+    // Sweep the line on, after the camera has been sent to its frame so the
+    // stroke widths are chosen for the zoom the user will actually see. Fires
+    // for a CHANGED route as well as a new one — editing stops is exactly when
+    // you want to watch where the route now goes — but never after a drag.
+    const revealing =
+      routeChanged && all.length >= 2 && !isHandEdit && !keepHandedOffView && routeMotionAllowed()
+    if (revealing && startReveal(all)) return
+    if (revealInFlight) {
+      showRouteStrokes(false)
+      return
+    }
+    showRouteStrokes(true)
+    badgeEl?.classList.remove('is-waiting')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveMap, routePolylines, routeDistanceLabel])
 
@@ -671,6 +1230,8 @@ export default function GoogleMap({
     const map = liveMap
     if (!g || !map) return
     for (const m of markerObjsRef.current) m.setMap(null)
+    // No entrance on the marks (user, 2026-09-11): a stop simply IS where it
+    // was put. The route's own reveal is the one animation on this layer.
     markerObjsRef.current = markers.map((marker) => {
       const m = new g.maps.Marker({
         map,
@@ -710,6 +1271,63 @@ export default function GoogleMap({
       })
       return m
     })
+
+    // ── Frame a new address ──────────────────────────────────────────────
+    // With a route on the map the route decides the frame (the route effect).
+    // Without one, an address that was just entered is the only thing to look
+    // at, and the map goes to it (user, 2026-09-11: "sa iti faca zoom direct
+    // in zona unde se afla adresa"): a single mark is framed by the place's
+    // own extent — the block for a building, the length of a street, the
+    // outline of a town — and several marks by the box round all of them.
+    // Only when the SET of marks changes (an id added or removed): a mark
+    // moving, or being re-created by a snap, must not move the camera, and
+    // neither must anything within 1.5 s of a hand edit.
+    const ids = markers.map((m) => m.id).join('|')
+    const setChanged = ids !== drawnMarkerIdsRef.current
+    drawnMarkerIdsRef.current = ids
+    const isHandEdit = Date.now() - lastInteractiveDragAtRef.current < 1_500
+    if (setChanged && markers.length > 0 && routePolylines.length === 0 && !isHandEdit) {
+      if (handoffPendingRef.current) {
+        // The other engine's view wins over this first frame too.
+        handoffPendingRef.current = false
+      } else {
+        const W = containerRef.current?.clientWidth ?? 0
+        const inset = panelInsetRef.current
+        const padding = { top: 64, bottom: 64, right: 64, left: inset > 0 && inset < W ? inset + 48 : 64 }
+        const frame = () => {
+          if (markers.length === 1) {
+            const only = markers[0]
+            if (only.viewport) {
+              map.fitBounds(only.viewport, padding)
+              // A building's viewport is a few metres across and fitBounds
+              // would run to the last zoom level; a street needs its number
+              // readable, not its rooftop.
+              g.maps.event.addListenerOnce(map, 'idle', () => {
+                const z = map.getZoom()
+                if (typeof z === 'number' && z > 17) map.setZoom(17)
+              })
+            } else {
+              // A coordinate or a map-placed point: no extent to frame, so a
+              // street-level look at it.
+              map.panTo(only.position)
+              if ((map.getZoom() ?? 0) < 15) map.setZoom(15)
+            }
+          } else {
+            const bounds = new g.maps.LatLngBounds()
+            for (const m of markers) bounds.extend(m.position)
+            map.fitBounds(bounds, padding)
+            g.maps.event.addListenerOnce(map, 'idle', () => {
+              const z = map.getZoom()
+              if (typeof z === 'number' && z > 16) map.setZoom(16)
+            })
+          }
+        }
+        // No projection yet (a tab that has not drawn) → fitBounds is a
+        // silent no-op; the first idle is the earliest it can be done.
+        if (map.getBounds()) frame()
+        else g.maps.event.addListenerOnce(map, 'idle', frame)
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveMap, markers, objectsDraggable])
 
@@ -813,8 +1431,9 @@ export default function GoogleMap({
   }, [liveMap, center])
 
   return (
-    <div className={['google-map-root', className].filter(Boolean).join(' ')}>
+    <div ref={rootRef} className={['google-map-root', className].filter(Boolean).join(' ')}>
       <div ref={containerRef} className="google-map-surface absolute inset-0" />
+      <div ref={controlsHostRef} className="here-map-controls-host" aria-label="Map controls" />
       {status !== 'ready' && (
         <div className="absolute inset-0 flex items-center justify-center bg-bg text-sm text-muted">
           {status === 'error' ? (

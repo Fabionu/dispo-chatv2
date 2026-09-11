@@ -1732,13 +1732,70 @@ button {
 .here-map-controls-host > * {
   pointer-events: auto;
 }
+/* While Google's Street View panorama is up it owns the surface: the column
+   of controls and the mode hint go, and the one control left is the way back
+   (`.here-map-streetview-exit`, shown only in this state). */
+.here-map-controls-host.is-streetview > :not(.here-map-streetview-exit) {
+  display: none;
+}
+/* Top-LEFT, where the planner cards were: they leave the map while the
+   panorama is up (RoutePlanner hides them on `onStreetViewChange`), so the way
+   back sits exactly where the eye goes to find the way back, and a step
+   larger than the map's other controls — it is the only control there is. */
+.here-map-streetview-exit {
+  position: absolute;
+  left: 0.75rem;
+  top: 0.75rem;
+  z-index: 101;
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  height: 2.5rem;
+  padding: 0 1rem 0 0.75rem;
+  border: 1px solid rgb(var(--color-text));
+  border-radius: var(--control-radius);
+  background: rgb(var(--color-text));
+  color: rgb(var(--color-bg));
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+.here-map-streetview-exit:hover {
+  background: rgb(var(--color-text) / 0.9);
+}
+.here-map-streetview-exit svg {
+  width: 1.125rem;
+  height: 1.125rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.here-map-controls-host.is-streetview .here-map-streetview-exit {
+  display: inline-flex;
+}
 
-/* Visual map-style picker. HERE's stock control is text-only; this keeps the
-   native map/traffic layers but presents them as recognisable thumbnails. */
+/* The map's own controls — the map-view picker (Map / Satellite thumbnails +
+   a Traffic switch behind a layers button) and the zoom column. Named after
+   the HERE engine, where they were born, but since 2026-09-11 BOTH engines
+   mount them (GoogleMap switches Google's stock widgets off and creates these
+   in its own controls host), so the chrome over the map is the app's on
+   either basemap and does not change when HGV is toggled.
+
+   COMPACT (same day, user: "mai compacte"): a 2rem trigger and a 2rem-wide
+   zoom column, down from 2.75rem — the planner's own buttons over the map
+   (Places / HGV) are 2rem tall, and these now sit on the same step. Bottom
+   offsets clear Google's attribution row (~1.5rem), which the terms keep. */
 .here-map-style-control {
   position: absolute;
-  right: 0.875rem;
-  bottom: 2.75rem;
+  right: 0.75rem;
+  bottom: 2rem;
   z-index: 100;
   font-family: inherit;
   color: rgb(var(--color-text));
@@ -1748,15 +1805,15 @@ button {
 }
 .here-map-zoom-control {
   position: absolute;
-  right: 0.875rem;
-  bottom: 6rem;
+  right: 0.75rem;
+  bottom: 4.5rem;
   z-index: 100;
   display: flex;
-  width: 2.75rem;
+  width: 2rem;
   flex-direction: column;
   align-items: center;
   border: 1px solid rgb(var(--color-line));
-  border-radius: var(--chrome-radius);
+  border-radius: var(--control-radius);
   /* The two buttons are edge-to-edge inside this box, so their hover fill would
      square the corners off without the clip. */
   overflow: hidden;
@@ -1766,8 +1823,8 @@ button {
 }
 .here-map-zoom-button {
   display: grid;
-  width: 2.75rem;
-  height: 2.625rem;
+  width: 2rem;
+  height: 1.875rem;
   flex: none;
   place-items: center;
   border: 0;
@@ -1783,27 +1840,56 @@ button {
   background: rgb(var(--color-wash) / 0.08);
 }
 .here-map-zoom-button svg {
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 0.9375rem;
+  height: 0.9375rem;
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
   stroke-linecap: round;
 }
 .here-map-zoom-divider {
-  width: 1.625rem;
+  width: 1.125rem;
   height: 1px;
   flex: none;
   background: rgb(var(--color-line));
 }
-.here-map-style-trigger {
+/* Street View: the third control in the column, above the zoom pair. Google
+   engine only (HERE has no panoramas); the pick mode it starts is GoogleMap's. */
+.here-map-streetview-control {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 8.6875rem;
+  z-index: 100;
+}
+/* The guidance line for a map mode — "Click a road to open Street View" —
+   centred along the top edge, non-interactive, in the app's tooltip voice. */
+.here-map-hint {
+  position: absolute;
+  left: 50%;
+  top: 0.75rem;
+  z-index: 100;
+  transform: translateX(-50%);
+  pointer-events: none;
+  white-space: nowrap;
+  padding: 0.25rem 0.625rem;
+  border: 1px solid rgb(var(--color-line));
+  border-radius: var(--control-radius);
+  background: rgb(var(--color-surface));
+  color: rgb(var(--color-muted));
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1.4;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
+}
+.here-map-style-trigger,
+.here-map-streetview-trigger {
   display: grid;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 2rem;
+  height: 2rem;
   margin-left: auto;
   place-items: center;
   border: 1px solid rgb(var(--color-line));
-  border-radius: var(--chrome-radius);
+  border-radius: var(--control-radius);
   background: rgb(var(--color-surface));
   color: rgb(var(--color-text));
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
@@ -1811,13 +1897,23 @@ button {
   transition: background-color 140ms ease, border-color 140ms ease;
 }
 .here-map-style-trigger:hover,
+.here-map-streetview-trigger:hover,
 .here-map-style-control.is-open .here-map-style-trigger {
   border-color: rgb(var(--color-line-2));
   background: rgb(var(--color-surface-2));
 }
-.here-map-style-trigger svg {
-  width: 1.35rem;
-  height: 1.35rem;
+/* "On", the way the whole app says it — a solid `text` block with `bg` on it
+   (the planner's Places / HGV toggles do the same). */
+.here-map-streetview-trigger.is-active,
+.here-map-streetview-trigger.is-active:hover {
+  border-color: rgb(var(--color-text));
+  background: rgb(var(--color-text));
+  color: rgb(var(--color-bg));
+}
+.here-map-style-trigger svg,
+.here-map-streetview-trigger svg {
+  width: 1rem;
+  height: 1rem;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.8;
@@ -1827,9 +1923,9 @@ button {
 .here-map-style-panel {
   position: absolute;
   right: 0;
-  bottom: calc(100% + 0.5rem);
-  width: min(17.5rem, calc(100vw - 2rem));
-  padding: 0.875rem;
+  bottom: calc(100% + 0.375rem);
+  width: min(14.5rem, calc(100vw - 2rem));
+  padding: 0.625rem;
   border: 1px solid rgb(var(--color-line));
   border-radius: var(--chrome-radius);
   background: rgb(var(--color-surface));
@@ -1837,7 +1933,7 @@ button {
 }
 /* Hand-rolled `.eyebrow` (it predates the class) — kept in step with it. */
 .here-map-style-title {
-  margin-bottom: 0.6875rem;
+  margin-bottom: 0.5rem;
   font-family: 'Inter', system-ui, sans-serif;
   font-size: var(--msg-label-size);
   font-weight: 500;
@@ -1849,7 +1945,7 @@ button {
 .here-map-style-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.625rem;
+  gap: 0.5rem;
 }
 .here-map-style-option {
   min-width: 0;
@@ -1868,7 +1964,7 @@ button {
   display: block;
   overflow: hidden;
   aspect-ratio: 5 / 3;
-  margin-bottom: 0.375rem;
+  margin-bottom: 0.25rem;
   border: 2px solid transparent;
   border-radius: var(--control-radius);
   background: rgb(var(--color-surface-2));
@@ -1929,15 +2025,15 @@ button {
 }
 .here-map-style-divider {
   height: 1px;
-  margin: 0.75rem 0;
+  margin: 0.5rem 0;
   background: rgb(var(--color-line));
 }
 .here-map-traffic-option {
   display: grid;
   width: 100%;
-  grid-template-columns: 3.25rem minmax(0, 1fr) auto;
+  grid-template-columns: 2.75rem minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.625rem;
+  gap: 0.5rem;
   border: 0;
   padding: 0;
   background: transparent;
@@ -1946,8 +2042,8 @@ button {
   cursor: pointer;
 }
 .here-map-traffic-option > img {
-  width: 3.25rem;
-  height: 2.375rem;
+  width: 2.75rem;
+  height: 2rem;
   border: 1px solid rgb(var(--color-line));
   border-radius: var(--control-radius);
   object-fit: cover;
@@ -2016,27 +2112,37 @@ button {
    pointer/move"). `.route-hover` is still toggled by HereMap — the hover
    READOUT below keys off it — it just no longer touches the cursor. */
 
-/* Route distance badge: a compact, dark pill anchored at the route midpoint
-   (HERE DomMarker). It sits just ABOVE the line — `translate(-50%, calc(-100% -
-   8px))` lifts it clear of the route so it never covers it — with a small tail
-   (::after) pointing back down at the segment, Google-Maps style.
-   `pointer-events: none` ensures it never blocks dragging the route line or
-   clicking a marker beneath it. */
+/* Route distance badge: the total distance on a small white card anchored at
+   the route's midpoint (a HERE DomMarker or a Google OverlayView; the text is
+   set by map/routeDecor.ts). Distance ONLY — the time is on the panel's cards.
+   It sits just ABOVE the line — the transform lifts it clear of the route so
+   it never covers it — with a small tail (::after) pointing back down at the
+   segment, the way a maps app labels its route. Fixed light inks, like the
+   route's own colours: the basemap is always a day map, so the card is white
+   whichever theme the app is in. `pointer-events: none` ensures it never
+   blocks dragging the route line or clicking a marker beneath it. */
 .route-distance-badge {
   position: absolute;
   left: 0;
   top: 0;
-  transform: translate(-50%, calc(-100% - 0.5rem));
+  transform: translate(-50%, calc(-100% - 0.625rem));
   pointer-events: none;
   white-space: nowrap;
-  background: rgba(20, 20, 20, 0.92);
-  color: #f5f5f5;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  padding: 1px 0.4375rem;
+  background: #ffffff;
+  color: #202124;
+  border-radius: var(--control-radius);
+  padding: 0.125rem 0.4375rem;
+  font-family: Inter, system-ui, sans-serif;
   font-size: 0.6875rem;
   font-weight: 600;
-  line-height: 1.55;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    0 2px 8px rgba(0, 0, 0, 0.18);
+  transition:
+    opacity 260ms ease-out,
+    transform 260ms ease-out;
 }
 /* Tail: a small triangle hanging off the badge's bottom edge, its tip reaching
    down to the route midpoint the badge describes. */
@@ -2050,7 +2156,16 @@ button {
   height: 0;
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
-  border-top: 7px solid rgba(20, 20, 20, 0.92);
+  border-top: 6px solid #ffffff;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18));
+}
+/* While the route is still drawing itself on, the badge — anchored at the
+   midpoint the line has not reached yet — waits, then rises in with the line's
+   arrival rather than floating over empty map. */
+.route-distance-badge.is-waiting {
+  opacity: 0;
+  transform: translate(-50%, calc(-100% - 0.375rem));
+  transition: none;
 }
 
 /* Route hover readout: a compact dark pill that follows the cursor along the

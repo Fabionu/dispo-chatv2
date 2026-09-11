@@ -20,8 +20,8 @@ export function NumberField({
   placeholder?: string
 }) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs text-muted">{label}</span>
+    <label className="flex flex-col gap-0.5">
+      <span className="text-xs leading-tight text-muted">{label}</span>
       <input
         type="number"
         inputMode="numeric"
@@ -29,7 +29,7 @@ export function NumberField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="rounded-card h-8 border border-line bg-transparent px-2.5 text-base outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4 placeholder:text-faint"
+        className="rounded-card h-7 border border-line bg-transparent px-2 text-base outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4 placeholder:text-faint"
       />
     </label>
   )
@@ -193,7 +193,7 @@ export function PresetSelect({
         onClick={() => (open ? setOpen(false) : openMenu())}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="rounded-card h-8 w-full min-w-0 flex items-center justify-between gap-1.5 border border-line bg-transparent px-2.5 text-sm outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4"
+        className="rounded-card h-7 w-full min-w-0 flex items-center justify-between gap-1.5 border border-line bg-transparent px-2 text-sm outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4"
       >
         <span className={`truncate ${active ? 'text-text' : 'text-faint'}`} title={active?.name}>
           {active ? active.name : 'Preset…'}
@@ -292,10 +292,13 @@ export function PresetSelect({
 // fit whole. `truncate` stays as a backstop for a value nobody predicted, with
 // the full string on hover so it is never simply lost.
 export function Stat({ label, value }: { label: string; value: string }) {
+  // 34px per cell (was 46): the label sits directly on the value, and the
+  // value is the same 13px as the point cards' headline rather than a step
+  // up — a readout in a compact panel, not a dashboard tile.
   return (
-    <div className="min-w-0 flex flex-col gap-0.5 px-2.5 py-1.5">
-      <span className="text-2xs text-faint">{label}</span>
-      <span className="text-lg font-semibold tracking-[-0.2px] tabular-nums truncate" title={value}>
+    <div className="min-w-0 flex flex-col px-2.5 py-1">
+      <span className="text-2xs leading-tight text-faint">{label}</span>
+      <span className="text-base font-semibold leading-tight tracking-[-0.1px] tabular-nums truncate" title={value}>
         {value}
       </span>
     </div>

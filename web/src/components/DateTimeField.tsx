@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { Calendar, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
 import { MENU_SURFACE } from './menuStyles'
-import { FIELD_BASE } from './vehicle/tripFormStyles'
+import { fieldClass } from './forms/fieldStyles'
 
 // Custom, theme-native date & time fields used by the stop forms. Each is a
 // input (typeable) with an icon button that opens a compact custom picker — a
@@ -35,8 +35,11 @@ export function joinPlannedAt(date: string, time: string): string {
 // box), so it can't just BE a field — but it wears the app's field recipe: the
 // wrapper takes the box, edge and focus states, and the inner input is
 // transparent inside it. Same height, radius and states as every other control.
-const FIELD_WRAP =
-  `${FIELD_BASE} flex items-center gap-0.5 pr-0.5 focus-within:border-line-2 focus-within:bg-white/6`
+// `dense` is the planner's 28px step (see fieldStyles FIELD_SINGLE_DENSE);
+// everything else stays on the app's 32px control.
+function fieldWrap(dense: boolean): string {
+  return `${fieldClass({ fullWidth: false, dense })} flex items-center gap-0.5 pr-0.5 focus-within:border-line-2 focus-within:bg-white/6`
+}
 const FIELD_INPUT =
   'flex-1 min-w-0 h-full bg-transparent text-base text-text placeholder:text-faint/70 outline-none'
 const FIELD_BTN =
@@ -131,11 +134,14 @@ export function DateField({
   onChange,
   className,
   ariaLabel = 'Planned date',
+  dense = false,
 }: {
   value: string
   onChange: (v: string) => void
   className?: string
   ariaLabel?: string
+  /** The 28px control step, for dense tool panels. */
+  dense?: boolean
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const popRef = useRef<HTMLDivElement>(null)
@@ -189,7 +195,7 @@ export function DateField({
 
   return (
     <div ref={ref} className={`relative ${className ?? ''}`}>
-      <div className={FIELD_WRAP}>
+      <div className={fieldWrap(dense)}>
         <input
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -287,11 +293,14 @@ export function TimeField({
   onChange,
   className,
   ariaLabel = 'Planned time',
+  dense = false,
 }: {
   value: string
   onChange: (v: string) => void
   className?: string
   ariaLabel?: string
+  /** The 28px control step, for dense tool panels. */
+  dense?: boolean
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const popRef = useRef<HTMLDivElement>(null)
@@ -313,7 +322,7 @@ export function TimeField({
 
   return (
     <div ref={ref} className={`relative ${className ?? ''}`}>
-      <div className={FIELD_WRAP}>
+      <div className={fieldWrap(dense)}>
         <input
           value={value}
           onChange={(e) => onChange(e.target.value)}

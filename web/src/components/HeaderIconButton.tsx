@@ -45,6 +45,15 @@ export const ICON_ACTION_SMALL =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ' +
   'disabled:opacity-30 disabled:cursor-default'
 
+// The same button one step smaller (20px), for a control that sits ON a line
+// of text and must not stretch it — the edit/remove pair on a planner point
+// card. Same inks and states; only the box differs.
+export const ICON_ACTION_TINY =
+  'rounded-btn h-5 w-5 flex items-center justify-center text-muted ' +
+  'hover:text-text hover:bg-white/6 ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ' +
+  'disabled:opacity-30 disabled:cursor-default'
+
 type Props = {
   /** Accessible name + default tooltip. */
   label: string

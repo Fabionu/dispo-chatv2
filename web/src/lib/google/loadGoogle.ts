@@ -9,8 +9,9 @@
 //
 // One script tag, every library named up front, resolved on Google's callback.
 // Simpler than the "dynamic import" bootstrap and just as supported; the app
-// needs the same three libraries on every map it draws, so lazy per-library
-// loading would buy nothing.
+// needs the same libraries on every map it draws, so lazy per-library loading
+// would buy nothing. `places` is here for the search fields (lib/google/
+// places.ts), which are on the same screens as the maps.
 
 declare global {
   interface Window {
@@ -20,7 +21,7 @@ declare global {
   }
 }
 
-const LIBRARIES = 'maps,marker,geometry'
+const LIBRARIES = 'maps,marker,geometry,places'
 
 export function googleMapsKey(): string {
   return (import.meta.env.VITE_GOOGLE_MAPS_KEY as string | undefined)?.trim() ?? ''

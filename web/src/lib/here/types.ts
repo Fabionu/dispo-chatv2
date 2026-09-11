@@ -4,13 +4,24 @@
 
 export type LatLng = { lat: number; lng: number }
 
-// One result from HERE Geocoding & Search (Discover), surfaced by the proxy's
-// /api/here/search. Used for origin/destination autocomplete.
+// A geographic extent, as Google's Place viewport reports it. The map frames
+// a freshly entered address by THIS rather than by a fixed zoom: a city gets
+// its whole outline, a street its length, a building its block.
+export type LatLngExtent = { north: number; south: number; east: number; west: number }
+
+// A geocoded place — a label and a coordinate — as a search field hands it to
+// the planner. The name is historical: since 2026-09-11 the search fields are
+// Google Places (lib/google/places.ts) with HERE Discover (/api/here/search) as
+// the fallback, and both produce this shape; nothing downstream can tell them
+// apart, which is the point.
 export type HerePlace = {
   id: string
   title: string
   label: string
   position: LatLng
+  /** The place's extent, when the geocoder knows it (Google Places does; HERE
+   *  Discover and a typed coordinate do not). */
+  viewport?: LatLngExtent
 }
 
 // Truck profile the user enters in the planner. All optional — an empty field is
@@ -137,6 +148,8 @@ export type RouteMarker = {
   kind: RouteMarkerKind
   position: LatLng
   label?: string
+  /** The extent to frame when this mark is the only thing on the map. */
+  viewport?: LatLngExtent
 }
 
 // A live-driver marker to render on the map — visually distinct from the
@@ -192,6 +205,9 @@ export type RoutePoint = {
   // the correct carriageway/direction (sent as the waypoint `course`) instead of
   // snapping to the oncoming road. Undefined = let HERE pick freely.
   course?: number
+  // The searched place's extent (see LatLngExtent). Set by search only; a
+  // map-placed or dragged point has none.
+  viewport?: LatLngExtent
 }
 
 // A routing waypoint sent to the proxy: a coordinate plus an optional `course`

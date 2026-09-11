@@ -61,6 +61,11 @@ export const FIELD_EDGE_INVALID =
 // Single-line height. Matches the app's 32px control step (h-8) so a field, a
 // button and a select all line up in a row.
 export const FIELD_SINGLE = 'h-8 px-2.5'
+// The DENSE step: 28px, for a tool panel that stacks a dozen controls in a
+// 300px column (the route planner, since 2026-09-11). Same recipe, one step
+// shorter — a panel opts in as a whole, never one control at a time, or the
+// row it sits in stops lining up.
+export const FIELD_SINGLE_DENSE = 'h-7 px-2'
 export const FIELD_MULTI = 'px-2.5 py-1.5 resize-none leading-[1.45]'
 
 export function fieldClass(opts?: {
@@ -71,12 +76,14 @@ export function fieldClass(opts?: {
    * together in a flex row provide their own width/flex-basis instead.
    */
   fullWidth?: boolean
+  /** The 28px step (FIELD_SINGLE_DENSE). Single-line controls only. */
+  dense?: boolean
 }): string {
   return [
     opts?.fullWidth === false ? '' : 'w-full',
     FIELD_BASE,
     opts?.invalid ? FIELD_EDGE_INVALID : FIELD_EDGE,
-    opts?.multiline ? FIELD_MULTI : FIELD_SINGLE,
+    opts?.multiline ? FIELD_MULTI : opts?.dense ? FIELD_SINGLE_DENSE : FIELD_SINGLE,
   ].join(' ')
 }
 
