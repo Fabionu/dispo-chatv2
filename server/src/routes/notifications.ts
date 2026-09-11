@@ -9,11 +9,11 @@ import { pushIsConfigured } from '../push.js'
 export const notificationsRouter = Router()
 notificationsRouter.use(requireAuth)
 
+// Push not configured (no VAPID keys — every local dev setup) is an ordinary
+// answer, not a failure: the client asks on every start, and a 503 here put a
+// red line in the console of every session that had nothing to do with push.
 notificationsRouter.get('/vapid-public-key', (_req, res) => {
-  if (!pushIsConfigured()) {
-    return res.status(503).json({ error: 'push_not_configured' })
-  }
-  res.json({ publicKey: env.VAPID_PUBLIC_KEY })
+  res.json({ publicKey: pushIsConfigured() ? env.VAPID_PUBLIC_KEY : null })
 })
 
 const subscriptionSchema = z.object({

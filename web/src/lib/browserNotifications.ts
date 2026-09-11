@@ -87,7 +87,12 @@ async function registerPushSubscription(): Promise<boolean> {
       setPushActive(false)
       return false
     }
-    const { publicKey } = (await keyResponse.json()) as { publicKey: string }
+    const { publicKey } = (await keyResponse.json()) as { publicKey: string | null }
+    // null = the server has no VAPID keys; push simply is not offered.
+    if (!publicKey) {
+      setPushActive(false)
+      return false
+    }
     const applicationServerKey = base64UrlBytes(publicKey)
     const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' })
     await navigator.serviceWorker.ready

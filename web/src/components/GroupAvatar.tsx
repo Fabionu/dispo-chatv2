@@ -30,9 +30,10 @@ type Props = {
 
 // Vehicle-room identity slot. Shows the group's UPLOADED image when one exists,
 // otherwise a GENERATED, generic multi-user glyph — in the same circular slot as
-// a DM `Avatar`, so every conversation reads the same. The image URL 404s when
-// the group has no avatar, which flips us back to the glyph, so callers don't
-// need to know in advance whether an image exists. Call sites that pass no
+// a DM `Avatar`, so every conversation reads the same. The image URL answers
+// 204 (no body) when the group has no avatar, which fails the <img> and flips
+// us back to the glyph, so callers don't need to know in advance whether an
+// image exists. Call sites that pass no
 // `groupId`/`hasAvatar` simply get the glyph (e.g. compact rows, optimistic).
 export default function GroupAvatar({
   size = 28,

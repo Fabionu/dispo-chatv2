@@ -16,6 +16,7 @@ import type {
   ScreenGeoCandidate,
 } from '../../lib/here/types'
 import type { WorkspacePlace } from '../../lib/types'
+import type { MapViewport } from '../map/mapProps'
 import {
   DEFAULT_CENTER,
   DEFAULT_ZOOM,
@@ -26,6 +27,7 @@ import {
 } from './hereMapUtils'
 import {
   ROUTE_HOVER_BOOST,
+  ROUTE_SPINE,
   ghostSvg,
   iconFor,
   routeArrowStyle,
@@ -213,6 +215,16 @@ type Props = {
   // markers can't be nudged when nobody's editing.
   objectsDraggable?: boolean
   className?: string
+  /** Where to open — MapView hands the Google map's view across when the HGV
+   *  toggle swaps engines, so the switch does not jump back to Europe. */
+  initialView?: MapViewport | null
+  /** The settled view, for the handoff in the other direction. */
+  onViewportChange?: (view: MapViewport) => void
+  // Drag-and-route preview — see components/map/mapProps.ts.
+  onRouteDrag?: (sectionIndex: number, point: LatLng, zoom: number) => void
+  onMarkerDrag?: (id: string, point: LatLng, zoom: number) => void
+  previewPolylines?: string[] | null
+  previewPoint?: LatLng | null
 }
 
 // Interactive HERE map (Maps JS v3.2 / HARP). Owns the map instance; redraws the
@@ -240,8 +252,16 @@ export default function HereMap({
   center,
   objectsDraggable = true,
   className,
+  initialView,
+  onViewportChange,
+  onRouteDrag,
+  onMarkerDrag,
+  previewPolylines,
+  previewPoint,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const onViewportChangeRef = useRef(onViewportChange)
+  onViewportChangeRef.current = onViewportChange
   const controlsHostRef = useRef<HTMLDivElement>(null)
   // Keep the latest event callbacks in refs so the once-only init effect's
   // listeners always call the current handlers without re-subscribing.
@@ -257,14 +277,22 @@ export default function HereMap({
   onSavedPlaceClickRef.current = onSavedPlaceClick
   const onRouteDragEndRef = useRef(onRouteDragEnd)
   onRouteDragEndRef.current = onRouteDragEnd
+  const onRouteDragRef = useRef(onRouteDrag)
+  onRouteDragRef.current = onRouteDrag
+  const onMarkerDragRef = useRef(onMarkerDrag)
+  onMarkerDragRef.current = onMarkerDrag
+  const previewGroupRef = useRef<any>(null)
   // Set true on any real drag move so the trailing `tap` after a drag isn't
   // misread as a marker click (HERE fires a tap on press-release).
   const didDragRef = useRef(false)
   // Active route-line drag: which section was grabbed + the live ghost marker.
-  const routeDragRef = useRef<{ active: boolean; section: number; ghost: any }>({
+  // `snapped`: once the consumer has answered with a road-matched point, the
+  // ghost sits there and stops trailing the cursor.
+  const routeDragRef = useRef<{ active: boolean; section: number; ghost: any; snapped: boolean }>({
     active: false,
     section: -1,
     ghost: null,
+    snapped: false,
   })
   const panelInsetRef = useRef(panelInsetPx)
   panelInsetRef.current = panelInsetPx
@@ -340,6 +368,10 @@ export default function HereMap({
   // recalculates. This keeps the user's zoom/pan stable while adding stops, which
   // otherwise reframed (and felt like a random zoom-in) on every change.
   const lastFitSigRef = useRef<string>('')
+  // A view handed across an engine swap (MapView) wins over the first fit:
+  // the route on screen is the one the user was already looking at, and the
+  // swap must not reframe it or sweep it on again.
+  const handoffPendingRef = useRef(initialView != null)
   // Decoded route path (whole route, travel order) + per-vertex cumulative
   // distances (metres from the start), refreshed by draw(). Read by the
   // pointermove hover readout; null when there's no route so the readout stays
@@ -395,8 +427,8 @@ export default function HereMap({
         // more from the reduced render cost.
         const maxPixelRatio = desktopPointer ? 1.5 : 1.25
         const map = new H.Map(containerRef.current, baseLayer, {
-          center: DEFAULT_CENTER,
-          zoom: DEFAULT_ZOOM,
+          center: initialView?.center ?? DEFAULT_CENTER,
+          zoom: initialView?.zoom ?? DEFAULT_ZOOM,
           pixelRatio: Math.min(window.devicePixelRatio || 1, maxPixelRatio),
           // Reuse nearby cached zoom levels behind newly requested tiles. This
           // avoids a blank/flash during wheel zoom without increasing the live
@@ -428,8 +460,14 @@ export default function HereMap({
         map.addObject(group)
         const trailGroup = new H.map.Group()
         map.addObject(trailGroup)
+        // The dashed drag preview: above the route and the trail, under the
+        // markers, so the line being tried is never hidden by the line it
+        // replaces.
+        const previewGroup = new H.map.Group()
+        map.addObject(previewGroup)
         const markerGroup = new H.map.Group()
         map.addObject(markerGroup)
+        previewGroupRef.current = previewGroup
 
         HRef.current = H
         mapRef.current = map
@@ -655,9 +693,24 @@ export default function HereMap({
           mapStyleControlRef.current?.close()
           onViewChangeRef.current?.()
         }
+        // Reported as the camera moves, not only when it settles: a swap to
+        // the other engine (MapView) reads the last report, and a settle can
+        // still be pending when the toggle is pressed.
+        const reportViewport = () => {
+          try {
+            const c = map.getCenter()
+            const z = map.getZoom()
+            if (c && typeof z === 'number') {
+              onViewportChangeRef.current?.({ center: { lat: c.lat, lng: c.lng }, zoom: z })
+            }
+          } catch {
+            /* a view report is best-effort */
+          }
+        }
         const onViewChangeEnd = () => {
           viewChangingRef.current = false
           updateRouteWidths()
+          reportViewport()
           // Let HERE finish the camera's final frame before returning interaction
           // objects to its live render path.
           if (!interactiveDragRef.current) {
@@ -670,6 +723,7 @@ export default function HereMap({
           }
         }
         map.addEventListener('mapviewchangestart', onViewChange)
+        map.addEventListener('mapviewchange', reportViewport)
         map.addEventListener('mapviewchangeend', onViewChangeEnd)
 
         // Wheel events reach the DOM before HERE begins its camera transition.
@@ -710,7 +764,7 @@ export default function HereMap({
                 volatility: true,
               })
               map.addObject(ghost)
-              routeDragRef.current = { active: true, section: data.section, ghost }
+              routeDragRef.current = { active: true, section: data.section, ghost, snapped: false }
             } else {
               // A pan beginning over a visible (non-draggable) route stroke is
               // still ordinary camera navigation.
@@ -728,10 +782,17 @@ export default function HereMap({
           didDragRef.current = true
           if (t instanceof H.map.Marker && pointer && t.__dragOffset) {
             const p = map.screenToGeo(pointer.viewportX - t.__dragOffset.x, pointer.viewportY - t.__dragOffset.y)
-            if (p) t.setGeometry(p)
+            if (p) {
+              t.setGeometry(p)
+              const id = t.getData?.()?.id
+              if (id) onMarkerDragRef.current?.(id, { lat: p.lat, lng: p.lng }, map.getZoom())
+            }
           } else if (routeDragRef.current.active && pointer && routeDragRef.current.ghost) {
             const geo = map.screenToGeo(pointer.viewportX, pointer.viewportY)
-            if (geo) routeDragRef.current.ghost.setGeometry(geo)
+            if (geo) {
+              if (!routeDragRef.current.snapped) routeDragRef.current.ghost.setGeometry(geo)
+              onRouteDragRef.current?.(routeDragRef.current.section, { lat: geo.lat, lng: geo.lng }, map.getZoom())
+            }
           }
         }
         const onDragEnd = (ev: any) => {
@@ -802,7 +863,7 @@ export default function HereMap({
               if (fresh) g = fresh
             }
             if (ghost) map.removeObject(ghost)
-            routeDragRef.current = { active: false, section: -1, ghost: null }
+            routeDragRef.current = { active: false, section: -1, ghost: null, snapped: false }
             if (g) {
               if (!havePixel) {
                 const s = map.geoToScreen(g)
@@ -874,6 +935,7 @@ export default function HereMap({
           if (hoverRaf) cancelAnimationFrame(hoverRaf)
           hoverLabel.remove()
           map.removeEventListener('mapviewchangestart', onViewChange)
+          map.removeEventListener('mapviewchange', reportViewport)
           map.removeEventListener('mapviewchangeend', onViewChangeEnd)
           if (resumeDraggableRaf) cancelAnimationFrame(resumeDraggableRaf)
           map.removeEventListener('pointerdown', onPointerDown)
@@ -1622,6 +1684,8 @@ export default function HereMap({
     // a specific junction; yanking the view out to the whole route would undo
     // the zoom they just chose. Every other route change reframes.
     const isHandEdit = Date.now() - lastInteractiveDragAtRef.current < 1_500
+    const keepHandedOffView = handoffPendingRef.current && (routeChanged || structuralChange)
+    if (keepHandedOffView) handoffPendingRef.current = false
 
     // Frame the route whenever it changes, the way a maps app does: a new
     // destination beyond the current view pulls the camera out to contain the
@@ -1630,7 +1694,9 @@ export default function HereMap({
     // follows from the geometry rather than from any rule here. Marker-only
     // structural changes (a first pin dropped, an endpoint cleared) still frame
     // too, which is what positions the map before a route exists.
-    if ((routeChanged && routePath.length >= 2 && !isHandEdit) || structuralChange) {
+    if (keepHandedOffView) {
+      // Nothing: the camera is where the other engine left it.
+    } else if ((routeChanged && routePath.length >= 2 && !isHandEdit) || structuralChange) {
       fitToPoints(H, map, allPoints)
     }
 
@@ -1638,7 +1704,7 @@ export default function HereMap({
     // the simplification are chosen for the zoom the user will actually see.
     // Fires for a CHANGED route as well as a new one — editing stops is exactly
     // when you want to watch where the route now goes.
-    const canAnimate = routePath.length >= 2 && !prefersReducedMotion()
+    const canAnimate = routePath.length >= 2 && !prefersReducedMotion() && !keepHandedOffView
     if (routeChanged) {
       // A pending resume belongs to the route being replaced; drop it so it can
       // never continue onto a different line.
@@ -1653,6 +1719,44 @@ export default function HereMap({
       startRouteReveal(routePath, elapsed)
     }
   }
+
+  // ── Drag preview ─────────────────────────────────────────────────────────
+  // The provisional route during a drag, dashed in the spine colour.
+  useEffect(() => {
+    const H = HRef.current
+    const previewGroup = previewGroupRef.current
+    if (!H || !previewGroup) return
+    previewGroup.removeAll()
+    if (!previewPolylines?.length) return
+    for (const encoded of previewPolylines) {
+      let points: LatLng[] = []
+      try {
+        points = decode(encoded).polyline.map(([lat, lng]) => ({ lat, lng }))
+      } catch {
+        continue
+      }
+      if (points.length < 2) continue
+      const line = new H.geo.LineString()
+      for (const point of points) line.pushPoint(point)
+      previewGroup.addObject(
+        new H.map.Polyline(line, {
+          style: { lineWidth: 4, strokeColor: ROUTE_SPINE, lineJoin: 'round', lineCap: 'round', lineDash: [6, 8] },
+        }),
+      )
+    }
+  }, [previewPolylines])
+
+  // The matched point moves the ghost onto the road the router chose.
+  useEffect(() => {
+    const drag = routeDragRef.current
+    if (!drag.active || !drag.ghost) return
+    if (previewPoint) {
+      drag.snapped = true
+      drag.ghost.setGeometry(previewPoint)
+    } else {
+      drag.snapped = false
+    }
+  }, [previewPoint])
 
   // Frame the route + all points: full polyline bounds (not just endpoints),
   // padded, kept clear of the floating left panel, and zoom-clamped so short

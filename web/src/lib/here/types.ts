@@ -195,8 +195,11 @@ export type RoutePoint = {
 }
 
 // A routing waypoint sent to the proxy: a coordinate plus an optional `course`
-// (desired travel heading) so HERE snaps to the correct direction/carriageway.
-export type RouteWaypoint = LatLng & { course?: number }
+// (desired travel heading) so HERE snaps to the correct direction/carriageway,
+// and an optional `snapRadius` (metres) asking HERE to match the point to the
+// most significant road within that distance — the road drawn under a cursor
+// on a zoomed-out map — instead of the nearest lane.
+export type RouteWaypoint = LatLng & { course?: number; snapRadius?: number }
 
 // A screen-space snap candidate: a geographic point produced by converting ONE
 // sampled screen pixel near the cursor back to lat/lng, tagged with `px` — its

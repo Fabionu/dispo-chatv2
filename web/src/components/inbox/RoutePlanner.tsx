@@ -26,6 +26,7 @@ import {
 import { api, ApiError } from '../../lib/api'
 import { useFlipReorder } from '../../hooks/useFlipReorder'
 import { useWorkspacePlaces } from '../../hooks/useWorkspacePlaces'
+import { snapRadiusForZoom, useRouteDragPreview, type DragRequest } from '../../hooks/useRouteDragPreview'
 import { bestInsertionIndex, haversineMeters, nearestRouteSection, routeCourseNear } from '../../lib/here/geo'
 import {
   builtInPresets,
@@ -36,7 +37,7 @@ import {
   setDefaultPresetId,
 } from '../../lib/here/truckPresets'
 import type { TruckPreset } from '../../lib/here/truckPresets'
-import HereMap from '../here/HereMap'
+import MapView from '../map/MapView'
 import PlaceSearchField from '../here/PlaceSearchField'
 import Spinner from '../Spinner'
 import { ICON_ACTION_BASE, ICON_ACTION_IDLE } from '../HeaderIconButton'
@@ -49,6 +50,7 @@ import type {
   ScreenGeoCandidate,
   TruckProfileForm,
   RouteCountryLeg,
+  RouteWaypoint,
   TruckRoute,
 } from '../../lib/here/types'
 import type { RouteMoney, RouteTollSummary } from '../../lib/here/types'
@@ -157,6 +159,13 @@ function readablePaymentMethod(value: string): string {
 // it, no direction is honestly better than a made-up one.
 const DRAG_COURSE_WINDOW_M = 2000
 
+// What a drawn route was calculated FROM: the ordered coordinates plus the
+// truck profile. Compared against the current inputs to decide "outdated".
+function routeSigOf(coords: LatLng[], truck: TruckProfileForm): string {
+  const c = coords.map((p) => `${p.lat.toFixed(6)},${p.lng.toFixed(6)}`).join('|')
+  return `${c}#${JSON.stringify(toTruckProfile(truck))}`
+}
+
 // The planner's own select surface — matches PresetSelect's trigger and the
 // truck-profile inputs, so the crew card reads as part of the same panel.
 const CREW_FIELD =
@@ -259,6 +268,8 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
 
   const regionRef = useRef<HTMLDivElement>(null)
   const reqIdRef = useRef(0)
+  // Live route preview while a marker or the line is being dragged.
+  const dragPreview = useRouteDragPreview()
   const {
     places,
     loading: placesLoading,
@@ -300,10 +311,10 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
   // ── Auto-recalculate (debounced) on any routing-relevant change ───────────
   const routeSig = useMemo(() => {
     if (!start || !destination) return ''
-    const coords = [start, ...stops, destination]
-      .map((p) => `${p.coordinates.lat.toFixed(6)},${p.coordinates.lng.toFixed(6)}`)
-      .join('|')
-    return `${coords}#${JSON.stringify(toTruckProfile(truck))}`
+    return routeSigOf(
+      [start, ...stops, destination].map((p) => p.coordinates),
+      truck,
+    )
   }, [start, destination, stops, truck])
 
   // A drawn route is only meaningful with both endpoints — drop it if one goes
@@ -382,28 +393,115 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeSig, recalcNonce])
 
-  // Route-line drag released → insert a snapped stop into the grabbed segment,
-  // then recalc. `section` maps to the stops-array insertion index (section i
-  // joins waypoint i and i+1, so the new stop becomes waypoint i+1). The snap
-  // weighs the SCREEN-space candidates sampled around the release so the stop
-  // lands on the road actually rendered under the cursor.
+  // ── Drag-and-route ─────────────────────────────────────────────────────────
+  // See hooks/useRouteDragPreview: while the line or a marker is dragged, the
+  // route through the point under the cursor is computed and drawn dashed; the
+  // release commits that route. The dragged waypoint carries a snap radius
+  // sized to the zoom (so on a zoomed-out map the motorway under the cursor
+  // wins) and the leg's heading (so it lands on the right carriageway).
+
+  // The waypoints of a route-line drag: the ordered points with a NEW one
+  // inserted after `section`'s start — leg i joins waypoint i and i+1.
+  function routeDragRequest(section: number, point: LatLng, zoom: number): DragRequest | null {
+    if (!start || !destination) return null
+    const seg = sectionCoords[section]
+    const course = seg ? routeCourseNear(point, [seg], DRAG_COURSE_WINDOW_M) ?? undefined : undefined
+    const waypoints: RouteWaypoint[] = orderedWaypoints.map((p) => ({ ...p.coordinates, course: p.course }))
+    const dragged = Math.min(section + 1, waypoints.length - 1)
+    waypoints.splice(dragged, 0, { ...point, course, snapRadius: snapRadiusForZoom(zoom, point.lat) })
+    return { waypoints, dragged, truck: toTruckProfile(truck) }
+  }
+
+  // The waypoints of a marker drag: the ordered points with `id` moved to `point`.
+  function markerDragRequest(id: string, point: LatLng, zoom: number): DragRequest | null {
+    const dragged = orderedWaypoints.findIndex((p) => p.id === id)
+    if (dragged < 0 || orderedWaypoints.length < 2) return null
+    const course = sectionCoords.length
+      ? routeCourseNear(point, sectionCoords, DRAG_COURSE_WINDOW_M) ?? undefined
+      : undefined
+    const waypoints: RouteWaypoint[] = orderedWaypoints.map((p, i) =>
+      i === dragged
+        ? { ...point, course, snapRadius: snapRadiusForZoom(zoom, point.lat) }
+        : { ...p.coordinates, course: p.course },
+    )
+    return { waypoints, dragged, truck: toTruckProfile(truck) }
+  }
+
+  function handleRouteDrag(section: number, point: LatLng, zoom: number) {
+    const req = routeDragRequest(section, point, zoom)
+    if (req) dragPreview.update(req)
+  }
+  function handleMarkerDrag(id: string, point: LatLng, zoom: number) {
+    const req = markerDragRequest(id, point, zoom)
+    if (req) dragPreview.update(req)
+  }
+
+  // A resolved drag becomes THE route: the point takes the road-matched
+  // position, the previewed route is adopted as calculated for exactly these
+  // inputs (so nothing is "outdated" and no recalc fires), and a label for the
+  // point follows when the reverse geocode answers.
+  function commitDrag(
+    id: string,
+    req: DragRequest,
+    result: { route: TruckRoute; matched: LatLng },
+    zoom: number,
+  ) {
+    const { matched } = result
+    const dragged = req.waypoints[req.dragged]
+    const coordsAfter = req.waypoints.map((w, i) => (i === req.dragged ? matched : { lat: w.lat, lng: w.lng }))
+    setPoints((cur) =>
+      cur.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              coordinates: matched,
+              label: fmtCoord(matched),
+              source: 'drag',
+              snapped: true,
+              course: dragged.course,
+            }
+          : p,
+      ),
+    )
+    // Outrank any calculate() still in flight: this route is newer.
+    reqIdRef.current++
+    setLoading(false)
+    setRoute(result.route)
+    setCalculatedSig(routeSigOf(coordsAfter, truck))
+    setError(null)
+    setSnapNote(null)
+    if (snapDebug())
+      // eslint-disable-next-line no-console
+      console.log('[routeSnap] drag committed', {
+        released: dragged,
+        matched,
+        movedMeters: Math.round(haversineMeters(dragged, matched)),
+        snapRadius: dragged.snapRadius,
+        zoom,
+      })
+    void api.here
+      .revgeocode(matched.lat, matched.lng, zoom)
+      .then(({ place }) => {
+        if (!place?.label) return
+        setPoints((cur) => cur.map((p) => (p.id === id ? { ...p, label: place.label } : p)))
+      })
+      .catch(() => {
+        /* the coordinate label stays */
+      })
+  }
+
+  // Route-line drag released → a new stop on the grabbed leg, at the road the
+  // router matched, with the previewed route adopted. `section` maps to the
+  // stops-array insertion index (leg i joins waypoint i and i+1, so the new
+  // stop becomes waypoint i+1).
   async function handleRouteDragEnd(section: number, candidates: ScreenGeoCandidate[], zoom: number) {
     const release = candidates[0]
     if (!release) return
-    // Heading of the grabbed section at the release point → drives BOTH the
-    // direction-aware snap (correct carriageway, not the oncoming road) and the
-    // recalc waypoint course. Computed before the snap so the snap can use it.
-    const seg = sectionCoords[section]
-    const course = seg
-      ? routeCourseNear(release, [seg], DRAG_COURSE_WINDOW_M) ?? undefined
-      : undefined
-    // The grabbed leg's endpoints bracket the new stop → detour-aware ranking.
-    const { prev, next } = neighborsForStopIndex(section)
+    const req = routeDragRequest(section, release, zoom)
+    const course = req?.waypoints[req.dragged]?.course
     // OPTIMISTIC: the stop appears at the raw release point the instant the
-    // ghost is dropped — the snap round-trip must never leave dead air between
-    // release and feedback. The road-snap then patches the SAME stop (by id)
-    // in place, and only that single post-snap recalc talks to routing, so the
-    // total HERE cost is identical to the old await-then-insert flow.
+    // ghost is dropped — the round-trip must never leave dead air between
+    // release and feedback. The resolved drag then patches the SAME stop by id.
     const id = uid()
     addStop(
       {
@@ -416,13 +514,18 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
       },
       section,
     )
+    const result = req ? await dragPreview.resolve(req) : null
+    if (req && result) {
+      commitDrag(id, req, result, zoom)
+      return
+    }
+    // The router could not answer (offline, no route through there): fall
+    // back to the screen-space road snap and a normal recalc.
+    const { prev, next } = neighborsForStopIndex(section)
     const s = await snapCandidatesToRoad(candidates, zoom, course, prev, next)
-    // No-op if the user already removed the stop while the snap was in flight.
     setPoints((cur) =>
       cur.map((p) =>
-        p.id === id
-          ? { ...p, coordinates: s.coordinates, label: s.label, snapped: s.snapped }
-          : p,
+        p.id === id ? { ...p, coordinates: s.coordinates, label: s.label, snapped: s.snapped } : p,
       ),
     )
     // The nonce (not just routeSig) triggers the recalc: a snap that fell back
@@ -740,13 +843,20 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
     return { id: uid(), label: s.label, coordinates: s.coordinates, source: 'map', snapped: s.snapped, course }
   }
 
-  // ── Marker drag → snap to road + recalc ───────────────────────────────────
-  // Updates the dragged point in place (keeping its id, role + order) via the
-  // SAME central screen-space snap, then recalcs immediately (like a route-line
-  // drag) so the route redraws through the moved point.
+  // ── Marker drag → the previewed route through the moved point ─────────────
+  // Updates the dragged point in place (keeping its id, role + order) at the
+  // road the router matched and adopts the previewed route. Without both
+  // endpoints there is no route to preview, so the point just moves and
+  // snaps to a road the old way.
   async function handleMarkerDragEnd(id: string, candidates: ScreenGeoCandidate[], zoom: number) {
     const release = candidates[0]
     if (!release) return
+    const req = markerDragRequest(id, release, zoom)
+    const result = req ? await dragPreview.resolve(req) : null
+    if (req && result) {
+      commitDrag(id, req, result, zoom)
+      return
+    }
     // Travel direction of the route nearest the drop — computed BEFORE the snap
     // so the snap itself lands on the correct carriageway (not just the recalc).
     const course = sectionCoords.length
@@ -1168,7 +1278,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
 
       {/* Map region — the panel floats over this and never resizes it. */}
       <div ref={regionRef} className="relative flex-1 min-h-[22.5rem] rounded-card overflow-hidden border border-line">
-        <HereMap
+        <MapView
           markers={markers}
           savedPlaces={placesOpen ? places : []}
           routePolylines={polylines}
@@ -1184,9 +1294,13 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
             setSavedPlaceMenu(null)
           }}
           onMarkerDragEnd={handleMarkerDragEnd}
+          onMarkerDrag={handleMarkerDrag}
           onMarkerClick={openMarkerMenu}
           onSavedPlaceClick={openSavedPlaceMenu}
           onRouteDragEnd={handleRouteDragEnd}
+          onRouteDrag={handleRouteDrag}
+          previewPolylines={dragPreview.preview?.polylines ?? null}
+          previewPoint={dragPreview.preview?.matched ?? null}
           panelInsetPx={panelCollapsed ? 0 : PANEL_INSET_PX}
           center={mapCenter}
           className="absolute inset-0"

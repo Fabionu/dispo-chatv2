@@ -5,6 +5,7 @@
 // trip saved. The geometry is stored so a future driver app can navigate it.
 
 import { api } from './api'
+import type { TruckRoute } from './here/types'
 import {
   parseCoordinates,
   type TripRoute,
@@ -54,6 +55,18 @@ function cleanTruckProfile(profile: TruckProfile | undefined): TruckProfile | un
   if (!profile) return undefined
   const entries = Object.entries(profile).filter(([, v]) => typeof v === 'number')
   return entries.length > 0 ? (Object.fromEntries(entries) as TruckProfile) : undefined
+}
+
+// The trip-route shape of a truck route that was already computed — the map's
+// drag preview commits the route it drew instead of asking the router again.
+export function tripRouteFromTruckRoute(route: TruckRoute): TripRoute {
+  return {
+    status: 'ok',
+    distanceText: formatDistance(route.summary.length),
+    durationText: formatDuration(route.summary.duration),
+    polylines: route.sections.map((sec) => sec.polyline).filter((p): p is string => Boolean(p)),
+    computedAt: new Date().toISOString(),
+  }
 }
 
 // Compute the route over the stops, in order: first coord = origin, last = dest,

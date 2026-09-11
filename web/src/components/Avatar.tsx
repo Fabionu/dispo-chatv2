@@ -43,7 +43,8 @@ type Props = {
    * Whether this user has an image on file, when the caller already knows from
    * a roster it has loaded. `false` skips the request and draws the fallback
    * straight away; `undefined` — every call site that does not know — keeps the
-   * original behaviour of asking and letting a 404 flip us to the fallback.
+   * original behaviour of asking and letting the empty answer flip us to the
+   * fallback.
    *
    * Note this is the OPPOSITE default to GroupAvatar's prop of the same name,
    * where undefined means "no image". A group's avatar is the exception and a
@@ -55,9 +56,9 @@ type Props = {
 
 // User avatar: the stored image when one exists, otherwise a fallback on a
 // neutral dark disc — the generic contact glyph, or the person's initials where
-// the caller opts in (see `fallback`). The image URL 404s when the user has no
-// avatar, which flips us to the fallback, so callers don't need to know in
-// advance whether an avatar exists.
+// the caller opts in (see `fallback`). The image URL answers 204 (no body) when
+// the user has no avatar, which fails the <img> and flips us to the fallback,
+// so callers don't need to know in advance whether an avatar exists.
 export default function Avatar({
   userId,
   name,
@@ -70,7 +71,7 @@ export default function Avatar({
   className = '',
 }: Props) {
   // `hasAvatar === false` is a caller telling us not to bother asking, so it
-  // folds into the same flag as "no id" and "the request already 404'd".
+  // folds into the same flag as "no id" and "the request already came back empty".
   // Unique per instance, for the tinted monogram's SVG mask below. Declared up
   // here with the other hooks because it must run on every render, including the
   // ones that never reach the tinted branch.

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { decode } from '@here/flexpolyline'
 import { Check, Copy, MapPin, Pencil, Trash2, X } from 'lucide-react'
 import Spinner from '../Spinner'
-import HereMap from '../here/HereMap'
+import MapView from '../map/MapView'
 import { api } from '../../lib/api'
 import { getSocket } from '../../lib/socket'
 import {
@@ -11,7 +11,8 @@ import {
   nearestPointOnPath,
   routeCourseNear,
 } from '../../lib/here/geo'
-import { computeTripRoute, type TripRoute } from '../../lib/tripRoute'
+import { computeTripRoute, tripRouteFromTruckRoute, type TripRoute } from '../../lib/tripRoute'
+import { snapRadiusForZoom, useRouteDragPreview, type DragRequest } from '../../hooks/useRouteDragPreview'
 import { parseCoordinates, stopId, type VehicleStop } from '../../lib/vehicleOps'
 import {
   DRIVER_EXPIRE_MS,
@@ -35,6 +36,7 @@ import type {
   LatLng,
   RouteMarker,
   RouteMarkerKind,
+  RouteWaypoint,
   ScreenGeoCandidate,
 } from '../../lib/here/types'
 import { MENU_CONTAINER, MENU_GLYPH, menuIconClass, menuItemClass } from '../menuStyles'
@@ -238,7 +240,7 @@ type MarkerMenuState = { id: string; kind: RouteMarkerKind; x: number; y: number
 // duration stay fresh. Planning data only — no live GPS/tracking.
 //
 // With `canEdit`, an "Edit route" mode lets a manager shape the route directly on
-// the map (reusing the shared HERE map's drag + road-snap, the same the Route
+// the map (reusing the shared map's drag + road-snap, the same the Route
 // Planner uses): drag a stop marker to move it, right-click to add an
 // intermediate stop, click a stop to remove it. Save recomputes and persists the
 // route + stops and the server logs a "… edited the trip route" system message;
@@ -281,6 +283,14 @@ export default function TripRouteMap({
 
   const [data, setData] = useState<TripRoute | null>(route?.status === 'ok' ? route : null)
   const [loading, setLoading] = useState(false)
+  // A route the drag preview already computed for the stops about to be set:
+  // the recompute effect adopts it instead of asking the router again.
+  const presetRef = useRef<{ sig: string; data: TripRoute } | null>(null)
+  // Forces one recompute when the stops changed in a way the signature cannot
+  // see (a road-snap that fell back to the very point already drawn).
+  const [recomputeNonce, setRecomputeNonce] = useState(0)
+  // Live route preview while a marker or the line is being dragged.
+  const dragPreview = useRouteDragPreview()
 
   // Prefer freshly-computed geometry. While editing, never show the saved route
   // because it may disagree with the draft stops.
@@ -307,6 +317,13 @@ export default function TripRouteMap({
       setData(null)
       return
     }
+    const preset = presetRef.current
+    if (preset && preset.sig === sig) {
+      presetRef.current = null
+      setData(preset.data)
+      setLoading(false)
+      return
+    }
     let cancelled = false
     setLoading(true)
     computeTripRoute(activeStops).then((r) => {
@@ -320,7 +337,7 @@ export default function TripRouteMap({
     }
     // activeStops is captured via the coordinate signature; recompute on change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sig])
+  }, [sig, recomputeNonce])
 
   // ── Live driver positions ─────────────────────────────────────────────────
   // Seeded from the room's stored `meta.driverLocations` (last known position),
@@ -564,40 +581,116 @@ export default function TripRouteMap({
     return { pos: { lat: release.lat, lng: release.lng }, label: '' }
   }
 
+  // ── Drag-and-route ─────────────────────────────────────────────────────────
+  // See hooks/useRouteDragPreview: while the line or a marker is dragged, the
+  // route through the point under the cursor is computed and drawn dashed, and
+  // the release commits that route. The dragged waypoint carries a snap radius
+  // sized to the zoom (on a zoomed-out map the motorway under the cursor wins)
+  // and the leg's heading (so it lands on the right carriageway).
+  //
   // DRAG THE ROUTE LINE ITSELF → a new stop on the leg that was grabbed, the
   // planner's gesture brought over whole (user, 2026-09-06). Right-clicking to
   // add a stop already existed here, but it has to guess which leg the point
   // belongs on (`bestInsertionIndex`); a drag does not — the leg IS the thing the
   // user grabbed, so the stop lands where they pulled from even when a nearer
   // leg passes close by.
-  //
+
+  // The waypoints of a route-line drag: the routable stops with a NEW one
+  // inserted after leg `section`'s start — leg i joins routable[i] and [i+1].
+  function routeDragRequest(section: number, point: LatLng, zoom: number): DragRequest | null {
+    if (routable.length < 2 || !routable[section + 1]) return null
+    const leg = sectionCoords[section]
+    const course = leg?.length ? routeCourseNear(point, [leg], DRAG_COURSE_WINDOW_M) ?? undefined : undefined
+    const waypoints: RouteWaypoint[] = routable.map((p) => ({ lat: p.lat, lng: p.lng }))
+    const dragged = section + 1
+    waypoints.splice(dragged, 0, { ...point, course, snapRadius: snapRadiusForZoom(zoom, point.lat) })
+    return { waypoints, dragged }
+  }
+
+  // The waypoints of a marker drag: the routable stops with `id` moved to `point`.
+  function markerDragRequest(id: string, point: LatLng, zoom: number): DragRequest | null {
+    const dragged = routable.findIndex((p) => p.id === id)
+    if (dragged < 0 || routable.length < 2) return null
+    const course = sectionCoords.length
+      ? routeCourseNear(point, sectionCoords, DRAG_COURSE_WINDOW_M) ?? undefined
+      : undefined
+    const waypoints: RouteWaypoint[] = routable.map((p, i) =>
+      i === dragged ? { ...point, course, snapRadius: snapRadiusForZoom(zoom, point.lat) } : { lat: p.lat, lng: p.lng },
+    )
+    return { waypoints, dragged }
+  }
+
+  function handleRouteDrag(section: number, point: LatLng, zoom: number) {
+    const req = routeDragRequest(section, point, zoom)
+    if (req) dragPreview.update(req)
+  }
+  function handleMarkerDrag(id: string, point: LatLng, zoom: number) {
+    const req = markerDragRequest(id, point, zoom)
+    if (req) dragPreview.update(req)
+  }
+
+  // Move stop `id` to the road-matched point and adopt the previewed route for
+  // the stops as they will then be, so the recompute effect does not ask the
+  // router for the line it is already looking at. A label follows when the
+  // reverse geocode answers.
+  function commitDrag(id: string, matched: LatLng, route: TripRoute, zoom: number) {
+    setDraftStops((cur) => {
+      const next = cur.map((s) =>
+        s.id === id
+          ? { ...s, lat: matched.lat, lng: matched.lng, coordinates: `${matched.lat.toFixed(5)}, ${matched.lng.toFixed(5)}` }
+          : s,
+      )
+      presetRef.current = { sig: coordSig(next), data: route }
+      return next
+    })
+    void api.here
+      .revgeocode(matched.lat, matched.lng, zoom)
+      .then(({ place }) => {
+        if (!place?.label) return
+        setDraftStops((cur) => cur.map((s) => (s.id === id ? { ...s, location: place.label } : s)))
+      })
+      .catch(() => {
+        /* the coordinate stays unlabelled */
+      })
+  }
+
   // OPTIMISTIC, like the planner: the stop appears at the raw release point the
-  // instant the ghost is dropped, and the road-snap patches that same stop by id
-  // when it returns. A drag that shows nothing until a network round-trip
+  // instant the ghost is dropped, and the resolved drag patches that same stop
+  // by id when it returns. A drag that shows nothing until a network round-trip
   // completes reads as a drag that failed.
   async function handleRouteDragEnd(section: number, candidates: ScreenGeoCandidate[], zoom: number) {
     const release = candidates[0]
     if (!release) return
     const before = routable[section + 1]
     if (!before) return
-
-    const leg = sectionCoords[section]
-    const course = leg?.length
-      ? routeCourseNear(release, [leg], DRAG_COURSE_WINDOW_M) ?? undefined
-      : undefined
-    const from = routable[section]
-    const prev = from ? { lat: from.lat, lng: from.lng } : undefined
-    const next = { lat: before.lat, lng: before.lng }
+    const req = routeDragRequest(section, release, zoom)
 
     const stop = mapStop({ lat: release.lat, lng: release.lng }, '')
+    const drawn = data
     setDraftStops((cur) => {
       const at = cur.findIndex((s) => s.id === before.id)
       const out = cur.slice()
       out.splice(at < 0 ? cur.length : at, 0, stop)
+      // The optimistic stop must not trigger a recompute of its own: the
+      // resolved drag brings the route, moments later. Until then the line on
+      // screen stays what it was.
+      if (drawn) presetRef.current = { sig: coordSig(out), data: drawn }
       return out
     })
 
+    const result = req ? await dragPreview.resolve(req) : null
+    if (result) {
+      commitDrag(stop.id, result.matched, tripRouteFromTruckRoute(result.route), zoom)
+      return
+    }
+    // The router could not answer: fall back to the screen-space road snap;
+    // the recompute effect then draws the route through the snapped stop.
+    const course = req?.waypoints[req.dragged]?.course
+    const from = routable[section]
+    const prev = from ? { lat: from.lat, lng: from.lng } : undefined
+    const next = { lat: before.lat, lng: before.lng }
     const snapped = await snapRelease(candidates, zoom, course, prev, next)
+    presetRef.current = null
     setDraftStops((cur) =>
       // A no-op if the stop was removed while the snap was in flight.
       cur.map((s) =>
@@ -612,14 +705,24 @@ export default function TripRouteMap({
           : s,
       ),
     )
+    // A snap that kept the raw point leaves the signature as the optimistic
+    // insert set it, and that recompute was deliberately skipped above.
+    setRecomputeNonce((n) => n + 1)
   }
 
-  // Marker drag released (edit mode only) → snap the drop to a road via the SAME
-  // screen-space snap the Route Planner uses, then move that stop's coordinate in
-  // the draft. The recompute effect redraws the preview through the moved point.
+  // Marker drag released (edit mode only) → the stop moves to the road the
+  // router matched and the previewed route is adopted. With fewer than two
+  // routable stops there is no route to preview, so the drop just snaps to a
+  // road the old way and the recompute effect (if any) redraws.
   async function handleMarkerDragEnd(id: string, candidates: ScreenGeoCandidate[], zoom: number) {
     const release = candidates[0]
     if (!release) return
+    const req = markerDragRequest(id, release, zoom)
+    const result = req ? await dragPreview.resolve(req) : null
+    if (result) {
+      commitDrag(id, result.matched, tripRouteFromTruckRoute(result.route), zoom)
+      return
+    }
     let pos = { lat: release.lat, lng: release.lng }
     try {
       const { place } = await api.here.snapCandidates({ candidates, zoom })
@@ -796,7 +899,7 @@ export default function TripRouteMap({
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-bg relative">
       <div ref={regionRef} className="flex-1 min-h-0 relative">
-        <HereMap
+        <MapView
           className="absolute inset-0"
           markers={markers}
           driverMarkers={driverMarkers}
@@ -814,7 +917,11 @@ export default function TripRouteMap({
           // while editing.
           objectsDraggable={editing}
           onMarkerDragEnd={editing ? handleMarkerDragEnd : undefined}
+          onMarkerDrag={editing ? handleMarkerDrag : undefined}
           onRouteDragEnd={editing ? handleRouteDragEnd : undefined}
+          onRouteDrag={editing ? handleRouteDrag : undefined}
+          previewPolylines={editing ? dragPreview.preview?.polylines ?? null : null}
+          previewPoint={editing ? dragPreview.preview?.matched ?? null : null}
           onMapContextMenu={editing ? openMenu : undefined}
           onMarkerClick={editing ? openMarkerMenu : undefined}
           onMapViewChange={

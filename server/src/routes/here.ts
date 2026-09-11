@@ -107,6 +107,15 @@ const coordinateSchema = z.object({
 // oncoming road.
 const waypointSchema = coordinateSchema.extend({
   course: z.number().min(0).max(359).optional(),
+  // HERE `snapRadius`, metres: match the waypoint to the most SIGNIFICANT
+  // road within this radius (motorway over national road over street) rather
+  // than the nearest one. It is what a point dragged onto a zoomed-out map
+  // means — "the road drawn under the cursor", which at that zoom is the big
+  // one — and it is HERE's own answer to that case ("useful for zoomed-out map
+  // interfaces"). Verified live: values well past 200 m are accepted (the
+  // plain `radius` option is capped there), and it combines with `course`,
+  // which still picks the carriageway. The cap is a sanity bound, not HERE's.
+  snapRadius: z.number().int().min(1).max(50000).optional(),
 })
 
 const truckRouteSchema = z.object({
@@ -1015,9 +1024,12 @@ hereRouter.post(
 
     // Format a waypoint for HERE: `lat,lng` plus an optional `;course=DEG` so
     // HERE matches the waypoint to a road link travelling in that direction
-    // (keeps a dragged point on the correct carriageway, not the oncoming one).
-    const fmtWaypoint = (wp: { lat: number; lng: number; course?: number }) =>
-      `${wp.lat},${wp.lng}${wp.course !== undefined ? `;course=${wp.course}` : ''}`
+    // (keeps a dragged point on the correct carriageway, not the oncoming one)
+    // and an optional `;snapRadius=M` (see waypointSchema).
+    const fmtWaypoint = (wp: { lat: number; lng: number; course?: number; snapRadius?: number }) =>
+      `${wp.lat},${wp.lng}${wp.course !== undefined ? `;course=${wp.course}` : ''}${
+        wp.snapRadius !== undefined ? `;snapRadius=${wp.snapRadius}` : ''
+      }`
 
     const url = new URL(routeBase)
     url.searchParams.set('apiKey', apiKey)

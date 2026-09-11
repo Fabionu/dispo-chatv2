@@ -3,7 +3,7 @@ import { Check, MapPin, Search, X } from 'lucide-react'
 import { api } from '../../lib/api'
 import { looksLikeCoordPair, parseLatLng } from '../../lib/here/geo'
 import type { HerePlace, LatLng } from '../../lib/here/types'
-import HereMap from '../here/HereMap'
+import MapView from '../map/MapView'
 
 type Props = {
   // Seed query composed from the stop's address fields (may be empty).
@@ -28,8 +28,9 @@ function coordText(c: LatLng): string {
 // In-chat map tool for picking ONE stop's coordinates. Opens seeded with the
 // stop's address, searches it via HERE Discover, and lets the user pick a
 // result, type a "lat, lng" pair, or right-click the map to drop a pin — then
-// confirm, which writes "lat, lng" back into that stop's field. Reuses HereMap
-// for the pin. Never auto-confirms and never geocodes on its own.
+// confirm, which writes "lat, lng" back into that stop's field. Reuses the
+// shared map (MapView) for the pin. Never auto-confirms and never geocodes on
+// its own.
 export default function StopLocationMap({ initialQuery, onConfirm, onCancel }: Props) {
   const [query, setQuery] = useState(initialQuery)
   const [items, setItems] = useState<HerePlace[]>([])
@@ -165,7 +166,7 @@ export default function StopLocationMap({ initialQuery, onConfirm, onCancel }: P
 
       {/* Map */}
       <div className="flex-1 min-h-0 relative">
-        <HereMap
+        <MapView
           className="absolute inset-0"
           markers={
             selected ? [{ id: 'pick', kind: 'destination', position: selected.position }] : []

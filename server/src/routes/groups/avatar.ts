@@ -19,8 +19,10 @@ function guessImageType(path: string): string {
 }
 
 // ── GET /api/groups/:id/avatar ───────────────────────────────────────────
-// Streams a vehicle group's image, any member may read it. 404 → the client
-// renders the themed multi-user fallback icon. Mirrors the user-avatar serve.
+// Streams a vehicle group's image, any member may read it. No image → 204
+// (the client renders the themed multi-user fallback icon without the browser
+// logging a 404 for it); a path that fails to serve stays 404. Mirrors the
+// user-avatar serve.
 avatarRouter.get(
   '/:id/avatar',
   asyncHandler(async (req, res) => {
@@ -38,7 +40,7 @@ avatarRouter.get(
       [groupId],
     )
     const path = rows[0]?.avatar_path
-    if (!path) return res.status(404).json({ error: 'no_avatar' })
+    if (!path) return res.status(204).end()
     const ok = await serveImageObject(res, path, guessImageType(path))
     if (!ok) return res.status(404).json({ error: 'no_avatar' })
   }),

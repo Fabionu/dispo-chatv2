@@ -225,10 +225,17 @@ export function iconFor(H: any, marker: RouteMarker): any {
 // near-black ink. That inversion is what separates the two layers at a
 // glance, and it survives the map being switched to satellite, where the white
 // plate does the same job it does for the route.
-export function savedPlaceIconFor(H: any, category: WorkspacePlaceCategory): any {
+// The SVG on its own, so the Google map draws the identical mark. The two map
+// engines wrap it differently (an H.map.Icon here, a data URL there) but the
+// picture is one function — a saved place must look the same whichever basemap
+// is under it, or toggling HGV would appear to change what was saved.
+export function savedPlaceSvg(category: WorkspacePlaceCategory): string {
   const color = PLACE_CATEGORY_COLOR[category]
   const glyph = PLACE_CATEGORY_GLYPH[category]
-  const svg = `<svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><rect width="18" height="18" fill="${ROUTE_HALO}"/><rect x="2" y="2" width="14" height="14" fill="${color}"/><text x="9" y="9.2" text-anchor="middle" dominant-baseline="central" font-family="Inter, system-ui, sans-serif" font-size="9.5" font-weight="600" fill="${ROUTE_HALO}">${glyph}</text></svg>`
+  return `<svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><rect width="18" height="18" fill="${ROUTE_HALO}"/><rect x="2" y="2" width="14" height="14" fill="${color}"/><text x="9" y="9.2" text-anchor="middle" dominant-baseline="central" font-family="Inter, system-ui, sans-serif" font-size="9.5" font-weight="600" fill="${ROUTE_HALO}">${glyph}</text></svg>`
+}
+
+export function savedPlaceIconFor(H: any, category: WorkspacePlaceCategory): any {
   // Centre-anchored: the mark sits ON the coordinate, like every route mark.
-  return new H.map.Icon(svg, { anchor: new H.math.Point(9, 9) })
+  return new H.map.Icon(savedPlaceSvg(category), { anchor: new H.math.Point(9, 9) })
 }

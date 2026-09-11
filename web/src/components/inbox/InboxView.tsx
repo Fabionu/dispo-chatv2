@@ -4,7 +4,7 @@ import type { Group } from '../../lib/types'
 import type { RouteCountryLeg } from '../../lib/here/types'
 import { groupLabel, tractorPlate } from '../../lib/types'
 import { getOps, isTripActive } from '../../lib/vehicleOps'
-import { loadHere } from '../../lib/here/loadHere'
+import { loadGoogle } from '../../lib/google/loadGoogle'
 import { PaneLoader } from '../LazyFallback'
 import GroupAvatar from '../GroupAvatar'
 import Modal from '../Modal'
@@ -82,16 +82,18 @@ export default function InboxView({
     return parts
   }, [vehicleRooms])
 
-  // Warm the HERE SDK while the workspace home sits idle, so the first map open
-  // (Route planner here, or a vehicle room's Trip route) skips the script
-  // download + parse it would otherwise pay after the click. This is the app's
-  // default landing view, so nearly every session warms early. loadHere() is
-  // cached and idempotent — repeat mounts and the later real open reuse the
-  // same promise — and it resets itself on failure, so an unconfigured/offline
-  // HERE just stays cold (the swallow keeps the warm-up silent; the real open
+  // Warm the Google Maps API while the workspace home sits idle, so the first
+  // map open (Route planner here, or a vehicle room's Trip route) skips the
+  // script download + parse it would otherwise pay after the click. This is
+  // the app's default landing view, so nearly every session warms early.
+  // Google is what every map opens with now; HERE's SDK only loads when the
+  // HGV overlay is asked for, so it stays cold here. loadGoogle() is cached
+  // and idempotent — repeat mounts and the later real open reuse the same
+  // promise — and it resets itself on failure, so a missing key or an offline
+  // CDN just stays cold (the swallow keeps the warm-up silent; the real open
   // still surfaces its own error).
   useEffect(() => {
-    const warm = () => void loadHere().catch(() => {})
+    const warm = () => void loadGoogle().catch(() => {})
     // requestIdleCallback is still missing on some Safari versions at runtime
     // (the DOM types always declare it) — fall back to a short timeout there.
     if (typeof window.requestIdleCallback === 'function') {

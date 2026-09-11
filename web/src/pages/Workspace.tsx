@@ -295,9 +295,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // peer/group image instantly on open. Bounded to the recent 20 (the list is
   // ordered by recency) so we never fan out to hundreds of requests; the session
   // cache (lib/avatarCache) dedupes in-flight warms and remembers loaded/missing
-  // so revisits and 404s never re-request. DM peers warm unconditionally; a
+  // so revisits and misses never re-request. DM peers warm unconditionally; a
   // vehicle group only warms when it actually has an image (avoids needless
-  // 404s for the many groups without one).
+  // requests for the many groups without one).
   useEffect(() => {
     if (loadingGroups) return
     for (const g of groups.slice(0, 20)) {

@@ -198,8 +198,12 @@ profileRouter.delete(
 
 // ── GET /api/users/:id/avatar ────────────────────────────────────────────
 // Streams any user's avatar by id (message authors, member pickers). Auth-only
-// and image-only — 404 → the client renders initials. Mounted separately under
-// /api/users (see index.ts) but defined here to keep avatar logic together.
+// and image-only. No image on file → 204, not 404: the client's <img> still
+// fails to decode and flips to the fallback, but the browser does not log an
+// HTTP error for every photo-less person on the screen (a 404 per member of a
+// roster filled the console). A path that fails to serve is a real error and
+// stays 404. Mounted separately under /api/users (see index.ts) but defined
+// here to keep avatar logic together.
 export const usersRouter = Router()
 usersRouter.use(requireAuth)
 
@@ -302,7 +306,7 @@ usersRouter.get(
       [req.params.id],
     )
     const path = rows[0]?.avatar_path
-    if (!path) return res.status(404).json({ error: 'no_avatar' })
+    if (!path) return res.status(204).end()
     const ok = await serveImageObject(res, path, guessImageType(path))
     if (!ok) return res.status(404).json({ error: 'no_avatar' })
   }),
