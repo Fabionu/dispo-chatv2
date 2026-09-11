@@ -346,6 +346,62 @@ hereRouter.get('/config', (_req, res) => {
   res.json({ apiKey: env.HERE_API_KEY })
 })
 
+// ── HGV restriction tiles ────────────────────────────────────────────────────
+// The truck-restriction layer the planner draws OVER the Google basemap
+// (user, 2026-09-11: "layer-ul de hgv peste google maps"). HERE's Raster Tile
+// API v3 has no truck-only resource — the legacy Map Tile API's `truckonlytile`
+// is gone (410) — but its LABEL resource in the `logistics.day` style is a
+// transparent PNG carrying the restriction signs (height / weight / width
+// limits, no-truck roads) together with the street names; the client keeps
+// the signs and drops the names (web/src/components/map/hgvOverlay.ts).
+// `pois:disabled` already strips the POI labels here. 512px tiles so the
+// signs are crisp on a hi-DPI screen at Google's 256px tile grid.
+//
+// Proxied rather than fetched from the browser so the HERE key stays
+// server-side like every other HERE call. A tile is static for a map version,
+// so a small in-memory cache absorbs the pan-back-and-forth of one session;
+// the browser caches for a day on top of that.
+const tileBase = 'https://maps.hereapi.com/v3/label/mc'
+const tileCache = new TtlCache<Promise<Buffer | null>>(600, 6 * 60 * 60 * 1000)
+
+hereRouter.get(
+  '/tiles/hgv/:z/:x/:y',
+  asyncHandler(async (req, res) => {
+    const apiKey = requireHereKey()
+    const z = Number(req.params.z)
+    const x = Number(req.params.x)
+    const y = Number(req.params.y)
+    const n = 2 ** z
+    if (
+      !Number.isInteger(z) || !Number.isInteger(x) || !Number.isInteger(y) ||
+      z < 0 || z > 20 || x < 0 || x >= n || y < 0 || y >= n
+    ) {
+      throw new HttpError(400, 'bad_tile')
+    }
+    const png = await cachedAsync(tileCache, `${z}/${x}/${y}`, async () => {
+      const url = new URL(`${tileBase}/${z}/${x}/${y}/png8`)
+      url.searchParams.set('style', 'logistics.day')
+      url.searchParams.set('features', 'vehicle_restrictions:active_and_inactive,pois:disabled')
+      url.searchParams.set('size', '512')
+      url.searchParams.set('apiKey', apiKey)
+      const upstream = await fetch(url)
+      if (!upstream.ok) {
+        const body = await upstream.text().catch(() => '')
+        console.warn('HERE tile request failed', { status: upstream.status, body: body.slice(0, 300) })
+        // A tile HERE does not have (404) is simply empty; anything else is
+        // an error the client should see rather than cache.
+        if (upstream.status === 404) return null
+        throw new HttpError(upstream.status >= 500 ? 502 : upstream.status, 'here_request_failed')
+      }
+      return Buffer.from(await upstream.arrayBuffer())
+    })
+    res.setHeader('Cache-Control', 'private, max-age=86400')
+    if (!png) return res.status(204).end()
+    res.setHeader('Content-Type', 'image/png')
+    res.send(png)
+  }),
+)
+
 hereRouter.get(
   '/search',
   asyncHandler(async (req, res) => {

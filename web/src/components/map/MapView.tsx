@@ -1,42 +1,26 @@
-import { lazy, Suspense, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import type { MapSurfaceProps, MapViewport } from './mapProps'
 import GoogleMap from './GoogleMap'
 
-// HereMap is the heavier engine (its own SDK, WebGL, the HERE key round-trip)
-// and now the one most sessions never open — only an HGV toggle reaches it. So
-// it loads on demand, and the planner's first paint is Google's map alone.
-const HereMap = lazy(() => import('../here/HereMap'))
-
-// Which basemap draws the route.
+// The map the app draws on. Google's, always.
 //
-// THE RULE IS ONE LINE: the HGV overlay is on → HERE; otherwise → Google.
-// Google's map is the familiar one and the default (user, 2026-09-11). The HGV
-// overlay — truck restrictions drawn into the map — is a HERE BASEMAP
-// (`vector.normal.logistics`), not a layer that can be laid over someone else's
-// tiles, so the moment it is asked for, the whole map has to be HERE's. The
-// toggle the planner already had is therefore also the engine switch, and the
-// route, markers, places and gestures are identical on both because both draw
-// the same contract (mapProps.ts).
+// Until 2026-09-11 this switched engines on the HGV toggle: the truck
+// restriction view was HERE's `vector.normal.logistics` BASEMAP, so asking
+// for restrictions meant swapping Google's map for HERE's (`HereMap`). It
+// worked, and it read as broken — the map changed style instead of gaining
+// something, and the user's reference was the apps that draw restrictions
+// OVER Google's map. The restrictions are now a tile layer on the Google map
+// (GoogleMap + hgvOverlay.ts), so there is one engine and nothing to swap.
+// `HereMap` is no longer imported anywhere; it stays in the tree for its
+// drag/snap/hover machinery, which GoogleMap's was ported from.
 //
-// The viewport is handed across the swap. Without it, every toggle would land
-// on the default view or re-fit the route, and a dispatcher zoomed in on a
-// junction to check a restriction would lose the junction the instant they
-// asked for the restriction.
+// The viewport bookkeeping below is what the swap used to need — the last
+// view of the outgoing engine handed to the incoming one. With one engine it
+// only forwards `onViewportChange`; kept as the one place a future second
+// engine would plug in.
 export default function MapView(props: MapSurfaceProps) {
-  const engine = props.truckOverlay ? 'here' : 'google'
-  // The latest view of whichever engine is live. Held in a ref AND mirrored
-  // to state: the ref is what the outgoing engine writes as its camera moves,
-  // the state is what the incoming engine is constructed with.
   const lastViewRef = useRef<MapViewport | null>(props.initialView ?? null)
-  const [handoff, setHandoff] = useState<MapViewport | null>(props.initialView ?? null)
-  // The "adjust state on a prop change" idiom: the previous engine is STATE,
-  // so the comparison survives React's re-render of this same pass (a ref
-  // mutated in the first pass would already match by the second).
-  const [prevEngine, setPrevEngine] = useState(engine)
-  if (prevEngine !== engine) {
-    setPrevEngine(engine)
-    setHandoff(lastViewRef.current)
-  }
+  const [handoff] = useState<MapViewport | null>(props.initialView ?? null)
 
   const shared: MapSurfaceProps = {
     ...props,
@@ -47,12 +31,5 @@ export default function MapView(props: MapSurfaceProps) {
     },
   }
 
-  if (engine === 'here') {
-    return (
-      <Suspense fallback={<div className={props.className} />}>
-        <HereMap key="here" {...shared} />
-      </Suspense>
-    )
-  }
   return <GoogleMap key="google" {...shared} />
 }

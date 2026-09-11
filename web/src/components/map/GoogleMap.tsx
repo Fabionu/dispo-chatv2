@@ -33,6 +33,7 @@ import { renderRouteBadge, routeMotionAllowed } from './routeDecor'
 import { createHereMapStyleControl, type HereMapStyleControlHandle } from '../here/HereMapStyleControl'
 import { createHereMapZoomControl, type HereMapZoomControlHandle } from '../here/HereMapZoomControl'
 import { createMapStreetViewControl, type MapStreetViewControlHandle } from './MapStreetViewControl'
+import { createHgvOverlay } from './hgvOverlay'
 
 // The Google basemap, wearing the same contract as HereMap (see mapProps.ts).
 //
@@ -207,6 +208,7 @@ export default function GoogleMap({
   routePolylines,
   scaleRouteWidthWithZoom = false,
   routeDistanceLabel,
+  truckOverlay,
   onTruckOverlayAvailabilityChange,
   onMapContextMenu,
   onMapViewChange,
@@ -254,6 +256,11 @@ export default function GoogleMap({
   // The blue "where Street View exists" lines, shown only while picking — the
   // same paint Pegman gives you while you hold him.
   const coverageLayerRef = useRef<google.maps.StreetViewCoverageLayer | null>(null)
+  // The HGV restriction layer (hgvOverlay.ts), on `map.overlayMapTypes` while
+  // the planner's HGV toggle is on. It used to swap the whole map for HERE's
+  // logistics basemap; now it is a layer over Google's, which is what the
+  // toggle looked like it should do.
+  const hgvOverlayRef = useRef<google.maps.MapType | null>(null)
   // The set of marker ids drawn last time — a NEW address (an id not seen
   // before) is what the map frames; a moved or re-created one is not.
   const drawnMarkerIdsRef = useRef<string>('')
@@ -723,8 +730,8 @@ export default function GoogleMap({
           })
         }
 
-        // The HGV toggle stays enabled on this engine: pressing it is what
-        // switches to the map that can draw the overlay (MapView).
+        // The HGV layer needs only the server's HERE key, which every other
+        // HERE call needs too; the toggle is always offered here.
         onTruckOverlayAvailabilityChange?.(true)
         setLiveMap(map)
         setStatus('ready')
@@ -1420,6 +1427,25 @@ export default function GoogleMap({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveMap, driverTrails])
+
+  // ── HGV restriction layer ──────────────────────────────────────────────────
+  useEffect(() => {
+    const g = gRef.current
+    const map = liveMap
+    if (!g || !map) return
+    if (truckOverlay) {
+      hgvOverlayRef.current ??= createHgvOverlay(g)
+      map.overlayMapTypes.push(hgvOverlayRef.current)
+    }
+    return () => {
+      const overlay = hgvOverlayRef.current
+      if (!overlay) return
+      const types = map.overlayMapTypes
+      for (let i = types.getLength() - 1; i >= 0; i--) {
+        if (types.getAt(i) === overlay) types.removeAt(i)
+      }
+    }
+  }, [liveMap, truckOverlay])
 
   // ── External recenter ──────────────────────────────────────────────────────
   useEffect(() => {
