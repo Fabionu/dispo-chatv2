@@ -4,6 +4,7 @@ import { requireAuth } from '../auth.js'
 import { asyncHandler, HttpError } from '../http.js'
 import { env } from '../env.js'
 import { TtlCache, cachedAsync } from '../util/ttlCache.js'
+import { hereLimiter, hereTilesLimiter } from '../middleware/rateLimit.js'
 
 export const hereRouter = Router()
 hereRouter.use(requireAuth)
@@ -331,8 +332,28 @@ function requireHereKey() {
   return env.HERE_API_KEY
 }
 
+// Deadline on every upstream HERE call (headers AND body — the responses are
+// small JSON or one PNG tile). Without it a stalled HERE endpoint holds the
+// caller's request, a Node socket and, for /snap/candidates, a whole fan-out
+// open until the TCP stack gives up. 15 s is several times HERE's slowest
+// honest answer (a long truck route with tolls is ~2–3 s).
+const HERE_TIMEOUT_MS = 15_000
+async function hereFetch(url: URL): Promise<Response> {
+  try {
+    return await fetch(url, { signal: AbortSignal.timeout(HERE_TIMEOUT_MS) })
+  } catch (err) {
+    // A deadline is an upstream fault the client can retry, not a bug worth a
+    // stack trace in the log — answer 504 instead of the generic 500.
+    if (err instanceof Error && err.name === 'TimeoutError') {
+      console.warn('HERE request timed out', { host: url.host, pathname: url.pathname })
+      throw new HttpError(504, 'here_timeout')
+    }
+    throw err
+  }
+}
+
 async function hereJson<T>(url: URL): Promise<T> {
-  const res = await fetch(url)
+  const res = await hereFetch(url)
   if (!res.ok) {
     const body = await res.text().catch(() => '')
     console.warn('HERE request failed', { status: res.status, body: body.slice(0, 500) })
@@ -341,10 +362,11 @@ async function hereJson<T>(url: URL): Promise<T> {
   return (await res.json()) as T
 }
 
-hereRouter.get('/config', (_req, res) => {
-  requireHereKey()
-  res.json({ apiKey: env.HERE_API_KEY })
-})
+// There is deliberately NO endpoint that returns the key. `GET /config` used
+// to hand it to the browser for the HERE JS map; that map is retired (the
+// basemap is Google's — see web/src/components/map/MapView.tsx) and every HERE
+// call goes through this proxy, so the key stays server-side. A browser-side
+// HERE key, if ever needed again, must be a SEPARATE referrer-restricted key.
 
 // ── HGV restriction tiles ────────────────────────────────────────────────────
 // The truck-restriction layer the planner draws OVER the Google basemap
@@ -355,7 +377,11 @@ hereRouter.get('/config', (_req, res) => {
 // limits, no-truck roads) together with the street names; the client keeps
 // the signs and drops the names (web/src/components/map/hgvOverlay.ts).
 // `pois:disabled` already strips the POI labels here. 512px tiles so the
-// signs are crisp on a hi-DPI screen at Google's 256px tile grid.
+// signs are crisp on a hi-DPI screen at Google's 256px tile grid, and
+// `ppi=200` so they are drawn at ~1.5× — at the default 100 a sign came out
+// 20 CSS px wide on the Google map, smaller than a route shield (user:
+// "foarte foarte mici"). 400 would double them but HERE then drops signs
+// that collide in dense areas, which is the one thing this layer is for.
 //
 // Proxied rather than fetched from the browser so the HERE key stays
 // server-side like every other HERE call. A tile is static for a map version,
@@ -363,9 +389,13 @@ hereRouter.get('/config', (_req, res) => {
 // the browser caches for a day on top of that.
 const tileBase = 'https://maps.hereapi.com/v3/label/mc'
 const tileCache = new TtlCache<Promise<Buffer | null>>(600, 6 * 60 * 60 * 1000)
+// Bump when the upstream query changes, so a tile cached under the old
+// parameters is not served for the new ones.
+const TILE_VARIANT = 'ppi200'
 
 hereRouter.get(
   '/tiles/hgv/:z/:x/:y',
+  hereTilesLimiter,
   asyncHandler(async (req, res) => {
     const apiKey = requireHereKey()
     const z = Number(req.params.z)
@@ -378,13 +408,14 @@ hereRouter.get(
     ) {
       throw new HttpError(400, 'bad_tile')
     }
-    const png = await cachedAsync(tileCache, `${z}/${x}/${y}`, async () => {
+    const png = await cachedAsync(tileCache, `${TILE_VARIANT}/${z}/${x}/${y}`, async () => {
       const url = new URL(`${tileBase}/${z}/${x}/${y}/png8`)
       url.searchParams.set('style', 'logistics.day')
       url.searchParams.set('features', 'vehicle_restrictions:active_and_inactive,pois:disabled')
       url.searchParams.set('size', '512')
+      url.searchParams.set('ppi', '200')
       url.searchParams.set('apiKey', apiKey)
-      const upstream = await fetch(url)
+      const upstream = await hereFetch(url)
       if (!upstream.ok) {
         const body = await upstream.text().catch(() => '')
         console.warn('HERE tile request failed', { status: upstream.status, body: body.slice(0, 300) })
@@ -401,6 +432,12 @@ hereRouter.get(
     res.send(png)
   }),
 )
+
+// Every remaining HERE call shares one per-user budget (see rateLimit.ts
+// `here`). Mounted AFTER the tile route on purpose: Express runs router-level
+// middleware in registration order, so tiles — which have their own, larger
+// budget — are not also charged against this one.
+hereRouter.use(hereLimiter)
 
 hereRouter.get(
   '/search',

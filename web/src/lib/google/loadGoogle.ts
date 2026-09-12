@@ -1,7 +1,8 @@
 // Loads the Google Maps JavaScript API once and hands back its namespace.
 //
 // THE KEY IS IN THE BROWSER, ON PURPOSE. This is the opposite of the HERE
-// arrangement (server-side key, auth-gated /api/here/config), and it is not an
+// arrangement (server-side key, every call proxied through /api/here/*, no
+// endpoint that returns it), and it is not an
 // oversight: Google's Maps JS key is designed to be public and is protected by
 // HTTP-referrer restrictions in the Cloud console, not by secrecy — proxying the
 // SDK's own requests would break it. The env var is Vite-exposed (`VITE_`

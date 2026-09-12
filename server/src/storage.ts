@@ -108,6 +108,32 @@ export async function createSignedUrl(
   return data.signedUrl
 }
 
+// Open a signed URL for streaming, with a deadline on the HEADERS only. The
+// two serve routes pipe the body to the browser at the browser's pace, so a
+// whole-request timeout would cut a 25 MB download on a slow phone; what must
+// not hang is the wait for Supabase to start answering, which otherwise pins
+// the request and a Node socket until the TCP stack gives up. The timer is
+// cleared as soon as headers arrive, after which the body streams unbounded.
+// Returns null on a deadline so callers answer the same clean 404/"unavailable"
+// they use for a vanished object rather than a 500 with a stack trace.
+const STORAGE_HEADER_TIMEOUT_MS = 15_000
+
+export async function openSignedUrl(signedUrl: string): Promise<Response | null> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), STORAGE_HEADER_TIMEOUT_MS)
+  try {
+    return await fetch(signedUrl, { signal: controller.signal })
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      console.warn('storage fetch timed out waiting for headers')
+      return null
+    }
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 // ── Cached signed URLs (immutable objects only) ──────────────────────────
 // The attachment-preview route redirects the browser straight to a signed URL
 // instead of proxying the bytes through this process. Minting a URL per request

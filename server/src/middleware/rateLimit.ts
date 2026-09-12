@@ -86,7 +86,14 @@ const keyByUserOrIp = (req: Request): string => {
 type Spec = { prefix: string; options: Partial<Options> }
 
 const SPECS: Record<
-  'signin' | 'signup' | 'emailVerification' | 'message' | 'groupCreate' | 'inviteCreate',
+  | 'signin'
+  | 'signup'
+  | 'emailVerification'
+  | 'message'
+  | 'groupCreate'
+  | 'inviteCreate'
+  | 'here'
+  | 'hereTiles',
   Spec
 > = {
   // Aggressive on signin — brute-force is the main threat.
@@ -163,6 +170,42 @@ const SPECS: Record<
       message: { error: 'too_many_requests' },
     },
   },
+  // HERE proxy — every call here is a BILLED upstream transaction, and one
+  // /snap/candidates fans out to ~45 of them. Nothing stops a script from
+  // draining the account except this. The budget is set by the heaviest
+  // honest use: a live drag preview keeps ONE route request in flight at a
+  // time (useRouteDragPreview), so a continuous minute of dragging is a few
+  // hundred calls — 300/min per user leaves that alone and caps a drain at
+  // 5/s.
+  here: {
+    prefix: 'here:',
+    options: {
+      windowMs: 60 * 1000,
+      limit: 300,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      keyGenerator: keyByUserOrIp,
+      message: { error: 'too_many_requests' },
+    },
+  },
+  // HGV tiles are billed too but arrive in bursts a JSON limit would choke
+  // on: a full-screen view is ~50 tiles, and zooming through five levels
+  // asks for all of them each time. The browser caches a tile for a day and
+  // the server for six hours, so honest traffic is front-loaded and then
+  // quiet; 1500/min per user (25/s) absorbs a hard pan-and-zoom session and
+  // still bounds a scripted crawl of the tile space. A refused tile is just
+  // an empty tile to the overlay (hgvOverlay.ts ignores !ok), never an error.
+  hereTiles: {
+    prefix: 'heretiles:',
+    options: {
+      windowMs: 60 * 1000,
+      limit: 1500,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      keyGenerator: keyByUserOrIp,
+      message: { error: 'too_many_requests' },
+    },
+  },
 }
 
 function build(spec: Spec, useRedis: boolean): RequestHandler {
@@ -190,6 +233,8 @@ export const emailVerificationLimiter = delegate('emailVerification')
 export const messageLimiter = delegate('message')
 export const groupCreateLimiter = delegate('groupCreate')
 export const inviteCreateLimiter = delegate('inviteCreate')
+export const hereLimiter = delegate('here')
+export const hereTilesLimiter = delegate('hereTiles')
 
 // Build the limiters with the correct store. Call AFTER initRedis(): Redis store
 // only when the command client is actually connected, otherwise in-memory. Logs

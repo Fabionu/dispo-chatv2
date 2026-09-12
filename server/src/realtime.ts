@@ -163,7 +163,7 @@ export async function initRealtime(httpServer: HttpServer) {
       const cookies = parseCookie(raw)
       const token = cookies[COOKIE]
       if (!token) return next(new Error('unauthenticated'))
-      const payload = jwt.verify(token, env.JWT_SECRET) as SessionPayload
+      const payload = jwt.verify(token, env.JWT_SECRET, { algorithms: ['HS256'] }) as SessionPayload
       socket.data.userId = payload.userId
       socket.data.workspaceId = payload.workspaceId
       return next()

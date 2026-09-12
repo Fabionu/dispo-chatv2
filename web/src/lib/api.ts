@@ -539,13 +539,10 @@ export const api = {
       request<{ ok: true }>(`/group-invites/${id}/cancel`, { method: 'POST' }),
   },
 
-  // HERE maps/routing — all proxied through our server so the HERE key stays
-  // server-side. The map-render key is fetched from `config` (auth-gated).
+  // HERE routing/search/snap/tiles — all proxied through our server
+  // (server/src/routes/here.ts) so the HERE key stays server-side. There is
+  // deliberately no endpoint that returns the key to the browser.
   here: {
-    // The HERE Maps JS API key, for the browser-rendered map. Auth-gated;
-    // throws ApiError('here_not_configured') when HERE_API_KEY is unset.
-    config: () => request<{ apiKey: string }>('/here/config'),
-
     // Address/location autocomplete (HERE Discover). Returns [] for queries
     // shorter than 3 chars (the server short-circuits those).
     search: (q: string) =>

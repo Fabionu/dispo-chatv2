@@ -161,7 +161,7 @@ placesRouter.patch(
       values.push(
         key === 'category' || numeric.has(key) ? raw : nullable(raw as string | null),
       )
-      sets.push(`${columns[key]} = ${values.length}`)
+      sets.push(`${columns[key]} = $${values.length}`)
     }
     sets.push('updated_at = now()')
     values.push(req.params.id, req.session!.workspaceId)

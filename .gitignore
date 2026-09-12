@@ -5,3 +5,6 @@ dist
 *.log
 .DS_Store
 tsconfig.tsbuildinfo
+
+# curl cookie jars (session tokens) — never track
+cookies.txt

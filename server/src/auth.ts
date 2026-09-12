@@ -38,7 +38,9 @@ export function readSession(req: Request): SessionPayload | null {
   const token = req.cookies?.[COOKIE]
   if (!token) return null
   try {
-    return jwt.verify(token, env.JWT_SECRET) as SessionPayload
+    // `algorithms` pinned: verify must accept only what issueSession signs
+    // (HS256), never whatever the token's own header claims.
+    return jwt.verify(token, env.JWT_SECRET, { algorithms: ['HS256'] }) as SessionPayload
   } catch {
     return null
   }

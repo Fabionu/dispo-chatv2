@@ -33,9 +33,10 @@ const TILE_PX = 512
 const MIN_ZOOM = 10
 const MAX_ZOOM = 20
 // The sign ring's ink (sampled off a live tile) and how far from a ring pixel
-// a pixel may be and still belong to the sign — the ring's own radius (~19px
-// at 512) plus a little, so the interior and the anti-aliased edge survive.
-const KEEP_RADIUS_PX = 22
+// a pixel may be and still belong to the sign — the ring's own radius (~31px
+// at 512 with the server's `ppi=200`) plus a little, so the interior and the
+// anti-aliased edge survive. Change the server's ppi and change this.
+const KEEP_RADIUS_PX = 35
 
 function isSignRed(r: number, g: number, b: number, a: number): boolean {
   return a > 96 && r > 190 && g < 110 && b < 150 && r - g > 110

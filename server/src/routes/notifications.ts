@@ -5,6 +5,7 @@ import { pool } from '../db/pool.js'
 import { asyncHandler } from '../http.js'
 import { env } from '../env.js'
 import { pushIsConfigured } from '../push.js'
+import { isAcceptablePushEndpoint } from '../util/pushEndpoint.js'
 
 export const notificationsRouter = Router()
 notificationsRouter.use(requireAuth)
@@ -16,8 +17,17 @@ notificationsRouter.get('/vapid-public-key', (_req, res) => {
   res.json({ publicKey: pushIsConfigured() ? env.VAPID_PUBLIC_KEY : null })
 })
 
+// The endpoint is a URL the SERVER will POST to (web-push, on every message
+// in the subscriber's rooms), so it is checked structurally before it is
+// stored — see util/pushEndpoint.ts for what is refused and why.
+const pushEndpoint = z
+  .string()
+  .url()
+  .max(4096)
+  .refine(isAcceptablePushEndpoint, { message: 'not_a_push_service' })
+
 const subscriptionSchema = z.object({
-  endpoint: z.string().url().max(4096),
+  endpoint: pushEndpoint,
   keys: z.object({
     p256dh: z.string().min(1).max(1024),
     auth: z.string().min(1).max(1024),
@@ -49,6 +59,7 @@ notificationsRouter.post(
   }),
 )
 
+// Deleting only touches the caller's own rows, so any URL shape is fine here.
 const deleteSchema = z.object({ endpoint: z.string().url().max(4096) })
 
 notificationsRouter.delete(

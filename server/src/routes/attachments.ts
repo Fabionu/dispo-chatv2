@@ -3,7 +3,7 @@ import { Router } from 'express'
 import { pool } from '../db/pool.js'
 import { requireAuth } from '../auth.js'
 import { asyncHandler } from '../http.js'
-import { createSignedUrl, getCachedSignedUrl, FileNotFound } from '../storage.js'
+import { createSignedUrl, getCachedSignedUrl, openSignedUrl, FileNotFound } from '../storage.js'
 
 export const attachmentsRouter = Router()
 attachmentsRouter.use(requireAuth)
@@ -114,7 +114,10 @@ attachmentsRouter.get(
       throw err
     }
 
-    const upstream = await fetch(signedUrl)
+    const upstream = await openSignedUrl(signedUrl)
+    // A deadline is storage being SLOW, not the object being gone — it must
+    // never flip `missing`, which is permanent. Retryable 504 instead.
+    if (!upstream) return res.status(504).json({ error: 'storage_timeout' })
     if (!upstream.ok || !upstream.body) {
       // Object vanished between signing and fetching, or storage hiccup.
       flagMissing()

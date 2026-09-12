@@ -1,6 +1,6 @@
 import { Readable } from 'node:stream'
 import type { Response } from 'express'
-import { createSignedUrl, FileNotFound } from '../storage.js'
+import { createSignedUrl, openSignedUrl, FileNotFound } from '../storage.js'
 
 // Stream a private storage object (avatar / company logo) to the client via a
 // short-lived signed URL — the same proxy pattern the attachments route uses,
@@ -20,8 +20,8 @@ export async function serveImageObject(
     throw err
   }
 
-  const upstream = await fetch(signedUrl)
-  if (!upstream.ok || !upstream.body) return false
+  const upstream = await openSignedUrl(signedUrl)
+  if (!upstream?.ok || !upstream.body) return false
 
   res.setHeader('Content-Type', contentType)
   const len = upstream.headers.get('content-length')
