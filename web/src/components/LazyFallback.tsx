@@ -1,4 +1,5 @@
 import Spinner from './Spinner'
+import { createPortal } from 'react-dom'
 
 // Compact, dark-theme loading placeholders shown while a code-split chunk (a
 // heavy panel / modal / preview / map) is fetched. Deliberately minimal — a
@@ -19,10 +20,13 @@ export function PaneLoader({ className = '' }: { className?: string }) {
 // Modal overlay slot: the same dim backdrop the real modals use with a small
 // centered spinner, so opening a lazy modal fades in smoothly.
 export function ModalLoader() {
-  return (
+  // Portalled like the modal it stands in for (see Modal.tsx): from inside the
+  // transformed sidebar shell a plain `fixed` backdrop only dims the rail.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <Spinner variant="sm" />
-    </div>
+    </div>,
+    document.body,
   )
 }
 

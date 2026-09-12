@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { ICON_ACTION_BASE, ICON_ACTION_IDLE } from './HeaderIconButton'
 
@@ -12,6 +13,15 @@ type Props = {
 
 // Shared modal shell. The overlay carries the one shadow the design system
 // permits (0 32px 80px rgba(0,0,0,0.65)). Esc and backdrop click both close.
+//
+// PORTALLED to document.body, like every viewport overlay in the app
+// (ImageLightbox, AvatarCropModal, ModalLoader). `position: fixed` is only
+// viewport-relative when no ancestor has a transform, filter or containment —
+// and the sidebar shell has `transform: translateX(0)` for its collapse slide,
+// which makes it the containing block for anything fixed inside it. A dialog
+// opened from a sidebar panel (Profile → change photo, a confirm) was therefore
+// centred in the 393px rail instead of the page (user, 2026-09-12). Rendering
+// into body makes "where the overlay was opened from" irrelevant.
 export default function Modal({ title, subtitle, onClose, children, footer }: Props) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -21,7 +31,7 @@ export default function Modal({ title, subtitle, onClose, children, footer }: Pr
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} aria-hidden />
       <div
@@ -60,6 +70,7 @@ export default function Modal({ title, subtitle, onClose, children, footer }: Pr
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

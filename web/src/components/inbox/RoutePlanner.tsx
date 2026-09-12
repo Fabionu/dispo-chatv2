@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import { decode } from '@here/flexpolyline'
 import {
-  ArrowLeft,
   Bookmark,
   CalendarClock,
   Check,
@@ -41,7 +40,7 @@ import MapView from '../map/MapView'
 import type { MapViewport } from '../map/mapProps'
 import PlaceSearchField from '../here/PlaceSearchField'
 import Spinner from '../Spinner'
-import { ICON_ACTION_BASE, ICON_ACTION_IDLE } from '../HeaderIconButton'
+import ToolHeader from './ToolHeader'
 import type {
   HerePlace,
   LatLng,
@@ -1288,18 +1287,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <header className="h-[var(--header-height)] flex items-center gap-3 px-4 shrink-0">
-        <button
-          onClick={onBack}
-          aria-label="Back to workspace"
-          className={`${ICON_ACTION_BASE} ${ICON_ACTION_IDLE} -ml-1`}
-        >
-          <ArrowLeft size="1.25rem" strokeWidth={1.8} />
-        </button>
-        <div className="min-w-0 text-xl font-semibold tracking-[-0.2px] leading-tight truncate">
-          Route planner
-        </div>
-      </header>
+      <ToolHeader title="Route planner" onBack={onBack} />
 
       {/* Map region — the panel floats over this and never resizes it. */}
       <div ref={regionRef} className="relative flex-1 min-h-[22.5rem] rounded-card overflow-hidden border border-line">

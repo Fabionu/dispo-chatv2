@@ -92,14 +92,14 @@ export function CategoryRow({
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20"
+      className="w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20"
     >
-      <span className="h-8 w-8 shrink-0 flex items-center justify-center rounded-tile border border-line bg-white/2 text-muted">
+      <span className="h-7 w-7 shrink-0 flex items-center justify-center rounded-tile border border-line bg-white/2 text-muted">
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-base font-medium text-text leading-tight">{title}</span>
-        <span className="block text-sm text-faint mt-0.5 leading-[1.4] truncate">{value}</span>
+        <span className="block text-sm font-medium text-text leading-tight">{title}</span>
+        <span className="block text-xs text-faint mt-0.5 leading-[1.4] truncate">{value}</span>
       </span>
       <ChevronRight size="1rem" strokeWidth={1.8} className="shrink-0 text-faint" />
     </button>

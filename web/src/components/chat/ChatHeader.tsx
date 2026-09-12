@@ -126,40 +126,62 @@ export default function ChatHeader({
       {/* Search is offered in EVERY conversation (DM + vehicle); Group info
           stays vehicle-only. */}
       <div className="flex items-center gap-0.5 shrink-0">
-        {/* Inline search field — expands to the LEFT of the search button when
-            open, so it stays inside the header action area instead of taking a
-            full row under the header. A drawn rectangle like every other field
-            in the app; a trailing clear (×) appears only with text typed. */}
-        {searchOpen && (
-          <div
-            data-search-region
-            className="flex items-center gap-1 h-10 pl-3 pr-1 mr-1.5 border border-strong"
-          >
-            <input
-              ref={searchInputRef}
-              value={searchQuery}
-              onChange={(e) => onSearchQueryChange(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') onCloseSearch()
-              }}
-              placeholder="Search messages…"
-              aria-label="Search this conversation"
-              className="w-40 sm:w-52 bg-transparent text-base outline-none placeholder:text-faint"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => {
-                  onSearchQueryChange('')
-                  searchInputRef.current?.focus()
+        {/* Inline search field — unfolds to the LEFT of the search button when
+            the button is pressed, so it stays inside the header action area
+            instead of taking a full row under the header. A drawn, rounded
+            field like every other field in the app (`rounded-card`, the field
+            step of the radius scale); a trailing clear (×) appears only with
+            text typed.
+
+            ALWAYS MOUNTED, revealed by `.chat-search-reveal` (index.css): the
+            wrapper is a one-column grid whose track goes 0fr → 1fr, so the
+            field grows out of the button and the title beside it reflows with
+            the motion instead of jumping to its final width while a fade plays
+            over the gap. Closing runs the same track back — the exit no other
+            mount/unmount could give without a presence timer — and the
+            wrapper's `visibility` flips hidden AFTER the collapse, which is
+            what takes the closed input out of the tab order and the
+            accessibility tree (a11y needs no React state for it — and no
+            aria-hidden, which Chrome would flag while the input still holds
+            focus during the collapse). The Animations setting and
+            prefers-reduced-motion both zero the transitions, so the field then
+            simply appears and disappears. */}
+        <div
+          data-search-region
+          className={`chat-search-reveal ${searchOpen ? 'is-open' : ''}`}
+        >
+          <div className="min-w-0 overflow-hidden">
+            <div className="flex items-center gap-1 h-10 pl-3 pr-1 mr-1.5 rounded-card border border-strong">
+              <input
+                ref={searchInputRef}
+                value={searchQuery}
+                onChange={(e) => onSearchQueryChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') onCloseSearch()
                 }}
-                aria-label="Clear search"
-                className="rounded-btn h-6 w-6 flex items-center justify-center text-muted hover:text-text hover:bg-white/8 transition-colors shrink-0"
-              >
-                <X size="0.875rem" strokeWidth={2} />
-              </button>
-            )}
+                placeholder="Search messages…"
+                aria-label="Search this conversation"
+                tabIndex={searchOpen ? 0 : -1}
+                className="w-40 sm:w-52 bg-transparent text-base outline-none placeholder:text-faint"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => {
+                    onSearchQueryChange('')
+                    searchInputRef.current?.focus()
+                  }}
+                  aria-label="Clear search"
+                  className="rounded-btn h-6 w-6 flex items-center justify-center text-muted hover:text-text hover:bg-white/8 transition-colors shrink-0"
+                >
+                  <X size="0.875rem" strokeWidth={2} />
+                </button>
+              )}
+            </div>
           </div>
-        )}
+        </div>
+        {/* `chat-search-toggle` gives the press itself a beat — a short dip
+            on :active — so the button answers the click before the field has
+            finished unfolding beside it. */}
         <button
           type="button"
           data-search-region
@@ -167,7 +189,7 @@ export default function ChatHeader({
           aria-pressed={searchOpen}
           title={searchOpen ? 'Close search' : 'Search conversation'}
           onClick={() => (searchOpen ? onCloseSearch() : onOpenSearch())}
-          className={`h-10 w-10 flex items-center justify-center rounded-btn transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+          className={`chat-search-toggle h-10 w-10 flex items-center justify-center rounded-btn transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
             searchOpen ? 'text-text bg-white/6' : 'text-muted hover:text-text hover:bg-white/6'
           }`}
         >

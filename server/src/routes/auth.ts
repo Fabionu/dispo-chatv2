@@ -273,7 +273,21 @@ authRouter.post(
         throw new HttpError(400, 'invite_email_mismatch')
 
       await lockAndAssertEmailAvailable(client, normEmail)
-      const verifiedByDeliveredInvite = Boolean(invite.recipient_email && invite.email_sent_at)
+      // Consuming a workspace invite verifies the account. The invite is a
+      // 32-byte single-use token a workspace admin generated on purpose and
+      // handed to one person, and the account it creates lives inside that
+      // admin's company with the role the admin chose — that is the vouch. It
+      // used to hold only for links DELIVERED by email (proof of the address),
+      // and a plain shared link still demanded a confirmation email, which with
+      // no email provider configured meant the invitee could not sign in until
+      // an operator ran `npm run member -- verify`. What is given up: proof that
+      // the invitee owns the address they typed. What that protects is a future
+      // password-reset delivery; the mismatch guard above still binds an emailed
+      // invite to its address, and the admin sees who joined in Company members
+      // and can revoke. Flip this back to
+      //   Boolean(invite.recipient_email && invite.email_sent_at)
+      // once an email provider is in place, if address proof is wanted again.
+      const verifiedByInvite = true
 
       let userId: string
       try {
@@ -293,9 +307,7 @@ authRouter.post(
             hash,
             displayName,
             invite.role,
-            // Consuming a link delivered to this exact address proves ownership.
-            // Legacy link-only invites still require a confirmation email.
-            verifiedByDeliveredInvite ? new Date() : null,
+            verifiedByInvite ? new Date() : null,
           ],
         )
         userId = userRow.rows[0].id
@@ -309,7 +321,7 @@ authRouter.post(
         `update workspace_invites set used_at = now(), used_by = $1 where id = $2`,
         [userId, invite.id],
       )
-      const verification = verifiedByDeliveredInvite
+      const verification = verifiedByInvite
         ? null
         : await issueEmailVerificationToken(client, userId)
       return { userId, workspaceId: invite.workspace_id, role: invite.role, verification }

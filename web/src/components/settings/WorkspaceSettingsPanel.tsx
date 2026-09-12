@@ -11,7 +11,6 @@ import {
   Mail,
   Palette,
   Play,
-  Plus,
   Trash2,
   Users,
 } from 'lucide-react'
@@ -107,6 +106,14 @@ export default function WorkspaceSettingsPanel({ onBack, backLabel = 'Back' }: P
   const densityOverride = getStoredDensity()
 
   // ── Detail views ────────────────────────────────────────────────────────────
+  // Every screen of this panel — each detail AND the list — enters with
+  // `panel-fade-in`, keyed on the category so React remounts the root when it
+  // changes. The sidebar's drill-in wrapper (pages/Workspace.tsx) already fades
+  // the panel in as a whole, but it is keyed on the TOP-level view ('settings'),
+  // so this second level used to switch screens inside an already-mounted
+  // wrapper with no entrance at all: Account → Settings faded, Settings →
+  // Appearance snapped (user, 2026-09-12: "the animation does not apply to
+  // every modal"). Same animation, same stillness gating, one level down.
   if (category) {
     const title = {
       appearance: 'Appearance',
@@ -115,13 +122,13 @@ export default function WorkspaceSettingsPanel({ onBack, backLabel = 'Back' }: P
       about: 'About',
     }[category]
     return (
-      <div className={`flex flex-col h-full ${SIDEBAR_PANEL_SURFACE}`}>
+      <div key={category} className={`panel-fade-in flex flex-col h-full ${SIDEBAR_PANEL_SURFACE}`}>
         <PanelHeader
           title={title}
           onBack={() => setCategory(null)}
           backLabel="Back to Workspace settings"
         />
-        <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 py-5">
+        <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 py-4">
           {category === 'appearance' ? (
             <AppearanceSettings />
           ) : category === 'notifications' ? (
@@ -142,9 +149,9 @@ export default function WorkspaceSettingsPanel({ onBack, backLabel = 'Back' }: P
   } density`
 
   return (
-    <div className={`flex flex-col h-full ${SIDEBAR_PANEL_SURFACE}`}>
+    <div key="list" className={`panel-fade-in flex flex-col h-full ${SIDEBAR_PANEL_SURFACE}`}>
       <PanelHeader title="Workspace settings" onBack={onBack} backLabel={backLabel} />
-      <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 py-4">
+      <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 py-3">
         <div className={PANEL_GROUP_CARD}>
           <CategoryRow
             icon={<Palette size="1rem" strokeWidth={1.8} />}
@@ -178,7 +185,7 @@ export default function WorkspaceSettingsPanel({ onBack, backLabel = 'Back' }: P
             onClick={() => setCategory('about')}
           />
         </div>
-        <p className="text-xs text-faint mt-2.5 px-1 leading-[1.5]">
+        <p className="text-xs text-faint mt-2 px-1 leading-[1.5]">
           Appearance preferences are saved in this browser and apply to this device only.
         </p>
       </div>
@@ -191,7 +198,7 @@ export default function WorkspaceSettingsPanel({ onBack, backLabel = 'Back' }: P
 function AppearanceSettings() {
   return (
     <div>
-      <div className="rounded-list border border-line bg-white/2 px-4 divide-y divide-line">
+      <div className="rounded-list border border-line bg-white/2 px-3.5 divide-y divide-line">
         <ThemeSetting />
         <DensitySetting />
         <MessageStyleSetting />
@@ -200,12 +207,12 @@ function AppearanceSettings() {
           above: the group has an internal dependency (the typing effect is
           governed by the switch over it) and a card is what says those two
           belong together and the theme/density/style rows do not. */}
-      <div className="eyebrow mt-5 mb-2">Animations</div>
-      <div className="rounded-list border border-line bg-white/2 px-4 divide-y divide-line">
+      <div className="eyebrow mt-4 mb-1.5">Animations</div>
+      <div className="rounded-list border border-line bg-white/2 px-3.5 divide-y divide-line">
         <InterfaceAnimationsSetting />
         <ComposerEffectSetting />
       </div>
-      <p className="text-xs text-faint mt-2.5 px-1 leading-[1.5]">
+      <p className="text-xs text-faint mt-2 px-1 leading-[1.5]">
         Saved in this browser — applies to this device only.
       </p>
     </div>
@@ -246,13 +253,13 @@ function NotificationSettings() {
 
   return (
     <div>
-      <div className="rounded-card border border-line bg-white/2 px-4 py-4 mb-3">
+      <div className="rounded-card border border-line bg-white/2 px-3.5 py-3 mb-3">
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
-            <div className="text-base font-medium leading-tight text-text">
+            <div className="text-sm font-medium leading-tight text-text">
               Allow notifications
             </div>
-            <div className="mt-1 text-sm leading-[1.4] text-faint">
+            <div className="mt-0.5 text-xs leading-[1.4] text-faint">
               {permissionDescription}
             </div>
           </div>
@@ -267,33 +274,33 @@ function NotificationSettings() {
               !browserNotifications.supported ||
               browserNotifications.permission === 'denied'
             }
-            className={`relative h-6 w-10 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 disabled:opacity-40 disabled:cursor-not-allowed ${
+            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 disabled:opacity-40 disabled:cursor-not-allowed ${
               browserNotifications.enabled ? 'bg-text' : 'bg-white/10'
             }`}
           >
             <span
-              className={`absolute top-1 h-4 w-4 rounded-full transition-all ${
+              className={`absolute top-0.5 h-4 w-4 rounded-full transition-all ${
                 browserNotifications.enabled
-                  ? 'left-5 bg-bg'
-                  : 'left-1 bg-muted'
+                  ? 'left-[1.125rem] bg-bg'
+                  : 'left-0.5 bg-muted'
               }`}
             />
           </button>
         </div>
       </div>
-      <div className="mb-2 px-1 text-xs font-semibold text-faint">
+      <div className="mb-1.5 px-1 text-xs font-semibold text-faint">
         Notification sound
       </div>
       <div className={PANEL_GROUP_CARD}>
         {NOTIFICATION_SOUNDS.map((sound) => {
           const active = sound.value === selected
           return (
-            <div key={sound.value} className="flex items-center gap-2 px-2 py-2">
+            <div key={sound.value} className="flex items-center gap-1.5 px-1.5 py-1">
               <button
                 type="button"
                 onClick={() => setNotificationSound(sound.value)}
                 aria-pressed={active}
-                className={`min-w-0 flex-1 flex items-center gap-3 rounded-btn px-2 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+                className={`min-w-0 flex-1 flex items-center gap-2.5 rounded-btn px-2 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
                   active ? '' : 'hover:bg-white/6'
                 }`}
               >
@@ -305,16 +312,16 @@ function NotificationSettings() {
                     native radio, and a lone round control in this UI reads as
                     something borrowed. */}
                 <span
-                  className={`h-5 w-5 shrink-0 rounded-chip border flex items-center justify-center transition-colors ${
+                  className={`h-4 w-4 shrink-0 rounded-chip border flex items-center justify-center transition-colors ${
                     active
                       ? 'border-text bg-text text-bg'
                       : 'border-line-2 text-transparent'
                   }`}
                 >
-                  <Check size="0.75rem" strokeWidth={2.5} />
+                  <Check size="0.625rem" strokeWidth={2.5} />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-base font-medium text-text">
+                  <span className="block text-sm font-medium text-text leading-tight">
                     {sound.label}
                   </span>
                   <span className="mt-0.5 block text-xs leading-[1.4] text-faint">
@@ -328,16 +335,16 @@ function NotificationSettings() {
                   onClick={() => void playNotificationSound(sound.value as NotificationSound)}
                   aria-label={`Preview ${sound.label}`}
                   title={`Preview ${sound.label}`}
-                  className="rounded-btn h-8 w-8 shrink-0 flex items-center justify-center text-muted hover:text-text hover:bg-white/8 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                  className="rounded-btn h-7 w-7 shrink-0 flex items-center justify-center text-muted hover:text-text hover:bg-white/8 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
                 >
-                  <Play size="0.875rem" strokeWidth={1.9} fill="currentColor" />
+                  <Play size="0.75rem" strokeWidth={1.9} fill="currentColor" />
                 </button>
               )}
             </div>
           )
         })}
       </div>
-      <p className="text-xs text-faint mt-2.5 px-1 leading-[1.5]">
+      <p className="text-xs text-faint mt-2 px-1 leading-[1.5]">
         Preview a sound before selecting it. Muted conversations always stay silent.
       </p>
     </div>
@@ -515,7 +522,7 @@ function AboutSettings() {
     commitRaw !== 'Not available' && commitRaw.length > 10 ? commitRaw.slice(0, 7) : commitRaw
 
   return (
-    <div className="rounded-card border border-line bg-white/2 px-4 py-1.5">
+    <div className="rounded-card border border-line bg-white/2 px-3.5 py-1">
       <FieldRow label="App version" value={APP_VERSION} />
       <FieldRow label="Environment" value={environment} />
       <FieldRow label="Build date" value={buildDate} />
@@ -525,9 +532,17 @@ function AboutSettings() {
 }
 
 // ── Company members (admin) ─────────────────────────────────────────────────
-// Send single-use, 48-hour invite links by email and review recent ones. The raw
-// link is shown ONCE (right after generation); the list afterwards carries only
-// status + timing, mirroring the server (which stores just a token hash).
+// Single-use, 48-hour invite links into this company, and the list of recent
+// ones. TWO ways to hand one out, from the same card: type an address and the
+// link goes by email (bound to that address); leave the address empty and you
+// get a plain link to share yourself — WhatsApp, a text, over the shoulder —
+// which the invitee opens to create their account under this company with the
+// chosen role. The plain link is the original flow and the one that works with
+// no email provider configured (user, 2026-09-12: "I want that back"); the
+// email step was added on top of it and had quietly made the address required.
+// Either way the raw link is shown ONCE (right after generation); the list
+// afterwards carries only status + timing, mirroring the server (which stores
+// just a token hash).
 function CompanyMembersSettings() {
   const [invites, setInvites] = useState<WorkspaceInvite[]>([])
   const [loading, setLoading] = useState(true)
@@ -558,15 +573,17 @@ function CompanyMembersSettings() {
     void load()
   }, [load])
 
+  // An empty address is not an error — it is the plain-link flow.
+  const willEmail = recipientEmail.trim().length > 0
+
   async function generate() {
-    if (!recipientEmail.trim()) {
-      setGenError('Enter the email address of the person you want to invite.')
-      return
-    }
     setGenerating(true)
     setGenError(null)
     try {
-      const { invite } = await api.workspaceInvites.create(role, recipientEmail.trim())
+      const { invite } = await api.workspaceInvites.create(
+        role,
+        willEmail ? recipientEmail.trim() : undefined,
+      )
       setFresh(invite)
       setRecipientEmail('')
       await load()
@@ -608,22 +625,23 @@ function CompanyMembersSettings() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* ── Generate + link ──────────────────────────────────────────────────
-          One card for the whole create flow: role picker and Generate as a
-          single row, the role hint underneath, and — past a hairline — the
-          link slot (the fresh link with copy/countdown, or a quiet explainer
-          while no link exists). */}
+          One card for the whole create flow, kept tight: the address on one
+          line, role + action on the next, the role hint under them, and —
+          past a hairline — the link slot (the fresh link with copy/countdown,
+          or a one-line explainer while no link exists). The field labels went
+          with the compaction; the placeholder and the button's own label say
+          what each control is, and the button reads "Generate link" or "Send
+          invite" according to whether an address was typed, so the two flows
+          need no switch. */}
       <section>
-        <div className="eyebrow mb-2">New invitation</div>
-        <div className="rounded-card border border-line bg-white/2 p-3.5">
-          <label htmlFor="invite-email" className="block text-sm text-muted">
-            Recipient email
-          </label>
-          <div className="relative mt-1.5 mb-3">
+        <div className="eyebrow mb-1.5">New invitation</div>
+        <div className="rounded-card border border-line bg-white/2 p-3">
+          <div className="relative">
             <Mail
               size="0.875rem"
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint"
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-faint"
             />
             <input
               id="invite-email"
@@ -633,46 +651,55 @@ function CompanyMembersSettings() {
                 setRecipientEmail(event.target.value)
                 setGenError(null)
               }}
-              placeholder="name@company.com"
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !generating) void generate()
+              }}
+              placeholder="Email (optional) — leave empty for a link to share"
+              aria-label="Recipient email (optional)"
               autoComplete="off"
               disabled={generating}
-              className="h-9 w-full rounded-card border border-line bg-white/4 pl-9 pr-3 text-base text-text outline-none placeholder:text-faint focus:border-line-2 disabled:opacity-60"
+              className="h-8 w-full rounded-card border border-line bg-white/4 pl-8 pr-2.5 text-sm text-text outline-none placeholder:text-faint focus:border-line-2 disabled:opacity-60"
             />
           </div>
-          <label htmlFor="invite-role" className="block text-sm text-muted">
-            Invite as
-          </label>
-          <div className="mt-1.5 flex items-center gap-2">
+          <div className="mt-2 flex items-center gap-2">
             <div className="flex-1 min-w-0">
-              <RoleSelect id="invite-role" value={role} onChange={setRole} disabled={generating} />
+              <RoleSelect
+                id="invite-role"
+                value={role}
+                onChange={setRole}
+                disabled={generating}
+                ariaLabel="Invite as"
+              />
             </div>
             <button
-              onClick={generate}
+              onClick={() => void generate()}
               disabled={generating}
-              className="shrink-0 h-9 px-3.5 flex items-center gap-1.5 rounded-btn bg-text text-bg font-semibold text-base hover:bg-text/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              className="shrink-0 h-8 px-3 flex items-center gap-1.5 rounded-btn bg-text text-bg font-semibold text-sm hover:bg-text/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {generating ? (
                 <Loader2 size="0.875rem" strokeWidth={2.2} className="animate-spin" />
+              ) : willEmail ? (
+                <Mail size="0.875rem" strokeWidth={2.2} />
               ) : (
-                <Plus size="0.875rem" strokeWidth={2.2} />
+                <Link2 size="0.875rem" strokeWidth={2.2} />
               )}
-              Send invite
+              {willEmail ? 'Send invite' : 'Generate link'}
             </button>
           </div>
           <p className="text-xs text-faint mt-1.5 leading-[1.45]">
-            {INVITE_ROLE_HINT[role]}
+            {ROLE_LABEL[role]} · {INVITE_ROLE_HINT[role]}
           </p>
-          {genError && <div className="mt-2 text-sm text-alert">{genError}</div>}
+          {genError && <div className="mt-1.5 text-sm text-alert">{genError}</div>}
 
-          <div className="mt-3 pt-3 border-t border-line">
+          <div className="mt-2.5 pt-2.5 border-t border-line">
             {fresh ? (
               <FreshInviteLink invite={fresh} />
             ) : (
               <div className="flex items-start gap-2 text-xs text-faint leading-[1.45]">
                 <Link2 size="0.8125rem" strokeWidth={1.8} className="shrink-0 mt-px" />
                 <span>
-                  The recipient receives a single-use email invitation valid for 48 hours. A
-                  manual copy of the link also appears here.
+                  The link is single-use and valid for 48 hours. Whoever opens it creates
+                  their account in this company with the role above.
                 </span>
               </div>
             )}
@@ -682,7 +709,7 @@ function CompanyMembersSettings() {
 
       {/* ── Recent invites ─────────────────────────────────────────────────── */}
       <section>
-        <div className="eyebrow mb-2">Recent invites</div>
+        <div className="eyebrow mb-1.5">Recent invites</div>
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-faint px-1 py-1">
             <Loader2 size="0.8125rem" className="animate-spin" /> Loading invites…
@@ -773,7 +800,11 @@ function FreshInviteLink({ invite }: { invite: WorkspaceInviteCreated }) {
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 text-sm font-medium text-done">
           <span className="h-1.5 w-1.5 rounded-full bg-done" aria-hidden />
-          {invite.emailSent ? 'Invitation sent — link shown only once' : 'Link ready — email not sent'}
+          {invite.emailSent
+            ? 'Invitation sent — link shown only once'
+            : invite.recipientEmail
+              ? 'Link ready — the email could not be sent, share it yourself'
+              : 'Link ready — share it; shown only once'}
         </div>
         <RoleBadge role={invite.role} />
       </div>
@@ -850,17 +881,17 @@ function InviteListRow({
       ? (invite.usedByName ?? invite.recipientEmail ?? 'Invite used')
       : (invite.recipientEmail ?? 'Invite link')
   const secondary = active
-    ? `${invite.emailSentAt ? 'Email sent' : 'Email not sent'} · ${
-        left ? `expires in ${left}` : 'expiring…'
-      }${by}`
+    ? `${
+        invite.emailSentAt ? 'Email sent' : invite.recipientEmail ? 'Email not sent' : 'Shared link'
+      } · ${left ? `expires in ${left}` : 'expiring…'}${by}`
     : invite.status === 'used'
       ? `Joined the company${invite.createdByName ? ` · invited by ${invite.createdByName}` : ''}`
       : `Expired · not used${by}`
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2.5 hover:bg-white/2 transition-colors first:rounded-t-list last:rounded-b-list">
+    <div className="flex items-center gap-2.5 px-3 py-2 hover:bg-white/2 transition-colors first:rounded-t-list last:rounded-b-list">
       <div className="relative shrink-0">
-        <span className="h-[2.125rem] w-[2.125rem] flex items-center justify-center rounded-full border border-line bg-white/2 text-muted">
+        <span className="h-[1.875rem] w-[1.875rem] flex items-center justify-center rounded-full border border-line bg-white/2 text-muted">
           {invite.status === 'used' ? (
             <Check size="0.9375rem" strokeWidth={2} />
           ) : (
@@ -880,7 +911,7 @@ function InviteListRow({
       </div>
       <div className="min-w-0 flex-1 flex flex-col gap-px">
         <div
-          className={`text-base leading-tight truncate ${
+          className={`text-sm leading-tight truncate ${
             invite.status === 'expired' ? 'text-muted' : 'text-text'
           }`}
         >
@@ -978,7 +1009,7 @@ function RoleSelect({
         onClick={() => setOpen((o) => !o)}
         className={`flex items-center gap-1.5 rounded-card border bg-white/4 text-text text-left outline-none transition-colors hover:border-line-2 focus-visible:border-line-2 disabled:opacity-50 disabled:cursor-default ${
           open ? 'border-line-2' : 'border-line'
-        } ${compact ? 'h-7 w-[6.25rem] px-2 text-xs' : 'h-9 w-full px-2.5 text-base'}`}
+        } ${compact ? 'h-7 w-[6.25rem] px-2 text-xs' : 'h-8 w-full px-2.5 text-sm'}`}
       >
         <span className="flex-1 min-w-0 truncate">{ROLE_LABEL[value]}</span>
         <ChevronDown
@@ -1033,12 +1064,12 @@ function RoleBadge({ role }: { role: Role }) {
 // Rows are separated by a hairline divider (none after the last).
 function FieldRow({ label, value, tabular = false }: { label: string; value: string; tabular?: boolean }) {
   return (
-    <div className="flex items-center justify-between gap-3 py-2.5 border-b border-line last:border-0">
+    <div className="flex items-center justify-between gap-3 py-2 border-b border-line last:border-0">
       <span className="shrink-0 text-sm text-muted">{label}</span>
       <span
         title={value}
-        className={`min-w-0 truncate text-right text-text ${
-          tabular ? 'text-sm tabular-nums' : 'text-base'
+        className={`min-w-0 truncate text-right text-sm text-text ${
+          tabular ? 'tabular-nums' : ''
         }`}
       >
         {value}
@@ -1050,6 +1081,11 @@ function FieldRow({ label, value, tabular = false }: { label: string; value: str
 // One setting inside the Appearance card: a clean label + short description
 // stacked over its control. Blocks stack in a divide-y card, so each carries
 // its own vertical padding; the card's hairlines do the separating.
+//
+// Sizes are the panel's compact step (2026-09-12, user: "every section in
+// workspace settings needs to get compacted"): sm label, xs description, 28px
+// controls, 12px block padding — the same step Company members and the
+// category rows use, so the whole panel reads at one density.
 function SettingBlock({
   label,
   description,
@@ -1060,10 +1096,10 @@ function SettingBlock({
   children: ReactNode
 }) {
   return (
-    <div className="py-4">
-      <div className="text-base text-text font-medium leading-tight">{label}</div>
-      <div className="text-sm text-faint mt-1 leading-[1.4]">{description}</div>
-      <div className="mt-3">{children}</div>
+    <div className="py-3">
+      <div className="text-sm text-text font-medium leading-tight">{label}</div>
+      <div className="text-xs text-faint mt-0.5 leading-[1.4]">{description}</div>
+      <div className="mt-2">{children}</div>
     </div>
   )
 }
@@ -1126,7 +1162,7 @@ function Segmented({
             aria-current={active ? 'true' : undefined}
             // `relative` so the label sits ON the pill rather than under it, and
             // the colour swap is the only thing this button now draws.
-            className={`relative z-10 h-7 px-3 rounded-btn text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+            className={`relative z-10 h-6 px-2.5 rounded-btn text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
               active ? 'text-bg' : 'text-muted hover:text-text'
             }`}
           >

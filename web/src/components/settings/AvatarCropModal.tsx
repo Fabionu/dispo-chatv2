@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Check, Loader2, Minus, Plus, RefreshCw, RotateCw, X } from 'lucide-react'
 
 type Props = {
@@ -340,7 +341,11 @@ export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
   }
   saveRef.current = save
 
-  return (
+  // Portalled to document.body: opened from the Profile panel, which lives in
+  // the transformed sidebar shell, a plain `fixed` overlay was confined to the
+  // rail and the crop dialog centred in a 393px column (user, 2026-09-12).
+  // Same fix as Modal / ImageLightbox.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/75" onClick={() => !busy && onCancel()} aria-hidden />
 
@@ -478,7 +483,8 @@ export default function AvatarCropModal({ file, onCancel, onConfirm }: Props) {
           <div className="text-sm text-alert text-center px-4 py-2 bg-bg">{error}</div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { ArrowLeft, Ban, Plus, Route as RouteIcon, X } from 'lucide-react'
+import { Ban, Plus, Route as RouteIcon, X } from 'lucide-react'
+import ToolHeader from './ToolHeader'
 
 import { DateField, TimeField } from '../DateTimeField'
 import { fieldClass } from '../forms/fieldStyles'
@@ -193,24 +194,7 @@ export default function RestrictionCalculator({ legs, onBack, onPlanRoute }: Pro
 
   return (
     <>
-      <header className="h-[var(--header-height)] flex shrink-0 items-center gap-3 px-5">
-        <button
-          type="button"
-          onClick={onBack}
-          aria-label="Back to workspace"
-          className={`${ICON_BTN} h-8 w-8`}
-        >
-          <ArrowLeft size="1rem" strokeWidth={1.8} />
-        </button>
-        <div className="min-w-0">
-          <div className="text-xl font-semibold tracking-[-0.2px] leading-tight">
-            Restriction calculator
-          </div>
-          <div className="mt-0.5 truncate text-sm leading-tight text-muted">
-            Driving bans, rests and the arrival they add up to
-          </div>
-        </div>
-      </header>
+      <ToolHeader title="Restriction calculator" onBack={onBack} />
 
       <div className="flex-1 overflow-y-auto px-5 py-5">
         <div className="mx-auto flex max-w-[57.5rem] flex-col gap-6">

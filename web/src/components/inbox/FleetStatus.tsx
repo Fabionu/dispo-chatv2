@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { ArrowLeft, ChevronRight, Search, Truck, X } from 'lucide-react'
+import { ChevronRight, Search, Truck, X } from 'lucide-react'
+import ToolHeader from './ToolHeader'
 import type { Group } from '../../lib/types'
 import { groupLabel, tractorPlate, trailerPlate } from '../../lib/types'
 import {
@@ -133,22 +134,7 @@ export default function FleetStatus({ rooms, onOpenRoom, onBack }: Props) {
 
   return (
     <>
-      <header className="h-[var(--header-height)] flex shrink-0 items-center gap-3 px-5">
-        <button
-          type="button"
-          onClick={onBack}
-          aria-label="Back to workspace"
-          className="rounded-btn flex h-8 w-8 shrink-0 items-center justify-center text-muted transition-colors hover:bg-white/6 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
-        >
-          <ArrowLeft size="1rem" strokeWidth={1.8} />
-        </button>
-        <div className="min-w-0">
-          <div className="text-xl font-semibold tracking-[-0.2px] leading-tight">Fleet status</div>
-          <div className="mt-0.5 truncate text-sm leading-tight text-muted">
-            Vehicles, current trips and availability
-          </div>
-        </div>
-      </header>
+      <ToolHeader title="Fleet status" onBack={onBack} />
 
       <div className="flex-1 overflow-y-auto px-5 py-5">
         <div className="mx-auto flex max-w-[57.5rem] flex-col gap-4">

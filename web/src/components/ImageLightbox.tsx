@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Maximize, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { IconButton } from './attachments/IconAction'
 
@@ -154,7 +155,13 @@ export default function ImageLightbox({ src, title, onClose }: Props) {
   const stop = (e: React.MouseEvent) => e.stopPropagation()
   const canPan = view.scale > 1
 
-  return (
+  // Portalled to document.body so the viewer covers the PAGE wherever it was
+  // opened from. The sidebar shell is a transformed element (its collapse
+  // slide), which makes it the containing block for anything `fixed` inside
+  // it — so a photo opened from the Profile panel was boxed into the rail,
+  // the picture squeezed to 393px with the panel still visible around it
+  // (user, 2026-09-12). Same fix as Modal / AvatarCropModal.
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -215,6 +222,7 @@ export default function ImageLightbox({ src, title, onClose }: Props) {
           </IconButton>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
