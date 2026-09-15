@@ -165,14 +165,24 @@ function pointAlong(path: LatLng[], fraction: number): LatLng | null {
 // of the Maps API, and the only way to put an arbitrary DOM element on the map
 // at a coordinate. One subclass does both jobs: with no `content` it is a pure
 // projection source; with one, it is the distance badge.
+type OverlayPlacer = (
+  el: HTMLElement,
+  anchor: LatLng,
+  px: { x: number; y: number },
+  proj: google.maps.MapCanvasProjection,
+) => void
 type OverlayCtor = new (content: HTMLElement | null) => google.maps.OverlayView & {
   setPosition(p: LatLng | null): void
+  /** Runs after each draw, once the content sits on its anchor: the badge's
+   *  chance to pick which side of the anchor to hang on (placeBadge). */
+  placer: OverlayPlacer | null
 }
 
 function makeOverlayClass(g: typeof google): OverlayCtor {
   class DispoOverlay extends g.maps.OverlayView {
     private content: HTMLElement | null
     private position: LatLng | null = null
+    placer: OverlayPlacer | null = null
     constructor(content: HTMLElement | null) {
       super()
       this.content = content
@@ -199,9 +209,140 @@ function makeOverlayClass(g: typeof google): OverlayCtor {
       this.content.style.display = ''
       this.content.style.left = `${px.x}px`
       this.content.style.top = `${px.y}px`
+      this.placer?.(this.content, this.position, px, proj)
     }
   }
   return DispoOverlay as unknown as OverlayCtor
+}
+
+// ── Badge placement ─────────────────────────────────────────────────────────
+// The distance badge hangs off the route's midpoint, and it used to hang ABOVE
+// it, always — which put it squarely over the line wherever the route ran
+// north–south or curved back under it (user, 2026-09-15: "sa nu se afiseze
+// peste ruta"). Now each draw tries the four sides of the anchor and keeps
+// the one the route crosses least. It is decided in SCREEN space, on every
+// draw, because "beside the line" is a fact about pixels: a bend that clears
+// the badge at country zoom runs straight through it two zoom levels in.
+//
+// Cost: only route segments within a window round the anchor are projected —
+// the window is sized in pixels and turned into degrees through the
+// projection — and the path is the already-thinned hover path, so a draw is
+// a few hundred projections at most.
+type BadgePlacement = 'above' | 'below' | 'right' | 'left'
+const BADGE_PLACEMENTS: BadgePlacement[] = ['above', 'below', 'right', 'left']
+// Gap between anchor and badge, and the tail's height — mirror index.css
+// `.route-distance-badge` (0.625rem gap, 6px tail).
+const BADGE_GAP_REM = 0.625
+const BADGE_TAIL_PX = 6
+// The route has to stay this clear of the card, in px, to count as "not over".
+const BADGE_CLEARANCE_PX = 4
+// How far round the anchor route segments are considered, in px.
+const BADGE_WINDOW_PX = 200
+
+type Rect = { x0: number; y0: number; x1: number; y1: number }
+
+function badgeRect(placement: BadgePlacement, ax: number, ay: number, w: number, h: number, gap: number): Rect {
+  const m = BADGE_CLEARANCE_PX
+  switch (placement) {
+    case 'above':
+      return { x0: ax - w / 2 - m, x1: ax + w / 2 + m, y0: ay - gap - h - m, y1: ay - gap + m }
+    case 'below':
+      return { x0: ax - w / 2 - m, x1: ax + w / 2 + m, y0: ay + gap - m, y1: ay + gap + h + m }
+    case 'right':
+      return { x0: ax + gap - m, x1: ax + gap + w + m, y0: ay - h / 2 - m, y1: ay + h / 2 + m }
+    case 'left':
+      return { x0: ax - gap - w - m, x1: ax - gap + m, y0: ay - h / 2 - m, y1: ay + h / 2 + m }
+  }
+}
+
+// Liang–Barsky: does the segment a→b cross the rectangle at all (a segment
+// with no vertex inside still counts — the thinned path has long straights).
+function segmentHitsRect(ax: number, ay: number, bx: number, by: number, r: Rect): boolean {
+  const dx = bx - ax
+  const dy = by - ay
+  let t0 = 0
+  let t1 = 1
+  const edges: Array<[number, number]> = [
+    [-dx, ax - r.x0],
+    [dx, r.x1 - ax],
+    [-dy, ay - r.y0],
+    [dy, r.y1 - ay],
+  ]
+  for (const [p, q] of edges) {
+    if (p === 0) {
+      if (q < 0) return false
+      continue
+    }
+    const t = q / p
+    if (p < 0) {
+      if (t > t1) return false
+      if (t > t0) t0 = t
+    } else {
+      if (t < t0) return false
+      if (t < t1) t1 = t
+    }
+  }
+  return true
+}
+
+/**
+ * Choose the badge's side. `path` is the route (thinned); `anchor` is the
+ * badge's coordinate; `px` its div-pixel. Writes `data-placement` on the
+ * element, which index.css turns into the transform and the tail. A side the
+ * badge already hangs on is kept while it is as good as any other, so a zoom
+ * animation does not flip it back and forth across the line.
+ */
+function placeBadge(
+  g: typeof google,
+  el: HTMLElement,
+  anchor: LatLng,
+  px: { x: number; y: number },
+  proj: google.maps.MapCanvasProjection,
+  path: LatLng[] | null,
+) {
+  const w = el.offsetWidth
+  const h = el.offsetHeight + BADGE_TAIL_PX
+  if (!w || !h) return
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+  const gap = BADGE_GAP_REM * rem
+  const rects = BADGE_PLACEMENTS.map((p) => badgeRect(p, px.x, px.y, w, h, gap))
+  const hits = [0, 0, 0, 0]
+
+  if (path && path.length >= 2) {
+    // Pixels per degree at the anchor, to keep the projection work to the
+    // segments that can reach the candidate rectangles.
+    const probe = proj.fromLatLngToDivPixel(new g.maps.LatLng(anchor.lat + 0.01, anchor.lng + 0.01))
+    const pxPerDegLat = probe ? Math.abs(probe.y - px.y) / 0.01 : 0
+    const pxPerDegLng = probe ? Math.abs(probe.x - px.x) / 0.01 : 0
+    const reach = BADGE_WINDOW_PX
+    const near = (p: LatLng) =>
+      Math.abs(p.lat - anchor.lat) * pxPerDegLat < reach && Math.abs(p.lng - anchor.lng) * pxPerDegLng < reach
+    let prev: { x: number; y: number } | null = null
+    let prevNear = near(path[0])
+    for (let i = 1; i < path.length; i++) {
+      const thisNear = near(path[i])
+      if (prevNear || thisNear) {
+        prev ??= proj.fromLatLngToDivPixel(new g.maps.LatLng(path[i - 1].lat, path[i - 1].lng))
+        const cur = proj.fromLatLngToDivPixel(new g.maps.LatLng(path[i].lat, path[i].lng))
+        if (prev && cur) {
+          for (let k = 0; k < rects.length; k++) {
+            if (segmentHitsRect(prev.x, prev.y, cur.x, cur.y, rects[k])) hits[k]++
+          }
+        }
+        prev = cur
+      } else {
+        prev = null
+      }
+      prevNear = thisNear
+    }
+  }
+
+  const current = el.dataset.placement as BadgePlacement | undefined
+  let best = 0
+  for (let k = 1; k < hits.length; k++) if (hits[k] < hits[best]) best = k
+  const currentIdx = current ? BADGE_PLACEMENTS.indexOf(current) : -1
+  const chosen = currentIdx >= 0 && hits[currentIdx] <= hits[best] ? current! : BADGE_PLACEMENTS[best]
+  if (chosen !== current) el.dataset.placement = chosen
 }
 
 export default function GoogleMap({
@@ -596,6 +737,9 @@ export default function GoogleMap({
         badgeEl.className = 'route-distance-badge'
         badgeElRef.current = badgeEl
         const badge = new Overlay(badgeEl)
+        // Which side of its anchor the badge hangs on: the one the route
+        // crosses least, re-decided on every draw (pan, zoom, new route).
+        badge.placer = (el, anchor, px, proj) => placeBadge(g, el, anchor, px, proj, hoverGeomRef.current?.path ?? null)
         badge.setMap(map)
         badgeRef.current = badge
 

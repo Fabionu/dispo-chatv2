@@ -56,7 +56,7 @@ import type {
 import type { RouteMoney, RouteTollSummary } from '../../lib/here/types'
 import PointRow from './RoutePointRow'
 import { RoleBadge, RouteRow } from './RoutePointCard'
-import { CopyCoordButton, NumberField, PresetSelect, Stat } from './RoutePlannerFields'
+import { CopyCoordButton, FoldCard, NumberField, PresetSelect, Stat } from './RoutePlannerFields'
 import { DateField, TimeField } from '../DateTimeField'
 import { estimateTransit } from '../../lib/transit'
 import {
@@ -1609,17 +1609,19 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                 that produced it. */}
             {route && !loading && (
               <section className="flex flex-col gap-1.5 p-2 pt-1">
-                {/* 2×2, NOT a single row of four. At 270px wide, four columns
-                    left each value ~47px of usable width, which truncated every
-                    duration ("4 h 40 min"), every toll status ("Not calculated")
-                    and even a five-digit distance. Two columns give ~110px —
-                    more than the longest string any of these four can produce. */}
+                {/* The distance on a row of its own, at the card's largest
+                    type — it is THE number of the route — and the rest two to
+                    a row, NOT four. At 270px wide, four columns left each value
+                    ~47px of usable width, which truncated every duration
+                    ("4 h 40 min") and every toll status ("Not calculated");
+                    two columns give ~110px — more than the longest string any
+                    of these can produce. Rests (nights / weekly) came off the
+                    card on 2026-09-15 (user: "nu prea ma intereseaza") — the
+                    arrival already has them priced in. */}
                 <div className="divide-y divide-line">
+                  <Stat label="Distance" value={formatDistance(route.summary.length)} size="lg" />
                   <div className="grid grid-cols-2 divide-x divide-line">
-                    <Stat label="Distance" value={formatDistance(route.summary.length)} />
                     <Stat label="Duration" value={formatDuration(drivingSeconds)} />
-                  </div>
-                  <div className="grid grid-cols-2 divide-x divide-line">
                     {/* ETA now answers with the LEGAL arrival, not the moment
                         the wheels would stop if nobody slept. A driving-only ETA
                         beside a transit time that includes two nights would have
@@ -1632,28 +1634,11 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                           : formatArrival(departAt + drivingSeconds * 1000, departAt)
                       }
                     />
-                    <Stat label="Tolls" value={tollSummaryValue(route.tolls, dirty)} />
                   </div>
-                  {transit && (
-                    <div className="grid grid-cols-2 divide-x divide-line">
-                      <Stat label="Transit" value={formatDuration(transit.totalMs / 1000)} />
-                      <Stat
-                        label="Rests"
-                        value={
-                          transit.nights === 0 && !transit.weeklyRestTaken
-                            ? 'None needed'
-                            : [
-                                transit.nights > 0
-                                  ? `${transit.nights} night${transit.nights === 1 ? '' : 's'}`
-                                  : null,
-                                transit.weeklyRestTaken ? '+ weekly' : null,
-                              ]
-                                .filter(Boolean)
-                                .join(' ')
-                        }
-                      />
-                    </div>
-                  )}
+                  <div className="grid grid-cols-2 divide-x divide-line">
+                    <Stat label="Tolls" value={tollSummaryValue(route.tolls, dirty)} />
+                    {transit && <Stat label="Transit" value={formatDuration(transit.totalMs / 1000)} />}
+                  </div>
                 </div>
                 {/* The handoff to the restriction calculator. Gated on `dirty`
                     for the same reason the toll details are: the country legs
@@ -1777,301 +1762,256 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
           </div>
         </div>
 
-        {/* Truck profile — its own card, and `shrink-0` so the field grid is
-            never the thing that gets squeezed. The row itself is the app's
-            standard grouped-row recipe (CategoryRow): glyph chip, label over its
-            live current value, chevron. The value stays visible while open, so
-            opening the fields never hides what they currently add up to. */}
-        <div className="shrink-0 rounded-soft border border-line bg-surface shadow-overlay">
-          <button
-            onClick={() => setTruckOpen((o) => !o)}
-            aria-expanded={truckOpen}
-            className={`flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20 ${
-              truckOpen ? 'rounded-t-panel' : 'rounded-panel'
-            }`}
-          >
-            <span className="h-7 w-7 shrink-0 flex items-center justify-center rounded-tile border border-line bg-white/2 text-muted">
-              <Truck size="0.875rem" strokeWidth={1.8} />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-base font-medium leading-tight text-text">Truck profile</span>
-              <span className="block truncate text-xs leading-tight text-faint" title={collapsedTruckLabel}>
-                {collapsedTruckLabel}
-              </span>
-            </span>
-            <ChevronDown
-              size="0.875rem"
-              strokeWidth={1.8}
-              className={`shrink-0 text-faint transition-transform motion-reduce:transition-none ${
-                truckOpen ? 'rotate-180' : ''
-              }`}
+        {/* Truck profile — its own card (FoldCard: a glyph square at rest, the
+            full row on hover, the fields once unfolded), and `shrink-0` so the
+            field grid is never the thing that gets squeezed. The row is the
+            app's standard grouped-row recipe (CategoryRow): glyph chip, label
+            over its live current value, chevron. The value stays visible while
+            open, so opening the fields never hides what they add up to. */}
+        <FoldCard
+          icon={<Truck size="0.875rem" strokeWidth={1.8} />}
+          title="Truck profile"
+          summary={collapsedTruckLabel}
+          open={truckOpen}
+          onToggle={() => setTruckOpen((o) => !o)}
+        >
+          {/* Presets */}
+          <div className="flex items-center gap-1">
+            <PresetSelect
+              builtIn={builtInPresets()}
+              saved={userPresets}
+              activeId={activePresetId}
+              onSelect={(id) => (id ? applyPreset(id) : setActivePresetId(null))}
+              defaultId={defaultPresetId}
+              onSetDefault={chooseDefaultPreset}
             />
-          </button>
+            <button
+              onClick={() => setSavingPreset((s) => !s)}
+              title="Save current profile as a preset"
+              aria-label="Save preset"
+              className="rounded-btn h-7 w-7 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 transition-colors"
+            >
+              <Bookmark size="0.8125rem" strokeWidth={1.8} />
+            </button>
+            {activePreset && !activePreset.builtIn && (
+              <button
+                onClick={() => removePreset(activePreset.id)}
+                title="Delete this preset"
+                aria-label="Delete preset"
+                className="rounded-btn h-7 w-7 flex items-center justify-center text-muted hover:text-alert hover:bg-white/6 transition-colors"
+              >
+                <Trash2 size="0.8125rem" strokeWidth={1.8} />
+              </button>
+            )}
+          </div>
 
-          {truckOpen && (
-            <div className="flex flex-col gap-2 border-t border-line p-2">
-              {/* Presets */}
-              <div className="flex items-center gap-1">
-                <PresetSelect
-                  builtIn={builtInPresets()}
-                  saved={userPresets}
-                  activeId={activePresetId}
-                  onSelect={(id) => (id ? applyPreset(id) : setActivePresetId(null))}
-                  defaultId={defaultPresetId}
-                  onSetDefault={chooseDefaultPreset}
-                />
-                <button
-                  onClick={() => setSavingPreset((s) => !s)}
-                  title="Save current profile as a preset"
-                  aria-label="Save preset"
-                  className="rounded-btn h-7 w-7 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 transition-colors"
-                >
-                  <Bookmark size="0.8125rem" strokeWidth={1.8} />
-                </button>
-                {activePreset && !activePreset.builtIn && (
-                  <button
-                    onClick={() => removePreset(activePreset.id)}
-                    title="Delete this preset"
-                    aria-label="Delete preset"
-                    className="rounded-btn h-7 w-7 flex items-center justify-center text-muted hover:text-alert hover:bg-white/6 transition-colors"
-                  >
-                    <Trash2 size="0.8125rem" strokeWidth={1.8} />
-                  </button>
-                )}
-              </div>
-
-              {savingPreset && (
-                <div className="flex items-center gap-1.5">
-                  <input
-                    value={presetName}
-                    onChange={(e) => setPresetName(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && commitSavePreset()}
-                    placeholder="Preset name"
-                    autoFocus
-                    className="rounded-card h-7 flex-1 min-w-0 border border-line bg-transparent px-2 text-sm outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4 placeholder:text-faint"
-                  />
-                  <button
-                    onClick={commitSavePreset}
-                    disabled={!presetName.trim()}
-                    className="h-7 px-2.5 flex items-center gap-1 rounded-btn bg-active text-bg text-sm font-semibold hover:bg-active/90 disabled:opacity-40 transition-colors"
-                  >
-                    <Check size="0.8125rem" strokeWidth={2.4} /> Save
-                  </button>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
-                <NumberField label="Height (cm)" value={truck.heightCm} onChange={(v) => updateTruck({ heightCm: v })} placeholder="400" />
-                <NumberField label="Width (cm)" value={truck.widthCm} onChange={(v) => updateTruck({ widthCm: v })} placeholder="255" />
-                <NumberField label="Length (cm)" value={truck.lengthCm} onChange={(v) => updateTruck({ lengthCm: v })} placeholder="1650" />
-                <NumberField label="Gross weight (kg)" value={truck.grossWeightKg} onChange={(v) => updateTruck({ grossWeightKg: v })} placeholder="40000" />
-                <NumberField label="Axle count" value={truck.axleCount} onChange={(v) => updateTruck({ axleCount: v })} placeholder="5" />
-                <NumberField label="Trailer count" value={truck.trailerCount} onChange={(v) => updateTruck({ trailerCount: v })} placeholder="1" />
-              </div>
-
-              {/* Below the dimension grid rather than inside it, because it is
-                  not the same kind of number: the six above are sent to HERE and
-                  decide which roads the truck may use, this one never leaves the
-                  browser and only decides how long the planner says those roads
-                  take. Blank keeps HERE’s own estimate. */}
-              <NumberField
-                label="Average speed (km/h)"
-                value={truck.averageSpeedKmh}
-                onChange={(v) => updateTruck({ averageSpeedKmh: v })}
-                placeholder="HERE estimate"
+          {savingPreset && (
+            <div className="flex items-center gap-1.5">
+              <input
+                value={presetName}
+                onChange={(e) => setPresetName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && commitSavePreset()}
+                placeholder="Preset name"
+                autoFocus
+                className="rounded-card h-7 flex-1 min-w-0 border border-line bg-transparent px-2 text-sm outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4 placeholder:text-faint"
               />
+              <button
+                onClick={commitSavePreset}
+                disabled={!presetName.trim()}
+                className="h-7 px-2.5 flex items-center gap-1 rounded-btn bg-active text-bg text-sm font-semibold hover:bg-active/90 disabled:opacity-40 transition-colors"
+              >
+                <Check size="0.8125rem" strokeWidth={2.4} /> Save
+              </button>
             </div>
           )}
-        </div>
+
+          <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
+            <NumberField label="Height (cm)" value={truck.heightCm} onChange={(v) => updateTruck({ heightCm: v })} placeholder="400" />
+            <NumberField label="Width (cm)" value={truck.widthCm} onChange={(v) => updateTruck({ widthCm: v })} placeholder="255" />
+            <NumberField label="Length (cm)" value={truck.lengthCm} onChange={(v) => updateTruck({ lengthCm: v })} placeholder="1650" />
+            <NumberField label="Gross weight (kg)" value={truck.grossWeightKg} onChange={(v) => updateTruck({ grossWeightKg: v })} placeholder="40000" />
+            <NumberField label="Axle count" value={truck.axleCount} onChange={(v) => updateTruck({ axleCount: v })} placeholder="5" />
+            <NumberField label="Trailer count" value={truck.trailerCount} onChange={(v) => updateTruck({ trailerCount: v })} placeholder="1" />
+          </div>
+
+          {/* Below the dimension grid rather than inside it, because it is
+              not the same kind of number: the six above are sent to HERE and
+              decide which roads the truck may use, this one never leaves the
+              browser and only decides how long the planner says those roads
+              take. Blank keeps HERE’s own estimate. */}
+          <NumberField
+            label="Average speed (km/h)"
+            value={truck.averageSpeedKmh}
+            onChange={(v) => updateTruck({ averageSpeedKmh: v })}
+            placeholder="HERE estimate"
+          />
+        </FoldCard>
 
         {/* Crew & hours — the third card, and the only inputs 561/2006 needs
             that a route cannot supply. Its own card for the same reason the
             truck profile is: it grows downward when opened instead of pushing
             the itinerary into a scrollbar. */}
-        <div className="shrink-0 rounded-soft border border-line bg-surface shadow-overlay">
-          <button
-            onClick={() => setCrewOpen((o) => !o)}
-            aria-expanded={crewOpen}
-            className={`flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20 ${
-              crewOpen ? 'rounded-t-panel' : 'rounded-panel'
-            }`}
-          >
-            <span className="h-7 w-7 shrink-0 flex items-center justify-center rounded-tile border border-line bg-white/2 text-muted">
-              <Users size="0.875rem" strokeWidth={1.8} />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-base font-medium leading-tight text-text">Crew &amp; hours</span>
-              <span className="block truncate text-xs leading-tight text-faint" title={collapsedCrewLabel}>
-                {collapsedCrewLabel}
-              </span>
-            </span>
-            <ChevronDown
-              size="0.875rem"
-              strokeWidth={1.8}
-              className={`shrink-0 text-faint transition-transform motion-reduce:transition-none ${
-                crewOpen ? 'rotate-180' : ''
-              }`}
+        <FoldCard
+          icon={<Users size="0.875rem" strokeWidth={1.8} />}
+          title="Crew & hours"
+          summary={collapsedCrewLabel}
+          open={crewOpen}
+          onToggle={() => setCrewOpen((o) => !o)}
+        >
+          <div className="flex flex-col gap-0.5">
+            <span className="text-xs leading-tight text-muted">Departure</span>
+            <div className="flex items-center gap-1.5">
+              <DateField
+                value={departDate}
+                onChange={setDepartDate}
+                className="flex-1"
+                ariaLabel="Departure date"
+                dense
+              />
+              <TimeField
+                value={departTime}
+                onChange={setDepartTime}
+                className="w-[6.5rem]"
+                ariaLabel="Departure time"
+                dense
+              />
+            </div>
+          </div>
+
+          <label className="flex flex-col gap-0.5">
+            <span className="text-xs leading-tight text-muted">Drivers</span>
+            <select
+              value={crew}
+              onChange={(e) => setCrew(Number(e.target.value) === 2 ? 2 : 1)}
+              className={CREW_FIELD}
+            >
+              <option value={1}>1 driver · 9h driving per shift</option>
+              <option value={2}>2 drivers · 18h driving per shift</option>
+            </select>
+          </label>
+
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={fullProgram}
+              onChange={(e) => setFullProgram(e.target.checked)}
+              className="h-3.5 w-3.5 accent-white"
             />
-          </button>
+            Starts on a full program
+          </label>
 
-          {crewOpen && (
-            <div className="flex flex-col gap-2 border-t border-line p-2">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-xs leading-tight text-muted">Departure</span>
-                <div className="flex items-center gap-1.5">
-                  <DateField
-                    value={departDate}
-                    onChange={setDepartDate}
-                    className="flex-1"
-                    ariaLabel="Departure date"
-                    dense
-                  />
-                  <TimeField
-                    value={departTime}
-                    onChange={setDepartTime}
-                    className="w-[6.5rem]"
-                    ariaLabel="Departure time"
-                    dense
-                  />
-                </div>
-              </div>
-
-              <label className="flex flex-col gap-0.5">
-                <span className="text-xs leading-tight text-muted">Drivers</span>
-                <select
-                  value={crew}
-                  onChange={(e) => setCrew(Number(e.target.value) === 2 ? 2 : 1)}
-                  className={CREW_FIELD}
-                >
-                  <option value={1}>1 driver · 9h driving per shift</option>
-                  <option value={2}>2 drivers · 18h driving per shift</option>
-                </select>
-              </label>
-
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
-                <input
-                  type="checkbox"
-                  checked={fullProgram}
-                  onChange={(e) => setFullProgram(e.target.checked)}
-                  className="h-3.5 w-3.5 accent-white"
+          {/* The Friday-afternoon case: the same route started with a full
+              card and started with three hours left are two different trips,
+              and this is the input that tells them apart. */}
+          {!fullProgram && (
+            <div className="flex flex-col gap-0.5">
+              <span className="text-xs leading-tight text-muted">Program until</span>
+              <div className="flex items-center gap-1.5">
+                <DateField
+                  value={programDate}
+                  onChange={setProgramDate}
+                  className="flex-1"
+                  ariaLabel="Program until, date"
+                  dense
                 />
-                Starts on a full program
-              </label>
-
-              {/* The Friday-afternoon case: the same route started with a full
-                  card and started with three hours left are two different trips,
-                  and this is the input that tells them apart. */}
-              {!fullProgram && (
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-xs leading-tight text-muted">Program until</span>
-                  <div className="flex items-center gap-1.5">
-                    <DateField
-                      value={programDate}
-                      onChange={setProgramDate}
-                      className="flex-1"
-                      ariaLabel="Program until, date"
-                      dense
-                    />
-                    <TimeField
-                      value={programTime}
-                      onChange={setProgramTime}
-                      className="w-[6.5rem]"
-                      ariaLabel="Program until, time"
-                      dense
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* A crew's rest is fixed at 9h by the multi-manning rule, so there
-                  is no choice to offer; a solo driver's is 11h, reducible to 9h
-                  three times between weekly rests — which this estimator does not
-                  count, so it has to be stated rather than assumed. */}
-              {crew === 1 ? (
-                <NumberField
-                  label="Daily rest (h)"
-                  value={dailyRestHours}
-                  onChange={setDailyRestHours}
-                  placeholder="11"
+                <TimeField
+                  value={programTime}
+                  onChange={setProgramTime}
+                  className="w-[6.5rem]"
+                  ariaLabel="Program until, time"
+                  dense
                 />
-              ) : (
-                <div className="text-xs leading-snug text-faint">
-                  A two-driver crew rests 9h inside each 30h window — fixed by the rule, so there is
-                  nothing to set. Working breaks are taken in the moving vehicle.
-                </div>
-              )}
-
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
-                <input
-                  type="checkbox"
-                  checked={weekEnds}
-                  onChange={(e) => setWeekEnds(e.target.checked)}
-                  className="h-3.5 w-3.5 accent-white"
-                />
-                Weekly rest falls in this trip
-              </label>
-
-              {weekEnds && (
-                <>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-xs leading-tight text-muted">Can work until</span>
-                    <div className="flex items-center gap-1.5">
-                      <DateField
-                        value={weekDate}
-                        onChange={setWeekDate}
-                        className="flex-1"
-                        ariaLabel="Can work until, date"
-                        dense
-                      />
-                      <TimeField
-                        value={weekTime}
-                        onChange={setWeekTime}
-                        className="w-[6.5rem]"
-                        ariaLabel="Can work until, time"
-                        dense
-                      />
-                    </div>
-                  </div>
-                  <label className="flex flex-col gap-0.5">
-                    <span className="text-xs leading-tight text-muted">Weekly rest</span>
-                    <select
-                      value={weeklyRestHours}
-                      onChange={(e) => setWeeklyRestHours(e.target.value)}
-                      className={CREW_FIELD}
-                    >
-                      <option value="45">45h · regular</option>
-                      <option value="24">24h · reduced</option>
-                    </select>
-                  </label>
-
-                  {/* Whether the rest above actually applies to THIS trip.
-                      Without it the field is silently inert whenever the cutoff
-                      falls beyond the arrival: the truck never reaches a shift
-                      end past it, no weekly rest is taken, and switching 45h to
-                      24h changes nothing — which reads exactly like a broken
-                      control. A no-op the user cannot see is worse than one that
-                      explains itself. */}
-                  {transit && (
-                    <div
-                      className={`text-2xs leading-snug ${
-                        transit.weeklyRestTaken ? 'text-muted' : 'text-amber-200/80'
-                      }`}
-                    >
-                      {transit.weeklyRestTaken
-                        ? `Applies — adds ${weeklyRestHours}h to this trip.`
-                        : `Not reached: the truck arrives before ${weekDate} ${weekTime}, so this rest changes nothing yet.`}
-                    </div>
-                  )}
-                </>
-              )}
-
-              <div className="text-2xs leading-snug text-faint">
-                Estimated from EC 561/2006 · driving bans are not included, use the Restriction
-                calculator for those.
               </div>
             </div>
           )}
-        </div>
+
+          {/* A crew's rest is fixed at 9h by the multi-manning rule, so there
+              is no choice to offer; a solo driver's is 11h, reducible to 9h
+              three times between weekly rests — which this estimator does not
+              count, so it has to be stated rather than assumed. */}
+          {crew === 1 ? (
+            <NumberField
+              label="Daily rest (h)"
+              value={dailyRestHours}
+              onChange={setDailyRestHours}
+              placeholder="11"
+            />
+          ) : (
+            <div className="text-xs leading-snug text-faint">
+              A two-driver crew rests 9h inside each 30h window — fixed by the rule, so there is
+              nothing to set. Working breaks are taken in the moving vehicle.
+            </div>
+          )}
+
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={weekEnds}
+              onChange={(e) => setWeekEnds(e.target.checked)}
+              className="h-3.5 w-3.5 accent-white"
+            />
+            Weekly rest falls in this trip
+          </label>
+
+          {weekEnds && (
+            <>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs leading-tight text-muted">Can work until</span>
+                <div className="flex items-center gap-1.5">
+                  <DateField
+                    value={weekDate}
+                    onChange={setWeekDate}
+                    className="flex-1"
+                    ariaLabel="Can work until, date"
+                    dense
+                  />
+                  <TimeField
+                    value={weekTime}
+                    onChange={setWeekTime}
+                    className="w-[6.5rem]"
+                    ariaLabel="Can work until, time"
+                    dense
+                  />
+                </div>
+              </div>
+              <label className="flex flex-col gap-0.5">
+                <span className="text-xs leading-tight text-muted">Weekly rest</span>
+                <select
+                  value={weeklyRestHours}
+                  onChange={(e) => setWeeklyRestHours(e.target.value)}
+                  className={CREW_FIELD}
+                >
+                  <option value="45">45h · regular</option>
+                  <option value="24">24h · reduced</option>
+                </select>
+              </label>
+
+              {/* Whether the rest above actually applies to THIS trip.
+                  Without it the field is silently inert whenever the cutoff
+                  falls beyond the arrival: the truck never reaches a shift
+                  end past it, no weekly rest is taken, and switching 45h to
+                  24h changes nothing — which reads exactly like a broken
+                  control. A no-op the user cannot see is worse than one that
+                  explains itself. */}
+              {transit && (
+                <div
+                  className={`text-2xs leading-snug ${
+                    transit.weeklyRestTaken ? 'text-muted' : 'text-amber-200/80'
+                  }`}
+                >
+                  {transit.weeklyRestTaken
+                    ? `Applies — adds ${weeklyRestHours}h to this trip.`
+                    : `Not reached: the truck arrives before ${weekDate} ${weekTime}, so this rest changes nothing yet.`}
+                </div>
+              )}
+            </>
+          )}
+
+          <div className="text-2xs leading-snug text-faint">
+            Estimated from EC 561/2006 · driving bans are not included, use the Restriction
+            calculator for those.
+          </div>
+        </FoldCard>
         </div>
 
         {/* Right-click context menu */}

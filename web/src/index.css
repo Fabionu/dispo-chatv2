@@ -1537,7 +1537,9 @@ input, button, textarea, select {
   .workspace-sidebar-panel,
   .workspace-main,
   .chat-search-reveal,
-  .chat-search-toggle {
+  .chat-search-toggle,
+  .planner-fold,
+  .planner-fold-text {
     transition: none;
   }
 
@@ -1573,7 +1575,9 @@ input, button, textarea, select {
   .workspace-main,
   .composer-context-slot,
   .chat-search-reveal,
-  .chat-search-toggle
+  .chat-search-toggle,
+  .planner-fold,
+  .planner-fold-text
 ) {
   transition: none;
 }
@@ -2205,17 +2209,28 @@ button {
 /* Route distance badge: the total distance on a small white card anchored at
    the route's midpoint (a HERE DomMarker or a Google OverlayView; the text is
    set by map/routeDecor.ts). Distance ONLY — the time is on the panel's cards.
-   It sits just ABOVE the line — the transform lifts it clear of the route so
-   it never covers it — with a small tail (::after) pointing back down at the
-   segment, the way a maps app labels its route. Fixed light inks, like the
-   route's own colours: the basemap is always a day map, so the card is white
-   whichever theme the app is in. `pointer-events: none` ensures it never
-   blocks dragging the route line or clicking a marker beneath it. */
+   It hangs off the anchor on ONE of four sides — `data-placement` above /
+   below / right / left, chosen per draw by GoogleMap's placeBadge as the side
+   the route crosses least (it used to be always-above, which sat it right on
+   top of any north–south stretch) — with a small tail (::after) on the edge
+   that faces the anchor, the way a maps app labels its route. The side is the
+   pair of --bx/--by offsets; the tail is re-hung per side below. Fixed light
+   inks, like the route's own colours: the basemap is always a day map, so the
+   card is white whichever theme the app is in. `pointer-events: none`
+   ensures it never blocks dragging the route line or clicking a marker
+   beneath it. The 0.625rem gap and the 6px tail are mirrored in placeBadge
+   (BADGE_GAP_REM / BADGE_TAIL_PX) — change the two together. */
 .route-distance-badge {
   position: absolute;
   left: 0;
   top: 0;
-  transform: translate(-50%, calc(-100% - 0.625rem));
+  /* above (default) */
+  --bx: -50%;
+  --by: calc(-100% - 0.625rem);
+  /* the nudge the waiting state starts from: toward the anchor */
+  --wx: 0px;
+  --wy: 0.25rem;
+  transform: translate(var(--bx), var(--by));
   pointer-events: none;
   white-space: nowrap;
   background: #ffffff;
@@ -2234,8 +2249,25 @@ button {
     opacity 260ms ease-out,
     transform 260ms ease-out;
 }
-/* Tail: a small triangle hanging off the badge's bottom edge, its tip reaching
-   down to the route midpoint the badge describes. */
+.route-distance-badge[data-placement='below'] {
+  --bx: -50%;
+  --by: 0.625rem;
+  --wy: -0.25rem;
+}
+.route-distance-badge[data-placement='right'] {
+  --bx: 0.625rem;
+  --by: -50%;
+  --wx: -0.25rem;
+  --wy: 0px;
+}
+.route-distance-badge[data-placement='left'] {
+  --bx: calc(-100% - 0.625rem);
+  --by: -50%;
+  --wx: 0.25rem;
+  --wy: 0px;
+}
+/* Tail: a small triangle on the edge facing the anchor, its tip reaching the
+   route midpoint the badge describes. Default: bottom edge, pointing down. */
 .route-distance-badge::after {
   content: '';
   position: absolute;
@@ -2249,13 +2281,73 @@ button {
   border-top: 6px solid #ffffff;
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18));
 }
+.route-distance-badge[data-placement='below']::after {
+  top: auto;
+  bottom: 100%;
+  border-top: 0;
+  border-bottom: 6px solid #ffffff;
+  filter: drop-shadow(0 -1px 1px rgba(0, 0, 0, 0.18));
+}
+.route-distance-badge[data-placement='right']::after {
+  top: 50%;
+  left: auto;
+  right: 100%;
+  transform: translateY(-50%);
+  border-left: 0;
+  border-right: 6px solid #ffffff;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+}
+.route-distance-badge[data-placement='left']::after {
+  top: 50%;
+  left: 100%;
+  transform: translateY(-50%);
+  border-right: 0;
+  border-left: 6px solid #ffffff;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+}
 /* While the route is still drawing itself on, the badge — anchored at the
    midpoint the line has not reached yet — waits, then rises in with the line's
    arrival rather than floating over empty map. */
 .route-distance-badge.is-waiting {
   opacity: 0;
-  transform: translate(-50%, calc(-100% - 0.375rem));
+  transform: translate(calc(var(--bx) + var(--wx)), calc(var(--by) + var(--wy)));
   transition: none;
+}
+
+/* ── Planner folding cards (inbox/RoutePlannerFields FoldCard) ─────────────
+   Truck profile and Crew & hours under the route card. Folded, a card is a
+   glyph square: 2.875rem = 1px border + 0.5rem row padding + the 1.75rem chip
+   + 0.5rem + 1px, so the chip sits where it will stay when the row grows and
+   the glyph never moves. Hover / keyboard focus / an unfolded card ([data-open])
+   take the column's full width (focus-VISIBLE: the click that folds a card
+   leaves focus on its button, and that must not hold it open); the text
+   fades in a beat later so it is never read half-clipped. Clipping is
+   FOLDED-ONLY: the preset dropdown and the date pickers are absolute popovers
+   inside the card, and an unfolded card must let them out. Registered in
+   both stillness lists above. */
+.planner-fold {
+  width: 2.875rem;
+  transition: width 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.planner-fold:not([data-open]) {
+  overflow: hidden;
+}
+.planner-fold:hover,
+.planner-fold:has(:focus-visible),
+.planner-fold[data-open] {
+  width: 100%;
+}
+.planner-fold-text {
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+.planner-fold:hover .planner-fold-text,
+.planner-fold:has(:focus-visible) .planner-fold-text,
+.planner-fold[data-open] .planner-fold-text {
+  opacity: 1;
+  transition: opacity 160ms ease-out 70ms;
 }
 
 /* Route hover readout: a compact dark pill that follows the cursor along the

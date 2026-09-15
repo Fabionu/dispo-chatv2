@@ -291,16 +291,103 @@ export function PresetSelect({
 // across (never four), which is what makes "4 h 40 min" and "Not calculated"
 // fit whole. `truncate` stays as a backstop for a value nobody predicted, with
 // the full string on hover so it is never simply lost.
-export function Stat({ label, value }: { label: string; value: string }) {
+export function Stat({
+  label,
+  value,
+  size = 'base',
+}: {
+  label: string
+  value: string
+  /**
+   * `lg` is the one headline readout of the card — the total distance, on a
+   * row of its own (user, 2026-09-15: "mai mare, pe un singur rand"). It is
+   * the number a dispatcher quotes, so it gets the card's largest type; every
+   * other stat stays at the compact size and shares a row with a neighbour.
+   */
+  size?: 'base' | 'lg'
+}) {
   // 34px per cell (was 46): the label sits directly on the value, and the
   // value is the same 13px as the point cards' headline rather than a step
   // up — a readout in a compact panel, not a dashboard tile.
+  const large = size === 'lg'
   return (
-    <div className="min-w-0 flex flex-col px-2.5 py-1">
+    <div className={`min-w-0 flex flex-col px-2.5 ${large ? 'py-1.5' : 'py-1'}`}>
       <span className="text-2xs leading-tight text-faint">{label}</span>
-      <span className="text-base font-semibold leading-tight tracking-[-0.1px] tabular-nums truncate" title={value}>
+      <span
+        className={`font-semibold leading-tight tabular-nums truncate ${
+          large ? 'text-2xl tracking-[-0.3px]' : 'text-base tracking-[-0.1px]'
+        }`}
+        title={value}
+      >
         {value}
       </span>
+    </div>
+  )
+}
+
+// ── Folding tool card ────────────────────────────────────────────────────────
+// The Truck profile and Crew & hours cards under the route card. At rest each
+// is nothing but its glyph — a square the size of the row's chip (user,
+// 2026-09-15: "pana sa se faca hover pe ele, sa fie niste butoane simple") —
+// so the two of them stop reading as two more panels stacked under the route
+// and the map gets the width back. Hovering (or focusing) grows the square
+// into the full row — glyph, title, live summary, chevron — and the click on
+// that row unfolds the fields beneath it. An UNFOLDED card holds the full
+// width until it is folded again, whatever the pointer does: the fields are
+// being edited, and a card that shrank away mid-edit because the cursor
+// strayed would be a trap.
+//
+// The grow is CSS (index.css `.planner-fold`): width on the card, driven by
+// :hover / :focus-within / [data-open], with the text fading in a beat after
+// the width starts so it is never read half-clipped. The card clips only
+// while folded — the preset dropdown and the date pickers are absolute
+// popovers INSIDE it, and an open card must let them out.
+export function FoldCard({
+  icon,
+  title,
+  summary,
+  open,
+  onToggle,
+  children,
+}: {
+  icon: React.ReactNode
+  title: string
+  /** The card's live current value, shown under the title. */
+  summary: string
+  open: boolean
+  onToggle: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <div
+      data-open={open || undefined}
+      className="planner-fold shrink-0 rounded-soft border border-line bg-surface shadow-overlay"
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20"
+      >
+        <span className="h-7 w-7 shrink-0 flex items-center justify-center rounded-tile border border-line bg-white/2 text-muted">
+          {icon}
+        </span>
+        <span className="planner-fold-text min-w-0 flex-1">
+          <span className="block whitespace-nowrap text-base font-medium leading-tight text-text">{title}</span>
+          <span className="block truncate text-xs leading-tight text-faint" title={summary}>
+            {summary}
+          </span>
+        </span>
+        <ChevronDown
+          size="0.875rem"
+          strokeWidth={1.8}
+          className={`planner-fold-text shrink-0 text-faint transition-transform motion-reduce:transition-none ${
+            open ? 'rotate-180' : ''
+          }`}
+        />
+      </button>
+
+      {open && <div className="flex flex-col gap-2 border-t border-line p-2">{children}</div>}
     </div>
   )
 }

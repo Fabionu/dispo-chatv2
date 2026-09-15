@@ -1,31 +1,149 @@
 import type { LatLng } from './types'
 
-// True when a string looks like a "number, number" (or "number number") pair —
-// i.e. the user is typing coordinates, not an address. Two signed decimals
-// separated by a comma and/or whitespace, nothing else. Used to route the input
-// to direct coordinate parsing instead of HERE address search.
-const COORD_PAIR_RE = /^\s*[-+]?\d+(?:\.\d+)?\s*(?:,\s*|\s+)[-+]?\d+(?:\.\d+)?\s*$/
+// ── Typed coordinates ───────────────────────────────────────────────────────
+// The search fields take coordinates in the forms a maps app takes them (user,
+// 2026-09-15: "49.278854N, 16.209515E ... pe google merg"):
+//
+//   49.278854, 16.209515          decimal degrees, the app's own fmtCoord form
+//   49.278854N, 16.209515E        hemisphere letter after (or before) a value
+//   N 49.278854 E 16.209515
+//   49°16'43.9"N 16°12'34.3"E     degrees, minutes, seconds
+//   49 16 43.9 N, 16 12 34.3 E    the same without the marks
+//   49 16.7309, 16 12.5709        degrees and decimal minutes
+//   -33.8688, 151.2093            signs, as before
+//
+// Two values, separated by a comma and/or whitespace. Minutes and seconds are
+// only read after an INTEGER degrees value — "49.27 16.20" is two decimal
+// degrees, never 49.27° and 16.20′ — which is what keeps the plain form
+// unambiguous without a comma. Order is lat-first, as everywhere in the UI,
+// unless the hemisphere letters say otherwise (E 16.2, N 49.2 is not a guess).
 
+// What a coordinate pair can be made of, and nothing else: digits, sign,
+// decimal point, the separators, the degree/minute/second marks (ASCII and
+// typographic) and the four hemisphere letters.
+const COORD_CHARS_RE = /^[\s\d.,+\-°º'′’"″”NSEWnsew]+$/
+const NUMBER_RE = /\d+(?:\.\d+)?/g
+// Two hemisphere letters in a row are a WORD — Essen, Sens, Wesen are all
+// spelt from N/S/E/W — and "Essen 4, 5" is an address, not a bad coordinate.
+const LETTER_RUN_RE = /[NSEWnsew]{2}/
+
+// True when a string looks like coordinates being typed rather than an
+// address: only coordinate characters, letters standing alone, and at least
+// two numbers. Used to route the input to direct parsing instead of place
+// search, and to show the "Go to coordinates" / "invalid" row while the pair
+// is still being typed.
 export function looksLikeCoordPair(input: string): boolean {
-  return COORD_PAIR_RE.test(input)
+  const t = input.trim()
+  return (
+    t.length > 0 &&
+    COORD_CHARS_RE.test(t) &&
+    !LETTER_RUN_RE.test(t) &&
+    (t.match(NUMBER_RE)?.length ?? 0) >= 2
+  )
 }
 
-// Parse manually-entered coordinates in the UI's canonical "lat, lng" order
-// (matching how coordinates are displayed/copied everywhere via fmtCoord) into a
-// validated { lat, lng }. Returns null when the text isn't a coordinate pair OR
-// when a value is out of range (lat −90..90, lng −180..180) — callers treat null
-// as "not a valid coordinate" and must NOT move the map. We deliberately do NOT
-// auto-swap lat/lng: the UI is explicitly lat-first, so a value with lat > 90 is
-// reported invalid rather than silently reinterpreted.
+type Hemisphere = 'N' | 'S' | 'E' | 'W'
+type Component = { value: number; hemi: Hemisphere | null }
+
+// One coordinate — a hemisphere letter before or after (not both), an
+// optional sign, then DD / DMM / DMS. Null when it is none of those.
+function parseComponent(raw: string): Component | null {
+  let t = raw.trim().toUpperCase()
+  let hemi: Hemisphere | null = null
+  const lead = t.match(/^([NSEW])\s*(.*)$/)
+  if (lead) {
+    hemi = lead[1] as Hemisphere
+    t = lead[2]
+  }
+  const trail = t.match(/^(.*?)\s*([NSEW])$/)
+  if (trail) {
+    if (hemi) return null
+    hemi = trail[2] as Hemisphere
+    t = trail[1]
+  }
+  let sign = 1
+  const signed = t.match(/^([-+])\s*(.*)$/)
+  if (signed) {
+    sign = signed[1] === '-' ? -1 : 1
+    t = signed[2]
+  }
+  // A sign AND a letter contradict each other ("-49N"): refuse rather than pick.
+  if (sign < 0 && hemi) return null
+
+  // Degrees, minutes and seconds are SEPARATED — by their mark or by
+  // whitespace — never run together: without that, "49.278854" would read as
+  // 4° 9.278854′ (a digit for the degrees and the rest for the minutes).
+  const dms = t.match(/^(\d+)(?:\s*°\s*|\s+)(\d+)(?:\s*'\s*|\s+)(\d+(?:\.\d+)?)\s*"?$/)
+  const dmm = t.match(/^(\d+)(?:\s*°\s*|\s+)(\d+(?:\.\d+)?)\s*'?$/)
+  const dd = t.match(/^(\d+(?:\.\d+)?)\s*°?$/)
+  let value: number
+  if (dms) {
+    const [, d, m, s] = dms
+    if (Number(m) >= 60 || Number(s) >= 60) return null
+    value = Number(d) + Number(m) / 60 + Number(s) / 3600
+  } else if (dmm) {
+    const [, d, m] = dmm
+    if (Number(m) >= 60) return null
+    value = Number(d) + Number(m) / 60
+  } else if (dd) {
+    value = Number(dd[1])
+  } else {
+    return null
+  }
+  if (!Number.isFinite(value)) return null
+  if (hemi === 'S' || hemi === 'W') value = -value
+  return { value: sign * value, hemi }
+}
+
+function pairFrom(a: Component, b: Component): LatLng | null {
+  const isLatHemi = (h: Hemisphere | null) => h === 'N' || h === 'S'
+  const isLngHemi = (h: Hemisphere | null) => h === 'E' || h === 'W'
+  // Letters fix the axes; without any, the UI's lat-first order stands.
+  const swapped = isLngHemi(a.hemi) || isLatHemi(b.hemi)
+  const [lat, lng] = swapped ? [b, a] : [a, b]
+  if (isLngHemi(lat.hemi) || isLatHemi(lng.hemi)) return null
+  if (lat.value < -90 || lat.value > 90 || lng.value < -180 || lng.value > 180) return null
+  return { lat: lat.value, lng: lng.value }
+}
+
+// Parse manually-entered coordinates (any of the forms above) into a validated
+// { lat, lng }. Returns null when the text isn't a coordinate pair OR when a
+// value is out of range (lat −90..90, lng −180..180) — callers treat null as
+// "not a valid coordinate" and must NOT move the map. Without hemisphere
+// letters the order is NOT auto-swapped: the UI is explicitly lat-first, so a
+// bare value with lat > 90 is reported invalid rather than reinterpreted.
 export function parseLatLng(input: string): LatLng | null {
   if (!looksLikeCoordPair(input)) return null
-  const parts = input.trim().split(/\s*,\s*|\s+/)
-  if (parts.length !== 2) return null
-  const lat = Number(parts[0])
-  const lng = Number(parts[1])
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
-  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null
-  return { lat, lng }
+  const text = input
+    .trim()
+    .replace(/[′’]/g, "'")
+    .replace(/[″”]/g, '"')
+    .replace(/º/g, '°')
+    // A letter run straight into the next value ("49.27N16.2E", "N49E16")
+    // gets the space the splitter needs.
+    .replace(/([NSEWnsew])(?=[\d+\-NSEWnsew])/g, '$1 ')
+    .replace(/\s+/g, ' ')
+
+  // A comma is the pair's separator when there is one; otherwise every gap
+  // between tokens is tried, and the first split that reads as two valid
+  // coordinates wins ("49 16 43.9 N 16 12 34.3 E" splits after the N).
+  if (text.includes(',')) {
+    const parts = text.split(',')
+    if (parts.length !== 2) return null
+    const a = parseComponent(parts[0])
+    const b = parseComponent(parts[1])
+    return a && b ? pairFrom(a, b) : null
+  }
+  const tokens = text.split(' ')
+  for (let i = 1; i < tokens.length; i++) {
+    const a = parseComponent(tokens.slice(0, i).join(' '))
+    if (!a) continue
+    const b = parseComponent(tokens.slice(i).join(' '))
+    if (!b) continue
+    const pair = pairFrom(a, b)
+    if (pair) return pair
+  }
+  return null
 }
 
 // Small planar geometry helpers for "is this click near the route, and which
