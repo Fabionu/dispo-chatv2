@@ -2,15 +2,11 @@ import { CircleUser, LogOut, Settings } from 'lucide-react'
 import type { User } from '../../auth/AuthContext'
 import type { Profile } from '../../lib/types'
 import { AWAY, statusMeta } from '../../lib/availability'
-import Avatar from '../Avatar'
+import { avatarUrl } from '../../lib/avatarCache'
+import { usePhotoEditor } from '../AvatarPhotoEditor'
+import { initials } from '../messages/messageUtils'
 import { PanelHeader, CategoryRow, PANEL_GROUP_CARD } from './panelChrome'
-import {
-  PANEL_BODY,
-  PROFILE_HERO_SIZE,
-  ProfileHero,
-  SIDEBAR_PANEL_SURFACE,
-  StatusPill,
-} from './profileChrome'
+import { PANEL_BODY, ProfileHero, SIDEBAR_PANEL_SURFACE, StatusPill } from './profileChrome'
 import { ROLE_LABEL } from './ProfileSidebarPanel'
 
 type Props = {
@@ -48,6 +44,18 @@ export default function AccountSidebarPanel({
   // Drivers have no availability, so no status line — same rule as the rail's
   // identity row and the profile panel.
   const status = user.role === 'driver' ? null : away ? AWAY : profile ? statusMeta(profile.availabilityStatus) : null
+  // The photo is viewable here (lightbox) but managed one level down, in My
+  // profile — so no pencil, no file input.
+  const hasAvatar = profile?.hasAvatar ?? true
+  const viewer = usePhotoEditor({
+    hasImage: hasAvatar,
+    canEdit: false,
+    noun: 'profile photo',
+    viewSrc: hasAvatar ? avatarUrl('user', user.id, avatarVersion) : undefined,
+    viewTitle: user.displayName,
+    onFile: () => {},
+    onRemove: () => {},
+  })
 
   return (
     <div className={`flex flex-col h-full ${SIDEBAR_PANEL_SURFACE}`}>
@@ -56,14 +64,13 @@ export default function AccountSidebarPanel({
       <div className={PANEL_BODY}>
         {/* Identity — the shared hero every profile surface uses. */}
         <ProfileHero
-          image={
-            <Avatar
-              userId={user.id}
-              name={user.displayName}
-              size={PROFILE_HERO_SIZE}
-              version={avatarVersion}
-            />
+          photo={
+            hasAvatar
+              ? { src: avatarUrl('user', user.id, avatarVersion), alt: `${user.displayName} profile photo` }
+              : null
           }
+          fallback={<span className="text-[76px] font-semibold tracking-[2px]">{initials(user.displayName)}</span>}
+          onPhotoClick={viewer.openPreview}
           title={user.displayName}
           subtitle={ROLE_LABEL[user.role]}
           status={
@@ -76,6 +83,7 @@ export default function AccountSidebarPanel({
             )
           }
         />
+        {viewer.chrome}
 
         <div className={PANEL_GROUP_CARD}>
           <CategoryRow

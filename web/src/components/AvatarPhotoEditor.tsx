@@ -1,14 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Eye, MoreVertical, Trash2, Upload } from 'lucide-react'
+import { Pencil, Trash2, Upload } from 'lucide-react'
 import ImageLightbox from './ImageLightbox'
-import { rem } from '../lib/density'
 import { MENU_CONTAINER, MENU_GLYPH, menuIconClass, menuItemClass } from './menuStyles'
 
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024
 
-type Props = {
-  /** Pixel diameter — must match the avatar passed as children. */
-  size: number
+type Options = {
   /** Whether an image is currently set (gates viewing + "Remove"). */
   hasImage: boolean
   /** Whether the viewer may change/remove the photo (e.g. group managers only).
@@ -16,16 +13,11 @@ type Props = {
   canEdit: boolean
   /** Noun used in tooltips / aria, e.g. "vehicle photo" or "logo". */
   noun: string
-  /** The rendered Avatar / GroupAvatar / logo, sized to `size`. */
-  children: ReactNode
-  /** Full-size image URL for the in-app preview (not the cropped thumbnail).
-   *  When present and hasImage, the avatar becomes a "View photo" action. */
+  /** Full-size image URL for the in-app preview. When present and hasImage,
+   *  the hero becomes a "View photo" action. */
   viewSrc?: string
   /** Title shown in the preview header (defaults to the noun). */
   viewTitle?: string
-  /** Corner radius of the image slot + its overlays: a circle for avatars, a
-   *  card for square logos. Defaults to a circle. */
-  shape?: 'circle' | 'card'
   accept?: string
   maxBytes?: number
   /** A validated image File, ready for the crop/upload step. */
@@ -36,33 +28,42 @@ type Props = {
   onError?: (msg: string) => void
 }
 
-// The avatar/group image/logo as the hero of a panel header. The image is for
-// VIEWING: when a photo exists, hover/focus reveals a dark overlay + eye icon
-// ("View photo") and clicking opens a themed in-app lightbox (zoom/pan) — never
-// a new tab.
+export type PhotoEditor = {
+  /** Render once, anywhere in the panel: the hidden file input + the lightbox. */
+  chrome: ReactNode
+  /** The pinned Options control for ProfileHero's `overlay`; null for viewers. */
+  optionsButton: ReactNode
+  /** For ProfileHero's `onPhotoClick`; undefined when there is nothing to view. */
+  openPreview?: () => void
+}
+
+// Photo viewing + management for a profile hero (profileChrome.ProfileHero).
 //
-// Photo MANAGEMENT lives in a compact three-dots Options button tucked into the
-// image's bottom-right corner. It stays hidden until the image is hovered or the
-// button is focused (keyboard-accessible), then opens a small themed menu
-// (Change / Remove) — no form-style buttons under the image. Remove is disabled
-// while there's no image. Viewing is NOT duplicated here: it's the image's own
-// hover action above. The menu closes on outside-click or Escape; the preview
-// closes on Escape.
-export default function AvatarPhotoEditor({
-  size,
+// This used to be a component that WRAPPED a 168px avatar disc: hover revealed
+// an eye over the picture, and a three-dots button hid in its corner until
+// hovered. The hero is a full-bleed banner now (2026-09-14, the phone's
+// design), so the two affordances moved with it: viewing is the whole banner
+// (ProfileHero renders the click target itself) and management is a pencil
+// pinned to the banner's bottom-right — always visible, as on the phone, since
+// hover-reveal is undiscoverable on touch and invisible on a photo that is
+// already dark. The menu (Change / Remove) opens UPWARD, over the picture,
+// because the banner clips its overflow and the page content sits below.
+//
+// A hook rather than a component because the hero needs the two pieces in two
+// different slots, on opposite sides of the text block, and the file input and
+// the lightbox belong to neither.
+export function usePhotoEditor({
   hasImage,
   canEdit,
   noun,
-  children,
   viewSrc,
   viewTitle,
-  shape = 'circle',
   accept = 'image/png,image/jpeg,image/webp,image/gif',
   maxBytes = DEFAULT_MAX_BYTES,
   onFile,
   onRemove,
   onError,
-}: Props) {
+}: Options): PhotoEditor {
   const inputRef = useRef<HTMLInputElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -84,10 +85,6 @@ export default function AvatarPhotoEditor({
     }
   }, [menuOpen])
 
-  function openPicker() {
-    inputRef.current?.click()
-  }
-
   function onChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     e.target.value = ''
@@ -98,101 +95,75 @@ export default function AvatarPhotoEditor({
   }
 
   const canView = hasImage && Boolean(viewSrc)
-  const roundedClass = shape === 'circle' ? 'rounded-full' : 'rounded-card'
-  // Where the Options button sits. A circle's corner is its lower-right arc, so a
-  // small positive inset lands the button on the edge. A square (logo) has a real
-  // corner, so we tuck the button right into it (slight overhang) like a badge.
-  const cornerOffset = shape === 'circle' ? 'bottom-1 right-1' : '-bottom-1.5 -right-1.5'
 
-  return (
+  const chrome = (
     <>
       {canEdit && (
         <input ref={inputRef} type="file" accept={accept} onChange={onChange} className="hidden" />
       )}
-
-      {/* The image is the hero. With a photo it's a "View photo" action that opens
-          the lightbox; editors also get a hover-revealed three-dots Options menu
-          in the bottom-right corner. */}
-      {/* The frame is sized in REM, exactly like the Avatar / GroupAvatar /
-          CompanyLogo it wraps (they render `size` through lib/density's rem()).
-          In raw px it drifted from its own image on any display where --ui-scale
-          isn't 1 — the scrim and the corner button then sat off the picture. */}
-      <div className={`group relative ${roundedClass}`} style={{ width: rem(size), height: rem(size) }}>
-        {children}
-
-        {canView && (
-          <button
-            type="button"
-            onClick={() => setPreviewOpen(true)}
-            aria-label="View photo"
-            title="View photo"
-            className={`absolute inset-0 ${roundedClass} flex items-center justify-center bg-black/50 text-pure-white opacity-0 hover:opacity-100 focus-visible:opacity-100 transition-opacity duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-active/60`}
-          >
-            <Eye size={rem(Math.max(16, Math.round(size * 0.22)))} strokeWidth={1.6} />
-          </button>
-        )}
-
-        {/* Photo management — a compact, circular Options button in the corner of
-            the image. Hidden by default; revealed on hover or keyboard focus. */}
-        {canEdit && (
-          <div className={`absolute ${cornerOffset} z-10`} ref={menuRef}>
-            <button
-              type="button"
-              onClick={() => setMenuOpen((v) => !v)}
-              aria-label={`${noun} options`}
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              title="Options"
-              className={`h-7 w-7 flex items-center justify-center rounded-full bg-black/55 text-pure-white/90 backdrop-blur-[2px] transition-all duration-150 hover:bg-black/75 focus:outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-active/60 ${
-                menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-              }`}
-            >
-              <MoreVertical size="0.9375rem" strokeWidth={1.9} />
-            </button>
-            {menuOpen && (
-              <div
-                role="menu"
-                className={`absolute right-0 top-[calc(100%+4px)] z-20 min-w-[9.375rem] ${MENU_CONTAINER}`}
-              >
-                <MenuItem
-                  onClick={() => {
-                    setMenuOpen(false)
-                    openPicker()
-                  }}
-                >
-                  <span className={menuIconClass()}>
-                    <Upload {...MENU_GLYPH} />
-                  </span>
-                  Change
-                </MenuItem>
-                <MenuItem
-                  tone="danger"
-                  disabled={!hasImage}
-                  onClick={() => {
-                    setMenuOpen(false)
-                    onRemove()
-                  }}
-                >
-                  <span className={menuIconClass('danger')}>
-                    <Trash2 {...MENU_GLYPH} />
-                  </span>
-                  Remove
-                </MenuItem>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
       {previewOpen && viewSrc && (
-        <ImageLightbox
-          src={viewSrc}
-          title={viewTitle ?? noun}
-          onClose={() => setPreviewOpen(false)}
-        />
+        <ImageLightbox src={viewSrc} title={viewTitle ?? noun} onClose={() => setPreviewOpen(false)} />
       )}
     </>
   )
+
+  // The pencil: the phone's control, in the app's scrim-button dress (black
+  // wash, hairline, white glyph) so it reads on any photo. `text-pure-white`
+  // rather than the theme ink — it sits on a picture, not on the field.
+  const optionsButton = canEdit ? (
+    <div className="relative" ref={menuRef}>
+      <button
+        type="button"
+        onClick={() => setMenuOpen((v) => !v)}
+        aria-label={`${noun} options`}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        title={`Change ${noun}`}
+        className={`h-10 w-10 flex items-center justify-center rounded-full border border-pure-white/15 bg-black/45 text-pure-white backdrop-blur-[2px] transition-colors hover:bg-black/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-active/60 ${
+          menuOpen ? 'bg-black/65' : ''
+        }`}
+      >
+        <Pencil size="1.0625rem" strokeWidth={1.7} />
+      </button>
+      {menuOpen && (
+        <div
+          role="menu"
+          className={`absolute right-0 bottom-[calc(100%+6px)] z-20 min-w-[9.375rem] ${MENU_CONTAINER}`}
+        >
+          <MenuItem
+            onClick={() => {
+              setMenuOpen(false)
+              inputRef.current?.click()
+            }}
+          >
+            <span className={menuIconClass()}>
+              <Upload {...MENU_GLYPH} />
+            </span>
+            Change
+          </MenuItem>
+          <MenuItem
+            tone="danger"
+            disabled={!hasImage}
+            onClick={() => {
+              setMenuOpen(false)
+              onRemove()
+            }}
+          >
+            <span className={menuIconClass('danger')}>
+              <Trash2 {...MENU_GLYPH} />
+            </span>
+            Remove
+          </MenuItem>
+        </div>
+      )}
+    </div>
+  ) : null
+
+  return {
+    chrome,
+    optionsButton,
+    openPreview: canView ? () => setPreviewOpen(true) : undefined,
+  }
 }
 
 function MenuItem({

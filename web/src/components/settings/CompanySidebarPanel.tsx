@@ -1,17 +1,11 @@
 import { useEffect, useState } from 'react'
 import type { CompanyProfile } from '../../lib/types'
 import { api, type CompanyProfilePatch } from '../../lib/api'
-import CompanyLogo from '../CompanyLogo'
-import AvatarPhotoEditor from '../AvatarPhotoEditor'
+import { Box } from 'lucide-react'
+import { usePhotoEditor } from '../AvatarPhotoEditor'
 import { EditableField, EditableTextarea } from '../forms'
 import { PanelHeader } from './panelChrome'
-import {
-  PANEL_BODY,
-  PROFILE_HERO_SIZE,
-  ProfileHero,
-  ProfileSection,
-  SIDEBAR_PANEL_SURFACE,
-} from './profileChrome'
+import { PANEL_BODY, ProfileHero, ProfileSection, SIDEBAR_PANEL_SURFACE } from './profileChrome'
 
 type Props = {
   onBack: () => void
@@ -81,6 +75,19 @@ export default function CompanySidebarPanel({ onBack, backLabel = 'Back', onSave
     }
   }
 
+  // The logo's viewing + management, for the hero's two slots.
+  const logoSrc = company?.hasLogo ? `/api/company-profile/logo?v=${logoVersion}` : undefined
+  const editor = usePhotoEditor({
+    hasImage: company?.hasLogo ?? false,
+    canEdit,
+    noun: 'logo',
+    viewSrc: logoSrc,
+    viewTitle: company?.name,
+    onFile: uploadLogo,
+    onRemove: removeLogo,
+    onError: setError,
+  })
+
   return (
     <div className={`flex flex-col h-full ${SIDEBAR_PANEL_SURFACE}`}>
       <PanelHeader title="Company profile" onBack={onBack} backLabel={backLabel} />
@@ -91,37 +98,22 @@ export default function CompanySidebarPanel({ onBack, backLabel = 'Back', onSave
         </div>
       ) : (
         <div className={PANEL_BODY}>
-          {/* Logo + name — the logo is the hero, at the same size as every other
-              profile surface. It previews in a lightbox (View); admins also
-              change/remove it via the hover three-dots menu in the logo's corner
-              (no form-style buttons). Non-admins can view but not manage. */}
+          {/* Logo + name — the logo is the hero, the same banner as every other
+              profile surface, but CONTAINED rather than cropped (a logo is
+              artwork, the phone does the same): it sits on the backdrop
+              gradient. Admins change/remove it via the pinned pencil; everyone
+              can open it in the lightbox. */}
           <ProfileHero
-            image={
-              <AvatarPhotoEditor
-                size={PROFILE_HERO_SIZE}
-                shape="circle"
-                hasImage={company.hasLogo}
-                canEdit={canEdit}
-                noun="logo"
-                viewSrc={
-                  company.hasLogo ? `/api/company-profile/logo?v=${logoVersion}` : undefined
-                }
-                viewTitle={company.name}
-                onFile={uploadLogo}
-                onRemove={removeLogo}
-                onError={setError}
-              >
-                <CompanyLogo
-                  size={PROFILE_HERO_SIZE}
-                  version={logoVersion}
-                  className="!rounded-full"
-                />
-              </AvatarPhotoEditor>
-            }
+            photo={logoSrc ? { src: logoSrc, alt: `${company.name} logo` } : null}
+            fallback={<Box size="4.5rem" strokeWidth={1.4} />}
+            fit="contain"
+            onPhotoClick={editor.openPreview}
+            overlay={editor.optionsButton}
             title={company.name}
             subtitle={canEdit ? undefined : 'Managed by a workspace admin'}
             error={error}
           />
+          {editor.chrome}
 
           {/* Registration */}
           <ProfileSection label="Registration">

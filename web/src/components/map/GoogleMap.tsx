@@ -384,6 +384,26 @@ export default function GoogleMap({
       },
     }
   }
+  // The right-click menu, in one place for the map and for the route line.
+  // A ref so the route-drawing effect (which re-runs per route) can attach it
+  // without re-subscribing the map.
+  const openContextMenuRef = useRef<(e: google.maps.MapMouseEvent) => void>(() => {})
+  openContextMenuRef.current = (e) => {
+    const map = mapRef.current
+    const px = containerPx(e.domEvent)
+    const ll = e.latLng
+    if (!map || !px || !ll) return
+    e.domEvent?.preventDefault?.()
+    cb.current.onMapContextMenu?.({
+      lat: ll.lat(),
+      lng: ll.lng(),
+      x: px.x,
+      y: px.y,
+      zoom: map.getZoom() ?? DEFAULT_ZOOM,
+      candidates: candidatesAt(px.x, px.y),
+    })
+  }
+
   function containerPx(domEvent: Event | undefined): { x: number; y: number } | null {
     const el = containerRef.current
     const me = domEvent as MouseEvent | undefined
@@ -421,6 +441,13 @@ export default function GoogleMap({
           // Scroll zooms without a modifier, as HERE's map does and as a
           // full-pane map should; the ctrl-to-zoom nag is for embeds.
           gestureHandling: 'greedy',
+          // Without a mapId this is a RASTER map, where Google's default is
+          // integer zoom: one wheel notch = one whole level = the map doubling
+          // under the cursor, which is what read as "too much or too little
+          // per scroll, never gradual" (user, 2026-09-14). Fractional zoom
+          // is what makes the wheel proportional — small deltas move the
+          // zoom by fractions and a flick still gets somewhere.
+          isFractionalZoomEnabled: true,
           clickableIcons: true,
         })
         mapRef.current = map
@@ -565,19 +592,12 @@ export default function GoogleMap({
         badgeRef.current = badge
 
         // ── Map-level gestures ──────────────────────────────────────────────
+        // The route's grab polyline is `clickable`, so a right-click ON the
+        // line is delivered to it and never reaches this listener — the same
+        // handler is attached to each route target where it is drawn (see
+        // openContextMenuRef), so the options open over the route as well.
         map.addListener('contextmenu', (e: google.maps.MapMouseEvent) => {
-          const px = containerPx(e.domEvent)
-          const ll = e.latLng
-          if (!px || !ll) return
-          e.domEvent?.preventDefault?.()
-          cb.current.onMapContextMenu?.({
-            lat: ll.lat(),
-            lng: ll.lng(),
-            x: px.x,
-            y: px.y,
-            zoom: map.getZoom() ?? DEFAULT_ZOOM,
-            candidates: candidatesAt(px.x, px.y),
-          })
+          openContextMenuRef.current(e)
         })
         map.addListener('dragstart', () => {
           cb.current.onMapViewChange?.()
@@ -725,8 +745,10 @@ export default function GoogleMap({
           })
           zoomControlRef.current = createHereMapZoomControl({
             container: controlsHostRef.current,
-            onZoomIn: () => map.setZoom((map.getZoom() ?? DEFAULT_ZOOM) + 1),
-            onZoomOut: () => map.setZoom((map.getZoom() ?? DEFAULT_ZOOM) - 1),
+            // From a fractional wheel zoom, the buttons step to the next
+            // WHOLE level (12.4 → 13), the way a zoom control reads.
+            onZoomIn: () => map.setZoom(Math.floor(map.getZoom() ?? DEFAULT_ZOOM) + 1),
+            onZoomOut: () => map.setZoom(Math.ceil(map.getZoom() ?? DEFAULT_ZOOM) - 1),
           })
         }
 
@@ -1092,8 +1114,16 @@ export default function GoogleMap({
       })
       target.addListener('mousedown', (e: google.maps.MapMouseEvent) => {
         if (!e.latLng) return
+        // Primary button only. This used to start on ANY mousedown, so a
+        // right-click on the line was a press-and-release drag of zero
+        // length: it inserted a stop under the cursor instead of opening the
+        // options (user, 2026-09-14).
+        if ((e.domEvent as MouseEvent | undefined)?.button !== 0) return
         e.domEvent?.preventDefault?.()
         beginRouteDrag(sectionIndex, e.latLng)
+      })
+      target.addListener('contextmenu', (e: google.maps.MapMouseEvent) => {
+        openContextMenuRef.current(e)
       })
       routeObjsRef.current.push({ casing, spine, target })
     })

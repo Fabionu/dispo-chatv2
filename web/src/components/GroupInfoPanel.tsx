@@ -18,14 +18,10 @@ import { persistOpsWithRoute, persistTripRoute } from '../lib/tripRoute'
 import { getSocket } from '../lib/socket'
 import { avatarUrl, clearAvatarCache } from '../lib/avatarCache'
 import { usePresence } from '../hooks/usePresence'
-import GroupAvatar from './GroupAvatar'
-import AvatarPhotoEditor from './AvatarPhotoEditor'
+import { Users } from 'lucide-react'
+import { usePhotoEditor } from './AvatarPhotoEditor'
 import { PanelCloseHeader } from './settings/panelChrome'
-import {
-  PANEL_SURFACE,
-  PROFILE_HERO_SIZE,
-  ProfileHero,
-} from './settings/profileChrome'
+import { PANEL_SURFACE, ProfileHero } from './settings/profileChrome'
 import AvatarCropModal from './settings/AvatarCropModal'
 import { StatusChip } from './vehicle/opsControls'
 import VehicleInfoTab from './vehicle/VehicleInfoTab'
@@ -349,6 +345,21 @@ export default function GroupInfoPanel({
     }
   }
 
+  // The vehicle photo's viewing + management, for the hero's two slots.
+  const editor = usePhotoEditor({
+    hasImage: Boolean(group.hasAvatar),
+    canEdit: canManage,
+    noun: 'vehicle photo',
+    viewSrc: group.hasAvatar ? avatarUrl('group', group.id, avatarVersion) : undefined,
+    viewTitle: groupLabel(group),
+    onFile: (file) => {
+      setError(null)
+      setCropFile(file)
+    },
+    onRemove: removeGroupAvatar,
+    onError: setError,
+  })
+
   return (
     <>
       {/* Click-away — only as an overlay drawer on narrow screens (< xl). On
@@ -372,36 +383,21 @@ export default function GroupInfoPanel({
 
         <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 py-4">
           {/* Identity — the vehicle image is the hero (uploaded photo, or the
-              generated multi-user glyph as a fallback), at the SAME size as every
-              profile surface, keeping the vehicle's squircle shape. Managers
-              change/remove it via the image overlay + the "More" menu; no
-              form-style buttons. The manual vehicle status shows as a chip. */}
+              generated multi-user glyph as a fallback), the same banner as every
+              profile surface. Managers change/remove it via the pinned pencil;
+              the banner opens the photo. The manual vehicle status is a chip. */}
           <ProfileHero
-            image={
-              <AvatarPhotoEditor
-                size={PROFILE_HERO_SIZE}
-                hasImage={Boolean(group.hasAvatar)}
-                canEdit={canManage}
-                noun="vehicle photo"
-                shape="card"
-                viewSrc={group.hasAvatar ? avatarUrl('group', group.id, avatarVersion) : undefined}
-                viewTitle={groupLabel(group)}
-                onFile={(file) => {
-                  setError(null)
-                  setCropFile(file)
-                }}
-                onRemove={removeGroupAvatar}
-                onError={setError}
-              >
-                <GroupAvatar
-                  groupId={group.id}
-                  hasAvatar={Boolean(group.hasAvatar)}
-                  version={avatarVersion}
-                  shape="rounded"
-                  size={PROFILE_HERO_SIZE}
-                />
-              </AvatarPhotoEditor>
+            photo={
+              group.hasAvatar
+                ? {
+                    src: avatarUrl('group', group.id, avatarVersion),
+                    alt: `${groupLabel(group)} vehicle photo`,
+                  }
+                : null
             }
+            fallback={<Users size="4.5rem" strokeWidth={1.4} />}
+            onPhotoClick={editor.openPreview}
+            overlay={editor.optionsButton}
             title={groupLabel(group)}
             subtitle={`${members.length} member${members.length === 1 ? '' : 's'}`}
             meta={vehicleMeta || undefined}
@@ -415,6 +411,8 @@ export default function GroupInfoPanel({
             }
             error={error}
           />
+
+          {editor.chrome}
 
           {/* Tab bar — compact segmented control for the operational sections. */}
           <PanelTabs value={tab} onChange={setTab} />

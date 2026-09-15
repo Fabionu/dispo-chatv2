@@ -11,13 +11,12 @@ import { PanelCloseHeader } from './settings/panelChrome'
 import {
   PANEL_BODY,
   PANEL_SURFACE,
-  PROFILE_HERO_SIZE,
   ProfileHero,
   ProfileSection,
   StatusPill,
 } from './settings/profileChrome'
-import Avatar from './Avatar'
-import AvatarPhotoEditor from './AvatarPhotoEditor'
+import { usePhotoEditor } from './AvatarPhotoEditor'
+import { initials } from './messages/messageUtils'
 import { EditableField } from './forms'
 import Spinner from './Spinner'
 
@@ -244,6 +243,17 @@ export default function UserProfilePanel({
     }
   }
 
+  // Viewing only — no photo-management controls for someone else's account.
+  const viewer = usePhotoEditor({
+    hasImage: profile?.hasAvatar ?? false,
+    canEdit: false,
+    noun: 'profile photo',
+    viewSrc: profile?.hasAvatar ? avatarUrl('user', profile.id) : undefined,
+    viewTitle: displayName,
+    onFile: () => {},
+    onRemove: () => {},
+  })
+
   return (
     <>
       {/* Click-away — only as an overlay drawer on narrow screens (< xl). On
@@ -299,23 +309,19 @@ export default function UserProfilePanel({
         ) : (
           <div className={PANEL_BODY}>
             {/* Identity hero — the shared one, so this card and My profile are
-                the same object at the same size. Viewing the photo (lightbox)
-                only; no photo-management controls for someone else's account. */}
+                the same object. The banner opens the photo in the lightbox. */}
             <ProfileHero
-              image={
-                <AvatarPhotoEditor
-                  size={PROFILE_HERO_SIZE}
-                  hasImage={profile.hasAvatar}
-                  canEdit={false}
-                  noun="profile photo"
-                  viewSrc={profile.hasAvatar ? avatarUrl('user', profile.id) : undefined}
-                  viewTitle={displayName}
-                  onFile={() => {}}
-                  onRemove={() => {}}
-                >
-                  <Avatar userId={profile.id} name={displayName} size={PROFILE_HERO_SIZE} />
-                </AvatarPhotoEditor>
+              photo={
+                profile.hasAvatar
+                  ? { src: avatarUrl('user', profile.id), alt: `${displayName} profile photo` }
+                  : null
               }
+              fallback={
+                <span className="text-[76px] font-semibold tracking-[2px]">
+                  {initials(displayName)}
+                </span>
+              }
+              onPhotoClick={viewer.openPreview}
               title={displayName}
               subtitle={
                 profile.deleted
@@ -390,6 +396,7 @@ export default function UserProfilePanel({
                 ) : undefined
               }
             />
+            {viewer.chrome}
 
             {profile.deleted ? (
               // Anonymized account: name only — every personal detail was

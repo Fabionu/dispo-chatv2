@@ -5,7 +5,6 @@ import { api, type ProfilePatch } from '../../lib/api'
 import { PanelHeader } from './panelChrome'
 import {
   PANEL_BODY,
-  PROFILE_HERO_SIZE,
   ProfileHero,
   ProfileSection,
   SIDEBAR_PANEL_SURFACE,
@@ -14,8 +13,8 @@ import {
 import { useAuth } from '../../auth/AuthContext'
 import { avatarUrl, clearAvatarCache } from '../../lib/avatarCache'
 import { AVAILABILITY, AWAY, statusMeta } from '../../lib/availability'
-import Avatar from '../Avatar'
-import AvatarPhotoEditor from '../AvatarPhotoEditor'
+import { usePhotoEditor } from '../AvatarPhotoEditor'
+import { initials } from '../messages/messageUtils'
 import { EditableField } from '../forms'
 import ConfirmDialog from '../ConfirmDialog'
 import AvatarCropModal from './AvatarCropModal'
@@ -161,6 +160,23 @@ export default function ProfileSidebarPanel({
 
   const languagesValue = profile && profile.otherLanguages.length ? profile.otherLanguages.join(', ') : ''
 
+  // Photo viewing + management for the hero: the pencil (Change / Remove) and
+  // the lightbox. Called unconditionally — it is a hook — with the "no profile
+  // yet" case folded into `hasImage: false`.
+  const editor = usePhotoEditor({
+    hasImage: profile?.hasAvatar ?? false,
+    canEdit: true,
+    noun: 'profile photo',
+    viewSrc: profile?.hasAvatar ? avatarUrl('user', profile.id, avatarVersion) : undefined,
+    viewTitle: profile?.displayName,
+    onFile: (file) => {
+      setError(null)
+      setCropFile(file)
+    },
+    onRemove: removeAvatar,
+    onError: setError,
+  })
+
   return (
     <>
       <div className={`flex flex-col h-full ${SIDEBAR_PANEL_SURFACE}`}>
@@ -172,34 +188,24 @@ export default function ProfileSidebarPanel({
           </div>
         ) : (
           <div className={PANEL_BODY}>
-            {/* Identity — the avatar is the hero. Change/remove via the image
-                overlay + the More menu (top-right); no form-style buttons. */}
+            {/* Identity — the photo is the hero. Change/remove via the pencil
+                pinned to the banner; the banner itself opens the lightbox. */}
             <ProfileHero
-              image={
-                <AvatarPhotoEditor
-                  size={PROFILE_HERO_SIZE}
-                  hasImage={profile.hasAvatar}
-                  canEdit
-                  noun="profile photo"
-                  viewSrc={
-                    profile.hasAvatar ? avatarUrl('user', profile.id, avatarVersion) : undefined
-                  }
-                  viewTitle={profile.displayName}
-                  onFile={(file) => {
-                    setError(null)
-                    setCropFile(file)
-                  }}
-                  onRemove={removeAvatar}
-                  onError={setError}
-                >
-                  <Avatar
-                    userId={profile.id}
-                    name={profile.displayName}
-                    size={PROFILE_HERO_SIZE}
-                    version={avatarVersion}
-                  />
-                </AvatarPhotoEditor>
+              photo={
+                profile.hasAvatar
+                  ? {
+                      src: avatarUrl('user', profile.id, avatarVersion),
+                      alt: `${profile.displayName} profile photo`,
+                    }
+                  : null
               }
+              fallback={
+                <span className="text-[76px] font-semibold tracking-[2px]">
+                  {initials(profile.displayName)}
+                </span>
+              }
+              onPhotoClick={editor.openPreview}
+              overlay={editor.optionsButton}
               title={profile.displayName}
               subtitle={`${ROLE_LABEL[profile.role]}${profile.jobTitle ? ` · ${profile.jobTitle}` : ''}`}
               status={
@@ -209,6 +215,7 @@ export default function ProfileSidebarPanel({
               }
               error={error}
             />
+            {editor.chrome}
 
             {/* Work details — each editable row changes on its own. */}
             <ProfileSection label="Work details">

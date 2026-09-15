@@ -4,8 +4,8 @@
 // the same three parts in the same order and at the same metrics:
 //
 //   PanelHeader (panelChrome)  — the seam, back or close affordance, title
-//   ProfileHero                — large image, name, one meta line, status pill,
-//                                optional icon actions, optional error
+//   ProfileHero                — full-bleed photo banner with the name, meta,
+//                                status pill and actions in its scrim; parallax
 //   ProfileSection × n         — eyebrow label over ONE grouped card of rows
 //
 // Everything below is presentational. The rows themselves stay EditableRow, so a
@@ -13,35 +13,209 @@
 // passes `editable` + `onSave` — which is where each surface's permission rule
 // lives (own profile, company admin, group manager).
 
-import type { ReactNode } from 'react'
-import { rem } from '../../lib/density'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 
-// The hero image size shared by Account, My profile, User profile, Company
-// profile and Group info. Design px rendered as rem by the size-prop components
-// (Avatar / GroupAvatar / CompanyLogo), so it tracks --ui-scale and shrinks on
-// compact displays and narrow rails without any per-panel override.
-export const PROFILE_HERO_SIZE = 168
-
-// The avatar SLOT. Every profile surface puts its image through this, so the
-// picture lands on exactly the same pixel whichever panel you are on — the thing
-// that was visibly shifting when moving between Account and My profile.
+// ── The hero banner ─────────────────────────────────────────────────────────
+// A port of the Android ProfileHero (ui/profile/ProfileUi.kt), which is the
+// version the user asked for on the web (2026-09-14: "I like how the image
+// looks when you enter the profile and the effect when you scroll"). The
+// picture IS the page header: it runs the full width of the panel, the identity
+// block sits in its bottom scrim, and it drifts at a third of the scroll speed
+// so the page slides over it. Same numbers as the phone so the two read as one
+// feature — height 94% of the width clamped 280–420, the five-stop scrim, a
+// 25px name, and 0.34× parallax.
 //
-// It reserves the hero box unconditionally (fixed width AND height, centred),
-// so all of these occupy identical space:
-//   • a loaded photo
-//   • the generated fallback initials/glyph
-//   • the still-loading state
-//   • the editable variant, whose hover scrim and corner "Options" button are
-//     absolutely positioned INSIDE the slot and therefore add nothing to it
-// Height is reserved with a real box rather than min-height so the content below
-// (name, meta, sections) starts at the same y on every panel.
-export function ProfileAvatarSlot({ children }: { children: ReactNode }) {
+// It used to be a centred 168px disc with the name under it (`ProfileAvatarSlot`
+// / PROFILE_HERO_SIZE, now gone). The banner replaces both, and it bleeds out of
+// PANEL_BODY's padding with negative margins so the panel keeps its one scroll
+// region and its one padding recipe.
+const HERO_DRIFT = 0.34
+
+// Cover for avatars (they fill the banner); contain for artwork that must not
+// be cut — a company logo — which then sits on the backdrop gradient instead.
+export type HeroFit = 'cover' | 'contain'
+
+// Find the scroll container the banner lives in. The panels never pass a ref:
+// the body is always the nearest ancestor that scrolls, which is exactly the
+// element a `scroll` listener has to sit on.
+function scrollParentOf(node: HTMLElement | null): HTMLElement | null {
+  let el = node?.parentElement ?? null
+  while (el) {
+    const overflowY = getComputedStyle(el).overflowY
+    if (overflowY === 'auto' || overflowY === 'scroll') return el
+    el = el.parentElement
+  }
+  return null
+}
+
+// The photo layer with its own load-failure handling: the avatar/logo URLs
+// answer 204 (no body) when nothing is stored, which fails the <img> — the
+// banner then shows the fallback exactly as if `src` had been null, so callers
+// that only know "probably has a photo" still draw the right thing.
+function HeroImage({
+  src,
+  alt,
+  fit,
+  onFailed,
+}: {
+  src: string
+  alt: string
+  fit: HeroFit
+  onFailed: () => void
+}) {
   return (
-    <div
-      className="flex shrink-0 items-center justify-center"
-      style={{ width: rem(PROFILE_HERO_SIZE), height: rem(PROFILE_HERO_SIZE) }}
-    >
-      {children}
+    <img
+      src={src}
+      alt={alt}
+      draggable={false}
+      onError={onFailed}
+      className={`absolute inset-0 h-full w-full select-none ${
+        fit === 'contain' ? 'object-contain p-10' : 'object-cover'
+      }`}
+    />
+  )
+}
+
+// The identity hero. Photo + fallback + the text block over the scrim, with two
+// slots the editing surfaces fill: `onPhotoClick` (View photo → lightbox) and
+// `overlay` (the pinned Options control, bottom-right, like the phone's pencil).
+export function ProfileHero({
+  photo,
+  fallback,
+  fit = 'cover',
+  title,
+  subtitle,
+  meta,
+  status,
+  actions,
+  error,
+  onPhotoClick,
+  overlay,
+}: {
+  /** The full-size image, or null when none is stored. */
+  photo: { src: string; alt: string } | null
+  /** Drawn centred on the backdrop when there is no photo: initials or a glyph. */
+  fallback: ReactNode
+  fit?: HeroFit
+  title: string
+  /** Role · job title, member count, "Managed by an admin" … */
+  subtitle?: ReactNode
+  /** A quieter third line (plates, workspace, etc.). */
+  meta?: ReactNode
+  /** Availability pill or status chip. */
+  status?: ReactNode
+  /** Icon actions row (message, connect, …). */
+  actions?: ReactNode
+  error?: string | null
+  /** Whole-banner click, e.g. open the photo in the lightbox. */
+  onPhotoClick?: () => void
+  /** Controls pinned to the banner (the photo editor's Options button). */
+  overlay?: ReactNode
+}) {
+  const [failed, setFailed] = useState(false)
+  const showPhoto = photo !== null && !failed
+  // The layer that drifts. Driven imperatively from the scroll event — reading
+  // scrollTop in a listener and writing one transform, never through React
+  // state — so the parallax costs nothing per frame (the phone reads it in
+  // the draw phase for the same reason).
+  const driftRef = useRef<HTMLDivElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    setFailed(false)
+  }, [photo?.src])
+
+  useEffect(() => {
+    const scroller = scrollParentOf(rootRef.current)
+    const layer = driftRef.current
+    if (!scroller || !layer) return
+    const apply = () => {
+      layer.style.transform = `translate3d(0, ${scroller.scrollTop * HERO_DRIFT}px, 0)`
+    }
+    apply()
+    scroller.addEventListener('scroll', apply, { passive: true })
+    return () => scroller.removeEventListener('scroll', apply)
+  }, [])
+
+  const clickable = Boolean(onPhotoClick && showPhoto)
+
+  return (
+    // `-mx-4 -mt-4`: out of PANEL_BODY's padding to the panel's edges. The
+    // height is the phone's rule — squarish on a narrow rail, capped wide.
+    <div className="-mx-4 -mt-4">
+      <div
+        ref={rootRef}
+        className="relative w-full overflow-hidden bg-bg"
+        style={{ aspectRatio: '100 / 94', minHeight: '17.5rem', maxHeight: '26.25rem' }}
+      >
+        {/* The drifting layer: backdrop (always painted — a contain photo sits
+            on it, a cover photo hides it) and the photo. */}
+        <div ref={driftRef} className="absolute inset-0 will-change-transform">
+          <div
+            className="absolute inset-0 flex items-center justify-center"
+            style={{
+              background:
+                'linear-gradient(135deg, rgb(var(--color-surface-2)), rgb(var(--color-surface)), rgb(var(--color-composer)))',
+            }}
+          >
+            {!showPhoto && (
+              // Lifted out of the bottom scrim so it stays centred in the
+              // visible part of the banner (the phone's 46dp).
+              <div className="pb-12 text-text/35">{fallback}</div>
+            )}
+          </div>
+          {showPhoto && (
+            <HeroImage src={photo.src} alt={photo.alt} fit={fit} onFailed={() => setFailed(true)} />
+          )}
+        </div>
+
+        {/* Top scrim keeps pinned controls readable over a bright photo; the
+            bottom one carries the name and dissolves the picture into the
+            page. The phone paints both in black; here they are the PAGE
+            colour at the same alphas, so on the dark theme they are that
+            black and on the light theme the picture fades into white with
+            the ink text set on it — the one place the port is not literal. */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              'linear-gradient(to bottom, rgb(var(--color-bg) / 0.55) 0%, rgb(var(--color-bg) / 0) 22%, rgb(var(--color-bg) / 0) 52%, rgb(var(--color-bg) / 0.72) 80%, rgb(var(--color-bg)) 100%)',
+          }}
+        />
+
+        {/* View photo — the whole banner, like the phone. A real button for
+            keyboard users; the text block below stays on top of it so its own
+            controls (status menu, actions) keep working. */}
+        {clickable && (
+          <button
+            type="button"
+            onClick={onPhotoClick}
+            aria-label={`View ${photo?.alt ?? 'photo'}`}
+            title="View photo"
+            className="absolute inset-0 cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-active/60"
+          />
+        )}
+
+        {/* Identity, bottom-left in the scrim. Sizes are the phone's: 25/30
+            semibold name, 13px meta, then the pill and any actions. */}
+        <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 px-5 pb-4">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-[25px] leading-[30px] font-semibold tracking-[-0.3px] text-text break-words line-clamp-2">
+              {title}
+            </h2>
+            {subtitle && (
+              <div className="mt-0.5 text-[13px] leading-tight text-muted truncate">{subtitle}</div>
+            )}
+            {meta && (
+              <div className="mt-0.5 text-[13px] leading-tight text-faint truncate">{meta}</div>
+            )}
+            {status && <div className="mt-2.5">{status}</div>}
+            {actions && <div className="mt-2.5 flex items-center gap-1">{actions}</div>}
+          </div>
+          {overlay && <div className="relative z-10 shrink-0">{overlay}</div>}
+        </div>
+      </div>
+      {error && <p className="mx-4 mt-2 text-sm text-alert leading-[1.4]">{error}</p>}
     </div>
   )
 }
@@ -96,49 +270,6 @@ export function ProfileSection({
       </div>
       {bare ? children : <div className={PANEL_FIELD_CARD}>{children}</div>}
     </section>
-  )
-}
-
-// The identity hero. `image` is the caller's avatar slot — an AvatarPhotoEditor
-// wrapping an Avatar / GroupAvatar / CompanyLogo — so each surface keeps its own
-// shape and its own change/crop permissions while the layout stays identical.
-export function ProfileHero({
-  image,
-  title,
-  subtitle,
-  meta,
-  status,
-  actions,
-  error,
-}: {
-  image: ReactNode
-  title: string
-  /** Role · job title, member count, "Managed by an admin" … */
-  subtitle?: ReactNode
-  /** A quieter third line (plates, workspace, etc.). */
-  meta?: ReactNode
-  /** Availability pill or status chip. */
-  status?: ReactNode
-  /** Icon actions row (message, connect, …). */
-  actions?: ReactNode
-  error?: string | null
-}) {
-  return (
-    // pt-1 + the fixed avatar slot are the whole reason this is one component:
-    // the distance from the panel header to the top of the picture is defined
-    // HERE, once, instead of by whatever each panel happened to wrap its avatar
-    // in. Nothing between the header and the image may add margin.
-    <div className="relative flex flex-col items-center text-center pt-1">
-      <ProfileAvatarSlot>{image}</ProfileAvatarSlot>
-      <h2 className="mt-3 text-2xl font-semibold tracking-[-0.2px] leading-tight break-words max-w-full">
-        {title}
-      </h2>
-      {subtitle && <div className="mt-1 text-base text-muted">{subtitle}</div>}
-      {meta && <div className="mt-1 text-sm text-faint">{meta}</div>}
-      {status && <div className="mt-2.5">{status}</div>}
-      {actions && <div className="mt-3 flex items-center justify-center gap-1">{actions}</div>}
-      {error && <p className="mt-2 text-sm text-alert leading-[1.4]">{error}</p>}
-    </div>
   )
 }
 
