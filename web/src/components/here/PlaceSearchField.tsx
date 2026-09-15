@@ -19,6 +19,18 @@ const FIELD_SURFACE =
   'h-7 rounded-card border border-line bg-transparent px-2.5 transition-colors hover:border-line-2'
 const FIELD_FOCUS = 'outline-none focus:border-line-2 focus:bg-white/4'
 
+// One suggestion row. Compact (user, 2026-09-15): the list opens over the map
+// beside a 28px field, and at the old `py-2` + loose leading five rows took
+// ~230px of it — more list than map. Two tiers, still — the place and the
+// locality answer different questions and a single truncated line would lose
+// the town on any street address — but drawn tight: 3px of padding over
+// headline and meta on their own leading, so a row is ~34px, not ~46. The
+// glyph is dropped to the meta size and centred on the headline.
+const ROW = 'w-full text-left px-2.5 py-[3px] transition-colors flex items-start gap-2'
+const ROW_GLYPH = 'mt-[3px] shrink-0'
+const ROW_TITLE = 'block text-base leading-[1.25] truncate'
+const ROW_META = 'block text-xs leading-[1.2] text-faint truncate'
+
 // Google starts suggesting from the first letter; two is where the list stops
 // being every street on the continent that starts with "a".
 const MIN_QUERY = 2
@@ -276,7 +288,7 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
       ref={dropdownRef}
       id={listboxId}
       role="listbox"
-      className={`fixed z-[100] ${MENU_SURFACE} overflow-y-auto`}
+      className={`fixed z-[100] ${MENU_SURFACE} overflow-y-auto py-1`}
       style={{
         left: popup.left,
         top: popup.top,
@@ -291,26 +303,26 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
             <button
               type="button"
               onClick={() => commit(coordPlace(coord))}
-              className="w-full text-left px-3 py-2 hover:bg-white/6 transition-colors flex items-start gap-2"
+              className={`${ROW} hover:bg-white/6`}
             >
-              <MapPin size="0.875rem" className="mt-0.5 shrink-0 text-active" strokeWidth={1.8} />
+              <MapPin size="0.75rem" className={`${ROW_GLYPH} text-active`} strokeWidth={1.8} />
               <span className="min-w-0">
-                <span className="block text-base">Go to coordinates</span>
-                <span className="block text-xs text-muted tabular-nums">
+                <span className={ROW_TITLE}>Go to coordinates</span>
+                <span className={`${ROW_META} tabular-nums`}>
                   {coord.lat.toFixed(5)}, {coord.lng.toFixed(5)}
                 </span>
               </span>
             </button>
           </li>
         ) : (
-          <li className="px-3 py-2.5 text-sm text-amber-200/80">
+          <li className="px-2.5 py-1.5 text-xs leading-[1.2] text-amber-200/80">
             Invalid coordinates — latitude −90 to 90, longitude −180 to 180.
           </li>
         )
       ) : (
         <>
           {loading && items.length === 0 && (
-            <li className="px-3 py-2.5 text-sm text-muted">Searching…</li>
+            <li className="px-2.5 py-1.5 text-xs text-muted">Searching…</li>
           )}
           {items.map((item, i) => (
             <li key={item.id} id={`${listboxId}-${i}`} role="option" aria-selected={i === active} data-index={i}>
@@ -322,16 +334,12 @@ export default function PlaceSearchField({ label, value, onChange, placeholder, 
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => void pick(item)}
                 onMouseEnter={() => setActive(i)}
-                className={`w-full text-left px-3 py-2 transition-colors flex items-start gap-2 ${
-                  i === active ? 'bg-white/8' : 'hover:bg-white/6'
-                }`}
+                className={`${ROW} ${i === active ? 'bg-white/8' : 'hover:bg-white/6'}`}
               >
-                <MapPin size="0.875rem" className="mt-0.5 shrink-0 text-muted" strokeWidth={1.8} />
+                <MapPin size="0.75rem" className={`${ROW_GLYPH} text-muted`} strokeWidth={1.8} />
                 <span className="min-w-0">
-                  <span className="block text-base truncate">{item.title}</span>
-                  {item.subtitle && (
-                    <span className="block text-xs text-muted truncate">{item.subtitle}</span>
-                  )}
+                  <span className={ROW_TITLE}>{item.title}</span>
+                  {item.subtitle && <span className={ROW_META}>{item.subtitle}</span>}
                 </span>
               </button>
             </li>

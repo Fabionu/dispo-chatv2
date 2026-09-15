@@ -59,6 +59,10 @@ function svgUrl(svg: string): string {
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
 }
 
+// How far the real route steps back while a drag preview is drawn over it:
+// still there to compare against, never competing with the line being pulled.
+const ROUTE_DIM_OPACITY = 0.28
+
 function markerIcon(g: typeof google, marker: RouteMarker): google.maps.Icon {
   const endpoint = {
     anchor: new g.maps.Point(ENDPOINT_ICON_ANCHOR, ENDPOINT_ICON_ANCHOR),
@@ -347,13 +351,17 @@ export default function GoogleMap({
   const routeDragRef = useRef<{
     active: boolean
     section: number
+    // The handle under the cursor. It trails the cursor for the WHOLE
+    // gesture — see the mousemove listener for why it no longer parks on the
+    // router's matched point.
     ghost: google.maps.Marker | null
-    // Once the consumer has answered with a matched point, the ghost sits on
-    // the road it picked and stops trailing the cursor.
-    snapped: boolean
-  }>({ active: false, section: -1, ghost: null, snapped: false })
+  }>({ active: false, section: -1, ghost: null })
   const previewObjsRef = useRef<google.maps.Polyline[]>([])
   const lastPreviewPointRef = useRef<LatLng | null>(null)
+  // True while a drag preview is drawn: the real route steps back (dimmed,
+  // arrows off) so the provisional line is the one being read. restyleRoute
+  // consults it, because a wheel-zoom mid-drag re-styles the strokes.
+  const routeDimmedRef = useRef(false)
   // When the user last moved a marker or the line itself. The route that
   // arrives moments later is that edit's result, and the camera holds still
   // for it (HereMap's rule): they are looking at the junction they just
@@ -627,10 +635,19 @@ export default function GoogleMap({
 
         // Route-line drag, continued on the MAP: Google's Polyline only emits
         // mousedown; the move and the release arrive on the map itself.
+        //
+        // The handle stays under the cursor on every move. It used to park on
+        // the router's matched point once the first preview answered, and from
+        // then on it moved only when the NEXT answer did — once per round trip,
+        // ~200 ms apart — so the one thing the hand was holding updated at
+        // 4–5 Hz while the cursor moved at 60 (user, 2026-09-15: "scad
+        // frameurile in preview"). The road the router chose is already shown
+        // by the preview line bending through it; the handle's job is to be
+        // where the hand is.
         map.addListener('mousemove', (e: google.maps.MapMouseEvent) => {
           const drag = routeDragRef.current
           if (!drag.active || !drag.ghost || !e.latLng) return
-          if (!drag.snapped) drag.ghost.setPosition(e.latLng)
+          drag.ghost.setPosition(e.latLng)
           cb.current.onRouteDrag?.(
             drag.section,
             { lat: e.latLng.lat(), lng: e.latLng.lng() },
@@ -819,6 +836,7 @@ export default function GoogleMap({
     }
     for (const p of previewObjsRef.current) p.setMap(null)
     previewObjsRef.current = []
+    routeDimmedRef.current = false
     markerObjsRef.current = []
     placeObjsRef.current = []
     driverObjsRef.current = []
@@ -845,14 +863,14 @@ export default function GoogleMap({
       icon: { url: svgUrl(ghostSvg()), anchor: new g.maps.Point(6, 6), scaledSize: new g.maps.Size(12, 12) },
       zIndex: 1000,
     })
-    routeDragRef.current = { active: true, section, ghost, snapped: false }
+    routeDragRef.current = { active: true, section, ghost }
   }
   function finishRouteDrag(domEvent: Event | undefined) {
     const drag = routeDragRef.current
     const map = mapRef.current
     if (!drag.active || !map) return
     const { section, ghost } = drag
-    routeDragRef.current = { active: false, section: -1, ghost: null, snapped: false }
+    routeDragRef.current = { active: false, section: -1, ghost: null }
     map.setOptions({ draggable: true })
     // Release pixel from the pointer itself when we have it; the ghost's last
     // position is the fallback, and both go through the same sampler.
@@ -918,12 +936,28 @@ export default function GoogleMap({
     const g = gRef.current
     if (!g) return
     const w = routeWidthsNow()
+    const dimmed = routeDimmedRef.current
     for (const r of routeObjsRef.current) {
-      r.casing.setOptions({ strokeWeight: w.casing })
-      r.spine.setOptions({ strokeWeight: w.main, icons: arrowIcons(g, w) })
+      r.casing.setOptions({ strokeWeight: w.casing, strokeOpacity: dimmed ? ROUTE_DIM_OPACITY : 1 })
+      r.spine.setOptions({
+        strokeWeight: w.main,
+        strokeOpacity: dimmed ? ROUTE_DIM_OPACITY : 1,
+        // The arrow glyphs carry their own opacity, so they would stay bright
+        // on a dimmed line; they sit the preview out instead.
+        icons: dimmed ? [] : arrowIcons(g, w),
+      })
     }
     // A sweep in flight grows at the same weight the finished line will have.
     revealRef.current?.restyle(w)
+  }
+
+  // The real route steps back while a provisional one is drawn over it, and
+  // comes forward again when the preview goes — the way a maps app shows the
+  // route you are pulling beside the one you had.
+  function setRouteDimmed(dimmed: boolean) {
+    if (routeDimmedRef.current === dimmed) return
+    routeDimmedRef.current = dimmed
+    restyleRoute()
   }
 
   // The cursor arrived on the route line, or left it. Only the transitions cost
@@ -1218,47 +1252,56 @@ export default function GoogleMap({
   }, [liveMap, scaleRouteWidthWithZoom])
 
   // ── Drag preview ───────────────────────────────────────────────────────────
-  // The provisional route during a drag: dashed, in the spine colour, above
-  // the real line. Google draws dashes as a repeated stroke symbol over an
-  // invisible polyline.
+  // The provisional route during a drag: ONE plain solid stroke in the spine
+  // colour, above the real line, which steps back (setRouteDimmed) for as
+  // long as the preview is up — the way a maps app shows the route you are
+  // pulling beside the one you had. It was dashed (a stroke symbol repeated
+  // every 12px) until 2026-09-15; measured on a 900 km / 14k-vertex route at
+  // zooms 11 and 15, the dashes cost nothing visible — Google only lays out
+  // the symbols in view — so the change is for the look and to keep the
+  // preview the cheapest object on the map, not a fix. The stutter the user
+  // reported was the drag handle (see the map's mousemove listener).
+  //
+  // The objects are kept between answers — setPath on the ones that exist,
+  // create only for extra sections, drop only the surplus — instead of a
+  // teardown-and-rebuild per answer: adding or removing an overlay costs
+  // Google a pane re-layout, setPath costs a redraw.
   useEffect(() => {
     const g = gRef.current
     const map = liveMap
     if (!g || !map) return
-    for (const p of previewObjsRef.current) p.setMap(null)
-    previewObjsRef.current = []
-    if (!previewPolylines?.length) return
-    previewObjsRef.current = previewPolylines.map(
-      (encoded) =>
-        new g.maps.Polyline({
-          map,
-          path: decodeSection(encoded),
-          strokeOpacity: 0,
-          icons: [
-            {
-              icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.9, strokeColor: ROUTE_SPINE, scale: 3 },
-              offset: '0',
-              repeat: '12px',
-            },
-          ],
-          clickable: false,
-          zIndex: 15,
-        }),
-    )
+    const encodedList = previewPolylines ?? []
+    const objs = previewObjsRef.current
+    const w = routeWidthsNow()
+    encodedList.forEach((encoded, i) => {
+      const path = decodeSection(encoded)
+      const existing = objs[i]
+      if (existing) {
+        existing.setPath(path)
+        existing.setOptions({ strokeWeight: w.main })
+        return
+      }
+      objs[i] = new g.maps.Polyline({
+        map,
+        path,
+        strokeColor: ROUTE_SPINE,
+        strokeOpacity: 1,
+        strokeWeight: w.main,
+        clickable: false,
+        zIndex: 15,
+      })
+    })
+    for (let i = encodedList.length; i < objs.length; i++) objs[i].setMap(null)
+    objs.length = encodedList.length
+    setRouteDimmed(encodedList.length > 0)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveMap, previewPolylines])
 
-  // The matched point moves the ghost onto the road the router chose.
+  // Where the router matched the dragged point. Kept for the dev handle and
+  // the release fallback; it no longer moves the ghost (see the mousemove
+  // listener above).
   useEffect(() => {
     lastPreviewPointRef.current = previewPoint ?? null
-    const drag = routeDragRef.current
-    if (!drag.active || !drag.ghost) return
-    if (previewPoint) {
-      drag.snapped = true
-      drag.ghost.setPosition(previewPoint)
-    } else {
-      drag.snapped = false
-    }
   }, [previewPoint])
 
   // ── Waypoint markers ───────────────────────────────────────────────────────

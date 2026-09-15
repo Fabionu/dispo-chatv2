@@ -66,14 +66,16 @@ export type MapSurfaceProps = {
   /** Same, for a waypoint marker being dragged. */
   onMarkerDrag?: (id: string, point: LatLng, zoom: number) => void
   /**
-   * A provisional route (HERE flexible polylines) drawn dashed above the real
-   * one while a drag is in progress. Null/empty = nothing drawn.
+   * A provisional route (HERE flexible polylines) drawn as a plain stroke
+   * above the real one — which steps back while it is up — during a drag.
+   * Null/empty = nothing drawn.
    */
   previewPolylines?: string[] | null
   /**
-   * Where the dragged point matched a road. The route-drag ghost dot sits here,
-   * on the road, rather than under the cursor, so the user sees what they will
-   * get. Null = ghost under the cursor.
+   * Where the dragged point matched a road. Informational: the drag handle
+   * stays under the cursor for the whole gesture (parking it here made the
+   * handle move once per router answer), and the preview line already bends
+   * through this point.
    */
   previewPoint?: LatLng | null
   /** Width (px) of the panel overlapping the map's left edge. */

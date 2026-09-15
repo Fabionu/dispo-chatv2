@@ -9,7 +9,7 @@ import type { LatLng, RouteWaypoint, TruckProfile, TruckRoute } from '../lib/her
 //
 // 1. THE ROUTE IS THE PREVIEW. While the line (or a marker) is being dragged,
 //    the route through the point under the cursor is computed as fast as the
-//    router answers and drawn dashed on the map. The user watches the road it
+//    router answers and drawn over the real one. The user watches the road it
 //    picked before letting go; a release then commits the last preview, with
 //    nothing left to compute. Before this, a drag showed a ghost dot and the
 //    answer arrived after release — a drag that felt like a guess.

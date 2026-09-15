@@ -583,10 +583,10 @@ export default function TripRouteMap({
 
   // ── Drag-and-route ─────────────────────────────────────────────────────────
   // See hooks/useRouteDragPreview: while the line or a marker is dragged, the
-  // route through the point under the cursor is computed and drawn dashed, and
-  // the release commits that route. The dragged waypoint carries a snap radius
-  // sized to the zoom (on a zoomed-out map the motorway under the cursor wins)
-  // and the leg's heading (so it lands on the right carriageway).
+  // route through the point under the cursor is computed and drawn over the
+  // real route, and the release commits it. The dragged waypoint carries a snap
+  // radius sized to the zoom (on a zoomed-out map the motorway under the cursor
+  // wins) and the leg's heading (so it lands on the right carriageway).
   //
   // DRAG THE ROUTE LINE ITSELF → a new stop on the leg that was grabbed, the
   // planner's gesture brought over whole (user, 2026-09-06). Right-clicking to

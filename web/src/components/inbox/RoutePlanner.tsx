@@ -210,6 +210,15 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
   const [panelCollapsed, setPanelCollapsed] = useState(false)
   const [truckOpen, setTruckOpen] = useState(false)
   const [addingStop, setAddingStop] = useState(false)
+  // Set by the start slot's pick, read by the end slot's `autoFocus` on the
+  // render that reveals it, and cleared right after (the effect below) so no
+  // later mount of that slot inherits the focus. A ref, not state: it is a
+  // one-render note to the next row, and a state would cost a second render
+  // that reaches the field after `autoFocus` has already been read.
+  const focusDestinationRef = useRef(false)
+  useEffect(() => {
+    focusDestinationRef.current = false
+  })
   // Id of the point (start/stop/destination) whose address is being edited inline
   // — the row swaps to a pre-populated search field until the user picks a new
   // place or cancels (keeping the old address/coordinates).
@@ -404,15 +413,18 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
 
   // ── Drag-and-route ─────────────────────────────────────────────────────────
   // See hooks/useRouteDragPreview: while the line or a marker is dragged, the
-  // route through the point under the cursor is computed and drawn dashed; the
-  // release commits that route. The dragged waypoint carries a snap radius
-  // sized to the zoom (so on a zoomed-out map the motorway under the cursor
-  // wins) and the leg's heading (so it lands on the right carriageway).
+  // route through the point under the cursor is computed and drawn over the
+  // real route; the release commits that route. The dragged waypoint carries a
+  // snap radius sized to the zoom (so on a zoomed-out map the motorway under the
+  // cursor wins) and the leg's heading (so it lands on the right carriageway).
 
   // The waypoints of a route-line drag: the ordered points with a NEW one
   // inserted after `section`'s start — leg i joins waypoint i and i+1.
   function routeDragRequest(section: number, point: LatLng, zoom: number): DragRequest | null {
-    if (!start || !destination) return null
+    // A line drag adds a stop; at the cap there is nothing it can add, and
+    // the request it would send (one via too many) is one the server rejects
+    // — once per pointer move for the length of the drag.
+    if (!start || !destination || stops.length >= MAX_STOPS) return null
     const seg = sectionCoords[section]
     const course = seg ? routeCourseNear(point, [seg], DRAG_COURSE_WINDOW_M) ?? undefined : undefined
     const waypoints: RouteWaypoint[] = orderedWaypoints.map((p) => ({ ...p.coordinates, course: p.course }))
@@ -506,6 +518,9 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
   async function handleRouteDragEnd(section: number, candidates: ScreenGeoCandidate[], zoom: number) {
     const release = candidates[0]
     if (!release) return
+    // Full list: addStop would refuse the insert below, and the fallback
+    // would then snap and recalc a stop that never existed.
+    if (stops.length >= MAX_STOPS) return
     const req = routeDragRequest(section, release, zoom)
     const course = req?.waypoints[req.dragged]?.course
     // OPTIMISTIC: the stop appears at the raw release point the instant the
@@ -1264,10 +1279,20 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
   // lets every row draw the connector down to the NEXT one — the last row, and
   // only the last row, ends the spine — and makes it impossible for the rendered
   // order to drift from the routing order.
+  //
+  // The list REVEALS ITSELF the way a maps app's directions box does (user,
+  // 2026-09-15: "ca si in google"): it opens as ONE field. The end field
+  // appears once there is a start to go from (or a stop with no end yet), and
+  // "Add stop" only once both ends are known — a via point between nothing and
+  // nothing is not a question anyone is asking, and three empty rows made the
+  // empty planner look like a form to fill in rather than a place to type.
   type PlannerRow =
     | { kind: 'point'; key: string; point: RoutePoint; role: RoutePointRole; index?: number }
     | { kind: 'slot'; key: string; role: 'start' | 'destination' }
     | { kind: 'add'; key: string }
+
+  const showDestinationSlot = !destination && (Boolean(start) || stops.length > 0)
+  const showAddStop = Boolean(start && destination) && stops.length < MAX_STOPS
 
   const plannerRows: PlannerRow[] = []
   plannerRows.push(
@@ -1278,12 +1303,16 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
   stops.forEach((s, i) =>
     plannerRows.push({ kind: 'point', key: s.id, point: s, role: 'stop', index: i + 1 }),
   )
-  if (stops.length < MAX_STOPS) plannerRows.push({ kind: 'add', key: 'add-stop' })
-  plannerRows.push(
-    destination
-      ? { kind: 'point', key: destination.id, point: destination, role: 'destination' }
-      : { kind: 'slot', key: 'slot-destination', role: 'destination' },
-  )
+  if (showAddStop) plannerRows.push({ kind: 'add', key: 'add-stop' })
+  if (destination)
+    plannerRows.push({ kind: 'point', key: destination.id, point: destination, role: 'destination' })
+  else if (showDestinationSlot) plannerRows.push({ kind: 'slot', key: 'slot-destination', role: 'destination' })
+
+  // An add-stop field that was open when its row went away (an end cleared
+  // mid-typing) must not come back already open the next time the row shows.
+  useEffect(() => {
+    if (!showAddStop) setAddingStop(false)
+  }, [showAddStop])
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -1466,10 +1495,19 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                       <PlaceSearchField
                         value={null}
                         view={currentView}
+                        // The end field appears the moment the start is picked
+                        // and takes the focus with it, so typing a route is one
+                        // continuous entry rather than pick, reach for the mouse,
+                        // click the next field. Only for THAT reveal: an end
+                        // slot that is there for any other reason (the end was
+                        // cleared, the panel reopened) must not grab the focus.
+                        autoFocus={row.role === 'destination' && focusDestinationRef.current}
                         onChange={(p) => {
                           if (!p) return
-                          if (row.role === 'start') setStart(fromSearch(p))
-                          else setDestinationPoint(fromSearch(p))
+                          if (row.role === 'start') {
+                            focusDestinationRef.current = !destination
+                            setStart(fromSearch(p))
+                          } else setDestinationPoint(fromSearch(p))
                         }}
                         placeholder={row.role === 'start' ? 'Start address or place…' : 'End address or place…'}
                       />
