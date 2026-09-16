@@ -113,6 +113,22 @@ function thinPath(path: LatLng[], maxPoints: number): LatLng[] {
   return out
 }
 
+// The route as the badge placer sees it: Douglas–Peucker only, with the
+// tolerance doubled until the path fits the budget. thinPath's every-Nth
+// fallback is fine for a hover readout but not for a clearance test — the
+// chords it draws between kept vertices cut a motorway's bends by several
+// pixels at mid zooms, and the placer then called a spot clean that the
+// drawn line ran through (2026-09-16). Shape-preserving at every budget.
+function simplifyToBudget(path: LatLng[], maxPoints: number): LatLng[] {
+  let tolerance = 30
+  let out = simplifyPath(path, tolerance)
+  while (out.length > maxPoints && tolerance < 5000) {
+    tolerance *= 2
+    out = simplifyPath(path, tolerance)
+  }
+  return out
+}
+
 /** A live driver: a teal dot, pointed when a heading is known, muted when stale. */
 function driverSvg(headingDeg: number | undefined, stale: boolean): string {
   const fill = stale ? '#7f8c8b' : '#00b8a9'
@@ -226,35 +242,49 @@ function makeOverlayClass(g: typeof google): OverlayCtor {
 // route: the candidates are a few anchors stepping outward from the middle
 // (BADGE_ANCHOR_FRACTIONS), each with its four sides, and the first
 // combination the route does not cross at all wins — the tail always on the
-// line, the card never over it. Only when no candidate is clean does it fall
-// back to the fewest crossings.
+// line, the card never over it. And it may STAND OFF the line: at mid zooms
+// a motorway undulates by more than the 9px gap within the card's width, so
+// every hugging candidate is crossed somewhere; the search then repeats with
+// the gap doubled and tripled (BADGE_GAP_STEPS), and a thin leader runs from
+// the tail down to the anchor to keep the badge readable as the line's
+// label. Only when no candidate at any gap is clean does it fall back to the
+// fewest crossings.
 //
 // Decided in SCREEN space, because "beside the line" is a fact about pixels:
 // a bend that clears the badge at country zoom runs straight through it two
-// zoom levels in. Re-decided when the zoom or the route changes — a pan moves
-// badge and route together, so the last choice is simply re-applied — and a
-// choice that is still clean is kept over an equally clean earlier candidate,
-// so a zoom animation does not walk the badge up and down the route.
+// zoom levels in. Decided only on SETTLED state — the map's `idle`, and a
+// route change — never inside a zoom animation: mid-animation Google's
+// projection and getZoom() disagree for a frame, and a choice made on that
+// frame (then trusted) is how a "clean" badge ended up on the line. Between
+// decisions draw() only re-applies the last choice, so a pan costs one
+// projection. A choice that is still clean is kept over an equally clean
+// earlier candidate, so a zoom does not walk the badge up and down the
+// route; and anchors on screen are tried before ones off it, because a
+// label nobody can see has cleared nothing.
 //
-// Cost per decision: one projection of the thinned hover path (≤1200 points)
-// plus a bounding-box-gated Liang–Barsky per segment per candidate rectangle.
+// Cost per decision: one projection of the badge path (≤2500 points, see
+// simplifyToBudget) plus a bounding-box-gated Liang–Barsky per segment per
+// candidate rectangle.
 type BadgePlacement = 'above' | 'below' | 'right' | 'left'
 const BADGE_PLACEMENTS: BadgePlacement[] = ['above', 'below', 'right', 'left']
 // Where along the route the badge may sit, as fractions of its length: the
 // middle first, then alternating outward. Tried in this order, so the badge
 // stays as central as a clean spot allows.
 const BADGE_ANCHOR_FRACTIONS = [0.5, 0.45, 0.55, 0.4, 0.6, 0.35, 0.65, 0.3, 0.7, 0.25, 0.75]
-// Gap between anchor and badge, and the tail's height — mirror index.css
-// `.route-distance-badge` (0.625rem gap, 6px tail).
+// Multiples of the base gap the badge may stand off the line, tried in this
+// order: hugging first (no leader), then further out with a leader.
+const BADGE_GAP_STEPS = [1, 2, 3]
+// The base gap between anchor and card — mirror index.css
+// `.route-distance-badge` (--gap defaults to 0.625rem; placeBadge overrides
+// it in px when it chooses a larger step).
 const BADGE_GAP_REM = 0.625
-const BADGE_TAIL_PX = 6
 // The route has to stay this clear of the card, in px, to count as "not over".
 const BADGE_CLEARANCE_PX = 6
 
 type Rect = { x0: number; y0: number; x1: number; y1: number }
 type Px = { x: number; y: number }
 /** The last decision, so a pan re-applies it and a zoom prefers it. */
-type BadgeChoice = { anchor: number; placement: BadgePlacement; zoom: number; sig: string }
+type BadgeChoice = { anchor: number; placement: BadgePlacement; gap: number; zoom: number; sig: string }
 
 function badgeRect(placement: BadgePlacement, ax: number, ay: number, w: number, h: number, gap: number): Rect {
   const m = BADGE_CLEARANCE_PX
@@ -317,10 +347,12 @@ function crossings(pts: Px[], r: Rect): number {
  * Place the badge: pick an anchor along the route and a side of it, then
  * put the element there. `anchors` are the candidate points in preference
  * order (`anchors[0]` is the overlay's own position, the midpoint); `path` is
- * the route (thinned); `sig` identifies the route so a new one starts the
- * search afresh. Writes `data-placement` (index.css turns it into the
- * transform and the tail) and the element's left/top, and remembers the
- * choice in `memo` for the next draw.
+ * the route (simplifyToBudget); `sig` identifies the route so a new one
+ * starts the search afresh. A full decision runs only when `decide` is set
+ * (the map went idle, or the route changed) — every other draw re-applies
+ * the last choice. Writes `data-placement` (index.css turns it into the
+ * transform and the tail), `--gap`, and the element's left/top, and
+ * remembers the choice in `memo`.
  */
 function placeBadge(
   g: typeof google,
@@ -331,34 +363,52 @@ function placeBadge(
   path: LatLng[] | null,
   sig: string,
   memo: { current: BadgeChoice | null },
+  decide: { current: boolean },
 ) {
+  // The card's own box; the tail is a pointer and is meant to touch the
+  // line, so it is not part of what must stay clear.
   const w = el.offsetWidth
-  const h = el.offsetHeight + BADGE_TAIL_PX
+  const h = el.offsetHeight
   if (!w || !h || anchors.length === 0) return
   const zoom = map.getZoom() ?? 0
   const toPx = (p: LatLng): Px | null => {
     const q = proj.fromLatLngToDivPixel(new g.maps.LatLng(p.lat, p.lng))
     return q ? { x: q.x, y: q.y } : null
   }
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+  const baseGap = BADGE_GAP_REM * rem
   const apply = (choice: BadgeChoice) => {
     const at = toPx(anchors[choice.anchor] ?? anchors[0])
     if (!at) return
     el.style.left = `${at.x}px`
     el.style.top = `${at.y}px`
+    el.style.setProperty('--gap', `${baseGap * choice.gap}px`)
     if (el.dataset.placement !== choice.placement) el.dataset.placement = choice.placement
     memo.current = choice
   }
 
-  // A pan: same zoom, same route — the geometry between badge and line has
-  // not changed, only where both are on screen. Re-apply and go.
+  // Not a decision point (a pan, a frame of a zoom animation): re-apply the
+  // last choice for this route and go.
   const last = memo.current
-  if (last && last.sig === sig && last.zoom === zoom && last.anchor < anchors.length) {
+  const mustDecide = decide.current
+  decide.current = false
+  if (!mustDecide && last && last.sig === sig && last.anchor < anchors.length) {
     apply(last)
     return
   }
 
-  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
-  const gap = BADGE_GAP_REM * rem
+  // Anchors on screen first, in their own (centre-out) order; the rest after.
+  // The card must fit too, so the visible box is inset by its size.
+  const div = map.getDiv()
+  const vis = { w: div.clientWidth, h: div.clientHeight }
+  const onScreen = (p: LatLng): boolean => {
+    const q = proj.fromLatLngToContainerPixel(new g.maps.LatLng(p.lat, p.lng))
+    return Boolean(q) && q!.x >= w / 2 && q!.x <= vis.w - w / 2 && q!.y >= h && q!.y <= vis.h - h
+  }
+  const order: number[] = []
+  for (let a = 0; a < anchors.length; a++) if (onScreen(anchors[a])) order.push(a)
+  for (let a = 0; a < anchors.length; a++) if (!onScreen(anchors[a])) order.push(a)
+
   const pts: Px[] = []
   if (path) {
     for (const p of path) {
@@ -366,28 +416,39 @@ function placeBadge(
       if (q) pts.push(q)
     }
   }
-  const hitsFor = (anchor: number, placement: BadgePlacement): number => {
+  const hitsFor = (anchor: number, placement: BadgePlacement, gap: number): number => {
     const at = toPx(anchors[anchor])
     if (!at) return Number.POSITIVE_INFINITY
-    return pts.length >= 2 ? crossings(pts, badgeRect(placement, at.x, at.y, w, h, gap)) : 0
+    return pts.length >= 2 ? crossings(pts, badgeRect(placement, at.x, at.y, w, h, baseGap * gap)) : 0
   }
 
-  // The previous choice first, if it is still clean: a zoom step must not
-  // move a badge that was fine where it was.
-  if (last && last.sig === sig && last.anchor < anchors.length && hitsFor(last.anchor, last.placement) === 0) {
+  // The previous choice first, if it is still clean and still on screen: a
+  // zoom step must not move a badge that was fine where it was.
+  if (
+    last &&
+    last.sig === sig &&
+    last.anchor < anchors.length &&
+    onScreen(anchors[last.anchor]) &&
+    hitsFor(last.anchor, last.placement, last.gap) === 0
+  ) {
     apply({ ...last, zoom })
     return
   }
 
+  // Gap-major: every anchor and side is tried hugging the line before any
+  // stands off it — a badge a little off-centre on the line beats one dead
+  // centre on a leader.
   let best: BadgeChoice | null = null
   let bestHits = Number.POSITIVE_INFINITY
-  for (let a = 0; a < anchors.length && bestHits > 0; a++) {
-    for (const placement of BADGE_PLACEMENTS) {
-      const n = hitsFor(a, placement)
-      if (n < bestHits) {
-        bestHits = n
-        best = { anchor: a, placement, zoom, sig }
-        if (n === 0) break
+  search: for (const gap of BADGE_GAP_STEPS) {
+    for (const a of order) {
+      for (const placement of BADGE_PLACEMENTS) {
+        const n = hitsFor(a, placement, gap)
+        if (n < bestHits) {
+          bestHits = n
+          best = { anchor: a, placement, gap, zoom, sig }
+          if (n === 0) break search
+        }
       }
     }
   }
@@ -542,7 +603,12 @@ export default function GoogleMap({
   // Where the badge may sit: candidate points along the route in preference
   // order (the midpoint first), and the placement last chosen — see placeBadge.
   const badgeAnchorsRef = useRef<LatLng[]>([])
+  // The route the placer tests against — shape-preserving, see simplifyToBudget.
+  const badgePathRef = useRef<LatLng[] | null>(null)
   const badgeChoiceRef = useRef<BadgeChoice | null>(null)
+  // Set when the badge must be re-decided (map idle, route change); the next
+  // draw runs the full search instead of re-applying the last choice.
+  const badgeDecideRef = useRef(true)
   const routeDragRef = useRef<{
     active: boolean
     section: number
@@ -662,6 +728,8 @@ export default function GoogleMap({
             map,
             previewCount: () => previewObjsRef.current.length,
             previewPoint: () => lastPreviewPointRef.current,
+            // The badge placer's inputs and last decision (placeBadge).
+            badge: () => ({ choice: badgeChoiceRef.current, anchors: badgeAnchorsRef.current, path: badgePathRef.current }),
             drag: () => routeDragRef.current,
             // The route's strokes, for probing hover and weights.
             route: () => routeObjsRef.current,
@@ -800,11 +868,24 @@ export default function GoogleMap({
             map,
             proj,
             badgeAnchorsRef.current,
-            hoverGeomRef.current?.path ?? null,
+            badgePathRef.current,
             drawnRouteSigRef.current ?? '',
             badgeChoiceRef,
+            badgeDecideRef,
           )
         badge.setMap(map)
+        // The badge decides where to sit only once the map has settled — see
+        // placeBadge for why not during a zoom animation. One frame after
+        // `idle`, not in it: at the instant idle fires the overlay's
+        // projection can still answer for the previous zoom, and a decision
+        // taken on that (then kept) put the card back on the line.
+        map.addListener('idle', () => {
+          requestAnimationFrame(() => {
+            if (badgeRef.current !== badge) return
+            badgeDecideRef.current = true
+            badge.draw()
+          })
+        })
         badgeRef.current = badge
 
         // ── Map-level gestures ──────────────────────────────────────────────
@@ -1399,7 +1480,9 @@ export default function GoogleMap({
         ? BADGE_ANCHOR_FRACTIONS.map((f) => pointAlong(all, f)).filter((p): p is LatLng => p !== null)
         : []
     badgeAnchorsRef.current = anchors
+    badgePathRef.current = all.length >= 2 ? simplifyToBudget(all, 2500) : null
     if (routeChanged) badgeChoiceRef.current = null
+    badgeDecideRef.current = true
     const badgeEl = badgeElRef.current
     if (badgeEl) {
       const show = anchors.length > 0 ? renderRouteBadge(badgeEl, routeDistanceLabel, routeTimeLabel) : false

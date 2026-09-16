@@ -2224,9 +2224,15 @@ button {
   position: absolute;
   left: 0;
   top: 0;
+  /* How far the card stands off its anchor. The base is the hugging
+     distance; GoogleMap placeBadge sets a larger value (in px) when the
+     route leaves no clean spot that close, and --lead is then the length of
+     the leader drawn from the tail down to the anchor. */
+  --gap: 0.625rem;
+  --lead: calc(var(--gap) - 0.625rem);
   /* above (default) */
   --bx: -50%;
-  --by: calc(-100% - 0.625rem);
+  --by: calc(-100% - var(--gap));
   /* the nudge the waiting state starts from: toward the anchor */
   --wx: 0px;
   --wy: 0.25rem;
@@ -2262,17 +2268,17 @@ button {
 }
 .route-distance-badge[data-placement='below'] {
   --bx: -50%;
-  --by: 0.625rem;
+  --by: var(--gap);
   --wy: -0.25rem;
 }
 .route-distance-badge[data-placement='right'] {
-  --bx: 0.625rem;
+  --bx: var(--gap);
   --by: -50%;
   --wx: -0.25rem;
   --wy: 0px;
 }
 .route-distance-badge[data-placement='left'] {
-  --bx: calc(-100% - 0.625rem);
+  --bx: calc(-100% - var(--gap));
   --by: -50%;
   --wx: 0.25rem;
   --wy: 0px;
@@ -2317,6 +2323,42 @@ button {
   border-left: 6px solid #ffffff;
   border-top: 5px solid transparent;
   border-bottom: 5px solid transparent;
+}
+/* Leader: a hairline from the tail's tip to the anchor, drawn only when the
+   card stands further off than the base gap (--lead is 0 otherwise). White
+   with a faint dark edge so it reads on the day map without competing with
+   the route. Runs from the tail edge, on the same axis as the tail. */
+.route-distance-badge::before {
+  content: '';
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  width: 2px;
+  height: var(--lead);
+  margin-left: -1px;
+  background: #ffffff;
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.18);
+}
+.route-distance-badge[data-placement='below']::before {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+.route-distance-badge[data-placement='right']::before {
+  top: 50%;
+  left: auto;
+  right: calc(100% + 6px);
+  width: var(--lead);
+  height: 2px;
+  margin-left: 0;
+  margin-top: -1px;
+}
+.route-distance-badge[data-placement='left']::before {
+  top: 50%;
+  left: calc(100% + 6px);
+  width: var(--lead);
+  height: 2px;
+  margin-left: 0;
+  margin-top: -1px;
 }
 /* While the route is still drawing itself on, the badge — anchored at the
    midpoint the line has not reached yet — waits, then rises in with the line's
