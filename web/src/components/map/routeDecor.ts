@@ -3,15 +3,28 @@
 // before it moves.
 
 /**
- * Fill `el` with the route badge — the distance, nothing else: the driving
- * time is on the panel's cards already — and say whether there was anything
- * to show. The element is the engine's (a HERE DomIcon's child or a Google
- * OverlayView's), positioned by the engine; only its contents are built here
- * so the two badges cannot drift. Styles: index.css `.route-distance-badge`.
+ * Fill `el` with the route badge — the distance, and the time after it when
+ * the caller has one ("1164 km · 27 h 33 min") — and say whether there was
+ * anything to show. The element is the engine's (a HERE DomIcon's child or a
+ * Google OverlayView's), positioned by the engine; only its contents are
+ * built here so the two badges cannot drift. Styles: index.css
+ * `.route-distance-badge` (the time half is `.route-distance-badge-time`).
  */
-export function renderRouteBadge(el: HTMLElement, distance: string | null | undefined): boolean {
-  el.textContent = distance ?? ''
-  return Boolean(distance)
+export function renderRouteBadge(
+  el: HTMLElement,
+  distance: string | null | undefined,
+  time?: string | null,
+): boolean {
+  el.textContent = ''
+  if (!distance) return false
+  el.append(distance)
+  if (time) {
+    const t = document.createElement('span')
+    t.className = 'route-distance-badge-time'
+    t.textContent = time
+    el.append(t)
+  }
+  return true
 }
 
 /**

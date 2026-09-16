@@ -36,10 +36,14 @@ export type MapSurfaceProps = {
   routePolylines: string[]
   /** Scale the route stroke down at overview zooms. */
   scaleRouteWidthWithZoom?: boolean
-  /** Pre-formatted total distance for the mid-route badge. Distance only —
-   *  the time is on the panel's cards (user, 2026-09-11), and a badge that
-   *  repeated it made the map say the same thing twice. */
+  /** Pre-formatted total distance for the mid-route badge. */
   routeDistanceLabel?: string | null
+  /** Pre-formatted time for the badge's second half ("1164 km · 27 h 33 min").
+   *  The planner passes the legal TRANSIT time (driving + rests), the number a
+   *  dispatcher quotes; omitted, the badge is distance only. Was deliberately
+   *  distance-only from 2026-09-11 until the user asked for the time back on
+   *  the map (2026-09-16), once the card's own stats went into a collapse. */
+  routeTimeLabel?: string | null
   /** Whether the HGV truck-restriction overlay is on. */
   truckOverlay: boolean
   onTruckOverlayAvailabilityChange?: (available: boolean) => void

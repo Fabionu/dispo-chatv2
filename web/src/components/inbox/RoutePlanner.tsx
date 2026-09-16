@@ -15,7 +15,6 @@ import {
   Navigation,
   Pencil,
   Plus,
-  Route as RouteIcon,
   Trash2,
   Truck,
   TriangleAlert,
@@ -26,6 +25,7 @@ import { api, ApiError } from '../../lib/api'
 import { useFlipReorder } from '../../hooks/useFlipReorder'
 import { useWorkspacePlaces } from '../../hooks/useWorkspacePlaces'
 import { snapRadiusForZoom, useRouteDragPreview, type DragRequest } from '../../hooks/useRouteDragPreview'
+import { hasRetained, useRetainedState } from '../../hooks/useRetainedState'
 import { bestInsertionIndex, haversineMeters, nearestRouteSection, routeCourseNear } from '../../lib/here/geo'
 import {
   builtInPresets,
@@ -40,6 +40,7 @@ import MapView from '../map/MapView'
 import type { MapViewport } from '../map/mapProps'
 import PlaceSearchField from '../here/PlaceSearchField'
 import Spinner from '../Spinner'
+import { ICON_ACTION_SMALL } from '../HeaderIconButton'
 import ToolHeader from './ToolHeader'
 import type {
   HerePlace,
@@ -160,6 +161,19 @@ function readablePaymentMethod(value: string): string {
 // it, no direction is honestly better than a made-up one.
 const DRAG_COURSE_WINDOW_M = 2000
 
+// How long the auto-route waits after the last input change before asking
+// the router, and how long after a toll-free route lands before it asks for
+// the tolls (see the auto-route effect).
+const AUTO_ROUTE_DEBOUNCE_MS = 350
+const AUTO_TOLLS_DEBOUNCE_MS = 900
+
+// The planner's inputs and its route outlive the component (see
+// hooks/useRetainedState): leaving for the Restriction calculator and coming
+// back — the normal way that pair is used — lands on the route that was
+// planned, not on an empty card. Transient state (menus, drags, the request
+// in flight, errors) is plain useState and starts over on every mount.
+const RETAIN = 'route-planner'
+
 // What a drawn route was calculated FROM: the ordered coordinates plus the
 // truck profile. Compared against the current inputs to decide "outdated".
 function routeSigOf(coords: LatLng[], truck: TruckProfileForm): string {
@@ -197,18 +211,21 @@ function nowHm(): string {
 }
 
 export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props) {
-  const [points, setPoints] = useState<RoutePoint[]>([])
-  const [truck, setTruck] = useState<TruckProfileForm>(EMPTY_TRUCK)
-  const [route, setRoute] = useState<TruckRoute | null>(null)
+  const [points, setPoints] = useRetainedState<RoutePoint[]>(RETAIN, 'points', [])
+  const [truck, setTruck] = useRetainedState<TruckProfileForm>(RETAIN, 'truck', EMPTY_TRUCK)
+  const [route, setRoute] = useRetainedState<TruckRoute | null>(RETAIN, 'route', null)
   // The routeSig the drawn route was calculated from — lets us tell when the
   // route is "outdated" relative to the current inputs.
-  const [calculatedSig, setCalculatedSig] = useState('')
+  const [calculatedSig, setCalculatedSig] = useRetainedState(RETAIN, 'calculatedSig', '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [snapNote, setSnapNote] = useState<string | null>(null)
 
-  const [panelCollapsed, setPanelCollapsed] = useState(false)
-  const [truckOpen, setTruckOpen] = useState(false)
+  const [panelCollapsed, setPanelCollapsed] = useRetainedState(RETAIN, 'panelCollapsed', false)
+  const [truckOpen, setTruckOpen] = useRetainedState(RETAIN, 'truckOpen', false)
+  // The route card's Details row (driving time, arrival, tolls) — closed by
+  // default; the two headline numbers are what the card is for.
+  const [detailsOpen, setDetailsOpen] = useRetainedState(RETAIN, 'detailsOpen', false)
   const [addingStop, setAddingStop] = useState(false)
   // Set by the start slot's pick, read by the end slot's `autoFocus` on the
   // render that reveals it, and cleared right after (the effect below) so no
@@ -250,7 +267,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
   const [placeSaving, setPlaceSaving] = useState(false)
   const [placeError, setPlaceError] = useState<string | null>(null)
   const [placeToDelete, setPlaceToDelete] = useState<WorkspacePlace | null>(null)
-  const [truckOverlay, setTruckOverlay] = useState(false)
+  const [truckOverlay, setTruckOverlay] = useRetainedState(RETAIN, 'truckOverlay', false)
   const [overlayAvailable, setOverlayAvailable] = useState(false)
 
   // Presets (built-in + user/localStorage). `activePresetId` is cleared on any
@@ -261,22 +278,22 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
   // ── Crew & hours ──────────────────────────────────────────────────────────
   // The inputs 561/2006 needs that a route cannot supply: who is in the cab and
   // what is left of their hours.
-  const [crewOpen, setCrewOpen] = useState(false)
-  const [crew, setCrew] = useState<1 | 2>(1)
+  const [crewOpen, setCrewOpen] = useRetainedState(RETAIN, 'crewOpen', false)
+  const [crew, setCrew] = useRetainedState<1 | 2>(RETAIN, 'crew', 1)
   // Seeded with now, then left alone. A departure that silently tracked the
   // clock would quietly change every number on the card while the dispatcher
   // was reading them, and a plan made for Friday 06:00 must stay made for it.
-  const [departDate, setDepartDate] = useState(todayDmy)
-  const [departTime, setDepartTime] = useState(nowHm)
-  const [fullProgram, setFullProgram] = useState(true)
-  const [programDate, setProgramDate] = useState(todayDmy)
-  const [programTime, setProgramTime] = useState('20:00')
-  const [dailyRestHours, setDailyRestHours] = useState('11')
-  const [weekEnds, setWeekEnds] = useState(false)
-  const [weekDate, setWeekDate] = useState(todayDmy)
-  const [weekTime, setWeekTime] = useState('20:00')
-  const [weeklyRestHours, setWeeklyRestHours] = useState('45')
-  const [activePresetId, setActivePresetId] = useState<string | null>(null)
+  const [departDate, setDepartDate] = useRetainedState(RETAIN, 'departDate', todayDmy)
+  const [departTime, setDepartTime] = useRetainedState(RETAIN, 'departTime', nowHm)
+  const [fullProgram, setFullProgram] = useRetainedState(RETAIN, 'fullProgram', true)
+  const [programDate, setProgramDate] = useRetainedState(RETAIN, 'programDate', todayDmy)
+  const [programTime, setProgramTime] = useRetainedState(RETAIN, 'programTime', '20:00')
+  const [dailyRestHours, setDailyRestHours] = useRetainedState(RETAIN, 'dailyRestHours', '11')
+  const [weekEnds, setWeekEnds] = useRetainedState(RETAIN, 'weekEnds', false)
+  const [weekDate, setWeekDate] = useRetainedState(RETAIN, 'weekDate', todayDmy)
+  const [weekTime, setWeekTime] = useRetainedState(RETAIN, 'weekTime', '20:00')
+  const [weeklyRestHours, setWeeklyRestHours] = useRetainedState(RETAIN, 'weeklyRestHours', '45')
+  const [activePresetId, setActivePresetId] = useRetainedState<string | null>(RETAIN, 'activePresetId', null)
   const [savingPreset, setSavingPreset] = useState(false)
   const [presetName, setPresetName] = useState('')
 
@@ -297,21 +314,30 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
     deletePlace,
   } = useWorkspacePlaces()
 
+  // Whether this mount picked up a retained profile from an earlier one.
+  // Decided at render time, before the retention effects have written this
+  // mount's own values back — after that, `hasRetained` is always true.
+  const [resumed] = useState(() => hasRetained(RETAIN, 'truck'))
+
   // Load the saved presets and, if one is marked default, open with it applied.
   // One effect rather than two because the default is an ID that has to be
   // resolved against the list — splitting them would apply the default on a
   // second pass, after the user could already have started typing a profile.
+  // A RESUMED planner keeps the profile it had: the default is what a fresh
+  // planner starts from, not something to reapply over the truck the user
+  // already chose on the way to the calculator.
   useEffect(() => {
     const saved = loadUserPresets()
     setUserPresets(saved)
     const id = loadDefaultPresetId()
     setDefaultPresetIdState(id)
-    if (!id) return
+    if (!id || resumed) return
     const preset = [...builtInPresets(), ...saved].find((p) => p.id === id)
     if (preset) {
       setTruck(preset.values)
       setActivePresetId(preset.id)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const presets = useMemo(() => [...builtInPresets(), ...userPresets], [userPresets])
@@ -336,7 +362,8 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
   }, [start, destination, stops, truck])
 
   // A drawn route is only meaningful with both endpoints — drop it if one goes
-  // away. Otherwise the route persists until the user presses Create/Update.
+  // away. Otherwise the route persists until the inputs change and the
+  // recompute below replaces it.
   useEffect(() => {
     if (!start || !destination) {
       setRoute(null)
@@ -345,8 +372,10 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
     }
   }, [start, destination])
 
-  // Explicit route creation/update. No auto-recalc: the user drives it via the
-  // Create/Update route button, so the drawn route never vanishes on an edit.
+  // Compute (or recompute) the route for the current inputs. Called by the
+  // auto-route effect below and by the drag paths; the drawn route is never
+  // cleared on failure, so a recompute that fails leaves the last good line on
+  // the map with an error beside it.
   async function calculate(includeTolls = true) {
     if (!start || !destination || loading) return
     const id = ++reqIdRef.current
@@ -387,11 +416,39 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
         // recalc never silently wipes the map — just surface the error. The
         // route stays "outdated" until a successful calculation.
         setError(err instanceof ApiError ? errorMessage(err.code) : errorMessage('unknown'))
+        // Remember WHICH inputs failed, so the auto-route effect does not ask
+        // again for the same ones the moment loading clears — that would be
+        // a retry loop against a router that has already said no. The next
+        // edit changes the signature and lifts the latch.
+        setFailedSig(sig)
       }
     } finally {
       if (id === reqIdRef.current) setLoading(false)
     }
   }
+
+  // ── Auto-route ─────────────────────────────────────────────────────────────
+  // The route follows the inputs (user, 2026-09-16: "remove the Create route
+  // button, make the route automatically"): once both ends are set, any change
+  // to the points or the truck recomputes it, and a route that arrived without
+  // tolls (a drag adopts its preview, which is the light, toll-free request)
+  // gets its tolls fetched after. Debounced, because the truck fields are
+  // typed a digit at a time; the toll follow-up waits longer, so a run of
+  // drags computes tolls once at the end rather than once per drag. Nothing is
+  // scheduled while a request is in flight — `loading` is a dependency, so
+  // the effect looks again the moment it clears and catches any edit made in
+  // the meantime.
+  const [failedSig, setFailedSig] = useState('')
+  const tollsPending = Boolean(route) && routeSig === calculatedSig && route?.tolls === undefined
+  useEffect(() => {
+    if (!routeSig || loading) return
+    const stale = routeSig !== calculatedSig
+    if (!stale && !tollsPending) return
+    if (stale && routeSig === failedSig) return
+    const timer = window.setTimeout(() => void calculate(true), stale ? AUTO_ROUTE_DEBOUNCE_MS : AUTO_TOLLS_DEBOUNCE_MS)
+    return () => window.clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeSig, calculatedSig, tollsPending, failedSig, loading])
 
   // When a route-line drag adds a stop we recalc immediately (drag-route feel),
   // unlike normal edits which wait for the button. This ref flags that intent so
@@ -1224,21 +1281,6 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
 
   const collapsedTruckLabel = activePreset ? `${activePreset.name} · ${truckSummary(truck)}` : truckSummary(truck)
 
-  // Create/Update route button state.
-  const hasEndpoints = Boolean(start && destination)
-  const tollsPending = Boolean(route) && !dirty && route?.tolls === undefined
-  const routeUpToDate = Boolean(route) && !dirty && !tollsPending
-  const routeButtonLabel = loading
-    ? 'Calculating…'
-    : !route
-      ? 'Create route'
-      : dirty
-        ? 'Update route'
-        : tollsPending
-          ? 'Calculate tolls'
-          : 'Route up to date'
-  const routeButtonDisabled = !hasEndpoints || loading || routeUpToDate
-
   // Inline address editor shown in place of a committed card while editing. Seeds
   // the search box with the current address; picking a result replaces the point
   // (keeping its role/order), cancelling leaves the old address untouched. The
@@ -1327,6 +1369,9 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
           scaleRouteWidthWithZoom
           // Total route distance, mid-line badge — same value as the panel stat.
           routeDistanceLabel={route ? formatDistance(route.summary.length) : null}
+          // The legal transit time beside it (user, 2026-09-16) — the same
+          // number as the card's Transit stat, never the bare driving time.
+          routeTimeLabel={route && transit ? formatDuration(transit.totalMs / 1000) : null}
           onViewportChange={(view) => {
             viewRef.current = view
           }}
@@ -1441,28 +1486,35 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
           aria-hidden={panelCollapsed || streetView}
         >
         <div className="flex min-h-0 flex-col rounded-soft border border-line bg-surface shadow-overlay">
-          <div className="flex h-10 shrink-0 items-center justify-between gap-2 pl-3 pr-1.5">
-            <div className="min-w-0">
+          {/* One 32px line: the title, a spinner while the route is being
+              recomputed (the route follows the inputs — there is no button to
+              press, so this is where "working" shows), and two 24px glyph
+              actions. The tagline and the labelled Clear went on 2026-09-16:
+              in a 300px card every row of chrome is a row the itinerary does
+              not get. */}
+          <div className="flex h-8 shrink-0 items-center justify-between gap-2 pl-3 pr-1">
+            <div className="flex min-w-0 items-center gap-2">
               <div className="text-base font-semibold leading-tight tracking-[-0.1px]">Route</div>
-              <div className="text-2xs text-faint leading-tight">Plan your delivery path</div>
+              {loading && <Spinner size={12} className="shrink-0 text-muted" />}
             </div>
             <div className="flex items-center gap-0.5">
               {points.length > 0 && (
                 <button
                   onClick={clearRoute}
                   title="Clear route"
-                  className="h-7 px-2 flex items-center gap-1 rounded-btn text-xs text-muted hover:text-text hover:bg-white/6 transition-colors"
+                  aria-label="Clear route"
+                  className={ICON_ACTION_SMALL}
                 >
-                  <Trash2 size="0.8125rem" strokeWidth={1.8} /> Clear
+                  <Trash2 size="0.8125rem" strokeWidth={1.8} />
                 </button>
               )}
               <button
                 onClick={() => setPanelCollapsed(true)}
                 title="Collapse panel"
                 aria-label="Collapse panel"
-                className="rounded-btn h-7 w-7 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 transition-colors"
+                className={ICON_ACTION_SMALL}
               >
-                <ChevronLeft size="1rem" strokeWidth={2} />
+                <ChevronLeft size="0.875rem" strokeWidth={2} />
               </button>
             </div>
           </div>
@@ -1605,40 +1657,120 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
               })}
             </section>
 
-            {/* Summary + notices — the result, sitting directly above the control
-                that produced it. */}
-            {route && !loading && (
-              <section className="flex flex-col gap-1.5 p-2 pt-1">
-                {/* The distance on a row of its own, at the card's largest
-                    type — it is THE number of the route — and the rest two to
-                    a row, NOT four. At 270px wide, four columns left each value
-                    ~47px of usable width, which truncated every duration
-                    ("4 h 40 min") and every toll status ("Not calculated");
-                    two columns give ~110px — more than the longest string any
-                    of these can produce. Rests (nights / weekly) came off the
-                    card on 2026-09-15 (user: "nu prea ma intereseaza") — the
-                    arrival already has them priced in. */}
+            {/* Summary + notices — the result. Stays up while a recompute is
+                in flight (dimmed, `aria-busy`): with the route following every
+                edit, hiding it for the round trip would blank the card on each
+                keystroke in the truck fields. */}
+            {route && (
+              <section
+                aria-busy={loading || undefined}
+                className={`flex flex-col gap-1.5 p-2 pt-1 transition-opacity motion-reduce:transition-none ${
+                  loading ? 'opacity-50' : ''
+                }`}
+              >
+                {/* Two headline readouts — the distance and the legal transit
+                    time, the two numbers a dispatcher quotes — at the card's
+                    largest type, and everything else (driving time, arrival,
+                    tolls and their charges) behind ONE Details row (user,
+                    2026-09-16: the six-cell grid "doesn't look that good").
+                    The toll total rides on the Details row while it is
+                    closed, because money is the one detail worth a glance
+                    without opening anything. Rests (nights / weekly) came off
+                    the card on 2026-09-15 — the arrival has them priced in. */}
                 <div className="divide-y divide-line">
-                  <Stat label="Distance" value={formatDistance(route.summary.length)} size="lg" />
                   <div className="grid grid-cols-2 divide-x divide-line">
-                    <Stat label="Duration" value={formatDuration(drivingSeconds)} />
-                    {/* ETA now answers with the LEGAL arrival, not the moment
-                        the wheels would stop if nobody slept. A driving-only ETA
-                        beside a transit time that includes two nights would have
-                        been two numbers contradicting each other on one card. */}
-                    <Stat
-                      label="Arrival"
-                      value={
-                        transit
-                          ? formatArrival(transit.arrival, departAt)
-                          : formatArrival(departAt + drivingSeconds * 1000, departAt)
-                      }
+                    <Stat label="Distance" value={formatDistance(route.summary.length)} size="lg" />
+                    {transit && (
+                      <Stat label="Transit" value={formatDuration(transit.totalMs / 1000)} size="lg" />
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDetailsOpen((o) => !o)}
+                    aria-expanded={detailsOpen}
+                    className="flex h-7 w-full items-center gap-2 px-2.5 text-left text-sm text-muted transition-colors hover:bg-white/4 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20"
+                  >
+                    <span>Details</span>
+                    {!detailsOpen && (
+                      <span className="min-w-0 flex-1 truncate text-xs text-faint">
+                        {formatDuration(drivingSeconds)} driving · {tollSummaryValue(route.tolls, dirty)}
+                      </span>
+                    )}
+                    <ChevronDown
+                      size="0.8125rem"
+                      strokeWidth={1.8}
+                      className={`ml-auto shrink-0 transition-transform motion-reduce:transition-none ${
+                        detailsOpen ? 'rotate-180' : ''
+                      }`}
                     />
-                  </div>
-                  <div className="grid grid-cols-2 divide-x divide-line">
-                    <Stat label="Tolls" value={tollSummaryValue(route.tolls, dirty)} />
-                    {transit && <Stat label="Transit" value={formatDuration(transit.totalMs / 1000)} />}
-                  </div>
+                  </button>
+                  {detailsOpen && (
+                    <div className="divide-y divide-line">
+                      <div className="grid grid-cols-2 divide-x divide-line">
+                        <Stat label="Driving" value={formatDuration(drivingSeconds)} />
+                        {/* ETA answers with the LEGAL arrival, not the moment
+                            the wheels would stop if nobody slept. A driving-only
+                            ETA beside a transit time that includes two nights
+                            would be two numbers contradicting each other. */}
+                        <Stat
+                          label="Arrival"
+                          value={
+                            transit
+                              ? formatArrival(transit.arrival, departAt)
+                              : formatArrival(departAt + drivingSeconds * 1000, departAt)
+                          }
+                        />
+                      </div>
+                      <Stat label="Tolls" value={tollSummaryValue(route.tolls, dirty)} />
+                      {!dirty && route.tolls && (
+                        <div className="py-1">
+                          {route.tolls.details.length > 0 ? (
+                            <div className="flex max-h-40 flex-col gap-0.5 overflow-y-auto px-2.5">
+                              {route.tolls.details.flatMap((detail, detailIndex) =>
+                                detail.fares.map((fare, fareIndex) => {
+                                  const amount = fare.convertedPrice ?? fare.price
+                                  const context = [
+                                    detail.countryCode,
+                                    detail.tollSystem,
+                                    fare.paymentMethods.length > 0
+                                      ? fare.paymentMethods.map(readablePaymentMethod).join(', ')
+                                      : null,
+                                  ].filter(Boolean).join(' · ')
+                                  return (
+                                    <div
+                                      key={fare.id ?? `${detailIndex}-${fareIndex}`}
+                                      className="flex min-w-0 items-start justify-between gap-3 py-0.5"
+                                    >
+                                      <span className="min-w-0">
+                                        <span className="block truncate text-sm text-text">
+                                          {fare.name || detail.tollSystem || 'Road toll'}
+                                        </span>
+                                        {context && (
+                                          <span className="block truncate text-2xs text-faint">{context}</span>
+                                        )}
+                                      </span>
+                                      <span className="shrink-0 text-sm tabular-nums text-muted">
+                                        {amount ? formatMoney(amount) : 'Included'}
+                                      </span>
+                                    </div>
+                                  )
+                                }),
+                              )}
+                            </div>
+                          ) : (
+                            <div className="px-2.5 text-xs text-muted">
+                              {route.tolls.status === 'unavailable'
+                                ? 'Toll data is unavailable for part of this route.'
+                                : 'No toll charges were found for this route.'}
+                            </div>
+                          )}
+                          <div className="px-2.5 pt-1 text-2xs leading-snug text-faint">
+                            Estimated by HERE · final operator charges may differ.
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {/* The handoff to the restriction calculator. Gated on `dirty`
                     for the same reason the toll details are: the country legs
@@ -1656,59 +1788,6 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                     <span className="text-faint">· {route.countries.length} countries</span>
                   </button>
                 )}
-                {!dirty && route.tolls && (
-                  <div className="border-t border-line pt-1">
-                    {route.tolls.details.length > 0 ? (
-                      <details className="group">
-                        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-btn px-2 py-1 text-sm leading-tight text-muted transition-colors hover:bg-white/4 hover:text-text">
-                          <span>Toll details · {route.tolls.details.reduce((count, detail) => count + detail.fares.length, 0)} charges</span>
-                          <ChevronDown size="0.8125rem" className="transition-transform group-open:rotate-180" />
-                        </summary>
-                        <div className="mt-1 flex max-h-40 flex-col gap-0.5 overflow-y-auto px-2">
-                          {route.tolls.details.flatMap((detail, detailIndex) =>
-                            detail.fares.map((fare, fareIndex) => {
-                              const amount = fare.convertedPrice ?? fare.price
-                              const context = [
-                                detail.countryCode,
-                                detail.tollSystem,
-                                fare.paymentMethods.length > 0
-                                  ? fare.paymentMethods.map(readablePaymentMethod).join(', ')
-                                  : null,
-                              ].filter(Boolean).join(' · ')
-                              return (
-                                <div
-                                  key={fare.id ?? `${detailIndex}-${fareIndex}`}
-                                  className="flex min-w-0 items-start justify-between gap-3 py-0.5"
-                                >
-                                  <span className="min-w-0">
-                                    <span className="block truncate text-sm text-text">
-                                      {fare.name || detail.tollSystem || 'Road toll'}
-                                    </span>
-                                    {context && (
-                                      <span className="block truncate text-2xs text-faint">{context}</span>
-                                    )}
-                                  </span>
-                                  <span className="shrink-0 text-sm tabular-nums text-muted">
-                                    {amount ? formatMoney(amount) : 'Included'}
-                                  </span>
-                                </div>
-                              )
-                            }),
-                          )}
-                        </div>
-                      </details>
-                    ) : (
-                      <div className="px-2 text-xs text-muted">
-                        {route.tolls.status === 'unavailable'
-                          ? 'Toll data is unavailable for part of this route.'
-                          : 'No toll charges were found for this route.'}
-                      </div>
-                    )}
-                    <div className="px-2 pt-1 text-2xs leading-snug text-faint">
-                      Estimated by HERE · final operator charges may differ.
-                    </div>
-                  </div>
-                )}
                 {notices.length > 0 && (
                   <div className="flex flex-col gap-1 px-0.5">
                     <div className="eyebrow">Notices</div>
@@ -1724,42 +1803,20 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
             )}
           </div>
 
-          {/* Footer — everything the user needs to act on, pinned below the
-              scroll region: what went wrong, what is stale, and the one button
-              that draws the route. `bg-white/6` (not `bg-rail`) for the inert
-              states, because a rail-on-rail button would vanish into the card. */}
-          <div className="flex shrink-0 flex-col gap-1 border-t border-line p-2">
-            {error && (
-              <div className="rounded-card border border-alert/20 bg-alert/10 px-2.5 py-1.5 text-sm leading-snug text-alert">
-                {error}
-              </div>
-            )}
-            {snapNote && <div className="px-1 text-xs leading-snug text-amber-200/80">{snapNote}</div>}
-            {route && dirty && !loading && (
-              <div className="px-1 text-xs leading-snug text-amber-200/80">
-                Route is outdated — press “Update route”.
-              </div>
-            )}
-            <button
-              onClick={() => void calculate(true)}
-              disabled={routeButtonDisabled}
-              title={!hasEndpoints ? 'Set a start and destination first' : undefined}
-              className={`flex h-8 w-full items-center justify-center gap-1.5 rounded-btn text-sm font-semibold transition-colors ${
-                routeButtonDisabled
-                  ? 'bg-white/6 text-muted cursor-default'
-                  : 'bg-text text-bg hover:bg-text/90'
-              }`}
-            >
-              {loading ? (
-                <Spinner size={13} />
-              ) : routeUpToDate ? (
-                <Check size="0.875rem" strokeWidth={2.4} className="text-done" />
-              ) : (
-                <RouteIcon size="0.875rem" strokeWidth={2} />
+          {/* Footer — only what went wrong, pinned below the scroll region.
+              The button that used to draw the route is gone (the route follows
+              the inputs; the header spinner says when it is working), so the
+              footer exists only while there is a message to show. */}
+          {(error || snapNote) && (
+            <div className="flex shrink-0 flex-col gap-1 border-t border-line p-2">
+              {error && (
+                <div className="rounded-card border border-alert/20 bg-alert/10 px-2.5 py-1.5 text-sm leading-snug text-alert">
+                  {error}
+                </div>
               )}
-              {routeButtonLabel}
-            </button>
-          </div>
+              {snapNote && <div className="px-1 text-xs leading-snug text-amber-200/80">{snapNote}</div>}
+            </div>
+          )}
         </div>
 
         {/* Truck profile — its own card (FoldCard: a glyph square at rest, the

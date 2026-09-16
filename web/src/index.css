@@ -2249,6 +2249,17 @@ button {
     opacity 260ms ease-out,
     transform 260ms ease-out;
 }
+/* The time half: a middle dot, then the transit time in the secondary ink,
+   regular weight — the distance stays the headline of the badge. */
+.route-distance-badge-time {
+  color: #5f6368;
+  font-weight: 500;
+}
+.route-distance-badge-time::before {
+  content: '·';
+  margin: 0 0.3em;
+  color: #9aa0a6;
+}
 .route-distance-badge[data-placement='below'] {
   --bx: -50%;
   --by: 0.625rem;

@@ -216,30 +216,45 @@ function makeOverlayClass(g: typeof google): OverlayCtor {
 }
 
 // ── Badge placement ─────────────────────────────────────────────────────────
-// The distance badge hangs off the route's midpoint, and it used to hang ABOVE
-// it, always — which put it squarely over the line wherever the route ran
-// north–south or curved back under it (user, 2026-09-15: "sa nu se afiseze
-// peste ruta"). Now each draw tries the four sides of the anchor and keeps
-// the one the route crosses least. It is decided in SCREEN space, on every
-// draw, because "beside the line" is a fact about pixels: a bend that clears
-// the badge at country zoom runs straight through it two zoom levels in.
+// The distance badge hangs off the route, and it used to hang ABOVE the
+// midpoint, always — which put it squarely over the line wherever the route
+// ran north–south or curved back under it (user, 2026-09-15: "sa nu se
+// afiseze peste ruta"). Trying the four sides of the midpoint was not enough
+// either: a midpoint in a bend has the route on every side of it, and the
+// "least bad" side still covered the line (user, 2026-09-16: "I don't want
+// the banner to block the route view"). So the badge may also SLIDE along the
+// route: the candidates are a few anchors stepping outward from the middle
+// (BADGE_ANCHOR_FRACTIONS), each with its four sides, and the first
+// combination the route does not cross at all wins — the tail always on the
+// line, the card never over it. Only when no candidate is clean does it fall
+// back to the fewest crossings.
 //
-// Cost: only route segments within a window round the anchor are projected —
-// the window is sized in pixels and turned into degrees through the
-// projection — and the path is the already-thinned hover path, so a draw is
-// a few hundred projections at most.
+// Decided in SCREEN space, because "beside the line" is a fact about pixels:
+// a bend that clears the badge at country zoom runs straight through it two
+// zoom levels in. Re-decided when the zoom or the route changes — a pan moves
+// badge and route together, so the last choice is simply re-applied — and a
+// choice that is still clean is kept over an equally clean earlier candidate,
+// so a zoom animation does not walk the badge up and down the route.
+//
+// Cost per decision: one projection of the thinned hover path (≤1200 points)
+// plus a bounding-box-gated Liang–Barsky per segment per candidate rectangle.
 type BadgePlacement = 'above' | 'below' | 'right' | 'left'
 const BADGE_PLACEMENTS: BadgePlacement[] = ['above', 'below', 'right', 'left']
+// Where along the route the badge may sit, as fractions of its length: the
+// middle first, then alternating outward. Tried in this order, so the badge
+// stays as central as a clean spot allows.
+const BADGE_ANCHOR_FRACTIONS = [0.5, 0.45, 0.55, 0.4, 0.6, 0.35, 0.65, 0.3, 0.7, 0.25, 0.75]
 // Gap between anchor and badge, and the tail's height — mirror index.css
 // `.route-distance-badge` (0.625rem gap, 6px tail).
 const BADGE_GAP_REM = 0.625
 const BADGE_TAIL_PX = 6
 // The route has to stay this clear of the card, in px, to count as "not over".
-const BADGE_CLEARANCE_PX = 4
-// How far round the anchor route segments are considered, in px.
-const BADGE_WINDOW_PX = 200
+const BADGE_CLEARANCE_PX = 6
 
 type Rect = { x0: number; y0: number; x1: number; y1: number }
+type Px = { x: number; y: number }
+/** The last decision, so a pan re-applies it and a zoom prefers it. */
+type BadgeChoice = { anchor: number; placement: BadgePlacement; zoom: number; sig: string }
 
 function badgeRect(placement: BadgePlacement, ax: number, ay: number, w: number, h: number, gap: number): Rect {
   const m = BADGE_CLEARANCE_PX
@@ -258,6 +273,11 @@ function badgeRect(placement: BadgePlacement, ax: number, ay: number, w: number,
 // Liang–Barsky: does the segment a→b cross the rectangle at all (a segment
 // with no vertex inside still counts — the thinned path has long straights).
 function segmentHitsRect(ax: number, ay: number, bx: number, by: number, r: Rect): boolean {
+  // Cheap reject first: a segment whose bounding box misses the rectangle
+  // cannot cross it, and nearly every segment of a long route misses.
+  if (Math.max(ax, bx) < r.x0 || Math.min(ax, bx) > r.x1 || Math.max(ay, by) < r.y0 || Math.min(ay, by) > r.y1) {
+    return false
+  }
   const dx = bx - ax
   const dy = by - ay
   let t0 = 0
@@ -285,64 +305,93 @@ function segmentHitsRect(ax: number, ay: number, bx: number, by: number, r: Rect
   return true
 }
 
+function crossings(pts: Px[], r: Rect): number {
+  let n = 0
+  for (let i = 1; i < pts.length; i++) {
+    if (segmentHitsRect(pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y, r)) n++
+  }
+  return n
+}
+
 /**
- * Choose the badge's side. `path` is the route (thinned); `anchor` is the
- * badge's coordinate; `px` its div-pixel. Writes `data-placement` on the
- * element, which index.css turns into the transform and the tail. A side the
- * badge already hangs on is kept while it is as good as any other, so a zoom
- * animation does not flip it back and forth across the line.
+ * Place the badge: pick an anchor along the route and a side of it, then
+ * put the element there. `anchors` are the candidate points in preference
+ * order (`anchors[0]` is the overlay's own position, the midpoint); `path` is
+ * the route (thinned); `sig` identifies the route so a new one starts the
+ * search afresh. Writes `data-placement` (index.css turns it into the
+ * transform and the tail) and the element's left/top, and remembers the
+ * choice in `memo` for the next draw.
  */
 function placeBadge(
   g: typeof google,
   el: HTMLElement,
-  anchor: LatLng,
-  px: { x: number; y: number },
+  map: google.maps.Map,
   proj: google.maps.MapCanvasProjection,
+  anchors: LatLng[],
   path: LatLng[] | null,
+  sig: string,
+  memo: { current: BadgeChoice | null },
 ) {
   const w = el.offsetWidth
   const h = el.offsetHeight + BADGE_TAIL_PX
-  if (!w || !h) return
-  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
-  const gap = BADGE_GAP_REM * rem
-  const rects = BADGE_PLACEMENTS.map((p) => badgeRect(p, px.x, px.y, w, h, gap))
-  const hits = [0, 0, 0, 0]
-
-  if (path && path.length >= 2) {
-    // Pixels per degree at the anchor, to keep the projection work to the
-    // segments that can reach the candidate rectangles.
-    const probe = proj.fromLatLngToDivPixel(new g.maps.LatLng(anchor.lat + 0.01, anchor.lng + 0.01))
-    const pxPerDegLat = probe ? Math.abs(probe.y - px.y) / 0.01 : 0
-    const pxPerDegLng = probe ? Math.abs(probe.x - px.x) / 0.01 : 0
-    const reach = BADGE_WINDOW_PX
-    const near = (p: LatLng) =>
-      Math.abs(p.lat - anchor.lat) * pxPerDegLat < reach && Math.abs(p.lng - anchor.lng) * pxPerDegLng < reach
-    let prev: { x: number; y: number } | null = null
-    let prevNear = near(path[0])
-    for (let i = 1; i < path.length; i++) {
-      const thisNear = near(path[i])
-      if (prevNear || thisNear) {
-        prev ??= proj.fromLatLngToDivPixel(new g.maps.LatLng(path[i - 1].lat, path[i - 1].lng))
-        const cur = proj.fromLatLngToDivPixel(new g.maps.LatLng(path[i].lat, path[i].lng))
-        if (prev && cur) {
-          for (let k = 0; k < rects.length; k++) {
-            if (segmentHitsRect(prev.x, prev.y, cur.x, cur.y, rects[k])) hits[k]++
-          }
-        }
-        prev = cur
-      } else {
-        prev = null
-      }
-      prevNear = thisNear
-    }
+  if (!w || !h || anchors.length === 0) return
+  const zoom = map.getZoom() ?? 0
+  const toPx = (p: LatLng): Px | null => {
+    const q = proj.fromLatLngToDivPixel(new g.maps.LatLng(p.lat, p.lng))
+    return q ? { x: q.x, y: q.y } : null
+  }
+  const apply = (choice: BadgeChoice) => {
+    const at = toPx(anchors[choice.anchor] ?? anchors[0])
+    if (!at) return
+    el.style.left = `${at.x}px`
+    el.style.top = `${at.y}px`
+    if (el.dataset.placement !== choice.placement) el.dataset.placement = choice.placement
+    memo.current = choice
   }
 
-  const current = el.dataset.placement as BadgePlacement | undefined
-  let best = 0
-  for (let k = 1; k < hits.length; k++) if (hits[k] < hits[best]) best = k
-  const currentIdx = current ? BADGE_PLACEMENTS.indexOf(current) : -1
-  const chosen = currentIdx >= 0 && hits[currentIdx] <= hits[best] ? current! : BADGE_PLACEMENTS[best]
-  if (chosen !== current) el.dataset.placement = chosen
+  // A pan: same zoom, same route — the geometry between badge and line has
+  // not changed, only where both are on screen. Re-apply and go.
+  const last = memo.current
+  if (last && last.sig === sig && last.zoom === zoom && last.anchor < anchors.length) {
+    apply(last)
+    return
+  }
+
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+  const gap = BADGE_GAP_REM * rem
+  const pts: Px[] = []
+  if (path) {
+    for (const p of path) {
+      const q = toPx(p)
+      if (q) pts.push(q)
+    }
+  }
+  const hitsFor = (anchor: number, placement: BadgePlacement): number => {
+    const at = toPx(anchors[anchor])
+    if (!at) return Number.POSITIVE_INFINITY
+    return pts.length >= 2 ? crossings(pts, badgeRect(placement, at.x, at.y, w, h, gap)) : 0
+  }
+
+  // The previous choice first, if it is still clean: a zoom step must not
+  // move a badge that was fine where it was.
+  if (last && last.sig === sig && last.anchor < anchors.length && hitsFor(last.anchor, last.placement) === 0) {
+    apply({ ...last, zoom })
+    return
+  }
+
+  let best: BadgeChoice | null = null
+  let bestHits = Number.POSITIVE_INFINITY
+  for (let a = 0; a < anchors.length && bestHits > 0; a++) {
+    for (const placement of BADGE_PLACEMENTS) {
+      const n = hitsFor(a, placement)
+      if (n < bestHits) {
+        bestHits = n
+        best = { anchor: a, placement, zoom, sig }
+        if (n === 0) break
+      }
+    }
+  }
+  if (best) apply(best)
 }
 
 export default function GoogleMap({
@@ -353,6 +402,7 @@ export default function GoogleMap({
   routePolylines,
   scaleRouteWidthWithZoom = false,
   routeDistanceLabel,
+  routeTimeLabel,
   truckOverlay,
   onTruckOverlayAvailabilityChange,
   onMapContextMenu,
@@ -489,6 +539,10 @@ export default function GoogleMap({
   const drawnRouteSigRef = useRef<string | null>(null)
   const badgeRef = useRef<(google.maps.OverlayView & { setPosition(p: LatLng | null): void }) | null>(null)
   const badgeElRef = useRef<HTMLDivElement | null>(null)
+  // Where the badge may sit: candidate points along the route in preference
+  // order (the midpoint first), and the placement last chosen — see placeBadge.
+  const badgeAnchorsRef = useRef<LatLng[]>([])
+  const badgeChoiceRef = useRef<BadgeChoice | null>(null)
   const routeDragRef = useRef<{
     active: boolean
     section: number
@@ -739,7 +793,17 @@ export default function GoogleMap({
         const badge = new Overlay(badgeEl)
         // Which side of its anchor the badge hangs on: the one the route
         // crosses least, re-decided on every draw (pan, zoom, new route).
-        badge.placer = (el, anchor, px, proj) => placeBadge(g, el, anchor, px, proj, hoverGeomRef.current?.path ?? null)
+        badge.placer = (el, _anchor, _px, proj) =>
+          placeBadge(
+            g,
+            el,
+            map,
+            proj,
+            badgeAnchorsRef.current,
+            hoverGeomRef.current?.path ?? null,
+            drawnRouteSigRef.current ?? '',
+            badgeChoiceRef,
+          )
         badge.setMap(map)
         badgeRef.current = badge
 
@@ -1328,11 +1392,18 @@ export default function GoogleMap({
     } else {
       hoverGeomRef.current = null
     }
-    const mid = pointAlong(all, 0.5)
+    // The badge's candidate anchors, the midpoint first (see placeBadge); a
+    // changed route forgets the last placement so the search starts over.
+    const anchors =
+      all.length >= 2
+        ? BADGE_ANCHOR_FRACTIONS.map((f) => pointAlong(all, f)).filter((p): p is LatLng => p !== null)
+        : []
+    badgeAnchorsRef.current = anchors
+    if (routeChanged) badgeChoiceRef.current = null
     const badgeEl = badgeElRef.current
     if (badgeEl) {
-      const show = mid ? renderRouteBadge(badgeEl, routeDistanceLabel) : false
-      badgeRef.current?.setPosition(show ? mid : null)
+      const show = anchors.length > 0 ? renderRouteBadge(badgeEl, routeDistanceLabel, routeTimeLabel) : false
+      badgeRef.current?.setPosition(show ? anchors[0] : null)
     }
 
     // A hand edit — dragging a waypoint or the line itself — is the one case
@@ -1387,7 +1458,7 @@ export default function GoogleMap({
     showRouteStrokes(true)
     badgeEl?.classList.remove('is-waiting')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveMap, routePolylines, routeDistanceLabel])
+  }, [liveMap, routePolylines, routeDistanceLabel, routeTimeLabel])
 
   // Re-read the width rule when the prop flips; the zoom listener does the rest.
   useEffect(() => {
