@@ -160,6 +160,8 @@ type Props = {
   // which is the old behaviour and the right one for a person we know nothing
   // about.
   authorHasAvatar?: boolean
+  /** The author's photo version from the same roster (see Avatar `version`). */
+  authorAvatarVersion?: string | null
   highlighted: boolean
   onRetry: (localId: string, body: string, file: File | null) => void
   // This row is among the newest in the thread — load its image attachments
@@ -203,6 +205,7 @@ function MessageRow({
   messageStyle,
   ruleColor,
   authorHasAvatar,
+  authorAvatarVersion,
   highlighted,
   onRetry,
   imagePriority,
@@ -497,6 +500,7 @@ function MessageRow({
           userId={message.authorId}
           name={authorLabel}
           hasAvatar={authorHasAvatar}
+          version={authorAvatarVersion}
           size={AUTHOR_TILE_PX}
           // Circle, matching the rail. Shape means "person" now, and the ONE
           // argument that squared this tile in August was that a face must not
@@ -800,6 +804,7 @@ function propsEqual(a: Props, b: Props): boolean {
     // roster does, which is exactly when a row's rule should be repainted.
     a.ruleColor === b.ruleColor &&
     a.authorHasAvatar === b.authorHasAvatar &&
+    a.authorAvatarVersion === b.authorAvatarVersion &&
     a.highlighted === b.highlighted &&
     a.imagePriority === b.imagePriority &&
     // Active-trip reference — rows re-tokenize their `#ref` trip mentions when

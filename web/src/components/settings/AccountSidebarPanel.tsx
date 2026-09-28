@@ -15,8 +15,6 @@ type Props = {
   profile: Profile | null
   /** Auto-away presence (idle / tab hidden). */
   away: boolean
-  /** Busts the avatar image cache after the user changes their photo. */
-  avatarVersion: number
   onBack: () => void
   onOpenProfile: () => void
   onOpenSettings: () => void
@@ -35,7 +33,6 @@ export default function AccountSidebarPanel({
   user,
   profile,
   away,
-  avatarVersion,
   onBack,
   onOpenProfile,
   onOpenSettings,
@@ -47,6 +44,10 @@ export default function AccountSidebarPanel({
   // The photo is viewable here (lightbox) but managed one level down, in My
   // profile — so no pencil, no file input.
   const hasAvatar = profile?.hasAvatar ?? true
+  // The same URL the profile panel and the rail draw, so the photo is fetched
+  // once and cached for good. Before the profile has loaded it is unversioned
+  // (cached for a minute).
+  const avatarVersion = profile?.avatarVersion
   const viewer = usePhotoEditor({
     hasImage: hasAvatar,
     canEdit: false,

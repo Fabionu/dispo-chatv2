@@ -4,7 +4,7 @@ import { pool } from '../../db/pool.js'
 import { asyncHandler, withTransaction } from '../../http.js'
 import { MAX_IMAGE_BYTES, isImage, uploadSingle } from '../../middleware/upload.js'
 import { saveBuffer, deleteFile } from '../../storage.js'
-import { serveImageObject } from '../../util/serveImage.js'
+import { imageVersion, serveImageObject } from '../../util/serveImage.js'
 import { authorizeInviter } from './authz.js'
 
 export const avatarRouter = Router()
@@ -41,7 +41,7 @@ avatarRouter.get(
     )
     const path = rows[0]?.avatar_path
     if (!path) return res.status(204).end()
-    const ok = await serveImageObject(res, path, guessImageType(path))
+    const ok = await serveImageObject(req, res, path, guessImageType(path))
     if (!ok) return res.status(404).json({ error: 'no_avatar' })
   }),
 )
@@ -77,7 +77,7 @@ avatarRouter.post(
     await pool.query('update groups set avatar_path = $1 where id = $2', [saved.storagePath, groupId])
     if (oldPath && oldPath !== saved.storagePath) await deleteFile(oldPath)
 
-    res.json({ ok: true, hasAvatar: true })
+    res.json({ ok: true, hasAvatar: true, avatarVersion: imageVersion(saved.storagePath) })
   }),
 )
 
@@ -101,6 +101,6 @@ avatarRouter.delete(
     })
 
     if (oldPath) await deleteFile(oldPath)
-    res.json({ ok: true, hasAvatar: false })
+    res.json({ ok: true, hasAvatar: false, avatarVersion: null })
   }),
 )

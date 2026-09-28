@@ -244,7 +244,7 @@ companyProfileRouter.get(
     )
     const path = rows[0]?.logo_path
     if (!path) return res.status(404).json({ error: 'no_logo' })
-    const ok = await serveImageObject(res, path, guessImageType(path))
+    const ok = await serveImageObject(req, res, path, guessImageType(path))
     if (!ok) return res.status(404).json({ error: 'no_logo' })
   }),
 )

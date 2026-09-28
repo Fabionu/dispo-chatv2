@@ -71,13 +71,15 @@ function relTime(iso: string | null): string {
 // doing, in less space than a silhouette. The tile is back for the thing the
 // meta line CAN'T do: a face is recognised before it is read. See RowTile.
 //
-// Line 2 falls back to the last-message preview when there are no operational
-// facts to show, and DMs keep the preview outright: between a colleague's
-// company name and what they just said, what they said is the point. Live
-// states (someone typing, an unsent draft) override either.
+// Line 2 is the last-message preview for EVERY conversation (user,
+// 2026-09-23: group rows should show it too). Live states (someone typing, an
+// unsent draft) override it.
 //
-// Line 1 is the name — with a DM peer's presence disc immediately after it —
-// plus the last-activity stamp at the far right. Pin/mute/mention/unread
+// Line 1 is the name — with a DM peer's presence disc, or a vehicle room's
+// plate │ corridor in the label voice, immediately after it — plus the
+// last-activity stamp at the far right. The plate and corridor used to OWN
+// line 2, which meant a vehicle room never showed what was said in it; they
+// moved up rather than going to a third line so every row keeps one height. Pin/mute/mention/unread
 // indicators sit at the end of line 2 and slide left on hover to expose the
 // actions arrow.
 export default function GroupRow({
@@ -382,9 +384,15 @@ export default function GroupRow({
             group. It rides the button's existing `--sidebar-row-gap`, which has
             been the identity slot's gutter all along. */}
         {isDirect ? (
-          <RowTile kind="user" id={peer?.id ?? ''} name={groupLabel(group)} />
+          <RowTile
+            kind="user"
+            id={peer?.id ?? ''}
+            name={groupLabel(group)}
+            hasAvatar={peer?.hasAvatar}
+            version={peer?.avatarVersion}
+          />
         ) : (
-          <RowTile kind="group" id={group.id} hasAvatar={group.hasAvatar} />
+          <RowTile kind="group" id={group.id} hasAvatar={group.hasAvatar} version={group.avatarVersion} />
         )}
         {/* Two-line body. Line 1: name + vehicle trip status + timestamp. Line 2:
             last-message preview + conversation-state icons. Tight line-height
@@ -424,6 +432,17 @@ export default function GroupRow({
                   style={{ backgroundColor: peerDot.color }}
                 />
               )}
+              {/* Plate │ corridor, beside the name. The name takes the room
+                  it needs; this gets what is left and shows only the
+                  segments that fit whole (RowMeta `whole`), so on a narrow
+                  rail the structure gives way before the content does.
+                  `tripLineFull` (status + next stop) rides along as the
+                  tooltip. */}
+              {metaSegments.length > 0 && (
+                <span className="flex min-w-0 flex-1" title={tripLineFull ?? undefined}>
+                  <RowMeta segments={metaSegments} whole />
+                </span>
+              )}
             </span>
             {/* The timestamp shares line 2's shift, so the actions arrow always
                 has a clear column between the two metadata clusters. */}
@@ -433,45 +452,35 @@ export default function GroupRow({
               {time && <span className="timestamp shrink-0 leading-tight">{time}</span>}
             </span>
           </span>
-          {/* Line 2 — operational facts in the label voice, or human text at
-              reading size. Live states win, then the meta, then the preview. State
-              icons sit inline at the right and slide left on hover/open,
-              exposing the arrow menu. */}
+          {/* Line 2 — human text at reading size: typing wins, then a draft,
+              then the last-message preview. State icons sit inline at the right
+              and slide left on hover/open, exposing the arrow menu. */}
           <span className="flex items-center gap-2">
-            {metaSegments.length > 0 && !typingText && !showDraft ? (
-              // `tripLineFull` carries the status plus the next stop — more than
-              // the two-segment line can show, so it rides along as the tooltip
-              // rather than being dropped.
-              <span className="min-w-0 flex-1" title={tripLineFull ?? undefined}>
-                <RowMeta segments={metaSegments} />
-              </span>
-            ) : (
-              <span
-                className={`flex-1 min-w-0 truncate leading-tight ${typingText ? 'text-active font-medium' : unread ? 'text-text/80' : 'text-muted'}`}
-                style={{ fontSize: 'var(--sidebar-conv-meta-font-size)' }}
-              >
-                {typingText ? (
-                  <span role="status" aria-live="polite">{typingText}</span>
-                ) : showDraft ? (
-                  // A local unsent draft takes over the line, its "Draft:" tag
-                  // in the app's accent so it reads as a distinct, personal
-                  // state. The line truncates, so a long draft ellipsizes.
-                  <>
-                    <span className="text-active font-medium">Draft: </span>
-                    {draft}
-                  </>
-                ) : (
-                  <>
-                    {preview.prefix && (
-                      <span className={unread ? 'text-text/80 font-medium' : 'text-muted'}>
-                        {preview.prefix}{' '}
-                      </span>
-                    )}
-                    {preview.text}
-                  </>
-                )}
-              </span>
-            )}
+            <span
+              className={`flex-1 min-w-0 truncate leading-tight ${typingText ? 'text-active font-medium' : unread ? 'text-text/80' : 'text-muted'}`}
+              style={{ fontSize: 'var(--sidebar-conv-meta-font-size)' }}
+            >
+              {typingText ? (
+                <span role="status" aria-live="polite">{typingText}</span>
+              ) : showDraft ? (
+                // A local unsent draft takes over the line, its "Draft:" tag
+                // in the app's accent so it reads as a distinct, personal
+                // state. The line truncates, so a long draft ellipsizes.
+                <>
+                  <span className="text-active font-medium">Draft: </span>
+                  {draft}
+                </>
+              ) : (
+                <>
+                  {preview.prefix && (
+                    <span className={unread ? 'text-text/80 font-medium' : 'text-muted'}>
+                      {preview.prefix}{' '}
+                    </span>
+                  )}
+                  {preview.text}
+                </>
+              )}
+            </span>
             <span className={`flex items-center gap-2 shrink-0 ${metaShift}`}>
               {pinned && <RowStateIcon icon={Pin} label="Pinned" />}
               {hasUnreadMention && (

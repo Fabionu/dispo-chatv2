@@ -5,6 +5,7 @@ import { asyncHandler, HttpError } from '../http.js'
 import { env } from '../env.js'
 import { TtlCache, cachedAsync } from '../util/ttlCache.js'
 import { hereLimiter, hereTilesLimiter } from '../middleware/rateLimit.js'
+import { legSections } from './hereLegs.js'
 
 export const hereRouter = Router()
 hereRouter.use(requireAuth)
@@ -41,7 +42,10 @@ type HereRevgeocodeResponse = {
   items?: HereRevgeocodeItem[]
 }
 
-type HereRoutePlace = { place?: { location?: HerePosition } }
+// `waypoint` is set only on a place that IS one of the request's vias (its
+// index among them); a ferry terminal or other mid-leg boundary has none —
+// see hereLegs.
+type HereRoutePlace = { place?: { location?: HerePosition; waypoint?: number } }
 
 type HereMoney = {
   type?: string
@@ -1168,7 +1172,9 @@ hereRouter.post(
     const route = data.routes?.[0]
     if (!route?.sections?.length) throw new HttpError(404, 'route_not_found')
 
-    const sections = route.sections.map((section) => ({
+    // Tolls and country spans read HERE's own sections (a ferry has spans and
+    // its own fares); everything the client indexes by leg reads legSections.
+    const sections = legSections(route.sections, (body.via?.length ?? 0) + 1).map((section) => ({
       id: section.id,
       polyline: section.polyline,
       summary: section.summary,

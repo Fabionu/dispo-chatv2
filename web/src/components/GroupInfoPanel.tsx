@@ -108,19 +108,17 @@ export default function GroupInfoPanel({
   // initialTab so the header trip bar can deep-link straight to the Trip tab.
   const [tab, setTab] = useState<PanelTab>(initialTab)
   // The picked vehicle image awaiting crop confirmation (no upload until the
-  // crop is confirmed). Local version busts the image cache after a change so
-  // the hero updates instantly; `onGroupUpdated({ hasAvatar })` flows the new
-  // state to the header + sidebar slots.
+  // crop is confirmed). `onGroupUpdated({ hasAvatar, avatarVersion })` flows
+  // the new image to this hero, the header and the sidebar slots at once — a
+  // new version is a new URL, so nothing shows the old picture.
   const [cropFile, setCropFile] = useState<File | null>(null)
-  const [avatarVersion, setAvatarVersion] = useState(0)
 
   // Confirm from the crop modal: upload the cropped square, then refresh. Must
   // THROW on failure so the crop modal surfaces a retryable error and stays open.
   async function uploadCroppedAvatar(cropped: File) {
-    await api.groups.uploadAvatar(group.id, cropped)
+    const { avatarVersion } = await api.groups.uploadAvatar(group.id, cropped)
     clearAvatarCache('group', group.id)
-    setAvatarVersion((v) => v + 1)
-    onGroupUpdated({ hasAvatar: true })
+    onGroupUpdated({ hasAvatar: true, avatarVersion })
     setCropFile(null)
   }
 
@@ -129,8 +127,7 @@ export default function GroupInfoPanel({
     try {
       await api.groups.removeAvatar(group.id)
       clearAvatarCache('group', group.id)
-      setAvatarVersion((v) => v + 1)
-      onGroupUpdated({ hasAvatar: false })
+      onGroupUpdated({ hasAvatar: false, avatarVersion: null })
     } catch {
       setError('Could not remove the image.')
     }
@@ -350,7 +347,7 @@ export default function GroupInfoPanel({
     hasImage: Boolean(group.hasAvatar),
     canEdit: canManage,
     noun: 'vehicle photo',
-    viewSrc: group.hasAvatar ? avatarUrl('group', group.id, avatarVersion) : undefined,
+    viewSrc: group.hasAvatar ? avatarUrl('group', group.id, group.avatarVersion) : undefined,
     viewTitle: groupLabel(group),
     onFile: (file) => {
       setError(null)
@@ -390,7 +387,7 @@ export default function GroupInfoPanel({
             photo={
               group.hasAvatar
                 ? {
-                    src: avatarUrl('group', group.id, avatarVersion),
+                    src: avatarUrl('group', group.id, group.avatarVersion),
                     alt: `${groupLabel(group)} vehicle photo`,
                   }
                 : null

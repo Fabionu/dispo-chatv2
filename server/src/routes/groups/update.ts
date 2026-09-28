@@ -5,6 +5,7 @@ import { asyncHandler, withTransaction } from '../../http.js'
 import { insertSystemMessage, emitSystemMessage } from '../../util/messages.js'
 import { getIOIfReady, roomForGroup } from '../../realtime.js'
 import { authorizeInviter } from './authz.js'
+import { imageVersion } from '../../util/serveImage.js'
 import {
   opsSchema,
   tripActivityEvents,
@@ -231,6 +232,7 @@ updateRouter.patch(
         description: group.description,
         meta: group.meta,
         hasAvatar: group.avatar_path !== null,
+        avatarVersion: imageVersion(group.avatar_path),
       },
     })
   }),

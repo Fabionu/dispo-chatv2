@@ -4,30 +4,30 @@ const loaded = new Set<string>()
 const failed = new Set<string>()
 const inflight = new Map<string, Promise<boolean>>()
 
-function key(kind: AvatarKind, id: string, version?: number | string): string {
+function key(kind: AvatarKind, id: string, version?: number | string | null): string {
   return `${kind}:${id}:${version ?? ''}`
 }
 
-export function avatarUrl(kind: AvatarKind, id: string, version?: number | string): string {
+export function avatarUrl(kind: AvatarKind, id: string, version?: number | string | null): string {
   const base = kind === 'user' ? `/api/users/${id}/avatar` : `/api/groups/${id}/avatar`
   return `${base}${version != null ? `?v=${version}` : ''}`
 }
 
-export function isAvatarLoaded(kind: AvatarKind, id: string, version?: number | string): boolean {
+export function isAvatarLoaded(kind: AvatarKind, id: string, version?: number | string | null): boolean {
   return loaded.has(key(kind, id, version))
 }
 
-export function isAvatarFailed(kind: AvatarKind, id: string, version?: number | string): boolean {
+export function isAvatarFailed(kind: AvatarKind, id: string, version?: number | string | null): boolean {
   return failed.has(key(kind, id, version))
 }
 
-export function markAvatarLoaded(kind: AvatarKind, id: string, version?: number | string): void {
+export function markAvatarLoaded(kind: AvatarKind, id: string, version?: number | string | null): void {
   const k = key(kind, id, version)
   failed.delete(k)
   loaded.add(k)
 }
 
-export function markAvatarFailed(kind: AvatarKind, id: string, version?: number | string): void {
+export function markAvatarFailed(kind: AvatarKind, id: string, version?: number | string | null): void {
   const k = key(kind, id, version)
   loaded.delete(k)
   failed.add(k)
@@ -49,7 +49,7 @@ export function clearAvatarCache(kind: AvatarKind, id: string): void {
 export function preloadAvatar(
   kind: AvatarKind,
   id: string | null | undefined,
-  version?: number | string,
+  version?: number | string | null,
 ): Promise<boolean> | null {
   if (!id) return null
   const k = key(kind, id, version)

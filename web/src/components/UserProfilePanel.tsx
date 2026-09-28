@@ -248,7 +248,7 @@ export default function UserProfilePanel({
     hasImage: profile?.hasAvatar ?? false,
     canEdit: false,
     noun: 'profile photo',
-    viewSrc: profile?.hasAvatar ? avatarUrl('user', profile.id) : undefined,
+    viewSrc: profile?.hasAvatar ? avatarUrl('user', profile.id, profile.avatarVersion) : undefined,
     viewTitle: displayName,
     onFile: () => {},
     onRemove: () => {},
@@ -313,7 +313,7 @@ export default function UserProfilePanel({
             <ProfileHero
               photo={
                 profile.hasAvatar
-                  ? { src: avatarUrl('user', profile.id), alt: `${displayName} profile photo` }
+                  ? { src: avatarUrl('user', profile.id, profile.avatarVersion), alt: `${displayName} profile photo` }
                   : null
               }
               fallback={

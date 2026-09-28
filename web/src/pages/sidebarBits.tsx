@@ -52,8 +52,8 @@ export function RowTile(
     // ConnectionUser do not carry it, and those fall back to asking and letting
     // the 404 flip them to the fallback. `avatarCache` remembers the failure, so
     // that costs one request per person per session, not one per render.
-    | { kind: 'user'; id: string; name: string; hasAvatar?: boolean; size?: number }
-    | { kind: 'group'; id: string; hasAvatar?: boolean; size?: number },
+    | { kind: 'user'; id: string; name: string; hasAvatar?: boolean; version?: string | null; size?: number }
+    | { kind: 'group'; id: string; hasAvatar?: boolean; version?: string | null; size?: number },
 ) {
   // `size` is a prop rather than a second component because the SHAPE RULE is
   // the thing worth sharing — vehicle squircle, person circle, initials as the
@@ -63,7 +63,13 @@ export function RowTile(
   const size = props.size ?? SIDEBAR_TILE_PX
   if (props.kind === 'group') {
     return (
-      <GroupAvatar groupId={props.id} hasAvatar={props.hasAvatar} shape="rounded" size={size} />
+      <GroupAvatar
+        groupId={props.id}
+        hasAvatar={props.hasAvatar}
+        version={props.version}
+        shape="rounded"
+        size={size}
+      />
     )
   }
   return (
@@ -71,6 +77,7 @@ export function RowTile(
       userId={props.id}
       name={props.name}
       hasAvatar={props.hasAvatar}
+      version={props.version}
       size={size}
       // CIRCLE for a person, against the room tile’s squircle above it
       // (user, 2026-09-05). Shape carries the type again, deliberately this
@@ -394,9 +401,38 @@ export function ArchiveToggle({
 // what the row can actually say about itself, which is more useful to scan and
 // costs no horizontal space. Empty segments are dropped, so a row with one fact
 // simply shows one.
-export function RowMeta({ segments }: { segments: (string | null | undefined)[] }) {
+//
+// `whole`: for a meta that shares its line with something more important (a
+// vehicle room's plate │ corridor beside the name). Segments are never cut —
+// one that doesn't fit wraps onto a clipped second line and disappears, so a
+// narrow row loses the corridor, then the plate, instead of showing `B… │ R`.
+export function RowMeta({
+  segments,
+  whole = false,
+}: {
+  segments: (string | null | undefined)[]
+  whole?: boolean
+}) {
   const parts = segments.filter((p): p is string => Boolean(p && p.trim()))
   if (parts.length === 0) return null
+  if (whole) {
+    return (
+      <span className="eyebrow flex h-[1lh] min-w-0 flex-wrap items-center overflow-hidden leading-tight">
+        {/* A flex line always keeps its FIRST item, even one too wide for it —
+            so the first real segment would sit clipped instead of wrapping
+            away. This item takes that place: a zero-width space, not an empty
+            span, because the row aligns on baselines and an empty box's
+            baseline is its bottom edge — it pushed the whole line down. */}
+        <span aria-hidden>{'​'}</span>
+        {parts.map((part, i) => (
+          <span key={i} className="flex shrink-0 items-center whitespace-nowrap">
+            {i > 0 && <span aria-hidden className="mx-2 h-3 w-px shrink-0 bg-line" />}
+            {part}
+          </span>
+        ))}
+      </span>
+    )
+  }
   return (
     <span className="eyebrow flex min-w-0 items-center leading-tight">
       {parts.map((part, i) => (

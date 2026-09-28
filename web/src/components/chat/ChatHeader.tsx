@@ -90,10 +90,18 @@ export default function ChatHeader({
             kind="user"
             id={group.directPeer?.id ?? ''}
             name={groupLabel(group)}
+            hasAvatar={group.directPeer?.hasAvatar}
+            version={group.directPeer?.avatarVersion}
             size={HEADER_TILE_PX}
           />
         ) : (
-          <RowTile kind="group" id={group.id} hasAvatar={group.hasAvatar} size={HEADER_TILE_PX} />
+          <RowTile
+            kind="group"
+            id={group.id}
+            hasAvatar={group.hasAvatar}
+            version={group.avatarVersion}
+            size={HEADER_TILE_PX}
+          />
         )}
       </div>
 

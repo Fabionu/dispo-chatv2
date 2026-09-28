@@ -19,8 +19,8 @@ type Props = {
   groupId?: string
   /** Whether this group has an uploaded image. */
   hasAvatar?: boolean
-  /** Bump to bust the cache after a manager changes/removes the image. */
-  version?: number | string
+  /** The image's version (`avatarVersion` from the API) — see Avatar. */
+  version?: string | null
   /** Slot geometry. 'circle' (default) matches the DM avatar; 'rounded' is a
    *  squircle used in the sidebar list so a vehicle room reads as a room — not a
    *  person — by SHAPE alone, at a glance, with no extra colour. */

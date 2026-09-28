@@ -113,10 +113,18 @@ export default function ForwardModal({ fromGroupId, message, onClose, onForwarde
                   <Avatar
                     userId={g.directPeer?.id ?? ''}
                     name={g.directPeer?.name ?? groupLabel(g)}
+                    hasAvatar={g.directPeer?.hasAvatar}
+                    version={g.directPeer?.avatarVersion}
                     size={32}
                   />
                 ) : (
-                  <GroupAvatar groupId={g.id} hasAvatar={Boolean(g.hasAvatar)} shape="rounded" size={32} />
+                  <GroupAvatar
+                    groupId={g.id}
+                    hasAvatar={Boolean(g.hasAvatar)}
+                    version={g.avatarVersion}
+                    shape="rounded"
+                    size={32}
+                  />
                 )}
                 <span className="min-w-0 flex-1">
                   <span className="block text-base truncate">{groupLabel(g)}</span>

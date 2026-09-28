@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { decode } from '@here/flexpolyline'
 import { loadGoogle } from '../../lib/google/loadGoogle'
-import { haversineMeters, nearestPointOnPath, simplifyPath } from '../../lib/here/geo'
+import { haversineMeters, nearestPointOnPath, simplifyPath, simplifyPathKeep } from '../../lib/here/geo'
 import type { LatLng, RouteMarker, ScreenGeoCandidate } from '../../lib/here/types'
 import {
   ENDPOINT_ICON_ANCHOR,
@@ -110,6 +110,59 @@ function thinPath(path: LatLng[], maxPoints: number): LatLng[] {
   const step = (simplified.length - 1) / (maxPoints - 1)
   for (let i = 1; i < maxPoints - 1; i++) out.push(simplified[Math.round(i * step)])
   out.push(simplified[simplified.length - 1])
+  return out
+}
+
+// ── Route level of detail ───────────────────────────────────────────────────
+// Google re-projects every vertex of every polyline on every frame of a zoom
+// animation. A HERE route is dense — a vertex every ~90 m, 11k of them on a
+// 1000 km run — drawn three times (casing, spine, grab target), and that is
+// what made zooming on a route stutter, worse the further in (user,
+// 2026-09-17: "sacadeaza in frame-uri cu cat dau mai mult zoom in"); with the
+// strokes hidden the same zoom ran at 60 fps. So the strokes are drawn from a
+// path fitted to the zoom: Douglas–Peucker at LOD_NEAR_PX of a pixel — a
+// deviation nobody can see — near the viewport, and at LOD_FAR_M away from
+// it, where the line is off screen anyway. Rebuilt on `idle` when the zoom
+// band changes or the view leaves the window the last build was made for;
+// the window is the viewport plus a viewport on every side, so ordinary pans
+// rebuild nothing and the coarse part is never in view before an idle.
+const LOD_NEAR_PX = 0.35
+const LOD_FAR_M = 300
+
+// Ctrl + wheel zooms a whole level per tick (see onWheel in the mount
+// effect), clamped to what the basemap can show.
+const CTRL_WHEEL_ZOOM_STEP = 1
+const CTRL_WHEEL_MIN_ZOOM = 2
+const CTRL_WHEEL_MAX_ZOOM = 21
+// Wheel delta that counts as one notch (Chrome reports 100 per notch).
+const WHEEL_TICK = 100
+type LodWindow = { s: number; n: number; w: number; e: number }
+type LodState = { band: number; win: LodWindow }
+
+function metersPerPixel(zoom: number, lat: number): number {
+  return (156543.03392 * Math.cos((lat * Math.PI) / 180)) / 2 ** zoom
+}
+
+/** The display path for one section: fine inside `win`, coarse outside, the
+ *  two joined at the vertices where the path crosses the window's edge. */
+function lodPath(full: LatLng[], win: LodWindow | null, nearM: number): LatLng[] {
+  if (full.length <= 2) return full
+  const fine = simplifyPathKeep(full, nearM)
+  if (!win) return full.filter((_, i) => fine[i] === 1)
+  const coarse = simplifyPathKeep(full, Math.max(nearM, LOD_FAR_M))
+  const inside = (p: LatLng) => p.lat >= win.s && p.lat <= win.n && p.lng >= win.w && p.lng <= win.e
+  const out: LatLng[] = []
+  let prevIn = inside(full[0])
+  for (let i = 0; i < full.length; i++) {
+    const p = full[i]
+    const nowIn = inside(p)
+    const nextIn = i + 1 < full.length ? inside(full[i + 1]) : nowIn
+    // Keep the vertex that touches a crossing on either side, so the fine and
+    // coarse stretches meet on the route rather than on a chord across it.
+    const keep = nowIn ? fine[i] === 1 : coarse[i] === 1 || prevIn !== nowIn || nextIn !== nowIn
+    if (keep) out.push(p)
+    prevIn = nowIn
+  }
   return out
 }
 
@@ -605,6 +658,10 @@ export default function GoogleMap({
   const badgeAnchorsRef = useRef<LatLng[]>([])
   // The route the placer tests against — shape-preserving, see simplifyToBudget.
   const badgePathRef = useRef<LatLng[] | null>(null)
+  // Route level of detail (see lodPath): the full decoded sections, and the
+  // zoom band + window the drawn strokes were last built for.
+  const routeFullRef = useRef<LatLng[][]>([])
+  const routeLodRef = useRef<LodState | null>(null)
   const badgeChoiceRef = useRef<BadgeChoice | null>(null)
   // Set when the badge must be re-decided (map idle, route change); the next
   // draw runs the full search instead of re-applying the last choice.
@@ -845,10 +902,88 @@ export default function GoogleMap({
           el.addEventListener('pointermove', onPointerMove)
           el.addEventListener('pointerleave', onPointerLeave)
         }
+        // ── Ctrl + wheel: the fast zoom ──────────────────────────────────
+        // A plain wheel tick is Google's fractional step (about a fifth of a
+        // level). With Ctrl held it is a whole level per tick, in one jump,
+        // around the point under the cursor (user, 2026-09-17: "sa dea mai
+        // mult scroll cu CTRL+scroll"). Capture phase on the container, so
+        // the event is taken before Google's own wheel handler on the inner
+        // div sees it; preventDefault also keeps the browser from treating
+        // Ctrl+wheel as page zoom. moveCamera, not setZoom: an instant move
+        // is the point — this is the gesture for covering distance.
+        //
+        // "Ctrl held" is the PHYSICAL key, tracked from keydown/keyup on the
+        // window, not the event's ctrlKey flag: a touchpad pinch arrives as
+        // wheel events with ctrlKey set (that is how browsers page-zoom on
+        // pinch), and reading the flag turned every pinch into a run of
+        // whole-level jumps with no Ctrl anywhere near (user, 2026-09-17:
+        // "imi face fara sa tin CTRL apasat"). And one level per WHEEL_TICK
+        // of delta, accumulated, rather than per event: a free-spinning or
+        // high-resolution wheel reports a notch as several small events.
+        let ctrlHeld = false
+        let wheelAccum = 0
+        let wheelAccumAt = 0
+        const onKey = (e: KeyboardEvent) => {
+          if (e.key === 'Control') ctrlHeld = e.type === 'keydown'
+        }
+        const onBlur = () => {
+          ctrlHeld = false
+        }
+        window.addEventListener('keydown', onKey)
+        window.addEventListener('keyup', onKey)
+        window.addEventListener('blur', onBlur)
+        const onWheel = (e: WheelEvent) => {
+          if (!ctrlHeld || !e.ctrlKey || e.deltaY === 0) return
+          e.preventDefault()
+          e.stopPropagation()
+          // A notch is ~100 units in Chrome (deltaMode 0); line-mode deltas
+          // (Firefox) are a few lines per notch.
+          const unit = e.deltaMode === 0 ? e.deltaY : e.deltaY * (WHEEL_TICK / 3)
+          const now = performance.now()
+          if (now - wheelAccumAt > 300 || Math.sign(unit) !== Math.sign(wheelAccum)) wheelAccum = 0
+          wheelAccumAt = now
+          wheelAccum += unit
+          if (Math.abs(wheelAccum) < WHEEL_TICK) return
+          const steps = Math.trunc(wheelAccum / WHEEL_TICK)
+          wheelAccum -= steps * WHEEL_TICK
+          const zoom = map.getZoom() ?? DEFAULT_ZOOM
+          const next = Math.max(CTRL_WHEEL_MIN_ZOOM, Math.min(CTRL_WHEEL_MAX_ZOOM, zoom - steps * CTRL_WHEEL_ZOOM_STEP))
+          if (next === zoom) return
+          const rect = el.getBoundingClientRect()
+          const px = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+          const under = screenAdapter().screenToGeo(px.x, px.y)
+          const world = map.getProjection()
+          if (!under || !world) {
+            map.setZoom(next)
+            return
+          }
+          // Keep the point under the cursor where it is: at zoom z a screen
+          // offset from the centre is a world offset × 2^z.
+          const w = world.fromLatLngToPoint(new g.maps.LatLng(under.lat, under.lng))
+          if (!w) {
+            map.setZoom(next)
+            return
+          }
+          const scale = 2 ** next
+          const centre = world.fromPointToLatLng(
+            new g.maps.Point(w.x - (px.x - rect.width / 2) / scale, w.y - (px.y - rect.height / 2) / scale),
+          )
+          if (!centre) {
+            map.setZoom(next)
+            return
+          }
+          map.moveCamera({ center: centre, zoom: next })
+        }
+        el.addEventListener('wheel', onWheel, { passive: false, capture: true })
+
         hoverCleanupRef.current = () => {
           if (hoverRaf) cancelAnimationFrame(hoverRaf)
           el.removeEventListener('pointermove', onPointerMove)
           el.removeEventListener('pointerleave', onPointerLeave)
+          el.removeEventListener('wheel', onWheel, { capture: true })
+          window.removeEventListener('keydown', onKey)
+          window.removeEventListener('keyup', onKey)
+          window.removeEventListener('blur', onBlur)
           hoverLabel.remove()
           hideHoverRef.current = () => {}
         }
@@ -882,6 +1017,9 @@ export default function GoogleMap({
         map.addListener('idle', () => {
           requestAnimationFrame(() => {
             if (badgeRef.current !== badge) return
+            // The strokes are re-fitted to the settled view first, then the
+            // badge is placed beside them.
+            rebuildRouteLod()
             badgeDecideRef.current = true
             badge.draw()
           })
@@ -906,7 +1044,7 @@ export default function GoogleMap({
           // The line moved under a resting cursor; the next pointermove
           // re-measures. Leaving the pill where it was would label empty map.
           hideHoverRef.current()
-          restyleRoute()
+          scheduleRestyle()
         })
         // Reported from the model events, not from `idle` or `bounds_changed`:
         // both of those wait for a rendered frame, and a tab in the background
@@ -1100,6 +1238,7 @@ export default function GoogleMap({
       controlsHostRef.current?.classList.remove('is-streetview')
       trafficLayerRef.current?.setMap(null)
       trafficLayerRef.current = null
+      window.clearTimeout(restyleTimerRef.current)
       cancelReveal()
       clearAll()
       projectionRef.current?.setMap(null)
@@ -1131,6 +1270,9 @@ export default function GoogleMap({
     driverObjsRef.current = []
     trailObjsRef.current = []
     routeObjsRef.current = []
+    lastRouteStyleRef.current = ''
+    routeFullRef.current = []
+    routeLodRef.current = null
     // A fresh map has to fit (and sweep) the route again, whatever the last
     // one showed.
     drawnRouteSigRef.current = null
@@ -1221,11 +1363,82 @@ export default function GoogleMap({
     ]
   }
 
+  // ── Route level of detail ─────────────────────────────────────────────────
+  // What the current view wants: the window (viewport + one viewport on every
+  // side) and the near tolerance for this zoom. Null before the map has drawn.
+  function lodTarget(): { band: number; win: LodWindow; nearM: number } | null {
+    const map = mapRef.current
+    const bounds = map?.getBounds()
+    if (!map || !bounds) return null
+    const zoom = map.getZoom() ?? DEFAULT_ZOOM
+    const ne = bounds.getNorthEast()
+    const sw = bounds.getSouthWest()
+    const dLat = ne.lat() - sw.lat()
+    const dLng = ne.lng() - sw.lng()
+    return {
+      // Half-level bands: a wheel tick is a fraction of a level, and the
+      // tolerance is sub-pixel, so a band is safe to sit inside.
+      band: Math.floor(zoom * 2) / 2,
+      win: { s: sw.lat() - dLat, n: ne.lat() + dLat, w: sw.lng() - dLng, e: ne.lng() + dLng },
+      nearM: LOD_NEAR_PX * metersPerPixel(zoom, (ne.lat() + sw.lat()) / 2),
+    }
+  }
+
+  /** Re-fit the drawn strokes to the current view if it has left the band
+   *  or window they were built for. `force` rebuilds regardless. */
+  function rebuildRouteLod(force = false) {
+    const sections = routeFullRef.current
+    const objs = routeObjsRef.current
+    if (sections.length === 0 || objs.length !== sections.length) return
+    const target = lodTarget()
+    if (!target) return
+    const last = routeLodRef.current
+    const map = mapRef.current
+    const bounds = map?.getBounds()
+    if (!force && last && bounds && last.band === target.band) {
+      const ne = bounds.getNorthEast()
+      const sw = bounds.getSouthWest()
+      const inWindow =
+        sw.lat() >= last.win.s && ne.lat() <= last.win.n && sw.lng() >= last.win.w && ne.lng() <= last.win.e
+      if (inWindow) return
+    }
+    sections.forEach((full, i) => {
+      const path = lodPath(full, target.win, target.nearM)
+      objs[i].casing.setPath(path)
+      objs[i].spine.setPath(path)
+      objs[i].target.setPath(path)
+    })
+    routeLodRef.current = { band: target.band, win: target.win }
+  }
+
+  // The strokes are restyled ONCE per zoom gesture, not once per frame. With
+  // fractional zoom, `zoom_changed` fires on every frame of the wheel
+  // animation, and restyling on each of them meant setOptions — a new
+  // `icons` sequence included — on every route polyline every frame: Google
+  // then re-tessellated the 10k-vertex line and re-laid the arrows along all
+  // of it, per frame, and the map stuttered harder the further in it went
+  // (user, 2026-09-17: "sacadeaza cu cat dau mai mult zoom in"). During the
+  // animation the overlay pane is scaled as a whole, so the width the line
+  // had going in is what shows; the trailing timer restyles it for the zoom
+  // it lands on.
+  const restyleTimerRef = useRef(0)
+  function scheduleRestyle() {
+    window.clearTimeout(restyleTimerRef.current)
+    restyleTimerRef.current = window.setTimeout(restyleRoute, 120)
+  }
+
+  // What the strokes were last set to, so a restyle that would change
+  // nothing (a zoom that stayed inside one width step) touches nothing.
+  const lastRouteStyleRef = useRef('')
+
   function restyleRoute() {
     const g = gRef.current
     if (!g) return
     const w = routeWidthsNow()
     const dimmed = routeDimmedRef.current
+    const key = `${w.main.toFixed(2)}|${w.casing.toFixed(2)}|${w.arrow.toFixed(2)}|${w.arrowsVisible}|${dimmed}|${routeObjsRef.current.length}`
+    if (key === lastRouteStyleRef.current && !revealRef.current) return
+    lastRouteStyleRef.current = key
     for (const r of routeObjsRef.current) {
       r.casing.setOptions({ strokeWeight: w.casing, strokeOpacity: dimmed ? ROUTE_DIM_OPACITY : 1 })
       r.spine.setOptions({
@@ -1401,7 +1614,15 @@ export default function GoogleMap({
     routeHoveredRef.current = false
 
     const sections = routePolylines.map(decodeSection).filter((s) => s.length >= 2)
-    sections.forEach((path, sectionIndex) => {
+    // The strokes are drawn at the view's level of detail (lodPath); the full
+    // geometry stays in routeFullRef for the rebuilds that pans and zooms ask
+    // for on idle. Before the map has drawn there is no window: near-tolerance
+    // everywhere, and the first idle fits it properly.
+    routeFullRef.current = sections
+    routeLodRef.current = null
+    const lod = lodTarget()
+    sections.forEach((full, sectionIndex) => {
+      const path = lodPath(full, lod?.win ?? null, lod?.nearM ?? LOD_NEAR_PX * metersPerPixel(DEFAULT_ZOOM, full[0].lat))
       const casing = new g.maps.Polyline({
         map,
         path,
@@ -1450,6 +1671,9 @@ export default function GoogleMap({
       })
       routeObjsRef.current.push({ casing, spine, target })
     })
+    if (lod) routeLodRef.current = { band: lod.band, win: lod.win }
+    // Fresh strokes carry no style yet: never let the change-check skip them.
+    lastRouteStyleRef.current = ''
     restyleRoute()
 
     // The badge rides the first section past the route's midpoint, which on a

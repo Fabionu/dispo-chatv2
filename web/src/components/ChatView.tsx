@@ -456,6 +456,12 @@ export default function ChatView({
     for (const m of members) if (m.hasAvatar !== undefined) byId.set(m.id, m.hasAvatar)
     return byId
   }, [members])
+  // …and the version of that photo, so the tile shares the rail's cached URL.
+  const authorAvatarVersion = useMemo(() => {
+    const byId = new Map<string, string | null>()
+    for (const m of members) if (m.avatarVersion !== undefined) byId.set(m.id, m.avatarVersion)
+    return byId
+  }, [members])
 
   const composerHandleRef = useRef<ChatComposerHandle>(null)
   const highlightTimer = useRef<number | undefined>(undefined)
@@ -1497,6 +1503,7 @@ export default function ChatView({
                               : undefined
                           }
                           authorHasAvatar={authorHasAvatar.get(m.authorId)}
+                          authorAvatarVersion={authorAvatarVersion.get(m.authorId)}
                           highlighted={highlightedMessageId === m.id}
                           onRetry={retry}
                           imagePriority={i >= visibleMessages.length - RECENT_IMAGE_WINDOW}

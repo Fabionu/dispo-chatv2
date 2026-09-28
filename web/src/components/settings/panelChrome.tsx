@@ -42,10 +42,16 @@ export function PanelHeader({
   )
 }
 
-// The same seam for panels that CLOSE rather than drill back — the right-hand
-// side panels (Group info, User profile) and overlay drawers. Title on the left,
-// one circular close action on the right, identical height and type to
-// PanelHeader so every panel in the app starts on the same line.
+// The bar for panels that CLOSE rather than drill back — the right-hand side
+// panels (Group info, User profile). Title on the left, one close action on the
+// right, the same type as PanelHeader.
+//
+// On --tool-header-height (44px at 1920), not PanelHeader's --header-height
+// (72px) — the same call as the workspace tool bars (ToolHeader). The tall
+// token exists for the rail seam and a thread's identity tile; this bar has a
+// title and an X, and the panel is its own card with no seam beside it to meet,
+// so at 72px it was a band of nothing above the hero (user, 2026-09-23:
+// "header-ul … mai îngust").
 export function PanelCloseHeader({
   title,
   onClose,
@@ -59,7 +65,7 @@ export function PanelCloseHeader({
   action?: ReactNode
 }) {
   return (
-    <div className="h-[var(--header-height)] flex items-center gap-1 px-4 shrink-0">
+    <div className="h-[var(--tool-header-height)] flex items-center gap-1 px-4 shrink-0">
       <span className="min-w-0 flex-1 truncate text-base font-semibold">{title}</span>
       {action}
       <button

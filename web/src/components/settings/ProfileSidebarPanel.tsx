@@ -31,8 +31,9 @@ type Props = {
   /** Names the back target (this panel is reached from the Account view). */
   backLabel?: string
   // Bubble saved data up so the sidebar user footer (avatar + name) updates
-  // immediately. `version` busts the avatar image cache.
-  onSaved: (profile: Profile, avatarVersion: number) => void
+  // immediately. A new photo arrives as a new `profile.avatarVersion`, which is
+  // a new image URL everywhere that reads it.
+  onSaved: (profile: Profile) => void
 }
 
 // Workspace-role display labels — shared with the read-only user details panel
@@ -64,7 +65,6 @@ export default function ProfileSidebarPanel({
     initialProfile?.availabilityStatus ?? 'available',
   )
   const [error, setError] = useState<string | null>(null)
-  const [avatarVersion, setAvatarVersion] = useState(0)
   // The picked image awaiting crop confirmation. Set on selection (no immediate
   // upload); cleared on cancel or after a successful cropped upload.
   const [cropFile, setCropFile] = useState<File | null>(null)
@@ -97,19 +97,17 @@ export default function ProfileSidebarPanel({
   async function savePatch(patch: ProfilePatch) {
     const { profile: p } = await api.profile.update(patch)
     setProfile(p)
-    onSaved(p, avatarVersion)
+    onSaved(p)
   }
 
   async function uploadCroppedAvatar(cropped: File) {
     const { profile: p } = await api.profile.uploadAvatar(cropped)
     // Purge every cached state for this user's old image (incl. the no-version
-    // key used by message rows) so the new picture shows everywhere; the bumped
-    // version below busts any browser/HTTP cache too.
+    // key used where the version isn't known) so the new picture shows
+    // everywhere; the profile's new avatarVersion is a new URL for the rest.
     clearAvatarCache('user', p.id)
-    const v = avatarVersion + 1
-    setAvatarVersion(v)
     setProfile(p)
-    onSaved(p, v)
+    onSaved(p)
     setCropFile(null)
   }
 
@@ -118,10 +116,8 @@ export default function ProfileSidebarPanel({
     try {
       const { profile: p } = await api.profile.removeAvatar()
       clearAvatarCache('user', p.id)
-      const v = avatarVersion + 1
-      setAvatarVersion(v)
       setProfile(p)
-      onSaved(p, v)
+      onSaved(p)
     } catch {
       setError('Could not remove the image.')
     }
@@ -134,7 +130,7 @@ export default function ProfileSidebarPanel({
     try {
       const { profile: p } = await api.profile.update({ availabilityStatus: s })
       setProfile(p)
-      onSaved(p, avatarVersion)
+      onSaved(p)
     } catch {
       setError('Could not update status.')
     }
@@ -167,7 +163,7 @@ export default function ProfileSidebarPanel({
     hasImage: profile?.hasAvatar ?? false,
     canEdit: true,
     noun: 'profile photo',
-    viewSrc: profile?.hasAvatar ? avatarUrl('user', profile.id, avatarVersion) : undefined,
+    viewSrc: profile?.hasAvatar ? avatarUrl('user', profile.id, profile.avatarVersion) : undefined,
     viewTitle: profile?.displayName,
     onFile: (file) => {
       setError(null)
@@ -194,7 +190,7 @@ export default function ProfileSidebarPanel({
               photo={
                 profile.hasAvatar
                   ? {
-                      src: avatarUrl('user', profile.id, avatarVersion),
+                      src: avatarUrl('user', profile.id, profile.avatarVersion),
                       alt: `${profile.displayName} profile photo`,
                     }
                   : null

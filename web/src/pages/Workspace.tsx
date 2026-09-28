@@ -138,9 +138,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // remounts each open, so without this it would refetch every time and flash
   // a "Loading…" state). Kept fresh by the panel's onSaved.
   const [cachedProfile, setCachedProfile] = useState<Profile | null>(null)
-  // Bumped after the current user / admin changes their avatar / logo, to bust
-  // the browser image cache in the rail.
-  const [avatarVersion, setAvatarVersion] = useState(0)
   // Active members of the caller's own company (internal/trusted contacts).
   const [members, setMembers] = useState<WorkspaceMember[]>([])
   const [selection, setSelection] = useState<Selection>(initialSelection)
@@ -302,9 +299,10 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     if (loadingGroups) return
     for (const g of groups.slice(0, 20)) {
       if (g.type === 'direct') {
-        if (g.directPeer?.id) void preloadAvatar('user', g.directPeer.id)
+        const peer = g.directPeer
+        if (peer?.id && peer.hasAvatar !== false) void preloadAvatar('user', peer.id, peer.avatarVersion)
       } else if (g.hasAvatar) {
-        void preloadAvatar('group', g.id)
+        void preloadAvatar('group', g.id, g.avatarVersion)
       }
     }
   }, [loadingGroups, groups])
@@ -1016,7 +1014,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 user={user}
                 profile={cachedProfile}
                 away={away}
-                avatarVersion={avatarVersion}
                 onBack={() => setSidebarView('list')}
                 onOpenProfile={() => setSidebarView('profile')}
                 onOpenSettings={() => setSidebarView('settings')}
@@ -1028,9 +1025,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 away={away}
                 onBack={() => setSidebarView('account')}
                 backLabel="Back to Account"
-                onSaved={(p, v) => {
+                onSaved={(p) => {
                   setCachedProfile(p)
-                  setAvatarVersion((n) => Math.max(n, v) + 1)
                   void refresh()
                 }}
               />

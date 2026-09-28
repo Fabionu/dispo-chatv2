@@ -148,18 +148,19 @@ export function routeArrowStyle(H: any, width: number) {
 // imagery as well as on the pale vector map, the same job the route's edge
 // does. Kept deliberately small so the markers don't blanket the spot under
 // them — precise clicking/placement needs the coordinate to stay visible.
-// Both endpoints are 20×20 and the stops 18: the ends are a matched pair and
-// neither outranks the other, and 20 against 18 is what makes the ends of the
-// route read as the ends. The radii are derived from the square marks these
-// replaced (a 2px-stroked core spanning 1..17 of an 18 box → r=7 stroked 2),
-// so the marks weigh exactly what they did.
+// Both endpoints are 20×20 and the stops 16: the ends are a matched pair and
+// neither outranks the other, and 20 against 16 is what makes the ends of the
+// route read as the ends. The endpoint radii are derived from the square marks
+// these replaced (a 2px-stroked core spanning 1..17 of an 18 box → r=7 stroked
+// 2). Stops were 18 on the same recipe until 2026-09-23 (user: "a bit
+// smaller"); at 16 the ring thins to 1.75 so the digit keeps its room.
 
 // Endpoint canvas: 20×20, plate r=10, core r=8, centre (10,10).
 export const ENDPOINT_ICON_SIZE = 20
 export const ENDPOINT_ICON_ANCHOR = 10
-// Stop canvas: 18×18, plate r=9, core r=7, centre (9,9).
-export const STOP_ICON_SIZE = 18
-export const STOP_ICON_ANCHOR = 9
+// Stop canvas: 16×16, plate r=8, ring r=6.125 stroked 1.75, centre (8,8).
+export const STOP_ICON_SIZE = 16
+export const STOP_ICON_ANCHOR = 8
 
 export function originSvg(): string {
   // Solid core, white arrow — the start keeps the "solid" identity it always
@@ -170,7 +171,7 @@ export function originSvg(): string {
 }
 
 export function stopSvg(label: string): string {
-  return `<svg width="${STOP_ICON_SIZE}" height="${STOP_ICON_SIZE}" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="9" r="9" fill="${ROUTE_HALO}"/><circle cx="9" cy="9" r="7" fill="${ROUTE_HALO}" stroke="${MARK_INK}" stroke-width="2"/><text x="9" y="9.2" text-anchor="middle" dominant-baseline="central" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" fill="${MARK_INK}">${label}</text></svg>`
+  return `<svg width="${STOP_ICON_SIZE}" height="${STOP_ICON_SIZE}" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="8" fill="${ROUTE_HALO}"/><circle cx="8" cy="8" r="6.125" fill="${ROUTE_HALO}" stroke="${MARK_INK}" stroke-width="1.75"/><text x="8" y="8.2" text-anchor="middle" dominant-baseline="central" font-family="Inter, system-ui, sans-serif" font-size="8.5" font-weight="600" fill="${MARK_INK}">${label}</text></svg>`
 }
 
 export function destSvg(): string {
@@ -226,9 +227,9 @@ export function iconFor(H: any, marker: RouteMarker): any {
 //   · Its glyph was the category colour on a near-black body, so the colour was
 //     carrying both the identity AND the legibility. At pin size neither won.
 //
-// Geometry still MATCHES stopSvg in every dimension — an 18×18 box, a 2px plate,
-// a 14×14 core, a 9.5px glyph — so a place and a numbered stop weigh the same on
-// the map even though one is now a circle and the other a square. The core is
+// Geometry: an 18×18 box, a 2px plate, a 14×14 core, a 9.5px glyph — the size
+// a numbered stop was until stops went to 16 (2026-09-23); places were left at
+// 18 because only the stops were asked to shrink. The core is
 // solid category ink with a white glyph; a route stop is a white core with
 // near-black ink. That inversion is what separates the two layers at a
 // glance, and it survives the map being switched to satellite, where the white

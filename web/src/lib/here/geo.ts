@@ -183,10 +183,23 @@ export function distancePointToSegmentMeters(p: LatLng, a: LatLng, b: LatLng): n
 // are always preserved and short paths are returned unchanged.
 export function simplifyPath(path: LatLng[], toleranceMeters: number): LatLng[] {
   if (path.length <= 2 || toleranceMeters <= 0) return path
+  const keep = simplifyPathKeep(path, toleranceMeters)
+  return path.filter((_, i) => keep[i] === 1)
+}
 
+// The same simplification as a keep-mask over the ORIGINAL indices (1 = this
+// vertex survives), for callers that combine two tolerances on one path — the
+// map's route level of detail keeps a fine mask near the viewport and a
+// coarse one away from it, and needs both to speak in the same indices.
+export function simplifyPathKeep(path: LatLng[], toleranceMeters: number): Uint8Array {
   const keep = new Uint8Array(path.length)
+  if (path.length === 0) return keep
   keep[0] = 1
   keep[path.length - 1] = 1
+  if (path.length <= 2 || toleranceMeters <= 0) {
+    keep.fill(1)
+    return keep
+  }
   const ranges: Array<[number, number]> = [[0, path.length - 1]]
 
   while (ranges.length) {
@@ -206,7 +219,7 @@ export function simplifyPath(path: LatLng[], toleranceMeters: number): LatLng[] 
     }
   }
 
-  return path.filter((_, i) => keep[i] === 1)
+  return keep
 }
 
 // Given the decoded coordinates of each route SECTION (one per leg between

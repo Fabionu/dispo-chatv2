@@ -42,6 +42,8 @@ export function RosterLabel({ children }: { children: ReactNode }) {
 export function RosterRow({
   userId,
   name,
+  hasAvatar,
+  avatarVersion,
   tag,
   dot,
   self = false,
@@ -50,6 +52,10 @@ export function RosterRow({
 }: {
   userId: string
   name: string
+  /** From the roster when it knows (see Avatar): skips a request for someone
+   *  with no photo, and shares the cached URL of someone with one. */
+  hasAvatar?: boolean
+  avatarVersion?: string | null
   /** Right-aligned label. Omit it when there is nothing distinguishing to say. */
   tag?: ReactNode
   /** Presence dot, or null for people who have none (drivers, invitees). */
@@ -64,7 +70,7 @@ export function RosterRow({
   const identity = (
     <>
       <span className="relative shrink-0">
-        <Avatar userId={userId} name={name} size={28} />
+        <Avatar userId={userId} name={name} hasAvatar={hasAvatar} version={avatarVersion} size={28} />
         {/* Ringed like the sidebar's identity dot, so presence reads the same
             wherever it appears. */}
         {dot && (
@@ -224,6 +230,8 @@ export default function MemberRow({
     <RosterRow
       userId={member.id}
       name={member.displayName}
+      hasAvatar={member.hasAvatar}
+      avatarVersion={member.avatarVersion}
       self={isSelf}
       dot={showDot ? dot : null}
       // The member's role IN THIS GROUP — never their company/workspace role.

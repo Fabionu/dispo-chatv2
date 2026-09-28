@@ -6,7 +6,7 @@ import { requireAuth, clearSession } from '../auth.js'
 import { asyncHandler, withTransaction } from '../http.js'
 import { uploadSingle, isImage, MAX_IMAGE_BYTES } from '../middleware/upload.js'
 import { saveBuffer, deleteFile } from '../storage.js'
-import { serveImageObject } from '../util/serveImage.js'
+import { imageVersion, serveImageObject } from '../util/serveImage.js'
 import { anonymizeUser } from '../util/anonymizeUser.js'
 import { LOCKED_PROFILE_FIELDS, lockedFieldsInBody } from '../util/identityLock.js'
 
@@ -42,6 +42,7 @@ function mapProfile(r: ProfileRow) {
     otherLanguages: r.other_languages ?? [],
     availabilityStatus: r.availability_status,
     hasAvatar: r.avatar_path !== null,
+    avatarVersion: imageVersion(r.avatar_path),
     company: r.workspace_name,
   }
 }
@@ -283,6 +284,7 @@ usersRouter.get(
           otherLanguages: [],
           availabilityStatus: null,
           hasAvatar: false,
+          avatarVersion: null,
           company: null,
           memberSince: null,
         },
@@ -307,7 +309,7 @@ usersRouter.get(
     )
     const path = rows[0]?.avatar_path
     if (!path) return res.status(204).end()
-    const ok = await serveImageObject(res, path, guessImageType(path))
+    const ok = await serveImageObject(req, res, path, guessImageType(path))
     if (!ok) return res.status(404).json({ error: 'no_avatar' })
   }),
 )

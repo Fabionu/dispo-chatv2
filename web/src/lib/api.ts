@@ -252,20 +252,21 @@ export const api = {
           description: string | null
           meta: Group['meta']
           hasAvatar: boolean
+          avatarVersion: string | null
         }
       }>(`/groups/${groupId}`, { method: 'PATCH', body: JSON.stringify(patch) }),
 
     uploadAvatar: (groupId: string, file: File) => {
       const form = new FormData()
       form.append('file', file, file.name)
-      return request<{ ok: true; hasAvatar: true }>(`/groups/${groupId}/avatar`, {
+      return request<{ ok: true; hasAvatar: true; avatarVersion: string }>(`/groups/${groupId}/avatar`, {
         method: 'POST',
         body: form,
       })
     },
 
     removeAvatar: (groupId: string) =>
-      request<{ ok: true; hasAvatar: false }>(`/groups/${groupId}/avatar`, { method: 'DELETE' }),
+      request<{ ok: true; hasAvatar: false; avatarVersion: null }>(`/groups/${groupId}/avatar`, { method: 'DELETE' }),
 
     editMessage: (groupId: string, messageId: string, body: string) =>
       request<{ message: { id: string; groupId: string; body: string; editedAt: string } }>(

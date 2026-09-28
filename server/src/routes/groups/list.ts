@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { pool } from '../../db/pool.js'
 import { asyncHandler } from '../../http.js'
+import { imageVersion } from '../../util/serveImage.js'
 
 export const listRouter = Router()
 
@@ -49,6 +50,7 @@ listRouter.get(
       peer_name: string | null
       peer_workspace: string | null
       peer_availability: string | null
+      peer_avatar_path: string | null
       last_body: string | null
       last_author_id: string | null
       last_author_name: string | null
@@ -65,6 +67,7 @@ listRouter.get(
               -- Per-user conversation prefs (migration 0023).
               gm.archived_at, gm.pinned_at, gm.muted,
               peer.peer_id, peer.peer_name, peer.peer_workspace, peer.peer_availability,
+              peer.peer_avatar_path,
               -- Latest USER message (matches last_message_at, which system rows
               -- don't bump) for the sidebar preview. Skips messages the caller
               -- deleted for themselves, same as the thread view.
@@ -77,7 +80,8 @@ listRouter.get(
            select u.id as peer_id,
                   u.display_name as peer_name,
                   w.name as peer_workspace,
-                  u.availability_status as peer_availability
+                  u.availability_status as peer_availability,
+                  u.avatar_path as peer_avatar_path
              from group_members gm2
              join users u on u.id = gm2.user_id
              join workspaces w on w.id = u.workspace_id
@@ -119,6 +123,7 @@ listRouter.get(
         description: r.description,
         meta: r.meta,
         hasAvatar: r.avatar_path !== null,
+        avatarVersion: imageVersion(r.avatar_path),
         lastMessageAt: r.last_message_at,
         lastReadAt: r.last_read_at,
         createdAt: r.created_at,
@@ -135,6 +140,8 @@ listRouter.get(
                 name: r.peer_name,
                 workspace: r.peer_workspace,
                 availabilityStatus: r.peer_availability,
+                hasAvatar: r.peer_avatar_path !== null,
+                avatarVersion: imageVersion(r.peer_avatar_path),
               }
             : null,
         // Compact preview of the latest user message for the sidebar. Body is

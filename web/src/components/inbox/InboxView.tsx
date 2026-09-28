@@ -254,6 +254,7 @@ export function VehicleRoomPicker({
                   <GroupAvatar
                     groupId={room.id}
                     hasAvatar={Boolean(room.hasAvatar)}
+                    version={room.avatarVersion}
                     shape="rounded"
                     size={38}
                   />

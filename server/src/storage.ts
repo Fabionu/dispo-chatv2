@@ -141,8 +141,10 @@ export async function openSignedUrl(signedUrl: string): Promise<Response | null>
 // so we reuse one URL per object for a window comfortably SHORTER than the
 // URL's validity: a redirect issued at the very end of the reuse window still
 // points at a URL with (TTL − reuse window) of life left. Only ever use this
-// for IMMUTABLE objects (attachment previews/originals) — for mutable ones
-// (avatars) a cached URL + Supabase's own CDN caching could pin stale bytes.
+// for IMMUTABLE objects — attachment previews/originals, and avatars / group
+// images / logos, which get a fresh path on every upload (see
+// util/serveImage imageVersion). For an object overwritten in place, a cached
+// URL + Supabase's own CDN caching could pin stale bytes.
 const SIGNED_URL_TTL_SEC = 3600
 const SIGNED_URL_REUSE_SEC = 3000
 const signedUrlCache = new TtlCache<Promise<{ url: string; mintedAt: number }>>(

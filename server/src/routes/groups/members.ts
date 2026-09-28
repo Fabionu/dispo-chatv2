@@ -10,6 +10,7 @@ import {
 } from '../../realtime.js'
 import { insertSystemMessage, emitSystemMessage } from '../../util/messages.js'
 import { authorizeRoleManager } from './authz.js'
+import { imageVersion } from '../../util/serveImage.js'
 
 export const membersRouter = Router()
 
@@ -52,6 +53,7 @@ export async function fetchGroupMembers(groupId: string) {
     userRole: r.user_role,
     availabilityStatus: r.availability_status,
     hasAvatar: r.avatar_path !== null,
+    avatarVersion: imageVersion(r.avatar_path),
     // "Read up to" marker. Per-message read receipts are DERIVED from this on
     // the client (a message is seen by this member iff lastReadAt >= its
     // createdAt) — no per-message rows, so it scales to large groups.

@@ -241,6 +241,7 @@ function FleetRow({ item, onOpenRoom }: { item: FleetRoom; onOpenRoom: (groupId:
         <GroupAvatar
           groupId={item.room.id}
           hasAvatar={Boolean(item.room.hasAvatar)}
+          version={item.room.avatarVersion}
           shape="rounded"
           size={38}
         />

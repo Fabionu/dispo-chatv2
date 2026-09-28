@@ -20,6 +20,9 @@ export type Profile = {
   otherLanguages: string[]
   availabilityStatus: AvailabilityStatus
   hasAvatar: boolean
+  /** Changes exactly when the photo does; the image URL's cache key (see
+   *  lib/avatarCache). Null = no photo. */
+  avatarVersion: string | null
   company: string
 }
 
@@ -39,6 +42,7 @@ export type PublicProfile = {
   otherLanguages: string[]
   availabilityStatus: AvailabilityStatus | null
   hasAvatar: boolean
+  avatarVersion: string | null
   company: string | null
   /** ISO timestamp of account creation ("Member since"). */
   memberSince: string | null
@@ -68,6 +72,10 @@ export type DirectPeer = {
   /** The peer's declared availability (manual status), for the DM row dot.
    *  Optional: older responses / optimistic rows omit it. */
   availabilityStatus?: AvailabilityStatus
+  /** Whether the peer has a photo, and its version (see Profile.avatarVersion).
+   *  Optional: optimistic rows built client-side do not know. */
+  hasAvatar?: boolean
+  avatarVersion?: string | null
 }
 
 export type Group = {
@@ -102,6 +110,8 @@ export type Group = {
    *  image regardless and falls back to the icon on 404. Optional for
    *  forward-compat with older responses / optimistic rows. */
   hasAvatar?: boolean
+  /** The image's version (see Profile.avatarVersion). */
+  avatarVersion?: string | null
   lastMessageAt: string | null
   lastReadAt: string | null
   createdAt: string
@@ -335,6 +345,7 @@ export type GroupMember = {
   availabilityStatus?: AvailabilityStatus
   /** Whether this member has an avatar image (lets the row skip a 404). */
   hasAvatar?: boolean
+  avatarVersion?: string | null
   /** This member's "read up to" timestamp for the conversation. Per-message
    *  read receipts are derived from it: a message is seen by this member iff
    *  lastReadAt >= the message's createdAt. Kept fresh live via `group:read`.

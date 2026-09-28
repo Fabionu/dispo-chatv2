@@ -16,8 +16,10 @@ type Props = {
   name: string
   /** Design-px diameter (rendered as rem so it tracks the global UI scale). */
   size?: number
-  /** Bump to bust the browser cache after the current user changes their image. */
-  version?: number | string
+  /** The photo's version (`avatarVersion` from the API) when the caller has
+   *  it: a versioned URL is cached by the browser for good, since it changes
+   *  whenever the photo does. Without it the URL is cached for a minute. */
+  version?: string | null
   /**
    * What to draw when there's no photo. 'glyph' (default) is the generic contact
    * silhouette — a photo-less person still reads as a person. 'initials' names
