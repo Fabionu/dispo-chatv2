@@ -91,13 +91,17 @@ tripTracksRouter.get(
     const maxPoints = parsed.data.max ?? DEFAULT_MAX_POINTS
     const groupId = await resolveTripGroup(userId, req.params.tripId)
 
+    // Every read below is scoped to the RESOLVED room, never to the trip id
+    // alone: trip ids are client-chosen, so another room can carry the same id,
+    // and filtering by trip id only would hand this caller that room's GPS.
     const { rows } = await pool.query<TrackRow>(
       `select driver_id, lat, lng, recorded_at, speed_mps, heading_deg, segment
          from trip_track_points
         where trip_id = $1
+          and group_id = $3
           and ($2::uuid is null or driver_id = $2)
         order by driver_id, recorded_at`,
-      [req.params.tripId, parsed.data.driverId ?? null],
+      [req.params.tripId, parsed.data.driverId ?? null, groupId],
     )
 
     const { rows: totals } = await pool.query<{
@@ -113,8 +117,9 @@ tripTracksRouter.get(
          from trip_tracks t
          left join users u on u.id = t.driver_id
         where t.trip_id = $1
+          and t.group_id = $3
           and ($2::uuid is null or t.driver_id = $2)`,
-      [req.params.tripId, parsed.data.driverId ?? null],
+      [req.params.tripId, parsed.data.driverId ?? null, groupId],
     )
 
     // Group by driver: two drivers swapping mid-trip are two distinct paths and
@@ -218,8 +223,9 @@ tripTracksRouter.get(
          from trip_tracks t
          left join users u on u.id = t.driver_id
         where t.trip_id = $1
+          and t.group_id = $2
         order by t.first_recorded_at`,
-      [req.params.tripId],
+      [req.params.tripId, groupId],
     )
 
     const firstAt = rows.reduce<Date | null>(

@@ -4,6 +4,8 @@ import { requireAuth } from '../auth.js'
 import { getIO, roomForGroup, roomForUser, subscribeUserToGroup } from '../realtime.js'
 import { asyncHandler, HttpError, withTransaction } from '../http.js'
 import { insertSystemMessage, emitSystemMessage } from '../util/messages.js'
+import { acceptInviteOutcome } from './groupInviteAuthz.js'
+import { mayCancelRoomInvites } from './groups/authz.js'
 
 // Group invitations into permanent vehicle groups. Distinct from cross-company
 // `connections`: invites are intra-workspace and only target vehicle groups.
@@ -87,28 +89,18 @@ groupInvitesRouter.post(
       )
       const row = rows[0]
       if (!row) throw new HttpError(404, 'not_found')
-      // Only the invited user may accept their own invite.
-      if (row.invited_user_id !== userId) throw new HttpError(403, 'forbidden')
-
-      if (row.status === 'accepted') {
-        // Already accepted — make sure membership exists, then no-op succeed.
+      const { rowCount: memberRows } = await client.query(
+        'select 1 from group_members where group_id = $1 and user_id = $2',
+        [row.group_id, userId],
+      )
+      // Already accepted and still a member → no-op success (a double click or
+      // a second tab). Already accepted but NO LONGER a member → 409: the invite
+      // cannot restore a membership that was removed (see acceptInviteOutcome).
+      const outcome = acceptInviteOutcome(userId, row, Boolean(memberRows))
+      if (outcome === 'already_member') {
         // No system row here: re-accepting must not duplicate "X joined".
-        await client.query(
-          // Seed unread_count to the group's existing visible backlog (migration
-          // 0020): a joiner with no last_read_at would otherwise show 0 unread
-          // instead of the history the old subquery counted. No mentions yet (a
-          // non-member can't have been mentioned), so unread_mention_count = 0.
-          `insert into group_members (group_id, user_id, role, unread_count)
-           select $1, $2, 'member',
-                  (select count(*) from messages msg
-                    where msg.group_id = $1 and msg.author_id <> $2
-                      and msg.deleted_at is null and msg.kind = 'user')
-           on conflict do nothing`,
-          [row.group_id, userId],
-        )
         return { groupId: row.group_id, invitedBy: row.invited_by_user_id, systemId: null }
       }
-      if (row.status !== 'pending') throw new HttpError(409, 'not_pending', { status: row.status })
 
       await client.query(
         `update group_invitations set status = 'accepted', responded_at = now() where id = $1`,
@@ -116,7 +108,9 @@ groupInvitesRouter.post(
       )
       await client.query(
         // Seed unread_count to the group's existing visible backlog (migration
-        // 0020) — see the matching insert in the re-accept branch above.
+        // 0020): a joiner with no last_read_at would otherwise show 0 unread
+        // instead of the history the old subquery counted. No mentions yet (a
+        // non-member can't have been mentioned), so unread_mention_count = 0.
         `insert into group_members (group_id, user_id, role, unread_count)
          select $1, $2, 'member',
                 (select count(*) from messages msg
@@ -225,19 +219,12 @@ groupInvitesRouter.post(
       if (row.status !== 'pending') throw new HttpError(409, 'not_pending', { status: row.status })
 
       // Inviter can always cancel; otherwise the caller must be authorised to
-      // manage this group's membership (group admin OR workspace admin/dispatcher).
+      // manage this group (group admin, or an admin/dispatcher of the company
+      // that owns it — see canManageRoom).
       if (row.invited_by_user_id !== userId) {
-        const { rows: perm } = await client.query<{ group_role: string; user_role: string }>(
-          `select gm.role as group_role, u.role as user_role
-             from group_members gm
-             join users u on u.id = gm.user_id
-            where gm.group_id = $1 and gm.user_id = $2`,
-          [row.group_id, userId],
-        )
-        const p = perm[0]
-        const allowed =
-          p && (p.group_role === 'admin' || p.user_role === 'admin' || p.user_role === 'dispatcher')
-        if (!allowed) throw new HttpError(403, 'forbidden')
+        if (!(await mayCancelRoomInvites(client, row.group_id, userId))) {
+          throw new HttpError(403, 'forbidden')
+        }
       }
 
       await client.query(

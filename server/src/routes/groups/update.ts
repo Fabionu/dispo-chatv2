@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { type DbClient } from '../../db/pool.js'
-import { asyncHandler, withTransaction } from '../../http.js'
+import { asyncHandler, HttpError, withTransaction } from '../../http.js'
 import { insertSystemMessage, emitSystemMessage } from '../../util/messages.js'
 import { getIOIfReady, roomForGroup } from '../../realtime.js'
 import { authorizeInviter } from './authz.js'
@@ -11,8 +11,30 @@ import {
   tripActivityEvents,
   assignedDriverDelta,
   driverIdsForOpsSave,
+  newlyClaimedTripId,
   type OpsLite,
 } from './ops.js'
+
+// Refuse a trip id another room already uses — as its current trip, as its own
+// room id (the canonical id of a trip saved without one), or in recorded GPS
+// history. Without this, a room admin could copy a known trip id into their own
+// room and have pings filed under — and history read from — someone else's trip.
+// Real clients generate a fresh UUID per trip, so they never hit this.
+async function assertTripIdFree(client: DbClient, tripId: string, groupId: string) {
+  const { rows } = await client.query<{ taken: boolean }>(
+    `select exists (
+              select 1 from groups
+               where id <> $2
+                 and (id::text = $1 or meta->'ops'->'trip'->>'id' = $1)
+            )
+         or exists (
+              select 1 from trip_tracks
+               where trip_id = $1 and group_id <> $2
+            ) as taken`,
+    [tripId, groupId],
+  )
+  if (rows[0]?.taken) throw new HttpError(409, 'trip_id_taken')
+}
 
 // Resolve user ids → display names for a driver-assignment activity row. Returns
 // a map so the caller can preserve the original id order in the payload.
@@ -89,6 +111,9 @@ updateRouter.patch(
           [groupId],
         )
         oldOps = (pre[0]?.meta?.ops as OpsLite | undefined) ?? null
+
+        const claimed = newlyClaimedTripId(oldOps, data.ops as OpsLite, groupId)
+        if (claimed) await assertTripIdFree(client, claimed, groupId)
       }
 
       // Driver assignment is protected server-side from the wholesale ops-save

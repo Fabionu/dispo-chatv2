@@ -23,6 +23,9 @@ const RestrictionCalculator = lazy(() => import('./RestrictionCalculator'))
 type Props = {
   workspaceName: string
   vehicleRooms: Group[]
+  // The subset of vehicleRooms the user may add a trip to (lib/roomPermissions):
+  // Fleet status shows every room, the Add trip picker only these.
+  tripRooms: Group[]
   canAddTrip: boolean
   onAddTrip: (groupId: string) => void
   onCreateVehicleRoom: () => void
@@ -48,6 +51,7 @@ type Props = {
 export default function InboxView({
   workspaceName,
   vehicleRooms,
+  tripRooms,
   canAddTrip,
   onAddTrip,
   onCreateVehicleRoom,
@@ -204,7 +208,7 @@ export default function InboxView({
       </div>
       {tripPickerOpen && (
         <VehicleRoomPicker
-          rooms={vehicleRooms}
+          rooms={tripRooms}
           onSelect={(groupId) => {
             setTripPickerOpen(false)
             onAddTrip(groupId)

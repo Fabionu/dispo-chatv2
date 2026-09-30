@@ -45,9 +45,11 @@ type Props = {
   currentUserId: string
   members: GroupMember[]
   membersLoading: boolean
-  // Whether the caller may edit details / invite. The server re-enforces the
-  // full rule; this only gates the controls' visibility.
+  // Whether the caller may edit details / invite, and (stricter) change member
+  // roles / remove members. Computed by ChatView from lib/roomPermissions; the
+  // server re-enforces the full rule, these only gate the controls' visibility.
   canManage: boolean
+  canManageRoles: boolean
   onClose: () => void
   // Open the shared invite picker (owned by ChatView so it can sit above chat).
   onInvite: () => void
@@ -91,6 +93,7 @@ export default function GroupInfoPanel({
   members,
   membersLoading,
   canManage,
+  canManageRoles,
   onClose,
   onInvite,
   onMembersChanged,
@@ -137,11 +140,6 @@ export default function GroupInfoPanel({
   // render once a save flows the updated meta back through onGroupUpdated).
   const ops = getOps(group)
 
-  // Group role vs workspace role: managing GROUP roles needs the caller to be a
-  // GROUP admin or a WORKSPACE admin (stricter than inviting — dispatchers can
-  // invite but not promote). Resolved from the caller's own member row.
-  const me = members.find((m) => m.id === currentUserId)
-  const canManageRoles = me?.role === 'admin' || me?.userRole === 'admin'
   // How many group admins exist — used to block demoting the last one.
   const adminCount = members.filter((m) => m.role === 'admin').length
 

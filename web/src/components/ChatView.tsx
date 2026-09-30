@@ -29,6 +29,7 @@ import { groupLabel, trailerPlate } from '../lib/types'
 import { fileError } from './attachments/attachmentUtils'
 import { resolveMentionIds } from '../lib/mentions'
 import { api, type MessageSearchResult } from '../lib/api'
+import { canManageRoom, canManageRoomRoles, type RoomViewer } from '../lib/roomPermissions'
 import { getSocket } from '../lib/socket'
 import ChatComposer, { type ChatComposerHandle, type EditContext } from './composer/ChatComposer'
 import ChatHeader from './chat/ChatHeader'
@@ -139,10 +140,13 @@ type Props = {
   onOpenAttachmentTab: (tab: AttachmentWorkspaceTab) => void
   onCloseAttachmentTab: (attachmentId: string) => void
   onReplyToAttachmentTab: (groupId: string, reply: ReplyToPreview) => void
-  // Whether the current user may invite members to a vehicle group (admin /
-  // dispatcher). Combined with the caller's group-admin role to gate the
-  // group-info edit/image/invite controls; the server re-enforces it.
+  // Whether the current user dispatches for their company (admin / dispatcher).
+  // In a DM this alone gates "Add trip" (the picker then offers only rooms the
+  // user manages); in a vehicle room the per-room rule below decides.
   canInviteMembers?: boolean
+  // The viewer's company role + company, for the per-room management rule in
+  // lib/roomPermissions (a company role only counts in the company's own rooms).
+  roomViewer: RoomViewer
   // Patch the parent group's record after an in-panel edit (name / plates /
   // image) so the header and rail reflect the change without a refetch.
   onGroupUpdated?: (groupId: string, partial: Partial<Group>) => void
@@ -167,6 +171,7 @@ export default function ChatView({
   onCloseAttachmentTab,
   onReplyToAttachmentTab,
   canInviteMembers = false,
+  roomViewer,
   onGroupUpdated,
 }: Props) {
   // ── Cached thread (session-level, instant on revisit) ──────────────────
@@ -247,7 +252,7 @@ export default function ChatView({
   // Whether the "Add trip" modal is open (vehicle groups only). Opened from the
   // composer's add (+) menu.
   const [addTripOpen, setAddTripOpen] = useState(
-    () => group.type === 'vehicle' && canInviteMembers && initialAddTripOpen,
+    () => group.type === 'vehicle' && canManageRoom(group, roomViewer) && initialAddTripOpen,
   )
   const [tripPickerOpen, setTripPickerOpen] = useState(false)
   useEffect(() => {
@@ -1068,11 +1073,13 @@ export default function ChatView({
           .join(' · ')
       : (group.directPeer?.workspace ?? 'Direct message')
 
-  // Group-info management gate: workspace admins/dispatchers, or the caller's
-  // own group-admin role (resolved from the loaded members). The server
-  // re-enforces the full rule on every mutating endpoint.
+  // Group-info management gate: the room's own company admins/dispatchers, or
+  // the caller's group-admin role (live from the loaded members, falling back to
+  // the room list's until they load). The server re-enforces the full rule on
+  // every mutating endpoint.
   const myGroupRole = members.find((m) => m.id === currentUserId)?.role
-  const canManageGroup = canInviteMembers || myGroupRole === 'admin'
+  const canManageGroup = canManageRoom(group, roomViewer, myGroupRole)
+  const canManageRoles = canManageRoomRoles(group, roomViewer, myGroupRole)
   const canAddTrip = group.type === 'vehicle' ? canManageGroup : canInviteMembers
   const openAddTrip = useCallback(() => {
     setReceiptTarget(null)
@@ -1723,6 +1730,7 @@ export default function ChatView({
           members={members}
           membersLoading={members.length === 0}
           canManage={canManageGroup}
+          canManageRoles={canManageRoles}
           onClose={() => setGroupInfoOpen(false)}
           onInvite={() => setInviteOpen(true)}
           onMembersChanged={refetchMembers}

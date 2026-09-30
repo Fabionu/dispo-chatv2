@@ -64,6 +64,8 @@ export default function CreateVehicleGroupModal({ onClose, onCreated }: Props) {
       onCreated({
         id: group.id,
         type: 'vehicle',
+        // The creator is the new room's admin (server: create.ts).
+        myRole: 'admin',
         name: nameTrim,
         description: null,
         meta: {

@@ -81,6 +81,11 @@ export type DirectPeer = {
 export type Group = {
   id: string
   type: GroupType
+  /** The company that owns the room (null for a cross-company DM). Optional for
+   *  optimistic rows the list hasn't reconciled yet. See lib/roomPermissions. */
+  workspaceId?: string | null
+  /** The viewer's ROOM role. Optional for optimistic rows / older responses. */
+  myRole?: 'admin' | 'member'
   name: string | null
   description: string | null
   /**

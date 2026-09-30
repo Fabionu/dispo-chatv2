@@ -32,6 +32,7 @@ listRouter.get(
     const { rows } = await pool.query<{
       id: string
       type: 'vehicle' | 'direct'
+      workspace_id: string | null
       name: string | null
       description: string | null
       meta: Record<string, unknown>
@@ -39,6 +40,7 @@ listRouter.get(
       last_message_at: string | null
       created_at: string
       last_read_at: string | null
+      my_role: 'admin' | 'member'
       member_count: number
       unread_count: number
       unread_mention_count: number
@@ -57,9 +59,9 @@ listRouter.get(
       last_deleted_at: string | null
       last_has_attachments: boolean | null
     }>(
-      `select g.id, g.type, g.name, g.description, g.meta, g.avatar_path,
+      `select g.id, g.type, g.workspace_id, g.name, g.description, g.meta, g.avatar_path,
               g.last_message_at, g.created_at,
-              gm.last_read_at,
+              gm.last_read_at, gm.role as my_role,
               (select count(*)::int from group_members where group_id = g.id) as member_count,
               -- Denormalized counters (migration 0020), maintained on write.
               gm.unread_count,
@@ -119,6 +121,12 @@ listRouter.get(
       groups: rows.map((r) => ({
         id: r.id,
         type: r.type,
+        // The company that owns the room (null for a cross-company DM) and the
+        // caller's ROOM role. Together they let the client mirror the server's
+        // canManageRoom rule: a company role only counts in the company's own
+        // rooms, a room admin counts anywhere.
+        workspaceId: r.workspace_id,
+        myRole: r.my_role,
         name: r.name,
         description: r.description,
         meta: r.meta,

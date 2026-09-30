@@ -20,6 +20,7 @@ import type {
 } from '../lib/types'
 import { groupLabel, isUnread, tractorPlate } from '../lib/types'
 import { api } from '../lib/api'
+import { canManageRoom } from '../lib/roomPermissions'
 import { getSocket } from '../lib/socket'
 import { useMessageCacheActions } from '../hooks/useMessageCache'
 import ChatView from '../components/ChatView'
@@ -634,13 +635,23 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // the main-pane fallback below.
   const inboxActive = !selectedGroup && !selectedRequest && !selectedInvite
 
-  // Who may invite members from the vehicle chat header. Group admins are also
-  // allowed server-side; the header button gates on workspace role for
-  // simplicity (the server enforces the full rule on POST).
+  // Whether the user dispatches for their company at all (admin / dispatcher) —
+  // gates the "Add trip" entry points that then ask WHICH room. Managing one
+  // particular room is the per-room rule in lib/roomPermissions.
   const canInviteMembers = user.role === 'admin' || user.role === 'dispatcher'
+  const roomViewer = useMemo(
+    () => ({ role: user.role, workspaceId: workspace.id }),
+    [user.role, workspace.id],
+  )
   const availableVehicleRooms = useMemo(
     () => groups.filter((group) => group.type === 'vehicle' && !group.archivedAt),
     [groups],
+  )
+  // Rooms a trip can be added to from a picker: only those this user manages,
+  // so a partner's room never shows up as a target the server would refuse.
+  const tripTargetRooms = useMemo(
+    () => availableVehicleRooms.filter((room) => canManageRoom(room, roomViewer)),
+    [availableVehicleRooms, roomViewer],
   )
 
   const addTripFromWorkspace = useCallback((groupId: string) => {
@@ -1070,13 +1081,14 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             onConsumeInitialAddTrip={() => setPendingAddTripGroupId(null)}
             initialDetailsOpen={pendingDetailsGroupId === selectedGroup.id}
             onConsumeInitialDetails={() => setPendingDetailsGroupId(null)}
-            vehicleRooms={availableVehicleRooms}
+            vehicleRooms={tripTargetRooms}
             onAddTripInGroup={addTripFromWorkspace}
             attachmentTabs={attachmentTabs}
             onOpenAttachmentTab={openAttachmentTab}
             onCloseAttachmentTab={closeAttachmentTab}
             onReplyToAttachmentTab={replyToAttachmentTab}
             canInviteMembers={canInviteMembers}
+            roomViewer={roomViewer}
             onGroupUpdated={patchGroup}
           />
         ) : (
@@ -1115,6 +1127,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               <InboxView
                 workspaceName={workspace.name}
                 vehicleRooms={availableVehicleRooms}
+                tripRooms={tripTargetRooms}
                 canAddTrip={canInviteMembers}
                 onAddTrip={addTripFromWorkspace}
                 onCreateVehicleRoom={() => setModal('vehicle')}

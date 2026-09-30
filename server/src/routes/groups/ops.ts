@@ -144,6 +144,7 @@ export type OpsLite = {
     assignedDriverIds?: string[]
   }
   trip?: {
+    id?: string
     status?: string
     reference?: string
     assignedDriverIds?: string[]
@@ -175,6 +176,27 @@ export function driverIdsForOpsSave(
 
   const requested = newOps?.vehicle?.assignedDriverIds ?? newOps?.trip?.assignedDriverIds
   return normaliseDriverIds(requested ?? [])
+}
+
+/**
+ * The trip id this save newly claims for the room, or null when it claims
+ * nothing new (no trip, no id, the id it already had, or the room's own id —
+ * the canonical id of a trip saved without one).
+ *
+ * Trip ids are client-generated, and GPS history is filed under them. A room
+ * that could adopt ANOTHER room's trip id would have its driver's pings filed
+ * under that trip too, so update.ts must check any id returned here is not
+ * already used elsewhere before storing it.
+ */
+export function newlyClaimedTripId(
+  oldOps: OpsLite | null,
+  newOps: OpsLite,
+  groupId: string,
+): string | null {
+  const id = newOps?.trip?.id
+  if (!id || id === groupId) return null
+  if (id === oldOps?.trip?.id) return null
+  return id
 }
 
 // The set of driver ids added / removed between two ops snapshots. Pure and
