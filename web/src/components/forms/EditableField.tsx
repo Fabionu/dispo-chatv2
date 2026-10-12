@@ -29,6 +29,13 @@ export type EditableFieldProps = {
   /** Persist just this field. Resolve → the row closes; reject → the row STAYS
    *  open with the user's text intact and a retryable error. */
   onSave?: (value: string) => Promise<void>
+  /** Row layout. 'stacked' (default): eyebrow label over the value, pencil on
+   *  hover — the original rows. The other two are the reworked panels' rows,
+   *  meant to sit in a divided card: 'card' keeps the label over the value
+   *  with an always-visible Edit / Add word (My profile), 'columns' puts the
+   *  label in a fixed column and makes the whole row the edit target, marked
+   *  by a quiet pencil (Group info's vehicle rows). */
+  variant?: 'stacked' | 'card' | 'columns'
 }
 
 // ── One information row that edits in place ─────────────────────────────────
@@ -61,6 +68,7 @@ export default function EditableField({
   hint,
   validate,
   onSave,
+  variant = 'stacked',
 }: EditableFieldProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -167,9 +175,13 @@ export default function EditableField({
       'aria-label': label,
     }
 
+    const carded = variant !== 'stacked'
     return (
-      <div className={FIELD_ROW}>
-        <label htmlFor={`${errorId}-control`} className={`${FIELD_LABEL} mb-1 flex items-baseline gap-1.5`}>
+      <div className={carded ? 'px-3.5 py-3' : FIELD_ROW}>
+        <label
+          htmlFor={`${errorId}-control`}
+          className={`${carded ? 'block text-sm leading-tight text-muted mb-1.5' : `${FIELD_LABEL} mb-1`} flex items-baseline gap-1.5`}
+        >
           <span>
             {label}
             {required && <span className="text-faint"> *</span>}
@@ -225,6 +237,64 @@ export default function EditableField({
           />
         </div>
       </div>
+    )
+  }
+
+  if (variant === 'card') {
+    return (
+      <div className="flex items-center gap-3 py-2.5 pl-3.5 pr-2">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm leading-tight text-muted">{label}</div>
+          <div
+            className={`mt-1 text-lg break-words ${
+              control === 'textarea' ? 'whitespace-pre-wrap leading-[1.5]' : 'font-medium leading-snug tabular-nums'
+            } ${has ? 'text-text' : 'text-faint'}`}
+          >
+            {has ? displayValue : 'Not set'}
+          </div>
+        </div>
+        {canEdit && (
+          <button
+            type="button"
+            onClick={start}
+            aria-label={`${has ? 'Edit' : 'Add'} ${label.toLowerCase()}`}
+            className="h-8 shrink-0 rounded-btn px-2.5 text-base font-semibold text-muted transition-colors hover:bg-white/6 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+          >
+            {has ? 'Edit' : 'Add'}
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  if (variant === 'columns') {
+    const body = (
+      <>
+        <span className="w-[6.5rem] shrink-0 text-base text-muted">{label}</span>
+        <span
+          className={`min-w-0 flex-1 truncate text-lg font-medium tabular-nums ${has ? 'text-text' : 'text-faint'}`}
+        >
+          {has ? displayValue : 'Not set'}
+        </span>
+      </>
+    )
+    return canEdit ? (
+      <button
+        type="button"
+        onClick={start}
+        title={`Edit ${label.toLowerCase()}`}
+        className="group flex w-full items-center gap-3 py-2.5 pl-3.5 pr-3 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20"
+      >
+        {body}
+        <Pencil
+          size="0.875rem"
+          strokeWidth={1.8}
+          aria-hidden
+          className="shrink-0 text-faint transition-colors group-hover:text-muted"
+        />
+      </button>
+    ) : (
+      <div className="flex items-center gap-3 py-2.5 pl-3.5 pr-3">{body}</div>
     )
   }
 

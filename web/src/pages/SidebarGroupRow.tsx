@@ -14,6 +14,7 @@ import type { Group } from '../lib/types'
 import { groupLabel, groupPreview, isUnread, tractorPlate, trailerPlate } from '../lib/types'
 import { useDraft } from '../lib/draftStorage'
 import { getOps, tripSummary } from '../lib/vehicleOps'
+import { TONE_TEXT } from '../components/vehicle/opsControls'
 import {
   RowActionsTrigger,
   RowMeta,
@@ -150,6 +151,7 @@ export default function GroupRow({
   const tripLineFull = trip
     ? [trip.statusLabel, trip.nextLabel && `Next: ${trip.nextLabel}`].filter(Boolean).join(' · ')
     : null
+  const tripPct = Math.max(0, Math.min(1, trip?.progress?.pct ?? 0))
 
   const preview = groupPreview(group, currentUserId)
   const time = relTime(group.lastMessageAt)
@@ -170,10 +172,26 @@ export default function GroupRow({
     const to = codes[codes.length - 1]
     return from === to ? from : `${from}→${to}`
   })()
+  // With a trip, the corridor moves down to the trip line (status │ corridor,
+  // over the progress track) and line 1 keeps only the plate.
   const metaSegments =
     group.type === 'vehicle'
-      ? [tractorPlate(group) ?? trailerPlate(group), corridor].filter(Boolean).map(String)
+      ? [tractorPlate(group) ?? trailerPlate(group), trip ? null : corridor].filter(Boolean).map(String)
       : []
+  // "FR Tremery – SK Zavar": first and last stop as country + town, postal
+  // codes dropped (they are what makes a place line too long for a row).
+  const corridorLong = (() => {
+    if (!trip || trip.routePlaces.length === 0) return null
+    const short = (text: string) =>
+      text
+        .split(/\s+/)
+        .filter((token) => token && !/\d/.test(token))
+        .join(' ')
+    const first = short(trip.routePlaces[0].text)
+    const last = short(trip.routePlaces[trip.routePlaces.length - 1].text)
+    if (!first && !last) return corridor
+    return first === last || !last ? first : `${first} – ${last}`
+  })()
   // Local unsent draft for THIS conversation (this user/device only — never
   // synced). It is persisted while typing, but only replaces the last-message
   // preview after the user leaves this conversation. This keeps the active
@@ -512,6 +530,39 @@ export default function GroupRow({
               {mutedIcon}
             </span>
           </span>
+          {/* Line 3, vehicle rooms with a trip only: the status in its tone and
+              the trip's progress as a hairline with the truck as a dot on it —
+              the same track the thread's trip bar and trip panel draw, so the
+              rail scans as a fleet. Pulls in from the right on hover/open like
+              the lines above, clearing the actions arrow's column. */}
+          {trip && (
+            <span
+              className={`flex flex-col transition-[margin] duration-200 ease-out group-hover/row:mr-7 group-focus-within/row:mr-7 ${
+                menuOpen ? 'mr-7' : ''
+              }`}
+              title={tripLineFull ?? undefined}
+            >
+              <span className="mt-0.5 flex min-w-0 items-center gap-2 text-xs leading-tight">
+                <span className={`shrink-0 font-medium ${TONE_TEXT[trip.statusTone]}`}>{trip.statusLabel}</span>
+                {corridorLong && (
+                  <>
+                    <span aria-hidden className="h-2.5 w-px shrink-0 bg-line-2" />
+                    <span className="min-w-0 truncate text-muted">{corridorLong}</span>
+                  </>
+                )}
+              </span>
+              <span aria-hidden className={`relative mt-2 mb-0.5 h-0.5 rounded-full bg-line ${TONE_TEXT[trip.statusTone]}`}>
+                <span
+                  className="absolute inset-y-0 left-0 rounded-full bg-current"
+                  style={{ width: `${tripPct * 100}%` }}
+                />
+                <span
+                  className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-current"
+                  style={{ left: `${tripPct * 100}%` }}
+                />
+              </span>
+            </span>
+          )}
         </span>
         </button>
         {rowActions}

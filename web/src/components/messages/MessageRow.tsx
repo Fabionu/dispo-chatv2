@@ -242,6 +242,9 @@ function MessageRow({
   // The only branch this prop drives. Everything else that separates the two
   // styles is CSS off the root attribute — see the bubble block in index.css.
   const bubble = messageStyle === 'bubble'
+  // Dense draws a time cell and a name cell on EVERY row instead of the
+  // attribution, the lane photo and the lane clock (see index.css).
+  const dense = messageStyle === 'dense'
 
   const showDayDivider =
     prev === undefined ||
@@ -489,7 +492,7 @@ function MessageRow({
   // filter — the restraint here is the tile's SIZE and its square, unringed
   // edge, not its saturation.
   const authorTile =
-    startNewGroup && showTile ? (
+    startNewGroup && showTile && !dense ? (
       <button
         type="button"
         onClick={() => onOpenProfile(message.authorId, authorLabel)}
@@ -652,11 +655,33 @@ function MessageRow({
             row was suppressed. The bubble style has no use for it: every block
             carries its own clock in its corner, so a second one behind a hover
             would be the same fact twice. */}
-        {!bubble && !startNewGroup && !hasLiveMeta && showTile && (
+        {!bubble && !dense && !startNewGroup && !hasLiveMeta && showTile && (
           <ThreadStamp>{time}</ThreadStamp>
         )}
 
-        {(bubble ? startNewGroup : startNewGroup || hasLiveMeta) && (
+        {/* Dense: the row's first two cells. My own delivery ticks ride with
+            my time; everyone else's name opens their profile. */}
+        {dense && (
+          <>
+            <span className="msg-dense-time timestamp">
+              {time}
+              {deliveryTicks}
+            </span>
+            {mine ? (
+              <span className="msg-dense-name">{authorLabel}</span>
+            ) : (
+              <button
+                type="button"
+                className="msg-dense-name hover:underline underline-offset-4 focus-visible:outline-none focus-visible:underline"
+                onClick={() => onOpenProfile(message.authorId, authorLabel)}
+              >
+                {authorLabel}
+              </button>
+            )}
+          </>
+        )}
+
+        {!dense && (bubble ? startNewGroup : startNewGroup || hasLiveMeta) && (
           <Attribution
             // Suppressed on a follow-up. In the TIMELINE the row can still be
             // here without a name — a pinned or edited message inside a burst
@@ -676,6 +701,10 @@ function MessageRow({
             describes it. In the timeline this wrapper is not in the box tree
             at all (`display: contents`); in the bubble style it IS the bubble,
             which is why the attribution row above stays outside it. */}
+        {/* The block and its sign-off travel together: `.msg-block` is not in
+            the box tree in the timeline, and in the bubble style it is the
+            column that hangs the clock under the bubble's right edge. */}
+        <div className="msg-block">
         <div className="msg-content">
           {!deleted && message.replyTo && (
             <ReplyQuote replyTo={message.replyTo} onJump={onJumpToMessage} neutral={mine} />
@@ -721,20 +750,24 @@ function MessageRow({
             </button>
           )}
 
-          {/* The block signs itself off (user, 2026-09-02): state, clock and
-              delivery ticks in the bottom-right corner, inside the block, under
-              the message. It is what lets a burst follow-up carry its own time
-              at no cost — the timeline had to hide that clock out in the lane
-              behind a hover, because in a column of bare text a repeated
-              timestamp per line is noise. In the corner of a block it is
-              somewhere the eye skips until it wants it. */}
-          {bubble && (
-            <div className="msg-meta">
-              {messageFlags}
-              <span className="timestamp">{time}</span>
-              {deliveryTicks}
-            </div>
-          )}
+        </div>
+
+        {/* The block signs itself off: state, clock and delivery ticks. Since
+            the 2026-10-10 rework (user: "move it on the right side") the
+            sign-off sits UNDER the bubble, on its right edge, for incoming and
+            own messages alike — outside the fill, so the bubble holds only what
+            was said. Every block still carries its own time, which is what lets
+            a burst follow-up show it at no cost. */}
+        {bubble && (
+          <div className="msg-meta">
+            {messageFlags}
+            <span className="timestamp">{time}</span>
+            {deliveryTicks}
+          </div>
+        )}
+        {dense && (pinned || forwarded || edited || failed) && (
+          <div className="msg-dense-flags">{messageFlags}</div>
+        )}
         </div>
 
         {/* Small text buttons, invisible until the message is hovered

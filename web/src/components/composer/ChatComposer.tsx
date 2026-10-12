@@ -6,13 +6,24 @@ import {
   useRef,
   useState,
 } from 'react'
-import { ArrowUp, Bold, Clock3, Italic } from 'lucide-react'
+import {
+  ArrowUp,
+  Bold,
+  Clock3,
+  FileText,
+  Image as ImageIcon,
+  Italic,
+  MapPin,
+  MessageSquareText,
+  Route,
+  type LucideIcon,
+} from 'lucide-react'
+import { MENU_CONTAINER, menuItemClass } from '../menuStyles'
 import type { GroupMember, ReplyToPreview } from '../../lib/types'
 import { DOC_ACCEPT, IMAGE_ACCEPT, fileError } from '../attachments/attachmentUtils'
 import { ComposerContextSlot } from '../messages/ComposerContextRow'
 import { useComposerAutosize } from '../../hooks/useComposerAutosize'
 import { useActiveComposerEffect } from '../../lib/animations'
-import AttachMenu from './AttachMenu'
 import MentionPicker from './MentionPicker'
 import TripMentionPicker from './TripMentionPicker'
 
@@ -23,6 +34,10 @@ import TripMentionPicker from './TripMentionPicker'
 const COMPOSER_TYPE = 'text-[length:var(--chat-msg-font-size)] leading-[1.5] px-2 py-1'
 
 export type EditContext = { id: string; originalBody: string }
+
+/** A ready-made piece of text the footer can drop into the field (a quick
+ *  message, a stop's address). `label` is what the menu shows. */
+export type ComposerSnippet = { label: string; text: string }
 
 export type ChatComposerHandle = {
   focus: () => void
@@ -50,6 +65,11 @@ type Props = {
   // parent either opens the current vehicle room directly or presents a room
   // chooser when the conversation itself is not vehicle-scoped.
   onAddTrip?: () => void
+
+  // Footer menus. Each is shown only when it has entries: quick messages for
+  // people who manage a vehicle room, locations when the trip has stops.
+  quickReplies?: ComposerSnippet[]
+  locations?: ComposerSnippet[]
 
   replyContext: ReplyToPreview | null
   onCancelReply: () => void
@@ -103,6 +123,8 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
     activeTrip,
     onFilePicked,
     onAddTrip,
+    quickReplies,
+    locations,
     replyContext,
     onCancelReply,
     editContext,
@@ -320,6 +342,15 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
       el.setSelectionRange(end, end)
     },
   }))
+
+  // A footer snippet goes in at the end of whatever is already typed (or fills
+  // an empty field), with the caret after it — it never sends by itself.
+  function insertSnippet(snippet: string) {
+    const base = text.trimEnd()
+    const next = base ? `${base} ${snippet}` : snippet
+    onTextChange(next)
+    pendingCaretRef.current = next.length
+  }
 
   function pickKind(accept: string) {
     const input = fileInputRef.current
@@ -558,11 +589,13 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
         snippet={editContext?.originalBody ?? ''}
         onCancel={onCancelEdit}
       />
-      {/* Minimal input bar: add (+) · textarea · send. The controls share
-          --composer-size and are vertically centred against the textarea, so
-          they stay aligned with the middle of the input whether it's one line or
-          grown to several (items-center tracks the textarea's height). */}
-      <div className="composer-bar flex items-center gap-1.5 px-1.5 py-1.5">
+      {/* TOOLBAR COMPOSER (rework, 2026-10-10): the field takes the full width
+          on top; everything you can add to a message is NAMED in a short footer
+          under a hairline, with Send at its right end. It replaced the `+` menu
+          and the quick-message chips that used to float over the thread — the
+          footer is deliberately low (user: "narrower from top to bottom"), so
+          the composer grows by one slim row, not by a second bar. */}
+      <div className="composer-bar flex items-center px-1.5 pt-1.5 pb-1">
         <input
           ref={fileInputRef}
           type="file"
@@ -570,7 +603,6 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           onChange={onPickFile}
           className="hidden"
         />
-        <AttachMenu disabled={Boolean(editContext)} onPickKind={pickKind} onAddTrip={onAddTrip} />
         {/* The textarea and its mirror share ONE typography string
              (COMPOSER_TYPE). That is not tidiness — it is the correctness
              condition: any difference in size, leading, padding or wrapping
@@ -610,7 +642,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
             onBlur={() => setHasSelection(false)}
             onCompositionStart={() => setComposing(true)}
             onCompositionEnd={() => setComposing(false)}
-            rows={1}
+            rows={2}
             placeholder={editContext ? 'Edit message…' : placeholder}
             // `relative` keeps it over the mirror so it still takes the pointer.
             // The glyphs are transparent, never the caret and never a selection
@@ -620,39 +652,139 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
             }`}
           />
         </div>
-        <button
-          type="button"
-          onClick={onSchedule}
-          aria-label="Schedule message"
-          title="Schedule message"
-          className={`rounded-btn h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 items-center justify-center text-muted hover:bg-white/6 hover:text-text transition-colors ${
-            editContext ? 'hidden' : 'flex'
-          }`}
-        >
-          <Clock3 size="1rem" strokeWidth={1.9} />
-        </button>
+      </div>
+
+      {/* The footer. Named tools rather than bare glyphs: a dispatcher should
+          not have to hover to find out which square is "document". While
+          editing a message only Save remains — an edit can't carry a file. */}
+      <div className="composer-tools flex items-center gap-0.5 border-t border-line px-1 py-[3px]">
+        {!editContext && (
+          <>
+            <ComposerTool icon={ImageIcon} label="Photo" onClick={() => pickKind(IMAGE_ACCEPT)} />
+            <ComposerTool icon={FileText} label="Document" onClick={() => pickKind(DOC_ACCEPT)} />
+            {locations && locations.length > 0 && (
+              <ComposerToolMenu icon={MapPin} label="Location" items={locations} onPick={insertSnippet} />
+            )}
+            {quickReplies && quickReplies.length > 0 && (
+              <ComposerToolMenu
+                icon={MessageSquareText}
+                label="Quick messages"
+                items={quickReplies}
+                onPick={insertSnippet}
+              />
+            )}
+            <ComposerTool icon={Clock3} label="Schedule" onClick={onSchedule} />
+            {onAddTrip && <ComposerTool icon={Route} label="Add trip" onClick={onAddTrip} />}
+          </>
+        )}
+        <span className="flex-1" />
         <button
           type="button"
           onClick={onSend}
           disabled={disabled}
           aria-label={editContext ? 'Save edit' : 'Send message'}
-          // The fill IS the state. With nothing to send the button is undrawn —
-          // no box, no wash, just a faint arrow sitting in the bar; the moment
-          // there's text it fills solid and becomes the one filled control in
-          // the thread, which is what makes it read as the primary action
-          // without a colour. It used to keep a hairline while disabled, so the
-          // empty state looked like an outlined button that had been switched
-          // off rather than an action that isn't available yet.
-          className={`rounded-btn h-[var(--composer-size)] w-[var(--composer-size)] shrink-0 flex items-center justify-center transition-colors ${
+          // The fill IS the state: undrawn while there is nothing to send,
+          // solid the moment there is — the one filled control in the thread.
+          className={`rounded-btn h-7 shrink-0 inline-flex items-center gap-1.5 px-2.5 text-sm font-semibold transition-colors ${
             disabled ? 'text-faint cursor-default' : 'bg-text text-bg hover:bg-white'
           }`}
         >
-          <ArrowUp size="1rem" strokeWidth={2.2} />
+          {editContext ? 'Save' : 'Send'}
+          <ArrowUp size="0.875rem" strokeWidth={2.2} />
         </button>
       </div>
     </div>
   )
 })
+
+// One named tool in the composer footer: glyph + label, undrawn until hovered.
+function ComposerTool({
+  icon: Icon,
+  label,
+  onClick,
+  active = false,
+}: {
+  icon: LucideIcon
+  label: string
+  onClick: () => void
+  active?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      aria-expanded={active || undefined}
+      className={`rounded-btn h-7 shrink-0 inline-flex items-center gap-1.5 px-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+        active ? 'bg-white/10 text-text' : 'text-muted hover:bg-white/6 hover:text-text'
+      }`}
+    >
+      <Icon size="0.875rem" strokeWidth={1.8} />
+      <span className="composer-tool-label">{label}</span>
+    </button>
+  )
+}
+
+// A footer tool that opens a short list upward (Location, Quick messages).
+// Picking an entry hands its text to the composer; nothing is sent.
+function ComposerToolMenu({
+  icon,
+  label,
+  items,
+  onPick,
+}: {
+  icon: LucideIcon
+  label: string
+  items: ComposerSnippet[]
+  onPick: (text: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    function onDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+  return (
+    <div className="relative shrink-0" ref={ref}>
+      <ComposerTool icon={icon} label={label} active={open} onClick={() => setOpen((v) => !v)} />
+      {open && (
+        <div
+          role="menu"
+          aria-label={label}
+          className={`action-strip-enter-up origin-bottom-left absolute bottom-[calc(100%+6px)] left-0 w-[17rem] max-w-[80vw] ${MENU_CONTAINER} z-20`}
+        >
+          {items.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              title={item.text}
+              onClick={() => {
+                setOpen(false)
+                onPick(item.text)
+              }}
+              className={menuItemClass()}
+            >
+              <span className="min-w-0 truncate">{item.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // One button in the floating format bar. onMouseDown preventDefault keeps the
 // textarea focused and its selection intact through the click.

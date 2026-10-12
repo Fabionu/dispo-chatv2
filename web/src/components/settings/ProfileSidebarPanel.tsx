@@ -1,31 +1,24 @@
-import { useEffect, useState } from 'react'
-import { Check, ChevronDown, Loader2, Trash2 } from 'lucide-react'
+import { useEffect, useState, type FormEvent } from 'react'
+import { Eye, Loader2, Lock, Plus, Trash2, X } from 'lucide-react'
 import type { AvailabilityStatus, Profile, Role } from '../../lib/types'
 import { api, type ProfilePatch } from '../../lib/api'
 import { PanelHeader } from './panelChrome'
-import {
-  PANEL_BODY,
-  ProfileHero,
-  ProfileSection,
-  SIDEBAR_PANEL_SURFACE,
-  StatusPill,
-} from './profileChrome'
-import { useAuth } from '../../auth/AuthContext'
+import { ProfileHero, SIDEBAR_PANEL_SURFACE } from './profileChrome'
+import { Segmented, SettingsSection } from './sectionChrome'
 import { avatarUrl, clearAvatarCache } from '../../lib/avatarCache'
-import { AVAILABILITY, AWAY, statusMeta } from '../../lib/availability'
+import { AVAILABILITY } from '../../lib/availability'
+import { RowMeta } from '../../pages/sidebarBits'
 import { usePhotoEditor } from '../AvatarPhotoEditor'
 import { initials } from '../messages/messageUtils'
 import { EditableField } from '../forms'
-import ConfirmDialog from '../ConfirmDialog'
+import { useAuth } from '../../auth/AuthContext'
 import AvatarCropModal from './AvatarCropModal'
-import { MENU_CONTAINER, menuItemClass } from '../menuStyles'
 
 type Props = {
   // Prefetched profile (warmed at app mount) so the drawer renders instantly
   // instead of flashing a "Loading…" state. When present we skip the fetch.
   initialProfile?: Profile | null
-  // Auto-away presence (idle / tab hidden). Overrides the manual status display
-  // without changing the stored value.
+  // Auto-away presence (idle / tab hidden). Mentioned under Availability.
   away?: boolean
   onBack: () => void
   /** Names the back target (this panel is reached from the Account view). */
@@ -34,6 +27,8 @@ type Props = {
   // immediately. A new photo arrives as a new `profile.avatarVersion`, which is
   // a new image URL everywhere that reads it.
   onSaved: (profile: Profile) => void
+  /** Opens your own card the way colleagues open it (the user-details panel). */
+  onPreview?: () => void
 }
 
 // Workspace-role display labels — shared with the read-only user details panel
@@ -45,34 +40,58 @@ export const ROLE_LABEL: Record<Role, string> = {
   partner: 'Partner',
 }
 
-// "My profile" rendered as a sidebar drawer (replaces the conversation list)
-// rather than a floating modal — the chat stays visible on the right.
+// Offered under "Add language" — the languages a European road-freight team
+// most often shares. Anything else is typed.
+const LANGUAGE_SUGGESTIONS = [
+  'English',
+  'German',
+  'French',
+  'Italian',
+  'Spanish',
+  'Polish',
+  'Romanian',
+  'Hungarian',
+  'Dutch',
+  'Czech',
+  'Bulgarian',
+  'Turkish',
+]
+
+// "My profile" as a sidebar drawer (replaces the conversation list) rather than
+// a floating modal — the chat stays visible on the right.
 //
-// Reads as clean information by default: work details, languages and company
-// are label/value rows, not form boxes. Each editable field is changed
-// INDIVIDUALLY — its own pencil → inline input → Save/Cancel — so there's no
-// single all-or-nothing form mode. Role and work email are identity/permission
-// fields: always read-only, never inputs.
+// Reworked 2026-10-12 from the "Profile & group info rework" canvas into the
+// section language of Workspace settings. The banner stays (it is where the
+// photo is managed). What changed: availability is a direct three-way choice
+// instead of a pill menu in the banner; the two fields you can change sit in
+// one card with an always-visible Edit; languages are removable tags instead
+// of a comma-separated text field; the four identity facts nobody can change
+// here (name, email, role, company) are one card marked Locked with a single
+// reason, instead of being mixed into the editable rows with a hint each; and
+// deleting the account is confirmed in place.
 export default function ProfileSidebarPanel({
   initialProfile,
   away = false,
   onBack,
   backLabel = 'Back',
   onSaved,
+  onPreview,
 }: Props) {
   const [profile, setProfile] = useState<Profile | null>(initialProfile ?? null)
   const [availability, setAvailability] = useState<AvailabilityStatus>(
     initialProfile?.availabilityStatus ?? 'available',
   )
   const [error, setError] = useState<string | null>(null)
+  const [statusError, setStatusError] = useState<string | null>(null)
   // The picked image awaiting crop confirmation. Set on selection (no immediate
   // upload); cleared on cancel or after a successful cropped upload.
   const [cropFile, setCropFile] = useState<File | null>(null)
-  // Account-deletion flow: a guarded, destructive action. `confirmDelete` shows
-  // the confirm dialog; `deleting` disables the trigger while the request runs.
+  // Account deletion: a guarded, destructive action confirmed in place — the
+  // first press arms it, the second (a different, filled button) commits.
   const auth = useAuth()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     // Seeded from the cache → render instantly, no fetch. Only fetch when we
@@ -80,20 +99,18 @@ export default function ProfileSidebarPanel({
     if (initialProfile) return
     api.profile
       .get()
-      .then(({ profile }) => hydrate(profile))
+      .then(({ profile }) => {
+        setProfile(profile)
+        setAvailability(profile.availabilityStatus)
+      })
       .catch(() => setError('Could not load your profile.'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  function hydrate(p: Profile) {
-    setProfile(p)
-    setAvailability(p.availabilityStatus)
-  }
-
   const isDriver = profile?.role === 'driver'
 
-  // Persist a single profile field. Throws on failure so the calling row keeps
-  // its editor open and surfaces a retryable error.
+  // Persist one profile change. Throws on failure so the calling control keeps
+  // its state and surfaces a retryable error.
   async function savePatch(patch: ProfilePatch) {
     const { profile: p } = await api.profile.update(patch)
     setProfile(p)
@@ -123,16 +140,17 @@ export default function ProfileSidebarPanel({
     }
   }
 
-  // Availability changes apply immediately (a quick toggle, not a form field).
-  async function setStatus(s: AvailabilityStatus) {
-    setAvailability(s)
-    setError(null)
+  // Availability applies immediately (a quick toggle, not a form field).
+  async function changeAvailability(next: AvailabilityStatus) {
+    if (next === availability) return
+    const before = availability
+    setAvailability(next)
+    setStatusError(null)
     try {
-      const { profile: p } = await api.profile.update({ availabilityStatus: s })
-      setProfile(p)
-      onSaved(p)
+      await savePatch({ availabilityStatus: next })
     } catch {
-      setError('Could not update status.')
+      setAvailability(before)
+      setStatusError('Could not change your availability. Try again.')
     }
   }
 
@@ -143,18 +161,16 @@ export default function ProfileSidebarPanel({
   // the panel, so there's no success state to reset.
   async function deleteAccount() {
     setDeleting(true)
-    setError(null)
+    setDeleteError(null)
     try {
       await api.profile.delete()
       await auth.signOut()
     } catch {
       setDeleting(false)
       setConfirmDelete(false)
-      setError('Could not delete your account. Please try again.')
+      setDeleteError('Could not delete your account. Try again.')
     }
   }
-
-  const languagesValue = profile && profile.otherLanguages.length ? profile.otherLanguages.join(', ') : ''
 
   // Photo viewing + management for the hero: the pencil (Change / Remove) and
   // the lightbox. Called unconditionally — it is a hook — with the "no profile
@@ -176,14 +192,31 @@ export default function ProfileSidebarPanel({
   return (
     <>
       <div className={`flex flex-col h-full ${SIDEBAR_PANEL_SURFACE}`}>
-        <PanelHeader title="Profile" onBack={onBack} backLabel={backLabel} />
+        <PanelHeader
+          title="My profile"
+          onBack={onBack}
+          backLabel={backLabel}
+          action={
+            onPreview && (
+              <button
+                type="button"
+                onClick={onPreview}
+                title="See your card the way colleagues see it"
+                className="flex h-[2.125rem] items-center gap-1.5 rounded-btn border border-line-2 px-3 text-base font-semibold text-text transition-colors hover:bg-white/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+              >
+                <Eye size="0.875rem" strokeWidth={1.9} />
+                Preview
+              </button>
+            )
+          }
+        />
 
         {!profile ? (
           <div className="flex-1 flex items-center justify-center text-sm text-faint">
             {error ?? 'Loading…'}
           </div>
         ) : (
-          <div className={PANEL_BODY}>
+          <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 pt-4 pb-8">
             {/* Identity — the photo is the hero. Change/remove via the pencil
                 pinned to the banner; the banner itself opens the lightbox. */}
             <ProfileHero
@@ -203,100 +236,141 @@ export default function ProfileSidebarPanel({
               onPhotoClick={editor.openPreview}
               overlay={editor.optionsButton}
               title={profile.displayName}
-              subtitle={`${ROLE_LABEL[profile.role]}${profile.jobTitle ? ` · ${profile.jobTitle}` : ''}`}
-              status={
-                !isDriver && (
-                  <StatusSelect value={availability} away={away} onChange={setStatus} />
-                )
-              }
+              subtitle={<RowMeta segments={[ROLE_LABEL[profile.role], profile.jobTitle ?? '']} whole />}
               error={error}
             />
             {editor.chrome}
 
-            {/* Work details — each editable row changes on its own. */}
-            <ProfileSection label="Work details">
-              {/* Display name is identity — captured at signup and locked after
-                  creation (identity consistency / anti-abuse). Read-only. */}
-              <EditableField label="Display name" value={profile.displayName} hint="Set at signup" />
-              {/* Role is permission-based — read-only. */}
-              <EditableField label="Role" value={ROLE_LABEL[profile.role]} hint="Set by an admin" />
-              <EditableField
-                label="Job title / function"
-                value={profile.jobTitle}
-                editable
-                placeholder="e.g. Fleet Manager"
-                onSave={(v) => savePatch({ jobTitle: v || null })}
-              />
-              <EditableField
-                label="Work phone"
-                value={profile.workPhone}
-                editable
-                placeholder="+40…"
-                onSave={(v) => savePatch({ workPhone: v || null })}
-              />
-              {/* Email is identity — read-only. */}
-              <EditableField label="Work email" value={profile.email} hint="Used to sign in" />
-            </ProfileSection>
-
-            {/* Languages (not shown for drivers). */}
-            {!isDriver && (
-              <ProfileSection label="Languages">
-                <EditableField
-                  label="Native language"
-                  value={profile.nativeLanguage}
-                  editable
-                  placeholder="e.g. Romanian"
-                  onSave={(v) => savePatch({ nativeLanguage: v || null })}
-                />
-                <EditableField
-                  label="Other spoken languages"
-                  value={languagesValue}
-                  editable
-                  hint="Comma-separated"
-                  placeholder="e.g. English, German"
-                  onSave={(v) =>
-                    savePatch({
-                      otherLanguages: v
-                        .split(',')
-                        .map((s) => s.trim())
-                        .filter(Boolean)
-                        .slice(0, 15),
-                    })
+            <div className="px-1">
+              {!isDriver && (
+                <SettingsSection
+                  title="Availability"
+                  description={
+                    away
+                      ? 'Shown next to your name across the company. You show as Away right now, because you are idle or this tab is hidden.'
+                      : 'Shown next to your name across the company. While you are idle or this tab is hidden, you show as Away.'
                   }
-                />
-              </ProfileSection>
-            )}
-
-            {/* Company (read-only context) */}
-            <ProfileSection label="Company">
-              <EditableField label="Workspace" value={profile.company} />
-            </ProfileSection>
-
-            {/* Danger zone — account deletion. Anonymizes the account; chat
-                history is preserved but personal details are removed. */}
-            <ProfileSection label="Danger zone" bare>
-              <div className="rounded-card border border-alert/20 bg-alert/[0.04] px-3.5 py-3">
-                <div className="text-base text-text font-medium leading-tight">
-                  Delete account
-                </div>
-                <p className="text-sm text-faint mt-1 leading-[1.45]">
-                  Permanently removes your name, photo and profile details. Your messages stay in
-                  conversations but show as a deleted user. This can’t be undone.
-                </p>
-                <button
-                  onClick={() => setConfirmDelete(true)}
-                  disabled={deleting}
-                  className="mt-3 inline-flex items-center gap-1.5 h-8 px-3 rounded-btn border border-alert/40 text-alert text-sm font-semibold hover:bg-alert/10 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  {deleting ? (
-                    <Loader2 size="0.8125rem" strokeWidth={2.2} className="animate-spin" />
-                  ) : (
+                  <Segmented
+                    fill
+                    label="Availability"
+                    value={availability}
+                    options={AVAILABILITY.map((a) => ({ value: a.value, label: a.label, dot: a.color }))}
+                    onChange={(v) => void changeAvailability(v as AvailabilityStatus)}
+                  />
+                  {statusError && <p className="text-sm text-alert">{statusError}</p>}
+                </SettingsSection>
+              )}
+
+              <SettingsSection
+                title="Contact details"
+                description="Colleagues and partners see these on your card."
+              >
+                <div className="overflow-hidden rounded-card border border-line divide-y divide-line">
+                  <EditableField
+                    variant="card"
+                    label="Job title"
+                    value={profile.jobTitle}
+                    editable
+                    placeholder="e.g. Fleet manager"
+                    onSave={(v) => savePatch({ jobTitle: v || null })}
+                  />
+                  <EditableField
+                    variant="card"
+                    label="Work phone"
+                    type="tel"
+                    value={profile.workPhone}
+                    editable
+                    placeholder="+40 …"
+                    onSave={(v) => savePatch({ workPhone: v || null })}
+                  />
+                </div>
+              </SettingsSection>
+
+              {!isDriver && (
+                <SettingsSection
+                  title="Languages"
+                  description="On your card, so people know which languages they can write to you in."
+                >
+                  <LanguagesSetting
+                    native={profile.nativeLanguage}
+                    others={profile.otherLanguages}
+                    onSave={savePatch}
+                  />
+                </SettingsSection>
+              )}
+
+              <SettingsSection
+                title="Sign-in and role"
+                action={
+                  <span className="flex items-center gap-1.5 py-1.5 text-sm text-faint">
+                    <Lock size="0.75rem" strokeWidth={2} aria-hidden />
+                    Locked
+                  </span>
+                }
+                description={`Set when your account was created. If one is wrong, ask an admin at ${profile.company}.`}
+              >
+                <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] rounded-card border border-line px-3.5">
+                  {(
+                    [
+                      ['Name', profile.displayName, null],
+                      ['Work email', profile.email, 'Used to sign in'],
+                      ['Role', ROLE_LABEL[profile.role], null],
+                      ['Company', profile.company, null],
+                    ] as const
+                  ).map(([label, value, note], i) => (
+                    <div key={label} className={`contents ${i === 0 ? '' : '[&>*]:border-t [&>*]:border-line'}`}>
+                      <dt className="py-3 text-base text-muted">{label}</dt>
+                      <dd className="flex min-w-0 flex-col items-end gap-0.5 py-3 text-right">
+                        <span className="max-w-full truncate text-base font-medium">{value}</span>
+                        {note && <span className="text-sm text-faint">{note}</span>}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </SettingsSection>
+
+              <SettingsSection
+                last
+                title="Delete account"
+                description="Removes your name, photo and details. Your messages stay in their conversations and show as a deleted user."
+              >
+                {confirmDelete ? (
+                  <div className="flex flex-col gap-3 rounded-card border border-alert p-3.5">
+                    <span className="text-lg font-semibold">This can’t be undone.</span>
+                    <span className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDelete(false)}
+                        disabled={deleting}
+                        className="h-9 rounded-btn border border-line-2 px-3 text-base font-semibold transition-colors hover:bg-white/6 disabled:opacity-60"
+                      >
+                        Keep my account
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void deleteAccount()}
+                        disabled={deleting}
+                        className="inline-flex h-9 items-center gap-1.5 rounded-btn bg-alert px-3 text-base font-semibold text-bg transition-opacity hover:opacity-90 disabled:opacity-60"
+                      >
+                        {deleting && <Loader2 size="0.8125rem" strokeWidth={2.2} className="animate-spin" />}
+                        Delete for good
+                      </button>
+                    </span>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(true)}
+                    className="inline-flex h-9 items-center gap-1.5 self-start rounded-btn border border-alert/40 px-3 text-base font-semibold text-alert transition-colors hover:bg-alert/10"
+                  >
                     <Trash2 size="0.8125rem" strokeWidth={1.9} />
-                  )}
-                  Delete my account
-                </button>
-              </div>
-            </ProfileSection>
+                    Delete my account
+                  </button>
+                )}
+                {deleteError && <p className="text-sm text-alert">{deleteError}</p>}
+              </SettingsSection>
+            </div>
           </div>
         )}
       </div>
@@ -308,84 +382,141 @@ export default function ProfileSidebarPanel({
           onConfirm={uploadCroppedAvatar}
         />
       )}
-
-      {confirmDelete && (
-        <ConfirmDialog
-          title="Delete your account?"
-          message="This permanently removes your name, photo and profile details. Your messages stay in conversations but will show as a deleted user. This can’t be undone."
-          confirmLabel="Delete account"
-          tone="alert"
-          onConfirm={deleteAccount}
-          onCancel={() => setConfirmDelete(false)}
-        />
-      )}
     </>
   )
 }
 
-// Status selector — sits under the name. The chip reflects the current status
-// (or "Away" when auto-away is active) and opens a small colour-coded menu.
-// Selecting applies instantly.
-function StatusSelect({
-  value,
-  away,
-  onChange,
+// Languages as tags: the native one first (marked), then the others, each
+// removable; "Add language" opens suggestions plus a field for anything else.
+// Every change saves at once — there is no form to submit.
+function LanguagesSetting({
+  native,
+  others,
+  onSave,
 }: {
-  value: AvailabilityStatus
-  away: boolean
-  onChange: (s: AvailabilityStatus) => void
+  native: string | null
+  others: string[]
+  onSave: (patch: ProfilePatch) => Promise<void>
 }) {
-  const [open, setOpen] = useState(false)
-  const meta = statusMeta(value)
-  const display = away ? AWAY : meta
+  const [adding, setAdding] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const all = [...(native ? [native] : []), ...others]
+  const has = (name: string) => all.some((l) => l.toLowerCase() === name.toLowerCase())
+  const suggestions = LANGUAGE_SUGGESTIONS.filter((l) => !has(l)).slice(0, 6)
+
+  async function run(patch: ProfilePatch) {
+    setBusy(true)
+    setError(null)
+    try {
+      await onSave(patch)
+      return true
+    } catch {
+      setError('Could not save your languages. Try again.')
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function remove(name: string) {
+    if (name === native) void run({ nativeLanguage: null })
+    else void run({ otherLanguages: others.filter((l) => l !== name) })
+  }
+
+  async function add(raw: string) {
+    const name = raw.trim()
+    if (!name || has(name)) {
+      setDraft('')
+      return
+    }
+    // The first language anyone adds is their native one.
+    const ok = await run(native ? { otherLanguages: [...others, name].slice(0, 15) } : { nativeLanguage: name })
+    if (ok) {
+      setDraft('')
+      setAdding(false)
+    }
+  }
+
+  function submit(e: FormEvent) {
+    e.preventDefault()
+    void add(draft)
+  }
 
   return (
-    <div className="relative inline-block">
-      {/* The pill itself is the shared read-only visual (StatusPill); only the
-          trailing chevron marks it as changeable, so the status reads
-          identically in Account / User profile where it can't be edited. */}
-      <button
-        onClick={() => setOpen((o) => !o)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label={`Availability: ${display.label}. Change`}
-        className="rounded-full transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
-      >
-        <StatusPill
-          label={display.label}
-          color={display.color}
-          suffix={away ? <span className="opacity-70">· auto</span> : undefined}
-          trailing={<ChevronDown size="0.75rem" strokeWidth={2} className="-mr-0.5 opacity-70" />}
-        />
-      </button>
-
-      {open && (
-        <>
-          {/* Click-away backdrop. */}
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} aria-hidden />
-          <div
-            role="listbox"
-            className={`absolute left-1/2 -translate-x-1/2 mt-1.5 z-20 w-[10rem] ${MENU_CONTAINER}`}
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap gap-1.5">
+        {all.map((name) => (
+          <span
+            key={name}
+            className="flex h-8 items-center gap-1.5 rounded-btn border border-line pl-3 pr-0.5 text-base font-medium"
           >
-            {AVAILABILITY.map((a) => (
-              <button
-                key={a.value}
-                role="option"
-                aria-selected={a.value === value}
-                onClick={() => {
-                  setOpen(false)
-                  if (a.value !== value) onChange(a.value)
-                }}
-                className={menuItemClass()}
-              >
-                <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: a.color }} />
-                <span className="flex-1">{a.label}</span>
-                {a.value === value && <Check size="0.8125rem" strokeWidth={2} className="text-muted shrink-0" />}
-              </button>
-            ))}
-          </div>
-        </>
+            {name}
+            {name === native && <span className="text-sm font-normal text-muted">Native</span>}
+            <button
+              type="button"
+              onClick={() => remove(name)}
+              disabled={busy}
+              aria-label={`Remove ${name}`}
+              className="flex h-[1.625rem] w-[1.625rem] items-center justify-center rounded-btn text-faint transition-colors hover:bg-white/6 hover:text-text disabled:opacity-50"
+            >
+              <X size="0.75rem" strokeWidth={2.2} />
+            </button>
+          </span>
+        ))}
+        <button
+          type="button"
+          onClick={() => setAdding((v) => !v)}
+          aria-expanded={adding}
+          className="flex h-8 items-center gap-1.5 rounded-btn border border-line-2 px-3 text-base font-semibold transition-colors hover:bg-white/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+        >
+          <Plus size="0.8125rem" strokeWidth={2} />
+          Add language
+        </button>
+      </div>
+
+      {adding && (
+        <div className="flex flex-col gap-2 rounded-card border border-line bg-white/2 p-3">
+          {suggestions.length > 0 && (
+            <>
+              <span className="text-sm text-muted">Suggestions</span>
+              <div className="flex flex-wrap gap-1.5">
+                {suggestions.map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void add(name)}
+                    className="h-[1.875rem] rounded-btn border border-line bg-bg px-2.5 text-base font-medium transition-colors hover:border-line-2 disabled:opacity-50"
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          <form onSubmit={submit} className="flex gap-1.5">
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="Another language"
+              aria-label="Another language"
+              disabled={busy}
+              className="h-9 min-w-0 flex-1 rounded-card border border-line-2 bg-transparent px-3 text-base text-text outline-none placeholder:text-faint focus:border-text/60"
+            />
+            <button
+              type="submit"
+              disabled={busy || !draft.trim()}
+              className="h-9 shrink-0 rounded-btn bg-text px-3 text-base font-semibold text-bg transition-opacity disabled:opacity-40"
+            >
+              Add
+            </button>
+          </form>
+        </div>
       )}
+      {error && <p className="text-sm text-alert">{error}</p>}
     </div>
   )
 }

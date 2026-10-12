@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { useTravellingMarker } from '../useTravellingMarker'
 import {
   Bell,
+  Building2,
   Check,
   ChevronDown,
   Copy,
@@ -9,9 +9,9 @@ import {
   Link2,
   Loader2,
   Mail,
+  Monitor,
   Palette,
   Play,
-  Trash2,
   Users,
 } from 'lucide-react'
 import {
@@ -21,24 +21,26 @@ import {
   clearDensityOverride,
   type Density,
 } from '../../lib/density'
-import { setMessageStyle, useMessageStyle, type MessageStyle } from '../../lib/messageStyle'
+import { MESSAGE_STYLE_LABEL, setMessageStyle, useMessageStyle, type MessageStyle } from '../../lib/messageStyle'
 import {
   useAnimations,
   setAnimations,
   useComposerEffect,
   setComposerEffect,
-  type InterfaceAnimations,
   type ComposerEffect,
 } from '../../lib/animations'
 import { useAuth } from '../../auth/AuthContext'
 import { setTheme, useTheme, type Theme } from '../../lib/theme'
 import { api, ApiError } from '../../lib/api'
-import type { Role, WorkspaceInvite, WorkspaceInviteCreated } from '../../lib/types'
+import type { Role, WorkspaceInvite, WorkspaceInviteCreated, WorkspaceMember } from '../../lib/types'
 import { ROLE_LABEL } from './ProfileSidebarPanel'
-import { PanelHeader, CategoryRow, PANEL_GROUP_CARD } from './panelChrome'
+import { PanelHeader } from './panelChrome'
 import { SIDEBAR_PANEL_SURFACE } from './profileChrome'
-import { ICON_ACTION_BASE, ICON_ACTION_IDLE } from '../HeaderIconButton'
 import { MENU_CONTAINER, menuItemClass } from '../menuStyles'
+import { RowTile } from '../../pages/sidebarBits'
+import { NavRow, RadioMark, Segmented, SettingsSection, Switch } from './sectionChrome'
+import { usePresence } from '../../hooks/usePresence'
+import AppMark from '../AppMark'
 import {
   NOTIFICATION_SOUNDS,
   playNotificationSound,
@@ -57,10 +59,10 @@ import {
 // names roles identically; the short hints describe each role in the picker.
 const INVITE_ROLE_ORDER: readonly Role[] = ['dispatcher', 'driver', 'partner', 'admin']
 const INVITE_ROLE_HINT: Record<Role, string> = {
-  dispatcher: 'Plans trips, manages vehicles and members',
-  driver: 'Drives assigned trips (mobile driver access)',
-  partner: 'External partner with limited access',
-  admin: 'Full company administration',
+  dispatcher: 'Plans trips, manages vehicles and members.',
+  driver: 'Drives assigned trips on the phone app.',
+  partner: 'Outside partner with limited access.',
+  admin: 'Full company administration.',
 }
 // The role a new invite defaults to — matches the server default so an admin who
 // doesn't touch the picker gets the previous behaviour.
@@ -72,24 +74,29 @@ type Props = {
   backLabel?: string
 }
 
-// The settings categories. New ones (Notifications, Integrations …) drop in as
-// another CategoryRow + detail view.
+// The settings categories. New ones drop in as another nav row + detail view.
 type Category = 'appearance' | 'notifications' | 'members' | 'about'
 
 // The app version, shared by the About detail and the category list summary.
 const APP_VERSION: string = import.meta.env.VITE_APP_VERSION ?? '0.3.2'
 
-// Workspace settings as a sidebar drawer — consistent with "My profile" /
+const DENSITY_LABEL: Record<Density, string> = {
+  compact: 'Compact',
+  default: 'Standard',
+  comfortable: 'Comfortable',
+}
+
+// Workspace settings as a sidebar drill-in — consistent with "My profile" /
 // "Company profile" (replaces the conversation list; the chat stays on the
-// right) and rendered inside the sidebar card so it shares the same shell.
+// right).
 //
-// Two-level, category-based UX: the FIRST screen lists settings CATEGORIES as
-// rows of ONE grouped card (a deliberate settings menu, not floating cards),
-// each showing its LIVE value as the subtitle; clicking one opens that
-// category's DETAIL view. Holds APP/DISPLAY preferences ONLY — never personal
-// profile fields (those live in "My profile"). Each appearance setting is a
-// device-local pref persisted in localStorage by its lib module — changing it
-// in a detail view applies live.
+// REWORK (2026-10-12, from the "Workspace settings rework" canvas): the list is
+// grouped by WHO a setting affects — "Your preferences" are saved on this
+// device, "<company>" applies to everyone in it, "App" is about the build — and
+// every detail says the same in its header (This device / Whole company), so
+// the old footnote ("saved in this browser…") under each card is gone. Details
+// are hairline-separated sections (title, one line of why, then the control),
+// with visual pickers wherever a choice is visual (theme, message style).
 export default function WorkspaceSettingsPanel({ onBack, backLabel = 'Back' }: Props) {
   // Which category's detail is open (null = the category list). Local UI state;
   // no routing needed — the drawer is a self-contained master/detail.
@@ -98,37 +105,61 @@ export default function WorkspaceSettingsPanel({ onBack, backLabel = 'Back' }: P
   // (the server enforces this too). Auth is always signed-in inside this panel.
   const auth = useAuth()
   const isAdmin = auth.status === 'signed_in' && auth.user.role === 'admin'
-  // Live values for the category-list subtitles (the hooks subscribe, so the
+  const companyName = auth.status === 'signed_in' ? auth.workspace.name : 'Company'
+  // Live values for the nav-row summaries (the hooks subscribe, so the
   // summaries refresh when the user returns from a detail view).
   const theme = useTheme()
+  const messageStyle = useMessageStyle()
   const notificationSound = useNotificationSound()
   const browserNotifications = useBrowserNotifications()
   const densityOverride = getStoredDensity()
 
+  // The Members row says how many people and pending invites there are. Fetched
+  // when the list shows (admins only), so it is fresh after a detail visit.
+  const [memberSummary, setMemberSummary] = useState<string[] | null>(null)
+  useEffect(() => {
+    if (!isAdmin || category) return
+    let live = true
+    Promise.all([api.workspace.members(), api.workspaceInvites.list()])
+      .then(([{ members }, { invites }]) => {
+        if (!live) return
+        const pending = invites.filter((invite) => invite.status === 'active').length
+        // /workspace/members lists everyone EXCEPT the caller (it feeds the
+        // contacts rail), so the viewer is counted back in.
+        const meId = auth.status === 'signed_in' ? auth.user.id : ''
+        const count = members.length + (members.some((m) => m.id === meId) ? 0 : 1)
+        setMemberSummary([
+          `${count} ${count === 1 ? 'person' : 'people'}`,
+          pending > 0 ? `${pending} invite${pending === 1 ? '' : 's'} pending` : 'No pending invites',
+        ])
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [isAdmin, category])
+
   // ── Detail views ────────────────────────────────────────────────────────────
   // Every screen of this panel — each detail AND the list — enters with
   // `panel-fade-in`, keyed on the category so React remounts the root when it
-  // changes. The sidebar's drill-in wrapper (pages/Workspace.tsx) already fades
-  // the panel in as a whole, but it is keyed on the TOP-level view ('settings'),
-  // so this second level used to switch screens inside an already-mounted
-  // wrapper with no entrance at all: Account → Settings faded, Settings →
-  // Appearance snapped (user, 2026-09-12: "the animation does not apply to
-  // every modal"). Same animation, same stillness gating, one level down.
+  // changes (the sidebar's drill-in wrapper only fades the TOP-level view).
   if (category) {
     const title = {
       appearance: 'Appearance',
       notifications: 'Notifications',
-      members: 'Company members',
+      members: 'Members',
       about: 'About',
     }[category]
+    const scope = category === 'members' ? 'company' : category === 'about' ? null : 'device'
     return (
       <div key={category} className={`panel-fade-in flex flex-col h-full ${SIDEBAR_PANEL_SURFACE}`}>
         <PanelHeader
           title={title}
           onBack={() => setCategory(null)}
           backLabel="Back to Workspace settings"
+          action={scope ? <ScopeTag scope={scope} /> : undefined}
         />
-        <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 py-4">
+        <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-5 pb-8">
           {category === 'appearance' ? (
             <AppearanceSettings />
           ) : category === 'notifications' ? (
@@ -144,338 +175,250 @@ export default function WorkspaceSettingsPanel({ onBack, backLabel = 'Back' }: P
   }
 
   // ── Category list ───────────────────────────────────────────────────────────
-  const appearanceValue = `${theme === 'light' ? 'Light' : 'Dark'} · ${
-    densityOverride ? DENSITY_LABEL[densityOverride] : 'Auto'
-  } density`
+  const soundLabel =
+    NOTIFICATION_SOUNDS.find((sound) => sound.value === notificationSound)?.label ?? 'Soft Pop'
 
   return (
     <div key="list" className={`panel-fade-in flex flex-col h-full ${SIDEBAR_PANEL_SURFACE}`}>
       <PanelHeader title="Workspace settings" onBack={onBack} backLabel={backLabel} />
-      <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 py-3">
-        <div className={PANEL_GROUP_CARD}>
-          <CategoryRow
-            icon={<Palette size="1rem" strokeWidth={1.8} />}
+      <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-2.5 pt-2 pb-6 flex flex-col gap-6">
+        <NavGroup title="Your preferences" scope="This device">
+          <NavRow
+            icon={<Palette size="1.0625rem" strokeWidth={1.7} />}
             title="Appearance"
-            value={appearanceValue}
+            value={[
+              theme === 'light' ? 'Light' : 'Dark',
+              MESSAGE_STYLE_LABEL[messageStyle],
+              densityOverride ? `${DENSITY_LABEL[densityOverride]} density` : 'Auto density',
+            ]}
             onClick={() => setCategory('appearance')}
           />
-          <CategoryRow
-            icon={<Bell size="1rem" strokeWidth={1.8} />}
+          <NavRow
+            icon={<Bell size="1.0625rem" strokeWidth={1.7} />}
             title="Notifications"
-            value={
-              `${browserNotifications.enabled ? 'Allowed' : 'Off'} · ${
-                NOTIFICATION_SOUNDS.find((sound) => sound.value === notificationSound)?.label ??
-                'Soft Pop'
-              }`
-            }
+            value={[browserNotifications.enabled ? 'On' : 'Off', soundLabel]}
             onClick={() => setCategory('notifications')}
           />
-          {isAdmin && (
-            <CategoryRow
-              icon={<Users size="1rem" strokeWidth={1.8} />}
-              title="Company members"
-              value="Invite people with a secure link"
+        </NavGroup>
+
+        {isAdmin && (
+          <NavGroup title={companyName} scope="Everyone in the company">
+            <NavRow
+              icon={<Users size="1.0625rem" strokeWidth={1.7} />}
+              title="Members"
+              value={memberSummary ?? ['People and invite links']}
               onClick={() => setCategory('members')}
             />
-          )}
-          <CategoryRow
-            icon={<Info size="1rem" strokeWidth={1.8} />}
+          </NavGroup>
+        )}
+
+        <NavGroup title="App">
+          <NavRow
+            icon={<Info size="1.0625rem" strokeWidth={1.7} />}
             title="About"
-            value={`Version ${APP_VERSION}`}
+            value={[`Version ${APP_VERSION}`]}
             onClick={() => setCategory('about')}
           />
-        </div>
-        <p className="text-xs text-faint mt-2 px-1 leading-[1.5]">
-          Appearance preferences are saved in this browser and apply to this device only.
-        </p>
+        </NavGroup>
       </div>
     </div>
   )
 }
 
-// Appearance detail: all display preferences in ONE hairline-divided card,
-// with the device-local note as a quiet footnote underneath.
+// ── Navigation pieces ─────────────────────────────────────────────────────────
+
+// One group of the settings list: its name, and — on the right — who it
+// affects. The scope is the point of the grouping, so it is said once here
+// rather than as a footnote under every card.
+function NavGroup({ title, scope, children }: { title: string; scope?: string; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-0.5">
+      <div className="flex items-baseline justify-between gap-3 px-3 pb-1.5">
+        <h2 className="min-w-0 truncate text-base font-semibold text-text">{title}</h2>
+        {scope && <span className="shrink-0 text-sm text-faint">{scope}</span>}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+
+// Who a detail's changes reach, in its header: this browser, or the company.
+function ScopeTag({ scope }: { scope: 'device' | 'company' }) {
+  return (
+    <span className="flex shrink-0 items-center gap-1.5 pr-1 text-sm text-faint">
+      {scope === 'device' ? (
+        <Monitor size="0.875rem" strokeWidth={1.8} />
+      ) : (
+        <Building2 size="0.875rem" strokeWidth={1.8} />
+      )}
+      {scope === 'device' ? 'This device' : 'Whole company'}
+    </span>
+  )
+}
+
+// ── Appearance ─────────────────────────────────────────────────────────────
+
 function AppearanceSettings() {
   return (
-    <div>
-      <div className="rounded-list border border-line bg-white/2 px-3.5 divide-y divide-line">
-        <ThemeSetting />
-        <DensitySetting />
-        <MessageStyleSetting />
-      </div>
-      {/* Animations are their own card rather than three more rows in the one
-          above: the group has an internal dependency (the typing effect is
-          governed by the switch over it) and a card is what says those two
-          belong together and the theme/density/style rows do not. */}
-      <div className="eyebrow mt-4 mb-1.5">Animations</div>
-      <div className="rounded-list border border-line bg-white/2 px-3.5 divide-y divide-line">
-        <InterfaceAnimationsSetting />
-        <ComposerEffectSetting />
-      </div>
-      <p className="text-xs text-faint mt-2 px-1 leading-[1.5]">
-        Saved in this browser — applies to this device only.
-      </p>
-    </div>
+    <>
+      <ThemeSetting />
+      <MessageStyleSetting />
+      <DensitySetting />
+      <MotionSetting />
+    </>
   )
 }
 
-function NotificationSettings() {
-  const selected = useNotificationSound()
-  const browserNotifications = useBrowserNotifications()
-  const [requestingPermission, setRequestingPermission] = useState(false)
-
-  async function toggleBrowserNotifications() {
-    if (requestingPermission || !browserNotifications.supported) return
-    if (browserNotifications.enabled) {
-      setRequestingPermission(true)
-      try {
-        await disableBrowserNotifications()
-      } finally {
-        setRequestingPermission(false)
-      }
-      return
-    }
-    setRequestingPermission(true)
-    try {
-      await enableBrowserNotifications()
-    } finally {
-      setRequestingPermission(false)
-    }
-  }
-
-  const permissionDescription = !browserNotifications.supported
-    ? 'This browser does not support system notifications.'
-    : browserNotifications.permission === 'denied'
-      ? 'Blocked by the browser. Re-enable notifications from the site permissions menu.'
-      : browserNotifications.enabled
-        ? 'Show notifications while the app is open or closed. Closed-app alerts use your system sound.'
-        : 'The browser will ask for permission when you turn this on.'
-
-  return (
-    <div>
-      <div className="rounded-card border border-line bg-white/2 px-3.5 py-3 mb-3">
-        <div className="flex items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium leading-tight text-text">
-              Allow notifications
-            </div>
-            <div className="mt-0.5 text-xs leading-[1.4] text-faint">
-              {permissionDescription}
-            </div>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={browserNotifications.enabled}
-            aria-label="Allow notifications"
-            onClick={() => void toggleBrowserNotifications()}
-            disabled={
-              requestingPermission ||
-              !browserNotifications.supported ||
-              browserNotifications.permission === 'denied'
-            }
-            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 disabled:opacity-40 disabled:cursor-not-allowed ${
-              browserNotifications.enabled ? 'bg-text' : 'bg-white/10'
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 h-4 w-4 rounded-full transition-all ${
-                browserNotifications.enabled
-                  ? 'left-[1.125rem] bg-bg'
-                  : 'left-0.5 bg-muted'
-              }`}
-            />
-          </button>
-        </div>
-      </div>
-      <div className="mb-1.5 px-1 text-xs font-semibold text-faint">
-        Notification sound
-      </div>
-      <div className={PANEL_GROUP_CARD}>
-        {NOTIFICATION_SOUNDS.map((sound) => {
-          const active = sound.value === selected
-          return (
-            <div key={sound.value} className="flex items-center gap-1.5 px-1.5 py-1">
-              <button
-                type="button"
-                onClick={() => setNotificationSound(sound.value)}
-                aria-pressed={active}
-                className={`min-w-0 flex-1 flex items-center gap-2.5 rounded-btn px-2 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
-                  active ? '' : 'hover:bg-white/6'
-                }`}
-              >
-                {/* The selection mark, and the ONLY thing that says which
-                    sound is live now that the row's wash is gone — a filled
-                    square in `bg-text`, the same block the segmented control
-                    and the Group Info pill use, so "selected" reads identically
-                    everywhere. Square rather than a radio circle: it is not a
-                    native radio, and a lone round control in this UI reads as
-                    something borrowed. */}
-                <span
-                  className={`h-4 w-4 shrink-0 rounded-chip border flex items-center justify-center transition-colors ${
-                    active
-                      ? 'border-text bg-text text-bg'
-                      : 'border-line-2 text-transparent'
-                  }`}
-                >
-                  <Check size="0.625rem" strokeWidth={2.5} />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium text-text leading-tight">
-                    {sound.label}
-                  </span>
-                  <span className="mt-0.5 block text-xs leading-[1.4] text-faint">
-                    {sound.description}
-                  </span>
-                </span>
-              </button>
-              {sound.value !== 'none' && (
-                <button
-                  type="button"
-                  onClick={() => void playNotificationSound(sound.value as NotificationSound)}
-                  aria-label={`Preview ${sound.label}`}
-                  title={`Preview ${sound.label}`}
-                  className="rounded-btn h-7 w-7 shrink-0 flex items-center justify-center text-muted hover:text-text hover:bg-white/8 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
-                >
-                  <Play size="0.75rem" strokeWidth={1.9} fill="currentColor" />
-                </button>
-              )}
-            </div>
-          )
-        })}
-      </div>
-      <p className="text-xs text-faint mt-2 px-1 leading-[1.5]">
-        Preview a sound before selecting it. Muted conversations always stay silent.
-      </p>
-    </div>
-  )
+// Each theme drawn as itself — a rail, two incoming blocks and my own — so the
+// choice is seen, not read. The swatches are literal on purpose: a light
+// preview has to look light while the app around it is dark.
+const THEME_PREVIEW: Record<Theme, { label: string; ground: string; line: string; bubble: string; own: string }> = {
+  dark: { label: 'Dark', ground: '#000000', line: '#2C2C2C', bubble: '#1A1A1A', own: '#2A2A2A' },
+  light: { label: 'Light', ground: '#FFFFFF', line: '#D0D7E0', bubble: '#F1F4F8', own: '#E2E7EE' },
 }
 
-// Device-local color palette. The root data attribute switches the shared CSS
-// variables immediately; persistence keeps the selection through reloads.
 function ThemeSetting() {
   const theme = useTheme()
   return (
-    <SettingBlock
-      label="Color theme"
-      description="Choose the palette used throughout the application."
-    >
-      <Segmented
-        value={theme}
-        options={[
-          { value: 'dark', label: 'Dark' },
-          { value: 'light', label: 'Light' },
-        ]}
-        onChange={(value) => setTheme(value as Theme)}
-      />
-    </SettingBlock>
+    <SettingsSection title="Theme" description="The palette for the whole app.">
+      <div role="radiogroup" aria-label="Theme" className="grid grid-cols-2 gap-3">
+        {(Object.keys(THEME_PREVIEW) as Theme[]).map((value) => {
+          const preview = THEME_PREVIEW[value]
+          const on = theme === value
+          return (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => setTheme(value)}
+              className="group flex flex-col gap-2 text-left focus-visible:outline-none"
+            >
+              <span
+                aria-hidden
+                className={`flex h-24 overflow-hidden rounded-card border-2 transition-colors group-focus-visible:ring-2 group-focus-visible:ring-white/20 ${
+                  on ? 'border-text' : 'border-line group-hover:border-line-2'
+                }`}
+                style={{ background: preview.ground }}
+              >
+                <span
+                  className="flex w-[34%] flex-col gap-1.5 px-2 py-2.5"
+                  style={{ borderRight: `1px solid ${preview.line}` }}
+                >
+                  {[80, 60, 70].map((w) => (
+                    <span key={w} className="h-[5px] rounded-full" style={{ width: `${w}%`, background: preview.line }} />
+                  ))}
+                </span>
+                <span className="flex flex-1 flex-col justify-end gap-[5px] px-2 py-2.5">
+                  <span className="h-3 w-[70%] rounded" style={{ background: preview.bubble }} />
+                  <span className="h-3 w-[55%] rounded" style={{ background: preview.bubble }} />
+                  <span className="h-3 w-[60%] self-end rounded" style={{ background: preview.own }} />
+                </span>
+              </span>
+              <span className="flex items-center gap-2 text-lg font-medium">
+                <RadioMark on={on} />
+                {preview.label}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </SettingsSection>
   )
 }
 
-// How a message is DRAWN in the thread (lib/messageStyle.ts). Two readings of
-// the same vocabulary rather than two skins: Timeline hangs a message off a
-// coloured side rule; Bubbles sets it in a rounded block of quiet fill with the
-// name lifted out above it. Both say whose a message is with the SIDE it's on,
-// and which of the room's people sent it with the same per-author colour — the
-// rule wears it in one, the name wears it in the other — so switching doesn't
-// change what any mark in the thread MEANS.
+// How a message is DRAWN in the thread (lib/messageStyle.ts). Each option
+// carries a thumbnail of a two-message thread in that style, in the live
+// theme's own tokens, so the three read side by side as what they are.
+const MESSAGE_STYLES: { value: MessageStyle; hint: string }[] = [
+  { value: 'timeline', hint: 'A coloured rule, no box around the text.' },
+  { value: 'bubble', hint: 'Rounded blocks with the sender above.' },
+  { value: 'dense', hint: 'One line per message: time, sender, text.' },
+]
+
 function MessageStyleSetting() {
   const style = useMessageStyle()
   return (
-    <SettingBlock
-      label="Message style"
-      description={
-        style === 'bubble'
-          ? 'Each message sits in a rounded block, with the sender above it.'
-          : 'Each message hangs off a coloured rule, with no block around it.'
-      }
-    >
-      <Segmented
-        value={style}
-        options={[
-          { value: 'timeline', label: 'Timeline' },
-          { value: 'bubble', label: 'Bubbles' },
-        ]}
-        onChange={(value) => setMessageStyle(value as MessageStyle)}
-      />
-    </SettingBlock>
-  )
-}
-
-// ── Animations ─────────────────────────────────────────────────────────────
-// Two settings, and the order is the point: the universal switch first, the
-// composer's choice under it. The second is disabled while the first is off,
-// because a picker that cannot change anything is worse than one that is
-// visibly unavailable — and the stored choice is kept, so turning animations
-// back on restores it rather than resetting to a default.
-function InterfaceAnimationsSetting() {
-  const animations = useAnimations()
-  return (
-    <SettingBlock
-      label="Interface animations"
-      description={
-        animations === 'on'
-          ? 'Panels, menus and message actions ease in when they open.'
-          : 'Everything appears instantly. Your system\u2019s reduced-motion setting still applies either way.'
-      }
-    >
-      <Segmented
-        value={animations}
-        options={[
-          { value: 'on', label: 'On' },
-          { value: 'off', label: 'Off' },
-        ]}
-        onChange={(value) => setAnimations(value as InterfaceAnimations)}
-      />
-    </SettingBlock>
-  )
-}
-
-const COMPOSER_FX_DESCRIPTION: Record<ComposerEffect, string> = {
-  ink: 'Each letter fades in as you type it.',
-  pulse: 'A line runs out from the middle of the composer to both edges on each keystroke.',
-  none: 'The composer stays still while you type.',
-}
-
-function ComposerEffectSetting() {
-  const effect = useComposerEffect()
-  const animations = useAnimations()
-  const off = animations === 'off'
-  return (
-    <SettingBlock
-      label="Typing effect"
-      description={
-        off
-          ? 'Turned off with interface animations above.'
-          : COMPOSER_FX_DESCRIPTION[effect]
-      }
-    >
-      <div className={off ? 'pointer-events-none opacity-40' : ''} aria-disabled={off || undefined}>
-        <Segmented
-          value={effect}
-          options={[
-            { value: 'none', label: 'None' },
-            { value: 'ink', label: 'Fade' },
-            { value: 'pulse', label: 'Pulse' },
-          ]}
-          onChange={(value) => setComposerEffect(value as ComposerEffect)}
-        />
+    <SettingsSection title="Message style" description="How messages are drawn in every conversation.">
+      <div role="radiogroup" aria-label="Message style" className="flex flex-col gap-2">
+        {MESSAGE_STYLES.map((option) => {
+          const on = option.value === style
+          return (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => setMessageStyle(option.value)}
+              className={`flex items-center gap-3.5 rounded-card border p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+                on ? 'border-text bg-white/4' : 'border-line hover:border-line-2'
+              }`}
+            >
+              <MessageStylePreview style={option.value} />
+              <span className="min-w-0 flex-1">
+                <span className="block text-lg font-semibold">{MESSAGE_STYLE_LABEL[option.value]}</span>
+                <span className="mt-0.5 block text-base leading-[1.4] text-muted">{option.hint}</span>
+              </span>
+              <span className="mr-1.5">
+                <RadioMark on={on} />
+              </span>
+            </button>
+          )
+        })}
       </div>
-    </SettingBlock>
+    </SettingsSection>
   )
 }
 
-const DENSITY_LABEL: Record<Density, string> = {
-  compact: 'Compact',
-  default: 'Standard',
-  comfortable: 'Comfortable',
+function MessageStylePreview({ style }: { style: MessageStyle }) {
+  const green = 'rgb(var(--author-3))'
+  const blue = 'rgb(var(--author-0))'
+  return (
+    <span
+      aria-hidden
+      className="flex h-16 w-[6.5rem] shrink-0 flex-col justify-end gap-[5px] rounded-btn border border-line bg-bg p-2"
+    >
+      {style === 'timeline' ? (
+        <>
+          <span className="flex flex-col gap-[3px] border-l-2 pl-[5px]" style={{ borderColor: 'rgb(var(--author-3) / 0.6)' }}>
+            <span className="h-1 w-[26px] rounded-full" style={{ background: green }} />
+            <span className="h-1 w-[62px] rounded-full bg-line-2" />
+          </span>
+          <span className="flex flex-col items-end border-r-2 border-text pr-[5px]">
+            <span className="h-1 w-[50px] rounded-full bg-muted" />
+          </span>
+        </>
+      ) : style === 'bubble' ? (
+        <>
+          <span className="flex flex-col items-start gap-[3px]">
+            <span className="h-1 w-[26px] rounded-full" style={{ background: green }} />
+            <span className="h-4 w-[62px] rounded-[5px] bg-white/10" />
+          </span>
+          <span className="h-3.5 w-[50px] self-end rounded-[5px] bg-white/16" />
+        </>
+      ) : (
+        ([
+          [green, 56],
+          [blue, 40],
+          [green, 50],
+          ['rgb(var(--color-text))', 34],
+        ] as const).map(([color, width], index) => (
+          <span key={index} className="flex items-center gap-1">
+            <span className="h-1 w-2.5 rounded-full bg-line-2" />
+            <span className="h-1 w-4 rounded-full" style={{ background: color }} />
+            <span className="h-1 rounded-full bg-muted" style={{ width }} />
+          </span>
+        ))
+      )}
+    </span>
+  )
 }
 
-// Interface density: the manual override for lib/density's UI-scale tiers.
-// "Auto" (the default) clears the override and follows the screen size; picking
-// a tier pins it on this device. The choice mirrors localStorage, so it's local
-// state seeded from getStoredDensity() — useDensity() supplies the live tier so
-// the Auto description can say what it resolves to right now.
+// Interface density: the manual override for lib/density's UI scale. "Auto"
+// (the default) clears the override and follows the screen; picking a step
+// pins it on this device. useDensity() supplies the live step so the Auto line
+// can say what it resolves to right now.
 function DensitySetting() {
   const [choice, setChoice] = useState<Density | 'auto'>(() => getStoredDensity() ?? 'auto')
   const live = useDensity()
@@ -487,15 +430,16 @@ function DensitySetting() {
   }
 
   return (
-    <SettingBlock
-      label="Interface density"
+    <SettingsSection
+      title="Density"
       description={
         choice === 'auto'
-          ? `Adapts continuously to your screen — currently based on the ${DENSITY_LABEL[live]} range.`
-          : 'Sizes text and controls. Auto follows your screen size.'
+          ? `Auto follows your screen size. Right now that means ${DENSITY_LABEL[live]}.`
+          : 'Fixed on this device until you change it.'
       }
     >
       <Segmented
+        fill
         value={choice}
         options={[
           { value: 'auto', label: 'Auto' },
@@ -505,48 +449,194 @@ function DensitySetting() {
         ]}
         onChange={change}
       />
-    </SettingBlock>
+    </SettingsSection>
   )
 }
 
-// App/version/build metadata in a clean, read-only label/value card. Values
-// come from optional build-time env (injected by CI) and fall back to the
-// package version / "Not available" so nothing sensitive is exposed.
-function AboutSettings() {
-  const mode: string = import.meta.env.MODE
-  const environment = mode.charAt(0).toUpperCase() + mode.slice(1)
-  const buildDate = import.meta.env.VITE_BUILD_DATE ?? 'Not available'
-  const commitRaw = import.meta.env.VITE_COMMIT_SHA ?? 'Not available'
-  // Show a short SHA when a full one is provided; leave the fallback untouched.
-  const commit =
-    commitRaw !== 'Not available' && commitRaw.length > 10 ? commitRaw.slice(0, 7) : commitRaw
+const COMPOSER_FX_DESCRIPTION: Record<ComposerEffect, string> = {
+  ink: 'Each letter fades in as you type it.',
+  pulse: 'A line runs out from the middle of the message box on each keystroke.',
+  none: 'The message box stays still while you type.',
+}
+
+// Motion: the universal switch first, the composer's effect under it — the
+// second is greyed out while the first is off, and its stored choice is kept,
+// so turning animations back on restores it rather than resetting it.
+function MotionSetting() {
+  const animations = useAnimations()
+  const effect = useComposerEffect()
+  const off = animations === 'off'
+  return (
+    <SettingsSection title="Motion" description="Your system's reduce-motion setting always wins." last>
+      <div className="rounded-card border border-line">
+        <div className="flex items-center gap-3.5 p-3.5">
+          <span className="min-w-0 flex-1">
+            <span className="block text-lg font-medium">Interface animations</span>
+            <span className="mt-0.5 block text-base leading-[1.4] text-muted">
+              {off ? 'Everything appears instantly.' : 'Panels, menus and message actions ease in.'}
+            </span>
+          </span>
+          <Switch
+            checked={!off}
+            label="Interface animations"
+            onChange={(next) => setAnimations(next ? 'on' : 'off')}
+          />
+        </div>
+        <div
+          className={`flex flex-col gap-2.5 border-t border-line p-3.5 transition-opacity ${off ? 'opacity-50' : ''}`}
+          aria-disabled={off || undefined}
+        >
+          <span>
+            <span className="block text-lg font-medium">Typing effect</span>
+            <span className="mt-0.5 block text-base leading-[1.4] text-muted">
+              {off ? 'Off while interface animations are off.' : COMPOSER_FX_DESCRIPTION[effect]}
+            </span>
+          </span>
+          <div className={off ? 'pointer-events-none' : ''}>
+            <Segmented
+              fill
+              value={effect}
+              options={[
+                { value: 'none', label: 'None' },
+                { value: 'ink', label: 'Fade' },
+                { value: 'pulse', label: 'Pulse' },
+              ]}
+              onChange={(value) => setComposerEffect(value as ComposerEffect)}
+            />
+          </div>
+        </div>
+      </div>
+    </SettingsSection>
+  )
+}
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+function NotificationSettings() {
+  const selected = useNotificationSound()
+  const browserNotifications = useBrowserNotifications()
+  const [requestingPermission, setRequestingPermission] = useState(false)
+
+  async function toggleBrowserNotifications() {
+    if (requestingPermission || !browserNotifications.supported) return
+    setRequestingPermission(true)
+    try {
+      if (browserNotifications.enabled) await disableBrowserNotifications()
+      else await enableBrowserNotifications()
+    } finally {
+      setRequestingPermission(false)
+    }
+  }
+
+  const unsupported = !browserNotifications.supported
+  const blocked = browserNotifications.permission === 'denied'
+  const on = browserNotifications.enabled
+  // One status card that says the state in words first, then what it means or
+  // how to get out of it — "blocked" is the case that needs the instructions.
+  const title = unsupported
+    ? 'Not available in this browser'
+    : blocked
+      ? 'Blocked by your browser'
+      : on
+        ? 'Notifications are on'
+        : 'Notifications are off'
+  const detail = unsupported
+    ? 'This browser does not support system notifications.'
+    : blocked
+      ? 'Allow notifications for this site in your browser’s site settings, then reload Dispo-chat.'
+      : on
+        ? 'New messages show as system notifications, also when Dispo-chat is closed. Closed-app alerts use your system sound.'
+        : 'Turn this on and your browser will ask for permission once.'
 
   return (
-    <div className="rounded-card border border-line bg-white/2 px-3.5 py-1">
-      <FieldRow label="App version" value={APP_VERSION} />
-      <FieldRow label="Environment" value={environment} />
-      <FieldRow label="Build date" value={buildDate} />
-      <FieldRow label="Commit" value={commit} tabular />
-    </div>
+    <>
+      <SettingsSection title="System notifications">
+        <div className={`flex flex-col gap-2.5 rounded-card border p-3.5 ${blocked ? 'border-alert/60' : 'border-line'}`}>
+          <div className="flex items-center gap-3">
+            <span className="flex min-w-0 flex-1 items-center gap-2 text-lg font-semibold">
+              <span
+                aria-hidden
+                className={`h-2 w-2 shrink-0 rounded-full ${blocked ? 'bg-alert' : on ? 'bg-driven' : 'bg-line-2'}`}
+              />
+              {title}
+            </span>
+            {!unsupported && !blocked && (
+              <Switch
+                checked={on}
+                label="Allow notifications"
+                disabled={requestingPermission}
+                onChange={() => void toggleBrowserNotifications()}
+              />
+            )}
+          </div>
+          <p className="text-base leading-[1.45] text-muted">{detail}</p>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        title="Sound"
+        description="Plays when a message arrives in a conversation you're not looking at. Muted conversations always stay silent."
+        last
+      >
+        <div role="radiogroup" aria-label="Notification sound" className="overflow-hidden rounded-card border border-line">
+          {NOTIFICATION_SOUNDS.map((sound, index) => {
+            const active = sound.value === selected
+            return (
+              <div
+                key={sound.value}
+                className={`flex items-center gap-0.5 pr-1 ${index > 0 ? 'border-t border-line' : ''} ${
+                  active ? 'bg-white/4' : ''
+                }`}
+              >
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => setNotificationSound(sound.value)}
+                  className="flex min-w-0 flex-1 items-center gap-3 py-2.5 pl-3.5 pr-1.5 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:bg-white/6"
+                >
+                  <RadioMark on={active} />
+                  <span className="min-w-0">
+                    <span className="block text-lg font-semibold leading-tight">{sound.label}</span>
+                    <span className="mt-0.5 block text-sm leading-[1.4] text-muted">{sound.description}</span>
+                  </span>
+                </button>
+                {sound.value !== 'none' && (
+                  <button
+                    type="button"
+                    onClick={() => void playNotificationSound(sound.value as NotificationSound)}
+                    aria-label={`Preview ${sound.label}`}
+                    title={`Preview ${sound.label}`}
+                    className="h-10 w-10 shrink-0 flex items-center justify-center rounded-btn text-muted transition-colors hover:bg-white/8 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                  >
+                    <Play size="0.75rem" strokeWidth={1.9} fill="currentColor" />
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </SettingsSection>
+    </>
   )
 }
 
-// ── Company members (admin) ─────────────────────────────────────────────────
-// Single-use, 48-hour invite links into this company, and the list of recent
-// ones. TWO ways to hand one out, from the same card: type an address and the
-// link goes by email (bound to that address); leave the address empty and you
-// get a plain link to share yourself — WhatsApp, a text, over the shoulder —
-// which the invitee opens to create their account under this company with the
-// chosen role. The plain link is the original flow and the one that works with
-// no email provider configured (user, 2026-09-12: "I want that back"); the
-// email step was added on top of it and had quietly made the address required.
-// Either way the raw link is shown ONCE (right after generation); the list
-// afterwards carries only status + timing, mirroring the server (which stores
-// just a token hash).
+// ── Members (admin) ───────────────────────────────────────────────────────────
+// Three blocks: invite someone (pick the role first, then an optional address —
+// typed, the link goes by email; empty, you get a plain link to share yourself),
+// the people already in the company, and the invite links with their state.
+// The raw link is shown ONCE, right after it is created (the server keeps only a
+// token hash), so the list afterwards carries status and timing only.
 function CompanyMembersSettings() {
+  const auth = useAuth()
+  const meId = auth.status === 'signed_in' ? auth.user.id : ''
+  const { online } = usePresence()
+
   const [invites, setInvites] = useState<WorkspaceInvite[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
+  const [people, setPeople] = useState<WorkspaceMember[] | null>(null)
+  const [peopleError, setPeopleError] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [genError, setGenError] = useState<string | null>(null)
   // The just-created link, surfaced prominently with copy + countdown. Cleared
@@ -556,6 +646,7 @@ function CompanyMembersSettings() {
   // server validates + stores it and applies it when the invitee registers.
   const [role, setRole] = useState<Role>(DEFAULT_INVITE_ROLE)
   const [recipientEmail, setRecipientEmail] = useState('')
+  const [showExpired, setShowExpired] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -571,6 +662,10 @@ function CompanyMembersSettings() {
 
   useEffect(() => {
     void load()
+    api.workspace
+      .members()
+      .then(({ members }) => setPeople(members))
+      .catch(() => setPeopleError(true))
   }, [load])
 
   // An empty address is not an error — it is the plain-link flow.
@@ -624,118 +719,191 @@ function CompanyMembersSettings() {
     }
   }
 
+  const current = invites.filter((invite) => invite.status !== 'expired')
+  const expired = invites.filter((invite) => invite.status === 'expired')
+  const waiting = invites.filter((invite) => invite.status === 'active').length
+  // /workspace/members leaves the caller out (it feeds the contacts rail), so
+  // the viewer is added back from the session and listed first.
+  const me: WorkspaceMember | null =
+    auth.status === 'signed_in'
+      ? { id: auth.user.id, displayName: auth.user.displayName, email: auth.user.email, role: auth.user.role }
+      : null
+  const sortedPeople = people
+    ? [
+        ...(me && !people.some((p) => p.id === me.id) ? [me] : []),
+        ...[...people].sort((a, b) =>
+          a.id === meId ? -1 : b.id === meId ? 1 : a.displayName.localeCompare(b.displayName),
+        ),
+      ]
+    : null
+
   return (
-    <div className="space-y-4">
-      {/* ── Generate + link ──────────────────────────────────────────────────
-          One card for the whole create flow, kept tight: the address on one
-          line, role + action on the next, the role hint under them, and —
-          past a hairline — the link slot (the fresh link with copy/countdown,
-          or a one-line explainer while no link exists). The field labels went
-          with the compaction; the placeholder and the button's own label say
-          what each control is, and the button reads "Generate link" or "Send
-          invite" according to whether an address was typed, so the two flows
-          need no switch. */}
-      <section>
-        <div className="eyebrow mb-1.5">New invitation</div>
-        <div className="rounded-card border border-line bg-white/2 p-3">
-          <div className="relative">
-            <Mail
-              size="0.875rem"
-              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-faint"
-            />
-            <input
-              id="invite-email"
-              type="email"
-              value={recipientEmail}
-              onChange={(event) => {
-                setRecipientEmail(event.target.value)
-                setGenError(null)
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !generating) void generate()
-              }}
-              placeholder="Email (optional) — leave empty for a link to share"
-              aria-label="Recipient email (optional)"
-              autoComplete="off"
-              disabled={generating}
-              className="h-8 w-full rounded-card border border-line bg-white/4 pl-8 pr-2.5 text-sm text-text outline-none placeholder:text-faint focus:border-line-2 disabled:opacity-60"
-            />
-          </div>
-          <div className="mt-2 flex items-center gap-2">
-            <div className="flex-1 min-w-0">
-              <RoleSelect
-                id="invite-role"
-                value={role}
-                onChange={setRole}
+    <>
+      <SettingsSection
+        title="Invite someone"
+        description="A link that works once and expires after 48 hours. Pick what they can do first."
+      >
+        <div role="radiogroup" aria-label="Role for the new member" className="grid grid-cols-2 gap-2">
+          {INVITE_ROLE_ORDER.map((option) => {
+            const on = option === role
+            return (
+              <button
+                key={option}
+                type="button"
+                role="radio"
+                aria-checked={on}
                 disabled={generating}
-                ariaLabel="Invite as"
-              />
-            </div>
-            <button
-              onClick={() => void generate()}
-              disabled={generating}
-              className="shrink-0 h-8 px-3 flex items-center gap-1.5 rounded-btn bg-text text-bg font-semibold text-sm hover:bg-text/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {generating ? (
-                <Loader2 size="0.875rem" strokeWidth={2.2} className="animate-spin" />
-              ) : willEmail ? (
-                <Mail size="0.875rem" strokeWidth={2.2} />
-              ) : (
-                <Link2 size="0.875rem" strokeWidth={2.2} />
-              )}
-              {willEmail ? 'Send invite' : 'Generate link'}
-            </button>
-          </div>
-          <p className="text-xs text-faint mt-1.5 leading-[1.45]">
-            {ROLE_LABEL[role]} · {INVITE_ROLE_HINT[role]}
-          </p>
-          {genError && <div className="mt-1.5 text-sm text-alert">{genError}</div>}
-
-          <div className="mt-2.5 pt-2.5 border-t border-line">
-            {fresh ? (
-              <FreshInviteLink invite={fresh} />
-            ) : (
-              <div className="flex items-start gap-2 text-xs text-faint leading-[1.45]">
-                <Link2 size="0.8125rem" strokeWidth={1.8} className="shrink-0 mt-px" />
-                <span>
-                  The link is single-use and valid for 48 hours. Whoever opens it creates
-                  their account in this company with the role above.
+                onClick={() => setRole(option)}
+                className={`flex flex-col items-start gap-1 rounded-card border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 disabled:opacity-60 ${
+                  on ? 'border-text bg-white/4' : 'border-line hover:border-line-2'
+                }`}
+              >
+                <span className="flex items-center gap-2 text-lg font-semibold">
+                  <RadioMark on={on} />
+                  {ROLE_LABEL[option]}
                 </span>
-              </div>
-            )}
-          </div>
+                <span className="text-sm leading-[1.35] text-muted">{INVITE_ROLE_HINT[option]}</span>
+              </button>
+            )
+          })}
         </div>
-      </section>
+        <label htmlFor="invite-email" className="sr-only">
+          Email (optional)
+        </label>
+        <input
+          id="invite-email"
+          type="email"
+          value={recipientEmail}
+          onChange={(event) => {
+            setRecipientEmail(event.target.value)
+            setGenError(null)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !generating) void generate()
+          }}
+          placeholder="Email (optional)"
+          autoComplete="off"
+          disabled={generating}
+          className="h-11 w-full rounded-card border border-line-2 bg-transparent px-3.5 text-lg text-text outline-none transition-colors placeholder:text-faint focus:border-text disabled:opacity-60"
+        />
+        <button
+          type="button"
+          onClick={() => void generate()}
+          disabled={generating}
+          className="flex h-11 w-full items-center justify-center gap-2 rounded-btn bg-text text-lg font-semibold text-bg transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+        >
+          {generating ? (
+            <Loader2 size="1rem" strokeWidth={2.2} className="animate-spin" />
+          ) : willEmail ? (
+            <Mail size="1rem" strokeWidth={2.1} />
+          ) : (
+            <Link2 size="1rem" strokeWidth={2.1} />
+          )}
+          {willEmail ? 'Send invite' : 'Create invite link'}
+        </button>
+        {genError && <div className="text-base text-alert">{genError}</div>}
+        {fresh && <FreshInviteLink invite={fresh} />}
+      </SettingsSection>
 
-      {/* ── Recent invites ─────────────────────────────────────────────────── */}
-      <section>
-        <div className="eyebrow mb-1.5">Recent invites</div>
-        {loading ? (
-          <div className="flex items-center gap-2 text-sm text-faint px-1 py-1">
-            <Loader2 size="0.8125rem" className="animate-spin" /> Loading invites…
-          </div>
-        ) : loadError ? (
-          <div className="text-sm text-alert px-1 py-1">Could not load invites.</div>
-        ) : invites.length === 0 ? (
-          <div className="rounded-list border border-line bg-white/2 px-3.5 py-3 text-sm text-faint leading-[1.45]">
-            No invites yet — generate a link above to add your first member.
+      <SettingsSection title="People" aside={sortedPeople ? sortedPeople.length : undefined}>
+        {peopleError ? (
+          <p className="text-base text-alert">Could not load the people in this company.</p>
+        ) : !sortedPeople ? (
+          <div className="flex items-center gap-2 text-base text-muted">
+            <Loader2 size="0.875rem" className="animate-spin" /> Loading people…
           </div>
         ) : (
-          // No overflow-hidden — the row role dropdown must be able to open past
-          // the card edge; first/last rows round their own hover corners instead.
-          <div className="rounded-list border border-line bg-white/2 divide-y divide-line">
-            {invites.map((inv) => (
+          <ul className="flex flex-col">
+            {sortedPeople.map((person) => {
+              const isMe = person.id === meId
+              // You are, by definition, here — presence only tracks others.
+              const isOnline = isMe || online.has(person.id)
+              return (
+                <li key={person.id} className="flex items-center gap-3 py-2">
+                  <span className="relative shrink-0">
+                    <RowTile kind="user" id={person.id} name={person.displayName} size={36} />
+                    <span
+                      aria-hidden
+                      className={`absolute -bottom-px -right-px h-2.5 w-2.5 rounded-full border-2 border-bg ${
+                        isOnline ? 'bg-driven' : 'bg-line-2'
+                      }`}
+                    />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-lg font-semibold leading-tight">
+                      {person.displayName}
+                      {isMe && <span className="font-normal text-muted"> (you)</span>}
+                    </span>
+                    <span className="mt-0.5 block truncate text-sm text-muted">
+                      {isOnline ? 'Online' : 'Offline'}
+                    </span>
+                  </span>
+                  <RoleBadge role={person.role as Role} />
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </SettingsSection>
+
+      <SettingsSection
+        title="Invite links"
+        aside={waiting > 0 ? `${waiting} waiting` : undefined}
+        last
+      >
+        {loading ? (
+          <div className="flex items-center gap-2 text-base text-muted">
+            <Loader2 size="0.875rem" className="animate-spin" /> Loading invites…
+          </div>
+        ) : loadError ? (
+          <p className="text-base text-alert">Could not load invites.</p>
+        ) : invites.length === 0 ? (
+          <p className="text-base leading-[1.45] text-muted">
+            No invites yet. Create a link above to add your first member.
+          </p>
+        ) : (
+          <div className="flex flex-col">
+            {current.length === 0 && (
+              <p className="pb-3 text-base text-muted">No links waiting to be used.</p>
+            )}
+            {current.map((invite) => (
               <InviteListRow
-                key={inv.id}
-                invite={inv}
-                onRevoke={() => revoke(inv.id)}
-                onChangeRole={(next) => void changeInviteRole(inv.id, next)}
+                key={invite.id}
+                invite={invite}
+                onRevoke={() => revoke(invite.id)}
+                onChangeRole={(next) => void changeInviteRole(invite.id, next)}
               />
             ))}
+            {showExpired &&
+              expired.map((invite) => (
+                <InviteListRow
+                  key={invite.id}
+                  invite={invite}
+                  onRevoke={() => revoke(invite.id)}
+                  onChangeRole={(next) => void changeInviteRole(invite.id, next)}
+                />
+              ))}
+            {expired.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowExpired((v) => !v)}
+                aria-expanded={showExpired}
+                className="flex h-11 items-center gap-2 border-t border-line text-base font-medium text-muted transition-colors hover:text-text focus-visible:outline-none focus-visible:text-text"
+              >
+                <ChevronDown
+                  size="0.875rem"
+                  strokeWidth={2}
+                  className={`transition-transform ${showExpired ? 'rotate-180' : ''}`}
+                />
+                {showExpired
+                  ? 'Hide expired links'
+                  : `Show ${expired.length} expired link${expired.length === 1 ? '' : 's'}`}
+              </button>
+            )}
           </div>
         )}
-      </section>
-    </div>
+      </SettingsSection>
+    </>
   )
 }
 
@@ -749,7 +917,7 @@ function useNow(intervalMs = 1000): number {
   return now
 }
 
-// mm:ss remaining until `expiresAt`, or null once elapsed.
+// Time remaining until `expiresAt` ("41 h 12 min", "12:30"), or null once elapsed.
 function remaining(expiresAt: string, now: number): string | null {
   const ms = new Date(expiresAt).getTime() - now
   if (ms <= 0) return null
@@ -757,16 +925,15 @@ function remaining(expiresAt: string, now: number): string | null {
   if (total >= 3600) {
     const hours = Math.floor(total / 3600)
     const minutes = Math.floor((total % 3600) / 60)
-    return `${hours}h ${minutes}m`
+    return `${hours} h ${minutes} min`
   }
   const m = Math.floor(total / 60)
   const s = total % 60
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-// The freshly-generated link, rendered in the link slot of the "New invite
-// link" card: copyable, with a live countdown. This is the only place the raw
-// link is ever shown, hence the "shown only once" note.
+// The freshly-created link: the only place the raw link is ever shown, so it
+// is the one thing in the panel drawn in the live colour.
 function FreshInviteLink({ invite }: { invite: WorkspaceInviteCreated }) {
   const now = useNow()
   const [copied, setCopied] = useState(false)
@@ -796,65 +963,51 @@ function FreshInviteLink({ invite }: { invite: WorkspaceInviteCreated }) {
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 text-sm font-medium text-done">
-          <span className="h-1.5 w-1.5 rounded-full bg-done" aria-hidden />
+    <div className="flex flex-col gap-2.5 rounded-card border border-driven/70 bg-white/2 p-3">
+      <span className="flex items-center gap-2 text-base text-text">
+        <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-driven" />
+        <span className="min-w-0 flex-1">
           {invite.emailSent
-            ? 'Invitation sent — link shown only once'
+            ? `Invitation sent as ${ROLE_LABEL[invite.role]}`
             : invite.recipientEmail
-              ? 'Link ready — the email could not be sent, share it yourself'
-              : 'Link ready — share it; shown only once'}
-        </div>
-        <RoleBadge role={invite.role} />
-      </div>
-      <div className="mt-2 flex items-center gap-1">
+              ? 'Link ready, but the email could not be sent. Share it yourself.'
+              : `${ROLE_LABEL[invite.role]} link ready. It is shown only once.`}
+        </span>
+      </span>
+      <div className="flex items-center gap-2">
         <input
           ref={inputRef}
           readOnly
           value={invite.url}
+          aria-label="Invite link"
           onFocus={(e) => e.currentTarget.select()}
-          className="flex-1 min-w-0 h-9 bg-white/4 border border-line rounded-btn px-2.5 text-sm text-text tabular-nums truncate outline-none transition-colors focus:border-line-2"
+          className="h-9 min-w-0 flex-1 truncate rounded-btn border border-line bg-transparent px-2.5 text-base text-text tabular-nums outline-none transition-colors focus:border-line-2"
         />
         <button
+          type="button"
           onClick={copy}
-          title={copied ? 'Copied' : 'Copy link'}
-          aria-label="Copy invite link"
-          className={`${ICON_ACTION_BASE} ${ICON_ACTION_IDLE} shrink-0`}
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-btn border border-line-2 px-3 text-base font-semibold text-text transition-colors hover:bg-white/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
         >
-          {copied ? (
-            <Check size="1rem" strokeWidth={2.4} className="text-done" />
-          ) : (
-            <Copy size="1rem" strokeWidth={1.8} />
-          )}
+          {copied ? <Check size="0.875rem" strokeWidth={2.4} /> : <Copy size="0.875rem" strokeWidth={1.9} />}
+          {copied ? 'Copied' : 'Copy link'}
         </button>
       </div>
-      <div className="mt-1.5 flex items-center justify-between gap-2 text-xs text-faint">
+      <span className={`text-sm ${left ? 'text-muted' : 'text-alert'}`}>
         {left ? (
-          <span>
-            Single-use · expires in <span className="tabular-nums text-muted">{left}</span>
-          </span>
+          <>
+            Works once │ expires in <span className="tabular-nums">{left}</span>
+          </>
         ) : (
-          <span className="text-alert">This link has expired.</span>
+          'This link has expired.'
         )}
-        <span
-          aria-live="polite"
-          className={`text-done transition-opacity ${copied ? 'opacity-100' : 'opacity-0'}`}
-        >
-          Copied
-        </span>
-      </div>
+      </span>
     </div>
   )
 }
 
-// One row in the recent-invites list, styled like the app's member rows: a
-// circular glyph chip (with a green corner dot while the link is live, echoing
-// the presence dot on avatars), name/status over a detail line, then the
-// trailing controls. An active invite's role is editable inline (a compact
-// select) and revocable — revoke is two-step (icon → explicit "Revoke") so a
-// stray click can't kill a link. A used/expired invite shows its role
-// read-only — the member already exists with that role, so it can't change here.
+// One invite link: what it is and its state on the first line, who and how on
+// the second, and — while it is still active — its role (changeable until it is
+// used) and a two-step Revoke.
 function InviteListRow({
   invite,
   onRevoke,
@@ -875,92 +1028,60 @@ function InviteListRow({
 
   const active = invite.status === 'active'
   const left = active ? remaining(invite.expiresAt, now) : null
-  const by = invite.createdByName ? ` · by ${invite.createdByName}` : ''
+  const by = invite.createdByName ? ` │ by ${invite.createdByName}` : ''
   const primary =
     invite.status === 'used'
-      ? (invite.usedByName ?? invite.recipientEmail ?? 'Invite used')
-      : (invite.recipientEmail ?? 'Invite link')
+      ? (invite.usedByName ?? invite.recipientEmail ?? `${ROLE_LABEL[invite.role]} link`)
+      : (invite.recipientEmail ?? `${ROLE_LABEL[invite.role]} link`)
   const secondary = active
-    ? `${
-        invite.emailSentAt ? 'Email sent' : invite.recipientEmail ? 'Email not sent' : 'Shared link'
-      } · ${left ? `expires in ${left}` : 'expiring…'}${by}`
+    ? `${invite.emailSentAt ? 'Email sent' : invite.recipientEmail ? 'Email not sent' : 'Shared link'}${by}`
     : invite.status === 'used'
-      ? `Joined the company${invite.createdByName ? ` · invited by ${invite.createdByName}` : ''}`
-      : `Expired · not used${by}`
+      ? `Joined as ${ROLE_LABEL[invite.role]}${invite.createdByName ? ` │ invited by ${invite.createdByName}` : ''}`
+      : `${ROLE_LABEL[invite.role]} link │ never used${by}`
+  const state = active ? (left ? `Active, ${left} left` : 'Expiring') : invite.status === 'used' ? 'Used' : 'Expired'
+  const stateTone = active ? 'text-driven' : invite.status === 'used' ? 'text-muted' : 'text-faint'
 
   return (
-    <div className="flex items-center gap-2.5 px-3 py-2 hover:bg-white/2 transition-colors first:rounded-t-list last:rounded-b-list">
-      <div className="relative shrink-0">
-        <span className="h-[1.875rem] w-[1.875rem] flex items-center justify-center rounded-full border border-line bg-white/2 text-muted">
-          {invite.status === 'used' ? (
-            <Check size="0.9375rem" strokeWidth={2} />
-          ) : (
-            <Link2
-              size="0.9375rem"
-              strokeWidth={1.8}
-              className={invite.status === 'expired' ? 'opacity-50' : undefined}
-            />
-          )}
-        </span>
-        {active && (
-          <span
-            title="Active"
-            className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border border-sidebar bg-done"
-          />
-        )}
-      </div>
-      <div className="min-w-0 flex-1 flex flex-col gap-px">
-        <div
-          className={`text-sm leading-tight truncate ${
-            invite.status === 'expired' ? 'text-muted' : 'text-text'
-          }`}
+    <div className="flex flex-col gap-1.5 border-t border-line py-3 first:border-t-0">
+      <div className="flex items-center gap-2.5">
+        <span
+          className={`min-w-0 flex-1 truncate text-lg font-semibold ${invite.status === 'expired' ? 'text-muted' : 'text-text'}`}
         >
           {primary}
-        </div>
-        <div className="text-xs leading-tight text-faint truncate">{secondary}</div>
+        </span>
+        <span className={`flex shrink-0 items-center gap-1.5 text-sm font-medium tabular-nums ${stateTone}`}>
+          <span aria-hidden className="h-[7px] w-[7px] rounded-full bg-current" />
+          {state}
+        </span>
       </div>
-      {active ? (
-        <>
-          <RoleSelect
-            value={invite.role}
-            onChange={onChangeRole}
-            compact
-            ariaLabel="Change invite role"
-          />
-          {confirming ? (
-            <button
-              onClick={() => {
-                setConfirming(false)
-                onRevoke()
-              }}
-              className="shrink-0 h-7 px-2.5 rounded-btn text-xs font-semibold text-alert bg-alert/10 hover:bg-alert/15 transition-colors"
-            >
-              Revoke
-            </button>
-          ) : (
-            <button
-              onClick={() => setConfirming(true)}
-              title="Revoke link"
-              aria-label="Revoke link"
-              className="shrink-0 h-7 w-7 flex items-center justify-center rounded-btn text-muted hover:text-alert hover:bg-alert/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
-            >
-              <Trash2 size="0.875rem" strokeWidth={1.8} />
-            </button>
-          )}
-        </>
-      ) : (
-        <RoleBadge role={invite.role} />
+      <span className="truncate text-sm text-muted">{secondary}</span>
+      {active && (
+        <div className="mt-1 flex items-center gap-2">
+          <RoleSelect value={invite.role} onChange={onChangeRole} compact ariaLabel="Change invite role" />
+          <button
+            type="button"
+            onClick={() => {
+              if (!confirming) {
+                setConfirming(true)
+                return
+              }
+              setConfirming(false)
+              onRevoke()
+            }}
+            className={`h-8 rounded-btn px-3 text-base font-semibold text-alert transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+              confirming ? 'bg-alert/10' : 'border border-line hover:bg-alert/10'
+            }`}
+          >
+            {confirming ? 'Confirm revoke' : 'Revoke'}
+          </button>
+        </div>
       )}
     </div>
   )
 }
 
 // The role picker — a custom listbox on the app's shared menu recipe
-// (menuStyles), replacing the native <select> so the open menu matches every
-// other project dropdown (no browser-default option rows). The closed trigger
-// reads as a standard field; the menu anchors to it (same width in the default
-// variant, right-aligned in `compact` — the small variant used inline in a
-// list row; the default fills its container in the generate card).
+// (menuStyles), so the open menu matches every other dropdown in the app.
 function RoleSelect({
   value,
   onChange,
@@ -1007,13 +1128,13 @@ function RoleSelect({
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className={`flex items-center gap-1.5 rounded-card border bg-white/4 text-text text-left outline-none transition-colors hover:border-line-2 focus-visible:border-line-2 disabled:opacity-50 disabled:cursor-default ${
+        className={`flex items-center gap-1.5 rounded-btn border bg-transparent text-text text-left outline-none transition-colors hover:border-line-2 focus-visible:border-line-2 disabled:opacity-50 disabled:cursor-default ${
           open ? 'border-line-2' : 'border-line'
-        } ${compact ? 'h-7 w-[6.25rem] px-2 text-xs' : 'h-8 w-full px-2.5 text-sm'}`}
+        } ${compact ? 'h-8 w-[7.5rem] px-2.5 text-base' : 'h-9 w-full px-2.5 text-base'}`}
       >
         <span className="flex-1 min-w-0 truncate">{ROLE_LABEL[value]}</span>
         <ChevronDown
-          size={compact ? '0.75rem' : '0.875rem'}
+          size="0.875rem"
           strokeWidth={1.8}
           className={`shrink-0 text-faint transition-transform ${open ? 'rotate-180' : ''}`}
         />
@@ -1024,7 +1145,7 @@ function RoleSelect({
           role="listbox"
           aria-label={ariaLabel ?? 'Role'}
           className={`absolute top-full mt-1 z-20 ${MENU_CONTAINER} ${
-            compact ? 'right-0 w-[8.5rem]' : 'left-0 right-0'
+            compact ? 'left-0 w-[9rem]' : 'left-0 right-0'
           }`}
         >
           {INVITE_ROLE_ORDER.map((r) => (
@@ -1051,125 +1172,143 @@ function RoleSelect({
   )
 }
 
-// A quiet, read-only role pill for used/expired invites and the fresh-link card.
+// A quiet, read-only role chip (a person's role; there is no API to change a
+// member's company role from here yet, so it is a label, not a control).
 function RoleBadge({ role }: { role: Role }) {
   return (
-    <span className="shrink-0 text-2xs font-semibold px-2 py-0.5 rounded-full border border-line bg-white/4 text-muted">
-      {ROLE_LABEL[role]}
+    <span className="shrink-0 rounded-chip border border-line px-2.5 py-1 text-sm font-medium text-text">
+      {ROLE_LABEL[role] ?? role}
     </span>
   )
 }
 
-// A compact label/value line: label muted on the left, value on the right.
-// Rows are separated by a hairline divider (none after the last).
-function FieldRow({ label, value, tabular = false }: { label: string; value: string; tabular?: boolean }) {
-  return (
-    <div className="flex items-center justify-between gap-3 py-2 border-b border-line last:border-0">
-      <span className="shrink-0 text-sm text-muted">{label}</span>
-      <span
-        title={value}
-        className={`min-w-0 truncate text-right text-sm text-text ${
-          tabular ? 'tabular-nums' : ''
-        }`}
-      >
-        {value}
-      </span>
-    </div>
-  )
-}
+// ── About ─────────────────────────────────────────────────────────────────────
 
-// One setting inside the Appearance card: a clean label + short description
-// stacked over its control. Blocks stack in a divide-y card, so each carries
-// its own vertical padding; the card's hairlines do the separating.
-//
-// Sizes are the panel's compact step (2026-09-12, user: "every section in
-// workspace settings needs to get compacted"): sm label, xs description, 28px
-// controls, 12px block padding — the same step Company members and the
-// category rows use, so the whole panel reads at one density.
-function SettingBlock({
-  label,
-  description,
-  children,
-}: {
-  label: string
-  description: string
-  children: ReactNode
-}) {
-  return (
-    <div className="py-3">
-      <div className="text-sm text-text font-medium leading-tight">{label}</div>
-      <div className="text-xs text-faint mt-0.5 leading-[1.4]">{description}</div>
-      <div className="mt-2">{children}</div>
-    </div>
-  )
-}
+// Preferences this browser keeps for this app — what "Reset preferences" clears.
+// Unsent drafts, notification permission and the push subscription are NOT on
+// the list: losing a half-written message, or having to re-grant the browser,
+// is not what anyone means by resetting how the app looks.
+const PREFERENCE_KEYS = [
+  'dispo:theme',
+  'dispo:density',
+  'dispo:msg-style-v3',
+  'dispo:animations-v1',
+  'dispo:composer-fx-v1',
+  'dispo:notification-sound',
+  'dispo:sidebar-collapsed',
+  'dispo:trip-panel',
+]
 
-// The app's neutral segmented control — the same idiom as the Group Info tab
-// bar, and now the same MARK: a quietly recessed track where the selected
-// option is a solid `bg-text` block with `text-bg` on it. That inverts per
-// theme for free (white block/black label on dark, black block/white label on
-// light), because both tokens flip together.
-//
-// It used to be `bg-white/8 text-text` — the same wash as a hover, one step
-// darker. Which meant "selected" and "the pointer is here" were the same
-// gesture at two alphas nobody can rank, and on the light theme an 8% black
-// wash on a 4% black track is very nearly nothing at all. Selection is a state
-// worth a real mark; hover keeps the wash. No accent colour; the constant
-// font-medium keeps labels from shifting width when selection moves.
-// The setting's label/description live in the SettingBlock above it.
-function Segmented({
-  value,
-  options,
-  onChange,
-}: {
-  value: string
-  options: { value: string; label: string }[]
-  onChange: (value: string) => void
-}) {
-  // The selected block TRAVELS between options rather than switching on and off
-  // per button — the same mark, and the same mechanism, as the Group Info tab
-  // pill (components/useTravellingMarker). Options here are label-width, not
-  // equal-width like Group Info's, so the pill animates its width as well as its
-  // position.
-  const { trackRef, rect } = useTravellingMarker(value)
+// The build, said plainly, with a one-click copy for problem reports; and what
+// this browser stores, with a way to start over.
+function AboutSettings() {
+  const mode: string = import.meta.env.MODE
+  const environment = mode.charAt(0).toUpperCase() + mode.slice(1)
+  const buildDate = import.meta.env.VITE_BUILD_DATE ?? 'Not available'
+  const commitRaw = import.meta.env.VITE_COMMIT_SHA ?? 'Not available'
+  // Show a short SHA when a full one is provided; leave the fallback untouched.
+  const commit =
+    commitRaw !== 'Not available' && commitRaw.length > 10 ? commitRaw.slice(0, 7) : commitRaw
+  const facts: [string, string][] = [
+    ['Version', APP_VERSION],
+    ['Environment', environment],
+    ['Build date', buildDate],
+    ['Commit', commit],
+  ]
+
+  const [copied, setCopied] = useState(false)
+  const [confirmReset, setConfirmReset] = useState(false)
+  useEffect(() => {
+    if (!confirmReset) return
+    const t = setTimeout(() => setConfirmReset(false), 3000)
+    return () => clearTimeout(t)
+  }, [confirmReset])
+
+  async function copyDetails() {
+    const text = ['Dispo-chat', ...facts.map(([label, value]) => `${label}: ${value}`)].join('\n')
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // Clipboard unavailable — the facts are on screen to copy by hand.
+    }
+  }
+
+  function resetPreferences() {
+    if (!confirmReset) {
+      setConfirmReset(true)
+      return
+    }
+    try {
+      for (const key of PREFERENCE_KEYS) localStorage.removeItem(key)
+    } catch {
+      // Storage unavailable: nothing was stored to begin with.
+    }
+    window.location.reload()
+  }
 
   return (
-    <div
-      ref={trackRef}
-      className="relative inline-flex items-center gap-0.5 rounded-card bg-white/4 p-0.5"
-    >
-      {rect && (
-        <span
-          aria-hidden
-          className="travelling-marker pointer-events-none absolute left-0 top-0 rounded-btn bg-text motion-reduce:transition-none"
-          style={{
-            width: rect.w,
-            height: rect.h,
-            transform: `translate(${rect.x}px, ${rect.y}px)`,
-          }}
-        />
-      )}
-      {options.map((o) => {
-        const active = o.value === value
-        return (
+    <div className="flex flex-col gap-6 py-6">
+      <div className="flex items-center gap-3.5">
+        <AppMark size={40} />
+        <span>
+          <span className="block text-2xl font-bold tracking-[-0.02em]">Dispo-chat</span>
+          <span className="block text-base text-muted">Version {APP_VERSION}</span>
+        </span>
+      </div>
+
+      <section className="flex flex-col gap-2.5">
+        <div className="flex items-center gap-2.5">
+          <h3 className="flex-1 text-lg font-semibold">This version</h3>
           <button
-            key={o.value}
             type="button"
-            onClick={() => onChange(o.value)}
-            aria-pressed={active}
-            // `aria-current` is what the marker measures; `aria-pressed` stays
-            // because that is what makes these read as a toggle group.
-            aria-current={active ? 'true' : undefined}
-            // `relative` so the label sits ON the pill rather than under it, and
-            // the colour swap is the only thing this button now draws.
-            className={`relative z-10 h-6 px-2.5 rounded-btn text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
-              active ? 'text-bg' : 'text-muted hover:text-text'
+            onClick={() => void copyDetails()}
+            className="flex h-9 items-center gap-1.5 rounded-btn border border-line-2 px-3 text-base font-semibold text-text transition-colors hover:bg-white/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+          >
+            {copied ? <Check size="0.875rem" strokeWidth={2.4} /> : <Copy size="0.875rem" strokeWidth={1.9} />}
+            {copied ? 'Copied' : 'Copy details'}
+          </button>
+        </div>
+        <dl className="rounded-card border border-line px-3.5">
+          {facts.map(([label, value], index) => (
+            <div
+              key={label}
+              className={`flex items-center justify-between gap-3 py-3 ${index > 0 ? 'border-t border-line' : ''}`}
+            >
+              <dt className="shrink-0 text-base text-muted">{label}</dt>
+              <dd title={value} className="min-w-0 truncate text-right text-base font-medium tabular-nums">
+                {value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <p className="text-sm leading-[1.45] text-faint">
+          Paste these into a problem report so we know which build you are on.
+        </p>
+      </section>
+
+      <section className="flex flex-col gap-2.5">
+        <h3 className="text-lg font-semibold">Stored on this device</h3>
+        <div className="flex flex-col gap-3 rounded-card border border-line p-3.5">
+          <span>
+            <span className="block text-lg font-medium">Appearance, notification sound and layout choices</span>
+            <span className="mt-0.5 block text-base leading-[1.45] text-muted">
+              They stay in this browser and are not shared with your other devices or your company.
+              Resetting keeps your unsent drafts.
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={resetPreferences}
+            className={`h-9 self-start rounded-btn px-3 text-base font-semibold text-alert transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+              confirmReset ? 'bg-alert/10' : 'border border-line hover:bg-alert/10'
             }`}
           >
-            {o.label}
+            {confirmReset ? 'Reset and reload' : 'Reset preferences'}
           </button>
-        )
-      })}
+        </div>
+      </section>
     </div>
   )
 }

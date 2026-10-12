@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Archive,
   MailOpen,
@@ -562,6 +562,12 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     // Pinned conversations float to the top, preserving recency within the pinned
     // and the unpinned groups (Array.sort is stable). Contacts always trail.
     matched.sort((a, b) => Number(Boolean(b.pinnedAt)) - Number(Boolean(a.pinnedAt)))
+    // The All view is two sections (rework, 2026-10-10): vehicle rooms, then
+    // people. Stable, so pinned-then-recent still holds inside each. Search
+    // stays one flat list of matches.
+    if (filter === 'all' && !searching) {
+      matched.sort((a, b) => Number(b.type === 'vehicle') - Number(a.type === 'vehicle'))
+    }
 
     const items: SidebarRowItem[] = matched.map((g) => ({ kind: 'group', key: g.id, group: g }))
     // Company contacts (no DM yet) are directory entries, not conversations — so
@@ -572,7 +578,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
       }
     }
     return items
-  }, [groups, filter, matchesQuery, filteredContacts])
+  }, [groups, filter, matchesQuery, filteredContacts, searching])
+  const railSectioned = filter === 'all' && !searching
 
   // The bar that slides down the rail to whichever conversation is open. It is
   // ONE element measured against the list wrapper (see
@@ -764,9 +771,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         >
           <label
             htmlFor="rail-search"
-            className="min-w-0 flex-1 h-[var(--sidebar-search-height)] flex items-center gap-2.5 cursor-text"
+            className="min-w-0 flex-1 h-[var(--sidebar-search-height)] flex items-center gap-2 px-3 cursor-text rounded-card border transition-colors hover:border-strong focus-within:border-strong"
           >
-            <Search size="0.875rem" strokeWidth={1.7} className="text-faint shrink-0" />
+            <Search size="1rem" strokeWidth={1.8} className="text-muted shrink-0" />
             <input
               id="rail-search"
               // The field carries no visible label (the magnifier + placeholder
@@ -777,7 +784,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               onKeyDown={(e) => {
                 if (e.key === 'Escape') setQuery('')
               }}
-              placeholder="Search threads"
+              placeholder="Search plates, people, messages"
               style={{ fontSize: 'var(--sidebar-row-font-size)' }}
               className="bg-transparent flex-1 outline-none placeholder:text-faint min-w-0"
             />
@@ -802,10 +809,10 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               // new user what the square does.
               aria-label="New thread"
               title="New thread"
-              className={`h-[var(--sidebar-search-height)] w-[var(--sidebar-search-height)] flex items-center justify-center rounded-btn border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+              className={`h-[var(--sidebar-search-height)] w-[var(--sidebar-search-height)] flex items-center justify-center rounded-card border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
                 newMenuOpen
                   ? 'border-strong bg-white/6 text-text'
-                  : 'text-muted hover:border-strong hover:bg-white/4 hover:text-text'
+                  : 'text-text hover:border-strong hover:bg-white/4'
               }`}
             >
               <Plus size="1rem" strokeWidth={1.8} />
@@ -865,11 +872,13 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           <FilterTab active={filter === 'all'} onClick={() => setFilter('all')}>
             All
           </FilterTab>
+          {/* Named for what is IN them (rework, 2026-10-10): every group is a
+              vehicle room, every direct conversation is a person. */}
           <FilterTab active={filter === 'groups'} onClick={() => setFilter('groups')}>
-            Groups
+            Vehicles
           </FilterTab>
           <FilterTab active={filter === 'dms'} onClick={() => setFilter('dms')}>
-            Direct
+            People
           </FilterTab>
           {/* Unread cuts across the three type pills: every conversation with
               something new, room or DM. Its count is live (socket unread
@@ -954,10 +963,28 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                     <EmptyHint>{emptyListCopy}</EmptyHint>
                   )
                 ) : (
-                  conversationItems.map((item) =>
-                    item.kind === 'group' ? (
+                  conversationItems.map((item, index) => {
+                    const isVehicle = item.kind === 'group' && item.group.type === 'vehicle'
+                    const prev = conversationItems[index - 1]
+                    const prevVehicle = prev?.kind === 'group' && prev.group.type === 'vehicle'
+                    const heading =
+                      railSectioned && (index === 0 || prevVehicle !== isVehicle)
+                        ? isVehicle
+                          ? 'Vehicles'
+                          : 'People'
+                        : null
+                    return (
+                    <Fragment key={item.key}>
+                    {heading && (
+                      <h2
+                        className={`text-base font-medium text-muted ${index === 0 ? 'pt-1' : 'pt-4'} pb-1`}
+                        style={{ paddingLeft: 'calc(var(--sidebar-row-pad-x) + 2px)' }}
+                      >
+                        {heading}
+                      </h2>
+                    )}
+                    {item.kind === 'group' ? (
                       <GroupRow
-                        key={item.key}
                         group={item.group}
                         typingUsers={typingByGroup[item.group.id] ?? []}
                         online={onlineIds}
@@ -985,14 +1012,15 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                       />
                     ) : (
                       <ContactRow
-                        key={item.key}
                         member={item.member}
                         onClick={() =>
                           setProfileTarget({ id: item.member.id, name: item.member.displayName })
                         }
                       />
-                    ),
-                  )
+                    )}
+                    </Fragment>
+                    )
+                  })
                 )}
               </div>
             </>
@@ -1025,10 +1053,15 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 user={user}
                 profile={cachedProfile}
                 away={away}
+                companyName={workspace.name}
                 onBack={() => setSidebarView('list')}
                 onOpenProfile={() => setSidebarView('profile')}
                 onOpenSettings={() => setSidebarView('settings')}
                 onSignOut={() => void onSignOut()}
+                onProfileSaved={(p) => {
+                  setCachedProfile(p)
+                  void refresh()
+                }}
               />
             ) : sidebarView === 'profile' ? (
               <ProfileSidebarPanel
@@ -1040,6 +1073,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                   setCachedProfile(p)
                   void refresh()
                 }}
+                onPreview={() => setProfileTarget({ id: user.id, name: user.displayName })}
               />
             ) : sidebarView === 'company' ? (
               <CompanySidebarPanel

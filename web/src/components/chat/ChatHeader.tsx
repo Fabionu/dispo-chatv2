@@ -1,9 +1,12 @@
 import type { RefObject } from 'react'
-import { Info, Route, Search, X } from 'lucide-react'
+import { Info, PanelRight, Route, Search, X } from 'lucide-react'
 import type { Group } from '../../lib/types'
 import { groupLabel } from '../../lib/types'
 import HeaderIconButton from '../HeaderIconButton'
-import { HEADER_TILE_PX, RowTile } from '../../pages/sidebarBits'
+import { HEADER_TILE_PX, RowMeta, RowTile } from '../../pages/sidebarBits'
+import CountryFlag from '../CountryFlag'
+import { TONE_TEXT } from '../vehicle/opsControls'
+import type { TripPlace, TripStop, TripSummary } from '../../lib/vehicleOps'
 
 // The conversation header extracted from ChatView. Purely presentational: all
 // state (search text/open, trip-route tab, panel opening) is owned by ChatView
@@ -28,8 +31,15 @@ type Props = {
   tripRouteActive: boolean
   onOpenTripRoute: () => void
   onCloseTripRoute: () => void
+  // The trip panel beside the thread (vehicle rooms with a trip only).
+  tripPanelAvailable: boolean
+  tripPanelOpen: boolean
+  onToggleTripPanel: () => void
   // Opens the Group-info panel on its Info tab (vehicle rooms only).
   onOpenGroupInfo: () => void
+  // The vehicle room's active trip — when present the header grows a second
+  // row: the next stop and the final one over the trip's track.
+  trip?: TripSummary | null
 }
 
 export default function ChatHeader({
@@ -47,8 +57,20 @@ export default function ChatHeader({
   tripRouteActive,
   onOpenTripRoute,
   onCloseTripRoute,
+  tripPanelAvailable,
+  tripPanelOpen,
+  onToggleTripPanel,
   onOpenGroupInfo,
+  trip,
 }: Props) {
+  // LOGBOOK HEADER (rework, 2026-10-10, option C): a vehicle room with a trip
+  // names the truck and its order on ONE line, and a second row carries the
+  // trip itself. That row replaced the separate trip strip that used to sit
+  // under the header — one object at the top of the room instead of two.
+  const itinerary = group.type === 'vehicle' && trip && trip.stops.length > 0 ? trip : null
+  const orderLine = trip
+    ? [trip.reference && `#${trip.reference}`, trip.client].filter(Boolean).join(' ')
+    : ''
   return (
     /* Thread header — left-aligned identity, actions at the right edge, and a
        single hairline sealing it against the timeline.
@@ -79,7 +101,8 @@ export default function ChatHeader({
        sibling rather than an absolute overlay: with nothing centred there is
        nothing for an expanding search field to shift, so it can simply squeeze
        the title instead of floating over it. */
-    <header className="h-[var(--header-height)] flex items-center gap-3 px-5 shrink-0 overflow-hidden border-b">
+    <header className="shrink-0 border-b">
+    <div className="h-[var(--header-height)] flex items-center gap-3 px-5 overflow-hidden">
       {/* Not a button, though the DM title beside it is one. Two adjacent
           controls firing the same action is one tab stop too many and reads
           twice to a screen reader; the picture is here to be recognised, not
@@ -105,6 +128,32 @@ export default function ChatHeader({
         )}
       </div>
 
+      {itinerary ? (
+        // One line: the plate, then trailer │ members │ order, on its
+        // baseline. Typing takes the meta's place, as it does below.
+        <div className="min-w-0 flex-1 flex items-baseline gap-3">
+          <div className="shrink-0 text-2xl font-bold tracking-[-0.02em] tabular-nums leading-tight">
+            {groupLabel(group)}
+          </div>
+          <div
+            role={typingText ? 'status' : undefined}
+            aria-live={typingText ? 'polite' : undefined}
+            className={`min-w-0 flex-1 eyebrow truncate leading-tight ${typingText ? 'text-active' : ''}`}
+          >
+            {/* The order outranks the member count: when the line is tight,
+                RowMeta drops whole segments from the END, so it goes second. */}
+            {typingText || (
+              <RowMeta
+                segments={(() => {
+                  const [first, ...rest] = subtitle.split(' · ')
+                  return [first, orderLine, ...rest]
+                })()}
+                whole
+              />
+            )}
+          </div>
+        </div>
+      ) : (
       <div className="min-w-0 flex-1">
         {group.type === 'direct' ? (
           <button
@@ -117,7 +166,11 @@ export default function ChatHeader({
             {groupLabel(group)}
           </button>
         ) : (
-          <div className="text-xl font-semibold tracking-[-0.2px] truncate leading-tight">{groupLabel(group)}</div>
+          // A vehicle room's title is a plate: set heavier and a step larger
+          // than a person's name, in tabular figures (rework, 2026-10-10).
+          <div className="text-2xl font-bold tracking-[-0.02em] tabular-nums truncate leading-tight">
+            {groupLabel(group)}
+          </div>
         )}
         {/* The operational line — `.eyebrow`, because it is structure rather
             than something somebody said; `text-active` when someone is typing,
@@ -127,9 +180,12 @@ export default function ChatHeader({
           aria-live={typingText ? 'polite' : undefined}
           className={`eyebrow truncate leading-tight mt-1 ${typingText ? 'text-active' : ''}`}
         >
-          {typingText || subtitle}
+          {/* The subtitle's facts are split on the same hairline the rail's
+              meta line uses, not run together with dots. */}
+          {typingText || <RowMeta segments={subtitle.split(' · ')} whole />}
         </div>
       </div>
+      )}
 
       {/* Search is offered in EVERY conversation (DM + vehicle); Group info
           stays vehicle-only. */}
@@ -213,12 +269,113 @@ export default function ChatHeader({
             <Route size="1.1875rem" strokeWidth={1.8} />
           </HeaderIconButton>
         )}
+        {/* The trip panel's switch is WORDED, not just a glyph: it is the
+            one header control that changes the layout, and "Trip" says what
+            will appear. Drawn like a control (hairline + 6px), pressed fill
+            while the panel is open. */}
+        {tripPanelAvailable && (
+          <button
+            type="button"
+            onClick={onToggleTripPanel}
+            aria-pressed={tripPanelOpen}
+            aria-label={tripPanelOpen ? 'Hide trip panel' : 'Show trip panel'}
+            title={tripPanelOpen ? 'Hide trip panel' : 'Show trip panel'}
+            className={`ml-1 h-10 inline-flex items-center gap-2 rounded-btn border px-3.5 text-base font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+              tripPanelOpen
+                ? 'border-line bg-white/8 text-text'
+                : 'border-line text-muted hover:text-text hover:bg-white/6'
+            }`}
+          >
+            <PanelRight size="1rem" strokeWidth={1.8} />
+            Trip
+          </button>
+        )}
         {group.type === 'vehicle' && (
           <HeaderIconButton label="Group info" size="lg" onClick={onOpenGroupInfo}>
             <Info size="1.1875rem" strokeWidth={1.8} />
           </HeaderIconButton>
         )}
       </div>
+    </div>
+    {itinerary && <HeaderItinerary trip={itinerary} />}
     </header>
+  )
+}
+
+// "FR 57010 Tremery" → "Tremery": the flag already says the country, and a
+// postal code is not what anyone scans a header for.
+function town(place: TripPlace): string {
+  const words = place.text.split(/\s+/).filter((w) => w && !/\d/.test(w))
+  const withoutCode = place.code && words[0]?.toUpperCase() === place.code ? words.slice(1) : words
+  return withoutCode.join(' ') || place.text || place.code || '—'
+}
+
+// The header's second row: the stop the truck is heading for on the left, the
+// trip's final stop on the right, and the trip drawn as a track under them —
+// every stop a mark on it (the map's black-on-white marks; a stop behind the
+// truck drops to the hairline grey), the travelled part filled in the status
+// colour, and the truck as a dot where it is.
+function HeaderItinerary({ trip }: { trip: TripSummary }) {
+  const stops = trip.stops
+  const n = stops.length
+  const nextIndex = stops.findIndex((s) => s.status === 'planned')
+  const lastIndex = n - 1
+  // The left label is the stop being driven to — unless that IS the last one
+  // (or none is left), in which case it is where the trip began.
+  const leftIndex = nextIndex >= 0 && nextIndex < lastIndex ? nextIndex : 0
+  const pct = Math.max(0, Math.min(1, trip.progress?.pct ?? 0))
+  const at = (i: number) => (n === 1 ? 0 : i / (n - 1))
+  const tone = TONE_TEXT[trip.statusTone]
+
+  // ONE line (user, 2026-10-10: "make the header more compact"): the near end,
+  // the track, the far end. What each end IS (loading, next…) is in its
+  // tooltip; the ring on the track already says which stop is next.
+  return (
+    <div className="flex items-center gap-3 px-5 pb-2.5">
+      <ItineraryEnd stop={stops[leftIndex]} next={leftIndex === nextIndex} />
+      <div className={`relative h-3 min-w-16 flex-1 ${tone}`} aria-hidden>
+        <span className="absolute inset-x-0 top-1/2 h-0.5 -translate-y-1/2 rounded-full bg-line" />
+        <span
+          className="absolute left-0 top-1/2 h-0.5 -translate-y-1/2 rounded-full bg-current"
+          style={{ width: `${pct * 100}%` }}
+        />
+        {stops.map((stop, i) => (
+          <span
+            key={stop.id}
+            className={`absolute top-1/2 box-border h-3 w-3 -translate-y-1/2 rounded-full border-[3px] bg-bg ${
+              stop.status === 'done' ? 'border-line-2' : 'border-text'
+            }`}
+            // Ends sit flush with the row's edges; the rest centre on their mark.
+            style={{ left: `calc(${at(i) * 100}% - ${at(i) * 0.75}rem)` }}
+          />
+        ))}
+        {trip.progress && pct > 0 && pct < 1 && (
+          <span
+            className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-current ring-[3px] ring-bg"
+            style={{ left: `${pct * 100}%` }}
+          />
+        )}
+      </div>
+      {n > 1 && <ItineraryEnd stop={stops[lastIndex]} next={lastIndex === nextIndex} alignEnd />}
+    </div>
+  )
+}
+
+function ItineraryEnd({ stop, next, alignEnd = false }: { stop: TripStop; next: boolean; alignEnd?: boolean }) {
+  const when = stop.eta ? `ETA ${stop.eta}` : stop.plannedAt
+  const role = `${stop.typeLabel}${next ? ', next' : stop.status === 'done' ? ', done' : ''}`
+  return (
+    <span
+      title={`${role}: ${stop.place.text}${when ? `, ${when}` : ''}`}
+      className={`flex min-w-0 max-w-[45%] shrink items-center gap-2 ${alignEnd ? 'flex-row-reverse' : ''}`}
+    >
+      <CountryFlag code={stop.place.code} />
+      <span
+        className={`truncate text-base font-semibold ${stop.status === 'done' ? 'text-muted' : 'text-text'}`}
+      >
+        {town(stop.place)}
+      </span>
+      {when && <span className="shrink-0 text-sm text-muted tabular-nums">{when}</span>}
+    </span>
   )
 }

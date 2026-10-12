@@ -35,6 +35,9 @@ export type PhotoEditor = {
   optionsButton: ReactNode
   /** For ProfileHero's `onPhotoClick`; undefined when there is nothing to view. */
   openPreview?: () => void
+  /** Opens the file picker directly (a compact identity tile with no banner to
+   *  pin the pencil to); undefined for viewers. */
+  pickFile?: () => void
 }
 
 // Photo viewing + management for a profile hero (profileChrome.ProfileHero).
@@ -119,7 +122,7 @@ export function usePhotoEditor({
         aria-haspopup="menu"
         aria-expanded={menuOpen}
         title={`Change ${noun}`}
-        className={`h-10 w-10 flex items-center justify-center rounded-full border border-pure-white/15 bg-black/45 text-pure-white backdrop-blur-[2px] transition-colors hover:bg-black/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-active/60 ${
+        className={`h-10 w-10 flex items-center justify-center rounded-btn border border-pure-white/15 bg-black/45 text-pure-white backdrop-blur-[2px] transition-colors hover:bg-black/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-active/60 ${
           menuOpen ? 'bg-black/65' : ''
         }`}
       >
@@ -163,6 +166,7 @@ export function usePhotoEditor({
     chrome,
     optionsButton,
     openPreview: canView ? () => setPreviewOpen(true) : undefined,
+    pickFile: canEdit ? () => inputRef.current?.click() : undefined,
   }
 }
 

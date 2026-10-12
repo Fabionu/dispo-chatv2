@@ -31,7 +31,11 @@ import { resolveMentionIds } from '../lib/mentions'
 import { api, type MessageSearchResult } from '../lib/api'
 import { canManageRoom, canManageRoomRoles, type RoomViewer } from '../lib/roomPermissions'
 import { getSocket } from '../lib/socket'
-import ChatComposer, { type ChatComposerHandle, type EditContext } from './composer/ChatComposer'
+import ChatComposer, {
+  type ChatComposerHandle,
+  type ComposerSnippet,
+  type EditContext,
+} from './composer/ChatComposer'
 import ChatHeader from './chat/ChatHeader'
 import ChatModals from './chat/ChatModals'
 const AttachmentSendPreview = lazy(() => import('./attachments/AttachmentSendPreviewModal'))
@@ -49,9 +53,20 @@ const GroupInfoPanel = lazy(() => import('./GroupInfoPanel'))
 const AddTripPanel = lazy(() => import('./vehicle/AddTripPanel'))
 const StopLocationMap = lazy(() => import('./vehicle/StopLocationMap'))
 const TripRouteMap = lazy(() => import('./vehicle/TripRouteMap'))
-import TripBar from './vehicle/TripBar'
+import TripPanel from './vehicle/TripPanel'
 import type { PanelTab } from './GroupInfoPanel'
-import { getOps, tripSummary, type VehicleOps } from '../lib/vehicleOps'
+import {
+  getOps,
+  isRouteVia,
+  labelOf,
+  nextPlannedStop,
+  STOP_TYPES,
+  stopFullAddress,
+  stopLocationLabel,
+  tripSummary,
+  type VehicleOps,
+} from '../lib/vehicleOps'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 import { canRouteStops, persistOpsWithRoute } from '../lib/tripRoute'
 import ConversationSearch from './ConversationSearch'
 import UserProfilePanel from './UserProfilePanel'
@@ -1111,6 +1126,85 @@ export default function ChatView({
     if (tripRouteOpen && !routeMapAvailable) closeTripRoute()
   }, [tripRouteOpen, routeMapAvailable, closeTripRoute])
 
+  // ── Trip panel ───────────────────────────────────────────────────────────
+  // The trip kept open beside the thread (vehicle rooms with a trip). On a wide
+  // screen it is the resting state and the choice is remembered; below xl it is
+  // an overlay drawer, so it only ever opens when asked and never sticks.
+  // It yields the right-hand slot to anything opened on purpose — Group info,
+  // Add trip, a profile, read receipts — and comes back when they close.
+  const isWide = useMediaQuery('(min-width: 1280px)')
+  const [tripPanelPref, setTripPanelPref] = useState(() => readTripPanelPref())
+  const [tripPanelNarrow, setTripPanelNarrow] = useState(false)
+  const tripPanelAvailable = group.type === 'vehicle' && Boolean(trip)
+  const rightSlotTaken = Boolean(
+    profileTarget || receiptTarget || addTripOpen || (group.type === 'vehicle' && groupInfoOpen),
+  )
+  const showTripPanel =
+    tripPanelAvailable && (isWide ? tripPanelPref : tripPanelNarrow) && !rightSlotTaken
+  function setTripPanelWanted(open: boolean) {
+    if (isWide) {
+      setTripPanelPref(open)
+      writeTripPanelPref(open)
+    } else {
+      setTripPanelNarrow(open)
+    }
+  }
+  function toggleTripPanel() {
+    if (showTripPanel) {
+      setTripPanelWanted(false)
+      return
+    }
+    // Asked for while something else holds the slot: the ask wins.
+    setGroupInfoOpen(false)
+    setAddTripOpen(false)
+    setProfileTarget(null)
+    setReceiptTarget(null)
+    setTripPanelWanted(true)
+  }
+
+  // Dispatcher shortcuts, behind the composer footer's "Quick messages" menu.
+  const quickReplies: ComposerSnippet[] = (() => {
+    if (group.type !== 'vehicle' || !trip || !canManageGroup) return []
+    const next = ops ? nextPlannedStop(ops.stops) : undefined
+    const out: ComposerSnippet[] = []
+    if (next) {
+      const where = stopLocationLabel(next)
+      out.push({
+        label: 'Ask for ETA',
+        text: where ? `What is your ETA at ${where}?` : 'What is your ETA at the next stop?',
+      })
+    }
+    out.push({ label: 'Request CMR photo', text: 'Please send a photo of the signed CMR.' })
+    if (next) {
+      const type = labelOf(STOP_TYPES, next.type) || 'Stop'
+      const parts = [stopFullAddress(next), next.plannedAt?.trim()].filter(Boolean)
+      if (parts.length) out.push({ label: 'Send next stop', text: `Next stop, ${type.toLowerCase()}: ${parts.join(', ')}.` })
+    }
+    return out
+  })()
+
+  // The footer's "Location" menu: the trip's real stops (not route-shaping
+  // vias), each as its address plus a map link when it has coordinates — the
+  // thing a driver actually needs pasted into the chat.
+  const stopLocations: ComposerSnippet[] = (() => {
+    if (group.type !== 'vehicle' || !ops?.trip) return []
+    return ops.stops
+      .filter((s) => s.status !== 'cancelled' && !isRouteVia(s))
+      .map((s) => {
+        const type = labelOf(STOP_TYPES, s.type) || 'Stop'
+        const where = stopLocationLabel(s)
+        const address = stopFullAddress(s)
+        const link =
+          typeof s.lat === 'number' && typeof s.lng === 'number'
+            ? `https://www.google.com/maps?q=${s.lat},${s.lng}`
+            : ''
+        return {
+          label: where ? `${type}, ${where}` : type,
+          text: [`${type}: ${address || where}`.trim(), link].filter(Boolean).join(' '),
+        }
+      })
+  })()
+
   // The attachment tab currently shown in the chat-window body (null unless an
   // `att:<id>` surface is active).
   const activeAttachmentTab = activeTool.startsWith('att:')
@@ -1166,7 +1260,9 @@ export default function ChatView({
     // desktop; the left workspace sidebar lives one level up in Workspace.tsx.
     // xl:gap-3 spaces the in-flow group-info side card from the chat (no effect
     // when it's closed or a narrow-screen overlay — both leave one in-flow child).
-    <div className="relative flex-1 flex min-h-0 xl:gap-3">
+    // The trip panel is the exception: it sits on a hairline seam like the
+    // rail↔thread one, so the gap goes while it is the column showing.
+    <div className={`relative flex-1 flex min-h-0 ${showTripPanel ? '' : 'xl:gap-3'}`}>
       {/* Chat pane — the whole conversation column (header, pinned bar,
           messages, composer). `flex-1 min-w-0` lets it shrink naturally to the
           remaining width when the Group info column is open, and keeps the
@@ -1202,6 +1298,10 @@ export default function ChatView({
         tripRouteActive={tripRouteOpen && activeTool === 'route'}
         onOpenTripRoute={openTripRoute}
         onCloseTripRoute={closeTripRoute}
+        tripPanelAvailable={tripPanelAvailable}
+        tripPanelOpen={showTripPanel}
+        onToggleTripPanel={toggleTripPanel}
+        trip={group.type === 'vehicle' ? trip : null}
         onOpenGroupInfo={() => {
           setGroupInfoTab('info')
           setReceiptTarget(null)
@@ -1225,19 +1325,6 @@ export default function ChatView({
         </div>
       )}
 
-      {/* Active-trip bar — a slim, glanceable strip under the header for vehicle
-          rooms with a trip: completion ring + status, the origin → destination
-          route, and the order/client. Opens the Group info Trip tab on click. */}
-      {group.type === 'vehicle' && trip && (
-        <TripBar
-          trip={trip}
-          onOpen={() => {
-            setGroupInfoTab('trip')
-            setReceiptTarget(null)
-            setGroupInfoOpen(true)
-          }}
-        />
-      )}
 
       {/* Tool tabs — a compact banner under the header, shown ONLY when a chat-
           window tool is open (today: the stop-location Map). Lets the user flip
@@ -1642,6 +1729,8 @@ export default function ChatView({
                   // In a manageable vehicle room this opens the editor directly;
                   // from a DM it opens the workspace vehicle-room chooser.
                   onAddTrip={canAddTrip ? openAddTrip : undefined}
+                  quickReplies={quickReplies}
+                  locations={stopLocations}
                   replyContext={replyContext}
                   onCancelReply={() => setReplyContext(null)}
                   editContext={editContext}
@@ -1740,6 +1829,7 @@ export default function ChatView({
           onOpenRouteMap={routeMapAvailable ? openTripRoute : undefined}
           onAddTrip={() => setAddTripOpen(true)}
           initialTab={groupInfoTab}
+          viewerWorkspace={currentWorkspaceName}
         />
         </Suspense>
       )}
@@ -1787,6 +1877,48 @@ export default function ChatView({
         />
       )}
 
+      {showTripPanel && ops && trip && (
+        <TripPanel
+          group={group}
+          ops={ops}
+          trip={trip}
+          members={members}
+          viewerWorkspace={currentWorkspaceName}
+          canEdit={canManageGroup}
+          onClose={() => setTripPanelWanted(false)}
+          onEditTrip={() => {
+            setGroupInfoTab('trip')
+            setReceiptTarget(null)
+            setGroupInfoOpen(true)
+          }}
+          onOpenMembers={() => {
+            setGroupInfoTab('members')
+            setReceiptTarget(null)
+            setGroupInfoOpen(true)
+          }}
+          onOpenRoute={routeMapAvailable ? openTripRoute : undefined}
+          onOpenProfile={openProfile}
+        />
+      )}
+
     </div>
   )
+}
+
+// Whether the trip panel rests open on wide screens. Per device, so a
+// dispatcher on a laptop and on the office monitor can each keep their own.
+const TRIP_PANEL_KEY = 'dispo:trip-panel'
+function readTripPanelPref(): boolean {
+  try {
+    return localStorage.getItem(TRIP_PANEL_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
+function writeTripPanelPref(open: boolean) {
+  try {
+    localStorage.setItem(TRIP_PANEL_KEY, open ? '1' : '0')
+  } catch {
+    // Storage unavailable (private mode): the choice lasts for this session.
+  }
 }

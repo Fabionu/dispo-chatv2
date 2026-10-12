@@ -4,10 +4,7 @@ import { useTravellingMarker } from './useTravellingMarker'
 import { groupLabel, tractorPlate, trailerPlate } from '../lib/types'
 import {
   getOps,
-  labelOf,
   vehicleDriverIds,
-  vehicleStatusTone,
-  VEHICLE_STATUSES,
   type ActiveTrip,
   type VehicleInfo,
   type VehicleOps,
@@ -18,26 +15,28 @@ import { persistOpsWithRoute, persistTripRoute } from '../lib/tripRoute'
 import { getSocket } from '../lib/socket'
 import { avatarUrl, clearAvatarCache } from '../lib/avatarCache'
 import { usePresence } from '../hooks/usePresence'
-import { Users } from 'lucide-react'
-import { usePhotoEditor } from './AvatarPhotoEditor'
+import { Camera, Truck } from 'lucide-react'
+import { usePhotoEditor, type PhotoEditor } from './AvatarPhotoEditor'
 import { PanelCloseHeader } from './settings/panelChrome'
 import { PANEL_SURFACE, ProfileHero } from './settings/profileChrome'
+import { RowMeta } from '../pages/sidebarBits'
 import AvatarCropModal from './settings/AvatarCropModal'
-import { StatusChip } from './vehicle/opsControls'
+import VehicleStatusSelect from './vehicle/VehicleStatusSelect'
 import VehicleInfoTab from './vehicle/VehicleInfoTab'
 import TripTab from './vehicle/TripTab'
-import DocumentsTab from './vehicle/DocumentsTab'
 import MembersTab from './vehicle/MembersTab'
 
 // The operational tabs in the vehicle-room info panel. Stops are managed inside
 // the Trip tab (no separate Stops tab) so there's a single place to manage a
-// trip and its stops.
-export type PanelTab = 'info' | 'trip' | 'docs' | 'members'
+// trip and its stops. The ids are the ones ChatView deep-links with; the labels
+// were renamed in the 2026-10-12 rework (Info → Vehicle, Members → Crew) and
+// the Docs tab, a disabled placeholder, was dropped — transport documents
+// belong to a trip, so they will land with the Trip panel when they exist.
+export type PanelTab = 'info' | 'trip' | 'members'
 const PANEL_TABS: ReadonlyArray<{ id: PanelTab; label: string }> = [
-  { id: 'info', label: 'Info' },
+  { id: 'info', label: 'Vehicle' },
   { id: 'trip', label: 'Trip' },
-  { id: 'docs', label: 'Docs' },
-  { id: 'members', label: 'Members' },
+  { id: 'members', label: 'Crew' },
 ]
 
 type Props = {
@@ -73,6 +72,8 @@ type Props = {
   // Which tab to open on mount (e.g. the header trip bar opens straight to 'trip').
   // Defaults to 'info'.
   initialTab?: PanelTab
+  // The viewer's company — a crew member from another one is named in the row.
+  viewerWorkspace?: string | null
 }
 
 // Right-side panel with a vehicle group's operational details and membership.
@@ -103,6 +104,7 @@ export default function GroupInfoPanel({
   onOpenRouteMap,
   onAddTrip,
   initialTab = 'info',
+  viewerWorkspace,
 }: Props) {
   const [error, setError] = useState<string | null>(null)
   // The member whose role is currently being changed (drives the row spinner).
@@ -151,14 +153,14 @@ export default function GroupInfoPanel({
   // unsubscribes on unmount; GroupInfoPanel mounts per open/per group).
   const { online } = usePresence()
 
-  // Compact vehicle line under the member count: "Tractor … · Trailer …",
-  // dropping whichever plate isn't set (empty when neither exists).
-  const vehicleMeta = [
-    tractorPlate(group) && `Tractor ${tractorPlate(group)}`,
-    trailerPlate(group) && `Trailer ${trailerPlate(group)}`,
+  // The identity's two quiet lines: the plates, then what the truck is and how
+  // many people are in the room. RowMeta drops whichever segment is empty.
+  const plates = [tractorPlate(group), trailerPlate(group)]
+  const kind = [
+    ops.vehicle.vehicleType,
+    ops.vehicle.trailerType,
+    `${members.length} member${members.length === 1 ? '' : 's'}`,
   ]
-    .filter(Boolean)
-    .join(' · ')
 
   async function setMemberRole(targetId: string, role: 'admin' | 'member') {
     setRoleBusyId(targetId)
@@ -376,56 +378,63 @@ export default function GroupInfoPanel({
       >
         <PanelCloseHeader title="Group info" onClose={onClose} closeLabel="Close group info" />
 
-        <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 py-4">
-          {/* Identity — the vehicle image is the hero (uploaded photo, or the
-              generated multi-user glyph as a fallback), the same banner as every
-              profile surface. Managers change/remove it via the pinned pencil;
-              the banner opens the photo. The manual vehicle status is a chip. */}
-          <ProfileHero
-            photo={
-              group.hasAvatar
-                ? {
-                    src: avatarUrl('group', group.id, group.avatarVersion),
-                    alt: `${groupLabel(group)} vehicle photo`,
-                  }
-                : null
-            }
-            fallback={<Users size="4.5rem" strokeWidth={1.4} />}
-            onPhotoClick={editor.openPreview}
-            overlay={editor.optionsButton}
-            title={groupLabel(group)}
-            subtitle={`${members.length} member${members.length === 1 ? '' : 's'}`}
-            meta={vehicleMeta || undefined}
-            status={
-              ops.vehicle.status ? (
-                <StatusChip
-                  tone={vehicleStatusTone(ops.vehicle.status)}
-                  label={labelOf(VEHICLE_STATUSES, ops.vehicle.status)}
-                />
-              ) : undefined
-            }
-            error={error}
-          />
+        <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 pt-4 pb-8">
+          {/* Identity. With a vehicle photo it is the banner every profile
+              surface uses (managers change/remove it via the pinned pencil; the
+              banner opens the photo). Without one — most trucks — the banner
+              was 400px of empty gradient, so it is a compact tile + name, and
+              the tile is where a manager adds the first photo. */}
+          {group.hasAvatar ? (
+            <ProfileHero
+              photo={{
+                src: avatarUrl('group', group.id, group.avatarVersion),
+                alt: `${groupLabel(group)} vehicle photo`,
+              }}
+              fallback={<Truck size="4.5rem" strokeWidth={1.4} />}
+              onPhotoClick={editor.openPreview}
+              overlay={editor.optionsButton}
+              title={groupLabel(group)}
+              subtitle={<RowMeta segments={plates} whole />}
+              meta={<RowMeta segments={kind} whole />}
+              error={error}
+            />
+          ) : (
+            <VehicleIdentity
+              name={groupLabel(group)}
+              plates={plates}
+              kind={kind}
+              editor={editor}
+              error={error}
+            />
+          )}
 
           {editor.chrome}
 
-          {/* Tab bar — compact segmented control for the operational sections. */}
-          <PanelTabs value={tab} onChange={setTab} />
+          <div className="px-1">
+            {/* The manual vehicle status — always visible, above the tabs,
+                because it is the field a dispatcher changes most. */}
+            <div className="border-t border-line pt-4 pb-5">
+              <VehicleStatusSelect
+                value={ops.vehicle.status}
+                editable={canManage}
+                onSave={(status) => saveVehicle({ status })}
+              />
+            </div>
 
-          <div className="mt-4">
+            {/* Tab bar — compact segmented control for the operational sections. */}
+            <PanelTabs value={tab} onChange={setTab} crewCount={members.length} />
+
             {tab === 'info' && (
               <VehicleInfoTab
                 group={group}
                 canManage={canManage}
                 vehicle={ops.vehicle}
-                members={members}
-                assignedDriverIds={vehicleDriverIds(ops)}
                 onSaveField={saveField}
                 onSaveVehicle={saveVehicle}
-                onSaveDrivers={saveDrivers}
               />
             )}
             {tab === 'trip' && (
+              <div className="pt-4">
               <TripTab
                 trip={ops.trip}
                 stops={ops.stops}
@@ -437,13 +446,14 @@ export default function GroupInfoPanel({
                 onCalculateRoute={calculateRoute}
                 onEditRoute={onOpenRouteMap ? editRoute : undefined}
               />
+              </div>
             )}
-            {tab === 'docs' && <DocumentsTab />}
             {tab === 'members' && (
               <MembersTab
                 members={members}
                 membersLoading={membersLoading}
                 currentUserId={currentUserId}
+                viewerWorkspace={viewerWorkspace}
                 canManage={canManage}
                 canManageRoles={canManageRoles}
                 adminCount={adminCount}
@@ -459,6 +469,7 @@ export default function GroupInfoPanel({
                 onMessage={messageMember}
                 onOpenProfile={onOpenProfile}
                 onCancelInvite={cancelInvite}
+                onSaveDrivers={saveDrivers}
               />
             )}
           </div>
@@ -499,9 +510,12 @@ export default function GroupInfoPanel({
 function PanelTabs({
   value,
   onChange,
+  crewCount,
 }: {
   value: PanelTab
   onChange: (tab: PanelTab) => void
+  /** Drawn after the Crew label, quieter than it. */
+  crewCount: number
 }) {
   // Shared with the rail's filter bar, the Settings segmented control and the
   // conversation bar — see components/useTravellingMarker.
@@ -510,7 +524,7 @@ function PanelTabs({
   return (
     <div
       ref={trackRef}
-      className="relative mt-4 flex items-center gap-0.5 rounded-card bg-white/4 p-0.5"
+      className="relative flex items-center gap-0.5 rounded-card bg-white/4 p-0.5"
     >
       {rect && (
         <span
@@ -536,14 +550,68 @@ function PanelTabs({
             onClick={() => onChange(t.id)}
             aria-current={active ? 'true' : undefined}
             // `relative` so the label sits ON the pill rather than under it.
-            className={`relative z-10 flex-1 h-7 rounded-btn text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+            className={`relative z-10 flex flex-1 h-8 items-center justify-center gap-1.5 rounded-btn text-base font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
               active ? 'text-bg' : 'text-muted hover:text-text'
             }`}
           >
             {t.label}
+            {t.id === 'members' && <span className="font-medium opacity-60 tabular-nums">{crewCount}</span>}
           </button>
         )
       })}
+    </div>
+  )
+}
+
+// The compact identity for a vehicle room with no photo: the truck tile (a
+// manager's way to add the first photo, marked by a camera badge), the room
+// name, the plates, then what the truck is and how many people are in the room.
+function VehicleIdentity({
+  name,
+  plates,
+  kind,
+  editor,
+  error,
+}: {
+  name: string
+  plates: (string | undefined)[]
+  kind: (string | undefined)[]
+  editor: PhotoEditor
+  error: string | null
+}) {
+  const glyph = <Truck size="1.625rem" strokeWidth={1.6} />
+  return (
+    <div className="px-1 pt-1 pb-5">
+      <div className="flex items-center gap-4">
+        {editor.pickFile ? (
+          <button
+            type="button"
+            onClick={editor.pickFile}
+            aria-label="Add a vehicle photo"
+            title="Add a vehicle photo"
+            className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-tile border border-line bg-white/4 text-muted transition-colors hover:border-line-2 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+          >
+            {glyph}
+            <span className="absolute -bottom-[0.4375rem] -right-[0.4375rem] flex h-[1.375rem] w-[1.375rem] items-center justify-center rounded-btn border-2 border-panel bg-line text-text">
+              <Camera size="0.6875rem" strokeWidth={2.2} />
+            </span>
+          </button>
+        ) : (
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-tile border border-line bg-white/4 text-muted">
+            {glyph}
+          </span>
+        )}
+        <div className="min-w-0">
+          <h2 className="truncate text-2xl font-bold tracking-[-0.02em]">{name}</h2>
+          <div className="mt-1 text-base text-text/80">
+            <RowMeta segments={plates} whole />
+          </div>
+          <div className="mt-0.5 text-base text-muted">
+            <RowMeta segments={kind} whole />
+          </div>
+        </div>
+      </div>
+      {error && <p className="mt-2 text-sm text-alert leading-[1.4]">{error}</p>}
     </div>
   )
 }

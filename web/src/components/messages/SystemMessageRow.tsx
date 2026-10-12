@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react'
 import type { LocalMessage } from './types'
 import DayDivider from './DayDivider'
-import { TRIP_STATUSES, labelOf, type TripStatus } from '../../lib/vehicleOps'
+import { TRIP_STATUSES, labelOf, tripStatusTone, type TripStatus } from '../../lib/vehicleOps'
+import { TONE_TEXT } from '../vehicle/opsControls'
+import { formatTime } from './messageUtils'
 
 // Timeline entry for persisted activity (joins, member adds, pin/unpin, trips,
 // …). No bubble and no actions menu — an event, not a message.
@@ -53,6 +55,9 @@ export default function SystemMessageRow({
             the column instead of running its full width. */}
         <span className="max-w-body text-center text-[length:var(--msg-system-size)] leading-[1.6] text-faint">
           {renderActivity(message, onJumpToMessage)}
+          {/* When it happened, quietly after the sentence — an event in a
+              room's log is only half a fact without its time. */}
+          <span className="timestamp ml-2">{formatTime(message.createdAt)}</span>
         </span>
       </div>
     </>
@@ -146,13 +151,19 @@ function renderActivity(
       ) : (
         <>A trip was added</>
       )
-    case 'trip_status_changed':
+    case 'trip_status_changed': {
+      // Said the way the trip panel says it (rework, 2026-10-10): who set it,
+      // and the new status in its own colour with its dot — the old "from X to
+      // Y" made the reader do the diff, and the FROM is the line above anyway.
+      const tone = TONE_TEXT[tripStatusTone((payload.to ?? undefined) as TripStatus | undefined)]
       return (
         <>
-          Trip status changed from <Detail>{tripStatusLabel(payload.from)}</Detail> to{' '}
-          <Detail>{tripStatusLabel(payload.to)}</Detail>
+          <span aria-hidden className={`mr-2 inline-block h-[7px] w-[7px] rounded-full bg-current align-middle ${tone}`} />
+          {message.authorName ? <>{actor} set the trip to </> : <>Trip set to </>}
+          <span className={`font-medium ${tone}`}>{tripStatusLabel(payload.to)}</span>
         </>
       )
+    }
     case 'trip_driver_assigned':
       // "Fabio assigned Claudiu Cojocar as driver for trip #123" — actor prefix,
       // then the assigned driver name(s), and the trip reference when present.

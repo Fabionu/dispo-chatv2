@@ -1,17 +1,13 @@
+import { useState, type FormEvent } from 'react'
 import { EditableField, EditableTextarea } from '../forms'
-import AssignedDrivers from './AssignedDrivers'
-import { SelectRow, SubHeading } from './opsControls'
-import { VEHICLE_STATUSES, type TruckProfile, type VehicleInfo } from '../../lib/vehicleOps'
-import { tractorPlate, trailerPlate, type Group, type GroupMember } from '../../lib/types'
+import { SettingsSection } from '../settings/sectionChrome'
+import type { TruckProfile, VehicleInfo } from '../../lib/vehicleOps'
+import { tractorPlate, trailerPlate, type Group } from '../../lib/types'
 
 type Props = {
   group: Group
   canManage: boolean
   vehicle: VehicleInfo
-  // The room's members — the pool the assigned-drivers picker chooses from.
-  members: GroupMember[]
-  // Currently-assigned driver user ids (persistent vehicle-room assignment).
-  assignedDriverIds: string[]
   // Persist a group-level detail (name / plates / description) — reuses the
   // existing PATCH path, so plate editing behaves exactly as before.
   onSaveField: (
@@ -19,146 +15,238 @@ type Props = {
   ) => Promise<void>
   // Persist a patch onto the vehicle ops sub-object.
   onSaveVehicle: (patch: Partial<VehicleInfo>) => Promise<void>
-  // Persist independently of the active trip. Membership is re-validated server-side.
-  onSaveDrivers: (ids: string[]) => Promise<void>
 }
 
-// Vehicle Info tab: the permanent vehicle's identity + manual status. Group-level
-// fields (name, plates, description) keep using the existing per-field PATCH;
-// the richer vehicle fields live in the ops blob. Each field edits individually,
-// matching the rest of the panel.
-// The truck-profile fields, in storage order. `unit` is shown in the label so a
-// dispatcher enters exact restriction values (HERE units: centimetres/kilograms);
-// axle/trailer counts are plain integers.
+// The truck-profile values, in storage order. Stored in HERE's units
+// (centimetres / kilograms); shown in metres and tonnes, which is how a
+// dispatcher reads a truck, and entered back in the stored unit so a value is
+// never rounded on its way in.
 const TRUCK_FIELDS: ReadonlyArray<{
   key: keyof TruckProfile
   label: string
-  placeholder: string
+  unit: string
+  format: (v: number) => string
 }> = [
-  { key: 'heightCm', label: 'Height (cm)', placeholder: 'e.g. 400' },
-  { key: 'widthCm', label: 'Width (cm)', placeholder: 'e.g. 255' },
-  { key: 'lengthCm', label: 'Length (cm)', placeholder: 'e.g. 1650' },
-  { key: 'grossWeightKg', label: 'Gross weight (kg)', placeholder: 'e.g. 40000' },
-  { key: 'axleCount', label: 'Axles', placeholder: 'e.g. 5' },
-  { key: 'trailerCount', label: 'Trailers', placeholder: 'e.g. 1' },
+  { key: 'heightCm', label: 'Height', unit: 'cm', format: (v) => `${(v / 100).toFixed(2)} m` },
+  { key: 'widthCm', label: 'Width', unit: 'cm', format: (v) => `${(v / 100).toFixed(2)} m` },
+  { key: 'lengthCm', label: 'Length', unit: 'cm', format: (v) => `${(v / 100).toFixed(2)} m` },
+  { key: 'grossWeightKg', label: 'Gross weight', unit: 'kg', format: (v) => `${+(v / 1000).toFixed(1)} t` },
+  { key: 'axleCount', label: 'Axles', unit: '', format: (v) => String(v) },
+  { key: 'trailerCount', label: 'Trailers', unit: '', format: (v) => String(v) },
 ]
 
-export default function VehicleInfoTab({
-  group,
-  canManage,
-  vehicle,
-  members,
-  assignedDriverIds,
-  onSaveField,
-  onSaveVehicle,
-  onSaveDrivers,
-}: Props) {
-  const truck = vehicle.truckProfile ?? {}
+// Group info → Vehicle: the permanent truck. Reworked 2026-10-12 from the
+// "Profile & group info rework" canvas: the status and the driver assignment
+// moved out (status above the tabs, drivers to Crew), the identity fields are a
+// label-column card where the row is the edit target, and the truck profile is
+// six readable tiles edited together instead of six "Height (cm)" rows.
+export default function VehicleInfoTab({ group, canManage, vehicle, onSaveField, onSaveVehicle }: Props) {
+  return (
+    <div className="flex flex-col">
+      <SettingsSection title="Vehicle">
+        <div className="overflow-hidden rounded-card border border-line divide-y divide-line">
+          <EditableField
+            variant="columns"
+            label="Room name"
+            value={group.name}
+            editable={canManage}
+            required
+            onSave={(v) => onSaveField({ name: v })}
+          />
+          <EditableField
+            variant="columns"
+            label="Tractor plate"
+            value={tractorPlate(group)}
+            editable={canManage}
+            placeholder="e.g. B-123-ABC"
+            onSave={(v) => onSaveField({ tractorPlate: v || null })}
+          />
+          <EditableField
+            variant="columns"
+            label="Trailer plate"
+            value={trailerPlate(group)}
+            editable={canManage}
+            placeholder="e.g. B-456-XYZ"
+            onSave={(v) => onSaveField({ trailerPlate: v || null })}
+          />
+          <EditableField
+            variant="columns"
+            label="Vehicle type"
+            value={vehicle.vehicleType}
+            editable={canManage}
+            placeholder="e.g. Tractor unit, Van"
+            onSave={(v) => onSaveVehicle({ vehicleType: v || undefined })}
+          />
+          <EditableField
+            variant="columns"
+            label="Trailer type"
+            value={vehicle.trailerType}
+            editable={canManage}
+            placeholder="e.g. Curtainsider, Reefer"
+            onSave={(v) => onSaveVehicle({ trailerType: v || undefined })}
+          />
+        </div>
+      </SettingsSection>
 
-  // Persist one truck-profile number. Empty / non-positive input clears the
-  // field; the whole profile is dropped once it holds no numbers (so an empty
-  // profile is `undefined`, not `{}`). The server re-validates the ranges.
-  function saveTruckField(key: keyof TruckProfile, raw: string): Promise<void> {
-    const n = Number.parseInt(raw, 10)
-    const next: TruckProfile = { ...truck }
-    if (!raw.trim() || Number.isNaN(n) || n <= 0) delete next[key]
-    else next[key] = n
-    const hasAny = Object.values(next).some((v) => typeof v === 'number')
-    return onSaveVehicle({ truckProfile: hasAny ? next : undefined })
+      <TruckProfileSection
+        truck={vehicle.truckProfile ?? {}}
+        canManage={canManage}
+        onSave={(truckProfile) => onSaveVehicle({ truckProfile })}
+      />
+
+      <SettingsSection title="Notes" last>
+        <div className="overflow-hidden rounded-card border border-line divide-y divide-line">
+          <EditableTextarea
+            variant="card"
+            label="Description"
+            value={group.description}
+            editable={canManage}
+            placeholder="What this vehicle room is for"
+            onSave={(v) => onSaveField({ description: v || null })}
+          />
+          <EditableTextarea
+            variant="card"
+            label="Internal notes"
+            value={vehicle.notes}
+            editable={canManage}
+            placeholder="What the next dispatcher should know about this truck"
+            onSave={(v) => onSaveVehicle({ notes: v || undefined })}
+          />
+        </div>
+      </SettingsSection>
+    </div>
+  )
+}
+
+// The six dimensions the route calculation uses, as tiles; Edit turns all six
+// into inputs at once (they are entered together, from one registration
+// document) with one Save.
+function TruckProfileSection({
+  truck,
+  canManage,
+  onSave,
+}: {
+  truck: TruckProfile
+  canManage: boolean
+  onSave: (next: TruckProfile | undefined) => Promise<void>
+}) {
+  const [editing, setEditing] = useState(false)
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  function start() {
+    const next: Record<string, string> = {}
+    for (const f of TRUCK_FIELDS) next[f.key] = truck[f.key] !== undefined ? String(truck[f.key]) : ''
+    setDrafts(next)
+    setError(null)
+    setEditing(true)
+  }
+
+  // Empty or non-positive clears a value; the profile is dropped entirely once
+  // it holds no numbers (undefined, not {}). The server re-validates ranges.
+  async function save(e: FormEvent) {
+    e.preventDefault()
+    const next: TruckProfile = {}
+    for (const f of TRUCK_FIELDS) {
+      const raw = (drafts[f.key] ?? '').trim()
+      if (!raw) continue
+      const n = Number.parseInt(raw, 10)
+      if (Number.isNaN(n) || n <= 0) {
+        setError(`${f.label} must be a whole number above zero.`)
+        return
+      }
+      next[f.key] = n
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      await onSave(Object.keys(next).length ? next : undefined)
+      setEditing(false)
+    } catch {
+      setError('Could not save the truck profile. Check the values and try again.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
-    <div>
-      <SubHeading label="Identity">
-      <EditableField
-        label="Room name"
-        value={group.name}
-        editable={canManage}
-        required
-        onSave={(v) => onSaveField({ name: v })}
-      />
-      <EditableField
-        label="Tractor plate"
-        value={tractorPlate(group)}
-        editable={canManage}
-        placeholder="e.g. B-123-ABC"
-        onSave={(v) => onSaveField({ tractorPlate: v || null })}
-      />
-      <EditableField
-        label="Trailer plate"
-        value={trailerPlate(group)}
-        editable={canManage}
-        placeholder="e.g. B-456-XYZ"
-        onSave={(v) => onSaveField({ trailerPlate: v || null })}
-      />
-      <EditableField
-        label="Vehicle type"
-        value={vehicle.vehicleType}
-        editable={canManage}
-        placeholder="e.g. Tractor unit, Van"
-        onSave={(v) => onSaveVehicle({ vehicleType: v || undefined })}
-      />
-      <EditableField
-        label="Trailer type"
-        value={vehicle.trailerType}
-        editable={canManage}
-        placeholder="e.g. Curtainsider, Reefer"
-        onSave={(v) => onSaveVehicle({ trailerType: v || undefined })}
-      />
-      <EditableTextarea
-        label="Description"
-        value={group.description}
-        editable={canManage}
-        placeholder="Optional description of this vehicle room"
-        onSave={(v) => onSaveField({ description: v || null })}
-      />
-
-      </SubHeading>
-      <SubHeading label="Status &amp; crew">
-      <SelectRow
-        label="Current status"
-        value={vehicle.status}
-        options={VEHICLE_STATUSES}
-        editable={canManage}
-        onSave={(v) => onSaveVehicle({ status: v })}
-      />
-      {/* Assigned drivers — a persistent structured member picker (room members only), so
-          the mobile driver API can resolve "trips assigned to me" and a change
-          logs an activity row. This marks who DRIVES this room operationally; it
-          does not change anyone's company role. */}
-      <AssignedDrivers
-        members={members}
-        assignedIds={assignedDriverIds}
-        canManage={canManage}
-        onSave={onSaveDrivers}
-      />
-      </SubHeading>
-
-      {/* Truck profile — dimensions/weight the route calc + a future mobile truck
-          navigation use. Belongs to the vehicle (one truck per room), entered once
-          and reused by every trip. */}
-      <SubHeading label="Truck profile">
-      {TRUCK_FIELDS.map((f) => (
-        <EditableField
-          key={f.key}
-          label={f.label}
-          value={truck[f.key] !== undefined ? String(truck[f.key]) : undefined}
-          editable={canManage}
-          placeholder={f.placeholder}
-          onSave={(v) => saveTruckField(f.key, v)}
-        />
-      ))}
-
-      </SubHeading>
-      <SubHeading label="Notes">
-      <EditableTextarea
-        label="Internal vehicle notes"
-        value={vehicle.notes}
-        editable={canManage}
-        placeholder="Notes about this vehicle (internal)"
-        onSave={(v) => onSaveVehicle({ notes: v || undefined })}
-      />
-      </SubHeading>
-    </div>
+    <SettingsSection
+      title="Truck profile"
+      description="Routes for this truck avoid low bridges, weight limits and tunnels it can’t use."
+      action={
+        canManage && !editing ? (
+          <button
+            type="button"
+            onClick={start}
+            className="h-8 rounded-btn border border-line-2 px-3 text-base font-semibold transition-colors hover:bg-white/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+          >
+            Edit
+          </button>
+        ) : undefined
+      }
+    >
+      {editing ? (
+        <form onSubmit={save} className="flex flex-col gap-2.5">
+          <div className="grid grid-cols-3 gap-2">
+            {TRUCK_FIELDS.map((f) => (
+              <label
+                key={f.key}
+                className="flex cursor-text flex-col gap-1 rounded-card border border-line-2 px-2.5 py-2 focus-within:border-text/60"
+              >
+                <span className="text-sm text-muted">{f.label}</span>
+                <span className="flex items-baseline gap-1">
+                  <input
+                    value={drafts[f.key] ?? ''}
+                    onChange={(e) => setDrafts((d) => ({ ...d, [f.key]: e.target.value }))}
+                    inputMode="numeric"
+                    placeholder="–"
+                    disabled={saving}
+                    className="w-full min-w-0 bg-transparent p-0 text-xl font-semibold tabular-nums text-text outline-none placeholder:text-faint"
+                  />
+                  {f.unit && <span className="shrink-0 text-sm text-faint">{f.unit}</span>}
+                </span>
+              </label>
+            ))}
+          </div>
+          {error && <p className="text-sm text-alert">{error}</p>}
+          <div className="flex justify-end gap-1.5">
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              disabled={saving}
+              className="h-7 rounded-btn border border-line-2 px-2.5 text-sm font-semibold transition-colors hover:bg-white/6 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="h-7 rounded-btn bg-text px-3 text-sm font-semibold text-bg transition-opacity disabled:opacity-50"
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className="grid grid-cols-3 gap-2">
+          {TRUCK_FIELDS.map((f) => {
+            const v = truck[f.key]
+            return (
+              <div key={f.key} className="flex min-w-0 flex-col gap-0.5 rounded-card border border-line px-3 py-2.5">
+                <span
+                  className={`truncate text-xl font-semibold tracking-[-0.01em] tabular-nums ${
+                    v !== undefined ? 'text-text' : 'text-faint'
+                  }`}
+                >
+                  {v !== undefined ? f.format(v) : 'Not set'}
+                </span>
+                <span className="truncate text-sm text-muted">{f.label}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </SettingsSection>
   )
 }

@@ -159,7 +159,11 @@ html[data-density-mode='manual'][data-density='comfortable'] {
 
   --color-text: 242 242 242;
   --color-muted: 150 150 150;
-  --color-faint: 107 107 107;
+  /* 138, up from 107 (rework, 2026-10-10): 107 on the black field was ~3.9:1,
+     under the 4.5:1 small text needs, and faint IS the small-text colour —
+     timestamps, hints, placeholders. 138 clears it (~6:1) and still sits a
+     visible step below muted. */
+  --color-faint: 138 138 138;
   /* Driven-path teal as text. Matches the colour the map draws the travelled
      path in, which reads cleanly on the dark field. */
   --color-driven: 0 184 169;
@@ -458,8 +462,11 @@ html[data-density-mode='manual'][data-density='comfortable'] {
   --control-radius: 6px;
   --bubble-pad-x: var(--msg-indent);
   --bubble-pad-y: clamp(10.23px, calc((8px + 0.156vw) * var(--ui-scale)), 13.31px);
-  --bubble-gap: 3px;
-  --bubble-group-gap: 1.5rem;
+  /* Tightened with the 2026-10-10 rework: each block now carries its clock
+     UNDER it, so that line already separates a burst's messages and a new
+     speaker needs less extra air to read as one. */
+  --bubble-gap: 4px;
+  --bubble-group-gap: 0.875rem;
   /* Width of our custom scrollbar — reserved on the scroller AND added to the
      composer's right so both centred columns share the exact same content box
      (see .chat-column). Constant across tiers. */
@@ -802,8 +809,18 @@ html[data-theme='light'] {
    laid out as direct children of the row exactly as they were before it existed
    — which is what lets one DOM serve both styles without the timeline
    inheriting a stray block to argue with. */
-.msg-content {
+.msg-content,
+.msg-block {
   display: contents;
+}
+
+/* The bubble and its sign-off as one column: the bubble keeps its own width
+   (stretching only up to the sign-off's, so "Hi" is never narrower than its
+   clock), and the sign-off hangs under its right edge. */
+[data-msg-style='bubble'] .msg-block {
+  display: flex;
+  flex-direction: column;
+  max-width: 100%;
 }
 
 [data-msg-style='bubble'] .msg-content {
@@ -873,7 +890,41 @@ html[data-theme='light'] {
    they say they do and want the full inset. `:first-child` is the whole
    condition: a body under a reply quote is spaced by the quote, not by this. */
 [data-msg-style='bubble'] .msg-content > .msg-body:first-child {
-  margin-top: -5px;
+  margin-top: -3px;
+}
+
+/* Bubble text (rework, 2026-10-10): a step larger, at regular weight and a
+   tighter leading than the timeline's light 1.6. Inside a fill the text no
+   longer has a rule to carry it, and light text on #121212 read as faint. */
+[data-msg-style='bubble'] .msg-content .msg-body {
+  font-size: calc(var(--chat-plain-font-size) * 1.1);
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+/* The quote inside a bubble is a small filled card one step up from the
+   bubble, not a ruled indent — the bubble already has a fill to sit on. */
+[data-msg-style='bubble'] .msg-reply-quote {
+  border-left-width: 0;
+  border-radius: var(--control-radius);
+  background: rgb(var(--color-wash) / 0.06);
+  min-width: 0;
+}
+
+[data-msg-style='bubble'] .msg-reply-author {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+[data-msg-style='bubble'] .msg-reply-snippet {
+  font-size: 13px;
+  color: rgb(var(--color-text) / 0.72);
+}
+
+/* Day breaks sit closer in a bubble thread: the blocks are already spaced. */
+[data-msg-style='bubble'] .day-divider {
+  padding-top: 1.25rem;
+  padding-bottom: 0.375rem;
 }
 
 /* The row becomes a column of two blocks — caption, then message — each sized
@@ -929,6 +980,13 @@ html[data-theme='light'] {
   margin-bottom: 5px;
 }
 
+/* My own blocks are not captioned (rework, 2026-10-10): the right-hand side
+   already says they are mine, and in the bubble style the attribution row is
+   ONLY the name — the clock and ticks moved under the block. */
+[data-msg-style='bubble'] .msg-row[data-own] .msg-attribution {
+  display: none;
+}
+
 /* The block's sign-off: flags, clock and delivery ticks in its bottom-right
    corner (see MessageRow — the element only exists in this style, so the rule
    needs no attribute scope).
@@ -967,16 +1025,12 @@ html[data-theme='light'] {
      finally the honest control, and the user asked for the gap back "a bit" —
      ~3px read as collided. This lands it at ~5px of visible air. */
   line-height: 1;
-  margin-top: 1px;
 
-  /* INTO the corner, not merely inside it. The block pads its text by 10/14, and
-     a sign-off held to that same inset reads as a third line of the message that
-     happens to be right-aligned. Pulled 6px past it on both edges (8px and ~5px
-     of visible inset) it reads as what it is — a mark in the corner of the
-     shape. That is as far as it goes: the corner is rounded at 10px, and the
-     curve is what it would hit next. */
-  margin-right: -6px;
-  margin-bottom: -6px;
+  /* OUTSIDE the block since 2026-10-10: under the bubble, on its right edge,
+     with a few px of air above and a hair in from the curve of the corner. */
+  align-self: flex-end;
+  margin-top: 5px;
+  margin-right: 3px;
 }
 
 /* Which of the room's people is talking. `--author-color` is set inline on the
@@ -985,6 +1039,8 @@ html[data-theme='light'] {
    ordinary muted step. */
 [data-msg-style='bubble'] .msg-name {
   color: var(--author-color, rgb(var(--color-muted)));
+  font-size: 13px;
+  font-weight: 600;
 }
 
 /* A burst follow-up's hover clock hangs in the author lane, centred on the
@@ -1058,6 +1114,83 @@ html[data-theme='light'] {
   margin-bottom: 12px;
 }
 
+/* ── Dense message style ───────────────────────────────────────────────────
+   One line per message (rework, 2026-10-10): a time cell, a name cell and the
+   message, on a three-column grid. Every row is labelled — in a fast room the
+   name is the cheapest thing to repeat and the most expensive to hunt for — so
+   there is no attribution row, no lane photo, no rule and no side. MessageRow
+   renders the two cells only in this style; everything else here overrides
+   the timeline's utilities at (0,2,0) and up. */
+:root {
+  --dense-time-w: 4.25rem;
+  --dense-name-w: 8.75rem;
+}
+
+[data-msg-style='dense'] .msg-row {
+  display: grid;
+  grid-template-columns: var(--dense-time-w) var(--dense-name-w) minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: baseline;
+  width: auto;
+  max-width: none;
+  margin: 0;
+  border-width: 0;
+  padding: 3px 10px;
+  border-radius: var(--control-radius);
+}
+
+/* A new speaker gets a few px, not a paragraph break: density is the point. */
+[data-msg-style='dense'] .msg-row[data-head] {
+  margin-top: 5px;
+}
+
+[data-msg-style='dense'] .msg-row:hover {
+  background: rgb(var(--color-wash) / 0.04);
+}
+
+[data-msg-style='dense'] .msg-block {
+  display: block;
+  min-width: 0;
+}
+
+[data-msg-style='dense'] .msg-body {
+  line-height: 1.45;
+}
+
+[data-msg-style='dense'] .msg-attachments {
+  margin: 4px 0;
+}
+
+.msg-dense-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.msg-dense-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  font-size: var(--msg-author-size);
+  font-weight: 600;
+  color: var(--author-color, rgb(var(--color-text)));
+}
+
+.msg-dense-flags {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+/* The hover/menu strip hangs off the MESSAGE cell, not the row's edge. */
+[data-msg-style='dense'] .msg-anchored[data-side] {
+  left: calc(10px + var(--dense-time-w) + var(--dense-name-w) + 24px);
+  right: auto;
+}
+
 /* ── The composer ──────────────────────────────────────────────────────────
    NOT scoped to a message style (user, 2026-09-03: "when the message style is
    selected as timeline, the composer and everything needs to be the same").
@@ -1074,6 +1207,21 @@ html[data-theme='light'] {
    what stops a future change to the CHAT's curve from moving the composer. */
 .chat-composer {
   border-radius: var(--chrome-radius);
+}
+
+/* The composer footer names its tools — until the thread is too narrow for
+   the names, when they fold to their glyphs (still labelled for screen readers
+   and tooltips) rather than pushing Send out of the box. A container query, so
+   it answers to the COMPOSER's width, which the trip panel and the rail both
+   change, not to the window's. */
+.composer-tools {
+  container-type: inline-size;
+}
+
+@container (max-width: 40rem) {
+  .composer-tool-label {
+    display: none;
+  }
 }
 
 /* The reply/edit context row sits at the top of the composer with a 2px accent

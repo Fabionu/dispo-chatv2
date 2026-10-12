@@ -1,31 +1,32 @@
-import { UserPlus } from 'lucide-react'
+import { useState } from 'react'
+import { Check, UserPlus } from 'lucide-react'
 import type { GroupMember, GroupPendingInvitee } from '../../lib/types'
 import Spinner from '../Spinner'
-import MemberRow, { RosterRow, RosterLabel } from './MemberRow'
-import { ProfileSection } from '../settings/profileChrome'
+import Avatar from '../Avatar'
+import MemberRow, { RosterRow } from './MemberRow'
+import { SettingsSection, TextAction } from '../settings/sectionChrome'
+import { ROLE_LABEL } from '../settings/ProfileSidebarPanel'
 
-// ── The vehicle room's "Members" tab ────────────────────────────────────────
-// The roster, grouped by the one thing that actually matters in a VEHICLE room:
-// who drives this truck. That fact lived only in the Info tab's "Assigned
-// drivers" field, so a dispatcher opening Members saw a flat list in which the
-// driver, the fleet manager and a silent observer were indistinguishable — the
-// list answered "who is in the room" but never "who is on the truck".
+// ── Group info → Crew ─────────────────────────────────────────────────────────
+// The roster, split by the one thing that matters in a VEHICLE room: who drives
+// this truck. Reworked 2026-10-12 from the "Profile & group info rework"
+// canvas: the driver assignment moved here from the Info tab (it used to be a
+// field there while this tab only mirrored it), so "who drives" is read and
+// changed in one place:
 //
-//   Assigned drivers · 1     ← mirrors the Info tab's field, same wording
-//   Other members · 4
-//   Pending invites · 1
+//   [ Invite to this room ]
+//   Drives this truck  1                  Change
+//   Members  3
+//   Waiting to join  1
 //
 // The split is a stable partition of the list the server already sorted (admins
-// first, then display name), so ordering inside each group is unchanged and the
-// two surfaces never disagree about who is assigned.
-//
-// Purely presentational — all state (busy ids, errors, pending list) and
-// side-effecting handlers live in the parent GroupInfoPanel and flow in as
-// props, so behaviour is identical to the previous flat version.
+// first, then display name). State (busy ids, errors, pending list) and the
+// side-effecting handlers live in the parent GroupInfoPanel.
 export default function MembersTab({
   members,
   membersLoading,
   currentUserId,
+  viewerWorkspace,
   canManage,
   canManageRoles,
   adminCount,
@@ -41,10 +42,12 @@ export default function MembersTab({
   onMessage,
   onOpenProfile,
   onCancelInvite,
+  onSaveDrivers,
 }: {
   members: GroupMember[]
   membersLoading: boolean
   currentUserId: string
+  viewerWorkspace?: string | null
   canManage: boolean
   canManageRoles: boolean
   adminCount: number
@@ -61,7 +64,10 @@ export default function MembersTab({
   onMessage: (member: GroupMember) => void
   onOpenProfile: (member: GroupMember) => void
   onCancelInvite: (inviteId: string) => void
+  /** Replace the assignment. Membership is re-validated server-side. */
+  onSaveDrivers: (ids: string[]) => Promise<void>
 }) {
+  const [picking, setPicking] = useState(false)
   const assigned = new Set(assignedDriverIds)
   const drivers = members.filter((m) => assigned.has(m.id))
   const others = members.filter((m) => !assigned.has(m.id))
@@ -70,8 +76,10 @@ export default function MembersTab({
     <MemberRow
       key={m.id}
       member={m}
-      online={online.has(m.id)}
+      // The presence set never lists the viewer; you are online by definition.
+      online={m.id === currentUserId || online.has(m.id)}
       isSelf={m.id === currentUserId}
+      viewerWorkspace={viewerWorkspace}
       canManageRoles={canManageRoles}
       isLastAdmin={m.role === 'admin' && adminCount <= 1}
       busy={roleBusyId === m.id}
@@ -83,10 +91,9 @@ export default function MembersTab({
     />
   )
 
-  // The WHOLE roster waits, not just the list inside a section: the headings now
-  // carry counts, so rendering them against an empty array would flash
-  // "Members · 0" before settling on the real number. An error still shows —
-  // cancelling an invite can fail while the roster is refetching.
+  // The WHOLE roster waits: the headings carry counts, so rendering them
+  // against an empty array would flash "0" before the real number. An error
+  // still shows — cancelling an invite can fail while the roster refetches.
   if (membersLoading) {
     return (
       <div className="space-y-2">
@@ -98,76 +105,198 @@ export default function MembersTab({
     )
   }
 
+  const showPending = canManage && (pendingLoading || pending.length > 0)
+
   return (
-    <div className="space-y-5">
-      {/* Assigned drivers — omitted entirely when nobody is assigned, so a room
-          without a driver shows one plain roster rather than an empty heading.
-          Assigning happens in the Info tab; this is the read-out. */}
-      {drivers.length > 0 && (
-        <ProfileSection bare label={`Assigned drivers · ${drivers.length}`}>
-          <div className="-mx-1">{drivers.map(renderMember)}</div>
-        </ProfileSection>
+    <div className="flex flex-col">
+      {canManage && (
+        <div className="pt-5">
+          <button
+            type="button"
+            onClick={onInvite}
+            className="flex h-10 w-full items-center justify-center gap-2 rounded-btn border border-line-2 text-lg font-semibold transition-colors hover:bg-white/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+          >
+            <UserPlus size="1rem" strokeWidth={1.9} />
+            Invite to this room
+          </button>
+        </div>
       )}
 
-      {/* Section counts are per-group and no longer duplicate the hero's total
-          the way a single "Members" heading did — they say how the roster is
-          split, which is the whole point of splitting it. */}
-      <ProfileSection
-        bare
-        label={drivers.length > 0 ? `Other members · ${others.length}` : `Members · ${others.length}`}
+      <SettingsSection
+        title="Drives this truck"
+        aside={drivers.length || undefined}
         action={
-          canManage ? (
-            <button
-              onClick={onInvite}
-              className="inline-flex items-center gap-1 text-sm text-muted hover:text-text transition-colors"
-            >
-              <UserPlus size="0.75rem" strokeWidth={1.8} />
-              Invite
-            </button>
+          canManage && !picking ? (
+            <TextAction onClick={() => setPicking(true)}>{drivers.length ? 'Change' : 'Assign'}</TextAction>
           ) : undefined
         }
       >
-        {others.length > 0 ? (
-          <div className="-mx-1">{others.map(renderMember)}</div>
+        {picking ? (
+          <DriverPicker
+            members={members}
+            assignedIds={assignedDriverIds}
+            onCancel={() => setPicking(false)}
+            onSave={async (ids) => {
+              await onSaveDrivers(ids)
+              setPicking(false)
+            }}
+          />
+        ) : drivers.length > 0 ? (
+          <div className="-mx-2 flex flex-col">{drivers.map(renderMember)}</div>
         ) : (
-          <div className="px-1 py-2 text-sm text-faint">
-            Everyone in this room is assigned to the vehicle.
-          </div>
+          <p className="text-base text-faint">
+            No driver assigned. The driver’s phone app shows the trips of the rooms they drive.
+          </p>
         )}
-        {error && <div className="px-2 pt-1 text-sm text-alert">{error}</div>}
-      </ProfileSection>
+      </SettingsSection>
+
+      <SettingsSection title="Members" aside={others.length} last={!showPending}>
+        {others.length > 0 ? (
+          <div className="-mx-2 flex flex-col">{others.map(renderMember)}</div>
+        ) : (
+          <p className="text-base text-faint">Everyone in this room drives this truck.</p>
+        )}
+        {error && <p className="text-sm text-alert">{error}</p>}
+      </SettingsSection>
 
       {/* Pending invites (manage-capable only) — the same RosterRow as a joined
-          member, minus the presence dot and the profile link, so the tail of the
-          roster reads as one list instead of a second, differently-built one. */}
-      {canManage && (pendingLoading || pending.length > 0) && (
-        <ProfileSection bare label={`Pending invites${pending.length ? ` · ${pending.length}` : ''}`}>
+          member, outlined and dimmed, so the list reads as one roster. */}
+      {showPending && (
+        <SettingsSection title="Waiting to join" aside={pending.length || undefined} last>
           {pendingLoading ? (
             <div className="flex justify-center py-4">
               <Spinner size={16} />
             </div>
           ) : (
-            <div className="-mx-1">
+            <div className="-mx-2 flex flex-col">
               {pending.map((p) => (
                 <RosterRow
                   key={p.id}
                   userId={p.userId}
                   name={p.displayName}
-                  tag={<RosterLabel>Pending</RosterLabel>}
+                  pending
+                  sub="Invited, hasn’t joined yet"
                   trailing={
-                    <button
-                      onClick={() => void onCancelInvite(p.id)}
-                      className="h-7 rounded-btn px-2 text-sm text-muted transition-colors hover:bg-alert/10 hover:text-alert"
-                    >
-                      Cancel
-                    </button>
+                    <TextAction tone="alert" onClick={() => void onCancelInvite(p.id)}>
+                      Cancel invite
+                    </TextAction>
                   }
                 />
               ))}
             </div>
           )}
-        </ProfileSection>
+        </SettingsSection>
       )}
+    </div>
+  )
+}
+
+// Choose who drives this truck: the room's members (drivers first) as
+// toggles, saved together. Marks who DRIVES this room operationally — it does
+// not change anyone's company role.
+function DriverPicker({
+  members,
+  assignedIds,
+  onCancel,
+  onSave,
+}: {
+  members: GroupMember[]
+  assignedIds: string[]
+  onCancel: () => void
+  onSave: (ids: string[]) => Promise<void>
+}) {
+  const [draft, setDraft] = useState<string[]>(assignedIds)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(false)
+
+  const ordered = [...members].sort((a, b) => {
+    const ad = a.userRole === 'driver' ? 0 : 1
+    const bd = b.userRole === 'driver' ? 0 : 1
+    if (ad !== bd) return ad - bd
+    return a.displayName.localeCompare(b.displayName)
+  })
+
+  const before = new Set(assignedIds)
+  const changed = draft.length !== before.size || draft.some((id) => !before.has(id))
+
+  async function save() {
+    if (!changed) return onCancel()
+    setSaving(true)
+    setError(false)
+    try {
+      await onSave(draft)
+    } catch {
+      setError(true)
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      <div className="flex max-h-72 flex-col overflow-y-auto rounded-card border border-line p-1">
+        {ordered.length === 0 ? (
+          <p className="px-2 py-3 text-center text-base text-faint">No members to assign yet.</p>
+        ) : (
+          ordered.map((m) => {
+            const on = draft.includes(m.id)
+            return (
+              <button
+                key={m.id}
+                type="button"
+                role="checkbox"
+                aria-checked={on}
+                disabled={saving}
+                onClick={() => setDraft((d) => (on ? d.filter((x) => x !== m.id) : [...d, m.id]))}
+                className={`flex h-11 items-center gap-2.5 rounded-btn px-2 text-left transition-colors ${
+                  on ? 'bg-white/6' : 'hover:bg-white/4'
+                }`}
+              >
+                <Avatar
+                  userId={m.id}
+                  name={m.displayName}
+                  size={28}
+                  hasAvatar={m.hasAvatar}
+                  version={m.avatarVersion}
+                  fallback="initials"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-lg">{m.displayName}</span>
+                  {m.userRole && (
+                    <span className="block text-sm leading-tight text-faint">{ROLE_LABEL[m.userRole]}</span>
+                  )}
+                </span>
+                <span
+                  aria-hidden
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-btn border transition-colors ${
+                    on ? 'border-transparent bg-text text-bg' : 'border-line-2 text-transparent'
+                  }`}
+                >
+                  <Check size="0.75rem" strokeWidth={2.4} />
+                </span>
+              </button>
+            )
+          })
+        )}
+      </div>
+      {error && <p className="text-sm text-alert">Could not save the drivers. Try again.</p>}
+      <div className="flex justify-end gap-1.5">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          className="h-7 rounded-btn border border-line-2 px-2.5 text-sm font-semibold transition-colors hover:bg-white/6 disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() => void save()}
+          disabled={saving}
+          className="h-7 rounded-btn bg-text px-3 text-sm font-semibold text-bg transition-opacity disabled:opacity-50"
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
     </div>
   )
 }

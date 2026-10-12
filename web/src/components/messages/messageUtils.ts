@@ -28,6 +28,24 @@ export function formatDay(iso: string): string {
   return d.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+// The thread's day break, spelled out: "Thursday, 11 September" (the year only
+// when it is not this one). Today / Yesterday as in formatDay.
+export function formatDayLong(iso: string): string {
+  const d = new Date(iso)
+  const today = new Date()
+  const yesterday = new Date()
+  yesterday.setDate(today.getDate() - 1)
+  if (d.toDateString() === today.toDateString()) return 'Today'
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
+  const sameYear = d.getFullYear() === today.getFullYear()
+  return d.toLocaleDateString('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  })
+}
+
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).slice(0, 2)
   return parts.map((p) => p[0] ?? '').join('').toUpperCase() || '?'

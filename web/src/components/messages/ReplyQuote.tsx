@@ -52,16 +52,16 @@ export default function ReplyQuote({
   const content = (
     <span className="flex min-h-11 min-w-0 items-center gap-2 py-1 pl-2.5 pr-2.5">
       <span className="min-w-0 flex-1">
-        <span className={`eyebrow block truncate ${neutral ? '' : 'text-active'}`}>
+        <span className={`msg-reply-author eyebrow block truncate ${neutral ? '' : 'text-active'}`}>
           {replyTo.authorName}
         </span>
-        <span className="mt-1 block truncate text-xs leading-[1.3] text-muted">{snippet}</span>
+        <span className="msg-reply-snippet mt-1 block truncate text-xs leading-[1.3] text-muted">{snippet}</span>
       </span>
       <ReplyMedia replyTo={replyTo} />
     </span>
   )
 
-  const base = `mb-2 block min-w-[11.5rem] max-w-body overflow-hidden border-l text-left ${
+  const base = `msg-reply-quote mb-2 block min-w-[11.5rem] max-w-body overflow-hidden border-l text-left ${
     neutral ? 'border-line-2' : 'border-active/70'
   }`
 

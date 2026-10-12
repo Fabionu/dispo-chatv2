@@ -1,9 +1,42 @@
-import { Fragment, lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import { Activity, CalendarClock, ChevronRight, Plus, Route, Truck, UserPlus } from 'lucide-react'
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  Activity,
+  CalendarClock,
+  ChevronRight,
+  MapPinOff,
+  Plus,
+  Route,
+  Truck,
+  UserPlus,
+  UserX,
+  Wrench,
+} from 'lucide-react'
 import type { Group } from '../../lib/types'
 import type { RouteCountryLeg } from '../../lib/here/types'
-import { groupLabel, tractorPlate } from '../../lib/types'
-import { getOps, isTripActive } from '../../lib/vehicleOps'
+import { groupLabel, tractorPlate, trailerPlate } from '../../lib/types'
+import {
+  getOps,
+  isTripActive,
+  labelOf,
+  nextPlannedStop,
+  STOP_TYPES,
+  stopLocationLabel,
+  tripSummary,
+  VEHICLE_STATUSES,
+  vehicleDriverIds,
+  vehicleStatusTone,
+  type ChipTone,
+  type TripPlace,
+} from '../../lib/vehicleOps'
+import {
+  DRIVER_EXPIRE_MS,
+  driverLocationAgo,
+  formatDuration,
+  parseDriverLocations,
+} from '../../lib/driverLocation'
+import { RowMeta } from '../../pages/sidebarBits'
+import { TONE_TEXT } from '../vehicle/opsControls'
+import CountryFlag from '../CountryFlag'
 import { loadGoogle } from '../../lib/google/loadGoogle'
 import { PaneLoader } from '../LazyFallback'
 import GroupAvatar from '../GroupAvatar'
@@ -86,6 +119,16 @@ export default function InboxView({
     return parts
   }, [vehicleRooms])
 
+  // Ages ("12 min ago") and the stale threshold move with the clock, not only
+  // with new pings — a truck that went quiet has to turn up on its own.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 60_000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  const fleetRows = useMemo(() => vehicleRooms.map((room) => buildFleetRow(room, now)), [vehicleRooms, now])
+
   // Warm the Google Maps API while the workspace home sits idle, so the first
   // map open (Route planner here, or a vehicle room's Trip route) skips the
   // script download + parse it would otherwise pay after the click. This is
@@ -144,66 +187,132 @@ export default function InboxView({
     )
   }
 
+  // ── "Today" board (rework, 2026-10-10) ─────────────────────────────────
+  // The home used to be a kit of identical cards. It is now the board a
+  // dispatcher opens the day on: the company and its live counts, every truck
+  // as a row with its trip drawn as a track, what needs attention, and the
+  // tools as a plain list. Built from the same ops blob and driver pings the
+  // rooms already carry — nothing here is fetched for this screen alone.
+  const attention = fleetRows.flatMap((row) => row.attention)
+  const headerCounts = [
+    ...fleetMeta.map((part) => part.label),
+    attention.length > 0
+      ? `${attention.length} need${attention.length === 1 ? 's' : ''} attention`
+      : null,
+  ]
+
   return (
     <>
-      <header className="h-[var(--header-height)] flex flex-col justify-center px-5 shrink-0">
-        <div className="text-xl font-semibold tracking-[-0.2px] leading-tight">Workspace</div>
-        <div className="text-sm text-muted leading-tight mt-0.5">Operational tools for {workspaceName}.</div>
+      <header className="h-[var(--header-height)] shrink-0 flex items-center gap-4 border-b border-line px-6">
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-3xl font-bold tracking-[-0.02em] leading-tight">{workspaceName}</h1>
+          <div className="mt-0.5 text-base text-muted">
+            <RowMeta segments={headerCounts} whole />
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <HomeButton onClick={onAddConnection} icon={<UserPlus size="0.9375rem" strokeWidth={1.7} />}>
+            Add connection
+          </HomeButton>
+          {canAddTrip && (
+            <HomeButton onClick={() => setTripPickerOpen(true)} icon={<Plus size="0.9375rem" strokeWidth={1.8} />}>
+              Add trip
+            </HomeButton>
+          )}
+          <HomeButton primary onClick={onCreateVehicleRoom} icon={<Truck size="0.9375rem" strokeWidth={1.7} />}>
+            New vehicle room
+          </HomeButton>
+        </div>
       </header>
-      <div className="flex-1 overflow-y-auto px-5 py-5">
-        <div className="max-w-[57.5rem] mx-auto flex flex-col gap-6">
-          <section>
-            <div className="eyebrow mb-2">Tools</div>
-            <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(17.5rem,1fr))]">
-              <ToolCard
-                icon={<Route size="1.25rem" strokeWidth={1.6} />}
-                title="Route planner"
-                subtitle="Plan a truck route with distance, tolls and ETA."
-                meta={ROUTE_META}
-                onClick={() => setTool('route')}
-              />
-              <ToolCard
-                icon={<CalendarClock size="1.25rem" strokeWidth={1.6} />}
-                title="Restriction calculator"
-                subtitle="When the truck arrives, once bans and rests are counted."
-                meta={RESTRICTION_META}
-                onClick={() => setTool('restrictions')}
-              />
-              <ToolCard
-                icon={<Activity size="1.25rem" strokeWidth={1.6} />}
-                title="Fleet status"
-                subtitle="Vehicles, their current trips and availability."
-                meta={fleetMeta}
+
+      <div className="flex-1 overflow-y-auto px-6 py-7">
+        <div className="mx-auto flex max-w-[72rem] flex-col gap-9">
+          <section aria-labelledby="home-fleet">
+            <div className="mb-3 flex items-baseline gap-3">
+              <h2 id="home-fleet" className="text-xl font-semibold">Fleet</h2>
+              <button
+                type="button"
                 onClick={() => setTool('fleet')}
-              />
+                className="text-base font-medium text-muted underline-offset-4 hover:text-text hover:underline focus-visible:outline-none focus-visible:underline"
+              >
+                Open fleet status
+              </button>
+            </div>
+            <div className="overflow-x-auto border-t border-line">
+              <div className="min-w-[52rem]">
+                <div className={`${FLEET_GRID} border-b border-line py-2.5 text-sm font-medium text-muted`}>
+                  <span>Vehicle</span>
+                  <span>Status</span>
+                  <span>Trip</span>
+                  <span>Next</span>
+                  <span>Last position</span>
+                </div>
+                {fleetRows.map((row) => (
+                  <FleetRow key={row.room.id} row={row} onOpen={() => onOpenVehicleRoom(row.room.id)} />
+                ))}
+                {/* No add row here: "New vehicle room" in the header is the
+                    one way in (user, 2026-10-10). An empty fleet only says
+                    where that is. */}
+                {fleetRows.length === 0 && (
+                  <p className="border-b border-line py-3.5 text-base text-muted">
+                    No vehicle rooms yet. Use New vehicle room above to add your first truck.
+                  </p>
+                )}
+              </div>
             </div>
           </section>
 
-          <section>
-            <div className="eyebrow mb-2">Quick actions</div>
-            <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))]">
-              <ActionCard
-                icon={<Truck size="1.0625rem" strokeWidth={1.6} />}
-                title="Create vehicle room"
-                subtitle="A permanent room per truck"
-                onClick={onCreateVehicleRoom}
-              />
-              {canAddTrip && (
-                <ActionCard
-                  icon={<Plus size="1.0625rem" strokeWidth={1.7} />}
-                  title="Add trip"
-                  subtitle="Choose a vehicle room"
-                  onClick={() => setTripPickerOpen(true)}
+          <div className="flex flex-wrap gap-x-12 gap-y-9">
+            <section aria-labelledby="home-attention" className="min-w-0 flex-[1_1_22rem]">
+              <h2 id="home-attention" className="mb-3 text-xl font-semibold">Needs attention</h2>
+              <div className="border-t border-line">
+                {attention.length === 0 ? (
+                  <p className="border-b border-line py-3.5 text-base text-muted">
+                    Nothing right now. Trucks without a driver or without a recent position show up here.
+                  </p>
+                ) : (
+                  attention.map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => onOpenVehicleRoom(item.roomId)}
+                      className="flex w-full items-start gap-3 border-b border-line py-3.5 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:bg-white/4"
+                    >
+                      <span className={`mt-0.5 shrink-0 ${TONE_TEXT[item.tone]}`}>{item.icon}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-lg font-semibold">{item.title}</span>
+                        <span className="mt-0.5 block text-base leading-[1.45] text-muted">{item.detail}</span>
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </section>
+
+            <section aria-labelledby="home-tools" className="min-w-0 flex-[1_1_22rem]">
+              <h2 id="home-tools" className="mb-3 text-xl font-semibold">Tools</h2>
+              <div className="border-t border-line">
+                <ToolRow
+                  icon={<Route size="1.0625rem" strokeWidth={1.6} />}
+                  title="Route planner"
+                  subtitle="Plan a truck route with distance, tolls and ETA."
+                  onClick={() => setTool('route')}
                 />
-              )}
-              <ActionCard
-                icon={<UserPlus size="1.0625rem" strokeWidth={1.6} />}
-                title="Add connection"
-                subtitle="Connect across companies"
-                onClick={onAddConnection}
-              />
-            </div>
-          </section>
+                <ToolRow
+                  icon={<CalendarClock size="1.0625rem" strokeWidth={1.6} />}
+                  title="Restriction calculator"
+                  subtitle="When the truck arrives, once bans and rests are counted."
+                  onClick={() => setTool('restrictions')}
+                />
+                <ToolRow
+                  icon={<Activity size="1.0625rem" strokeWidth={1.6} />}
+                  title="Fleet status"
+                  subtitle="Vehicles, their current trips and availability."
+                  onClick={() => setTool('fleet')}
+                />
+              </div>
+            </section>
+          </div>
         </div>
       </div>
       {tripPickerOpen && (
@@ -287,100 +396,290 @@ export function VehicleRoomPicker({
   )
 }
 
-// One segment of a tool card's foot line. `alert` marks the one count that
-// wants attention (vehicles in service) so it reads without a chip.
+// One live count for the header line. `alert` marks the count that wants
+// attention (vehicles in service).
 type MetaPart = { label: string; alert?: boolean }
 
-// The Route planner has nothing live to report, so its foot line names what the
-// tool covers instead — the same shape as the fleet counts, so the two cards
-// stay symmetrical.
-// Like the planner's, a foot line naming what the tool covers rather than a
-// live count — there is nothing running to report on.
-const RESTRICTION_META: MetaPart[] = [
-  { label: 'Driving bans' },
-  { label: 'Rests' },
-  { label: 'Arrival' },
-]
+// ── Fleet board rows ─────────────────────────────────────────────────────────
 
-const ROUTE_META: MetaPart[] = [
-  { label: 'HGV profiles' },
-  { label: 'Tolls' },
-  { label: 'Saved places' },
-]
+// The five columns, shared by the header row and every vehicle row so the cells
+// line up. The board scrolls sideways inside its own box below ~52rem.
+const FLEET_GRID =
+  'grid grid-cols-[minmax(13rem,1.3fr)_minmax(9rem,1fr)_minmax(14rem,1.6fr)_minmax(10rem,1fr)_minmax(9rem,0.9fr)] gap-x-6'
 
-// A destination: opens its own workspace in place. Stacked so the accent glyph,
-// the name and the foot line each get their own line — the foot line is pushed
-// down by `mt-auto` so it sits on the same baseline across the row even when
-// one subtitle wraps and another doesn't.
-function ToolCard({
-  icon,
-  title,
-  subtitle,
-  meta,
-  onClick,
-}: {
-  icon: React.ReactNode
+// A driver who has not pinged for this long on an active trip is worth a look.
+// Long enough that a tunnel or a phone in a pocket doesn't raise it; short
+// enough that a dead phone is noticed the same morning.
+const QUIET_AFTER_MS = 60 * 60_000
+
+// "3 h 20 min" for a quiet afternoon, "5 days" for a phone that was never
+// switched back on — nobody reads "821 h" as a number of days.
+function quietFor(ms: number): string {
+  const days = Math.floor(ms / 86_400_000)
+  if (days >= 2) return `${days} days`
+  return formatDuration(ms)
+}
+
+type AttentionItem = {
+  key: string
+  roomId: string
+  tone: ChipTone
+  icon: ReactNode
   title: string
-  subtitle: string
-  meta: MetaPart[]
-  onClick: () => void
-}) {
+  detail: string
+}
+
+type FleetRowData = {
+  room: Group
+  name: string
+  plate?: string
+  statusLabel: string
+  tone: ChipTone
+  from?: TripPlace
+  to?: TripPlace
+  /** Trip completion 0..1, or null when there is no trip to draw. */
+  pct: number | null
+  next?: { label: string; when?: string }
+  position?: { who: string; ago: string; quiet: boolean }
+  attention: AttentionItem[]
+}
+
+// Everything one row shows, read off the room's ops blob and its stored driver
+// pings. Pure, so the board recomputes cheaply on every tick.
+function buildFleetRow(room: Group, now: number): FleetRowData {
+  const ops = getOps(room)
+  const trip = tripSummary(ops)
+  const vehicleStatus = ops.vehicle.status
+  const name = groupLabel(room)
+  const active = Boolean(ops.trip && isTripActive(ops.trip.status))
+
+  const places = trip?.routePlaces ?? []
+  const next = nextPlannedStop(ops.stops)
+
+  const tripId = ops.trip ? (ops.trip.id ?? room.id) : undefined
+  const latest = tripId
+    ? Object.values(parseDriverLocations(room.meta?.driverLocations, tripId)).sort(
+        (a, b) => Date.parse(b.recordedAt) - Date.parse(a.recordedAt),
+      )[0]
+    : undefined
+  const ageMs = latest ? now - Date.parse(latest.recordedAt) : null
+  const fresh = latest && ageMs !== null && ageMs < DRIVER_EXPIRE_MS ? latest : undefined
+
+  const attention: AttentionItem[] = []
+  if (vehicleStatus === 'service') {
+    attention.push({
+      key: `${room.id}:service`,
+      roomId: room.id,
+      tone: 'alert',
+      icon: <Wrench size="1.0625rem" strokeWidth={1.8} />,
+      title: `${name} is in service`,
+      detail: 'Not available for a trip until its status is set back.',
+    })
+  }
+  if (active && vehicleDriverIds(ops).length === 0) {
+    attention.push({
+      key: `${room.id}:driver`,
+      roomId: room.id,
+      tone: 'active',
+      icon: <UserX size="1.0625rem" strokeWidth={1.8} />,
+      title: `${name} has no driver assigned`,
+      detail: 'Assign one in the room so the trip shows up on their phone.',
+    })
+  } else if (active && (ageMs === null || ageMs > QUIET_AFTER_MS)) {
+    attention.push({
+      key: `${room.id}:position`,
+      roomId: room.id,
+      tone: 'active',
+      icon: <MapPinOff size="1.0625rem" strokeWidth={1.8} />,
+      title:
+        ageMs === null
+          ? `${name} has not sent a position on this trip`
+          : `${name} has not sent a position for ${quietFor(ageMs)}`,
+      detail: 'Ask the driver to open the Dispo-chat app so the trip is tracked.',
+    })
+  }
+
+  return {
+    room,
+    name,
+    plate: tractorPlate(room) ?? trailerPlate(room),
+    statusLabel: trip
+      ? trip.statusLabel
+      : vehicleStatus
+        ? labelOf(VEHICLE_STATUSES, vehicleStatus)
+        : 'No trip',
+    tone: trip ? trip.statusTone : vehicleStatus ? vehicleStatusTone(vehicleStatus) : 'muted',
+    from: places[0],
+    to: places.length > 1 ? places[places.length - 1] : undefined,
+    pct: trip ? Math.max(0, Math.min(1, trip.progress?.pct ?? 0)) : null,
+    next: next
+      ? {
+          label: [labelOf(STOP_TYPES, next.type), stopLocationLabel(next)].filter(Boolean).join(', '),
+          when: next.plannedAt?.trim() || undefined,
+        }
+      : undefined,
+    position: fresh
+      ? {
+          who: fresh.name,
+          ago: driverLocationAgo(fresh.recordedAt, now),
+          quiet: (ageMs ?? 0) > QUIET_AFTER_MS,
+        }
+      : undefined,
+    attention,
+  }
+}
+
+// A place as the board shows it: flag + town, postal code dropped.
+function BoardPlace({ place, align = 'start' }: { place: TripPlace; align?: 'start' | 'end' }) {
+  const text =
+    place.text
+      .split(/\s+/)
+      .filter((token) => token && !/\d/.test(token))
+      .join(' ') || place.text
+  return (
+    <span className={`inline-flex min-w-0 items-center gap-1.5 ${align === 'end' ? 'justify-end' : ''}`}>
+      <CountryFlag code={place.code} />
+      <span className="truncate" title={place.text}>
+        {text}
+      </span>
+    </span>
+  )
+}
+
+function FleetRow({ row, onOpen }: { row: FleetRowData; onOpen: () => void }) {
   return (
     <button
-      onClick={onClick}
-      className="group flex flex-col rounded-soft border border-line bg-white/2 p-4 text-left transition-colors hover:border-line hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+      type="button"
+      onClick={onOpen}
+      className={`${FLEET_GRID} w-full items-center border-b border-line py-3.5 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:bg-white/4`}
     >
-      <span className="flex items-center gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-tile border border-active/20 bg-active/10 text-active">
-          {icon}
-        </span>
-        <ChevronRight
-          size="1rem"
-          strokeWidth={1.7}
-          className="ml-auto shrink-0 text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-muted"
+      <span className="flex min-w-0 items-center gap-3">
+        <GroupAvatar
+          groupId={row.room.id}
+          hasAvatar={Boolean(row.room.hasAvatar)}
+          version={row.room.avatarVersion}
+          shape="rounded"
+          size={38}
         />
+        <span className="min-w-0">
+          <span className="block truncate text-xl font-bold tracking-[-0.015em] tabular-nums">{row.name}</span>
+          {row.plate && row.plate !== row.name && (
+            <span className="block truncate text-sm text-muted">{row.plate}</span>
+          )}
+        </span>
       </span>
-      <span className="mt-3 block text-lg font-semibold tracking-[-0.2px]">{title}</span>
-      <span className="mt-1 mb-3.5 block text-base leading-[1.5] text-muted">{subtitle}</span>
-      <span className="mt-auto flex flex-wrap items-center gap-1.5 border-t border-line pt-2.5 text-xs text-faint">
-        {meta.map((part, index) => (
-          <Fragment key={part.label}>
-            {index > 0 && <span aria-hidden className="text-white/16">·</span>}
-            <span className={part.alert ? 'text-alert' : undefined}>{part.label}</span>
-          </Fragment>
-        ))}
+
+      <span className={`flex min-w-0 items-center gap-2 ${TONE_TEXT[row.tone]}`}>
+        <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-current" />
+        <span className="truncate text-lg font-medium text-text">{row.statusLabel}</span>
+      </span>
+
+      <span className="flex min-w-0 flex-col gap-2">
+        {row.from ? (
+          <>
+            <span className="flex min-w-0 justify-between gap-3 text-base text-muted">
+              <BoardPlace place={row.from} />
+              {row.to && <BoardPlace place={row.to} align="end" />}
+            </span>
+            {row.pct !== null && (
+              <span aria-hidden className={`relative h-0.5 rounded-full bg-line ${TONE_TEXT[row.tone]}`}>
+                <span className="absolute inset-y-0 left-0 rounded-full bg-current" style={{ width: `${row.pct * 100}%` }} />
+                <span
+                  className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-current"
+                  style={{ left: `${row.pct * 100}%` }}
+                />
+              </span>
+            )}
+          </>
+        ) : (
+          <span className="text-base text-muted">No stops</span>
+        )}
+      </span>
+
+      <span className="min-w-0">
+        {row.next ? (
+          <>
+            <span className="block truncate text-lg">{row.next.label}</span>
+            {row.next.when && <span className="block truncate text-sm text-muted tabular-nums">{row.next.when}</span>}
+          </>
+        ) : (
+          <span className="text-base text-muted">Nothing planned</span>
+        )}
+      </span>
+
+      <span className="min-w-0">
+        {row.position ? (
+          <>
+            <span className="block truncate text-lg">{row.position.who}</span>
+            <span className={`block truncate text-sm tabular-nums ${row.position.quiet ? 'text-active' : 'text-muted'}`}>
+              {row.position.ago}
+            </span>
+          </>
+        ) : (
+          <span className="text-base text-muted">No position</span>
+        )}
       </span>
     </button>
   )
 }
 
-// An action: opens a dialog and returns you here. Compact, neutral glyph and no
-// chevron, so it never competes with the tool cards above it.
-function ActionCard({
+// A tool as a list row: tile, name over what it does, chevron. A destination,
+// so it gets the chevron; the header buttons above are actions and do not.
+function ToolRow({
   icon,
   title,
   subtitle,
   onClick,
 }: {
-  icon: React.ReactNode
+  icon: ReactNode
   title: string
   subtitle: string
   onClick: () => void
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className="group flex items-center gap-3 rounded-soft border border-line bg-white/2 px-3.5 py-3 text-left transition-colors hover:border-line hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+      className="group flex w-full items-center gap-3.5 border-b border-line py-3.5 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:bg-white/4"
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-tile border border-line bg-white/4 text-muted transition-colors group-hover:text-text">
+      <span className="flex h-[2.375rem] w-[2.375rem] shrink-0 items-center justify-center rounded-tile border border-line text-muted transition-colors group-hover:text-text">
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-base font-medium tracking-[-0.1px]">{title}</span>
-        {/* Wraps rather than truncates: the pane can get narrow when the rail is
-            wide, and a clipped half-sentence reads worse than a second line. */}
-        <span className="mt-0.5 block text-xs leading-tight text-faint">{subtitle}</span>
+        <span className="block text-lg font-semibold">{title}</span>
+        <span className="mt-0.5 block text-base leading-[1.45] text-muted">{subtitle}</span>
       </span>
+      <ChevronRight
+        size="1rem"
+        strokeWidth={1.7}
+        className="shrink-0 text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-muted"
+      />
+    </button>
+  )
+}
+
+// The header's actions: hairline controls, with the one primary action filled.
+function HomeButton({
+  icon,
+  primary = false,
+  onClick,
+  children,
+}: {
+  icon: ReactNode
+  primary?: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex h-9 items-center gap-2 rounded-btn px-3.5 text-base font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+        primary ? 'bg-text font-semibold text-bg hover:bg-white' : 'border border-line text-text hover:bg-white/6'
+      }`}
+    >
+      {icon}
+      {children}
     </button>
   )
 }

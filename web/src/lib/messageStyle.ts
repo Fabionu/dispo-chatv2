@@ -23,6 +23,12 @@
 //             --soft-radius in index.css. Pick Timeline and every corner in the
 //             app is square again — which is now the opt-IN rather than the
 //             starting point.
+//   dense     (rework, 2026-10-10) one LINE per message: time, sender, text
+//             in three columns, every row labelled, no blocks, no rules, no
+//             sides — for a dispatcher following many trucks, where how much of
+//             the conversation fits on screen matters more than its shape.
+//             Ownership is the name ("You"); the per-author colour is on the
+//             name, as in Bubbles.
 //
 // WHY A ROOT ATTRIBUTE AND NOT A PROP. The two styles render the SAME DOM. The
 // attribution row is a sibling ABOVE the message's content in both, and the
@@ -53,7 +59,14 @@
 
 import { useEffect, useState } from 'react'
 
-export type MessageStyle = 'timeline' | 'bubble'
+export type MessageStyle = 'timeline' | 'bubble' | 'dense'
+
+/** The settings' names for each style (list summaries, the picker). */
+export const MESSAGE_STYLE_LABEL: Record<MessageStyle, string> = {
+  timeline: 'Timeline',
+  bubble: 'Bubbles',
+  dense: 'Dense',
+}
 
 const STORAGE_KEY = 'dispo:msg-style-v3'
 
@@ -65,7 +78,7 @@ const STORAGE_KEY = 'dispo:msg-style-v3'
 const FALLBACK: MessageStyle = 'bubble'
 
 function isMessageStyle(value: unknown): value is MessageStyle {
-  return value === 'timeline' || value === 'bubble'
+  return value === 'timeline' || value === 'bubble' || value === 'dense'
 }
 
 export function getStoredMessageStyle(): MessageStyle {
