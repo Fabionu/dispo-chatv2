@@ -7,6 +7,25 @@ import { HEADER_TILE_PX, RowMeta, RowTile } from '../../pages/sidebarBits'
 import CountryFlag from '../CountryFlag'
 import { TONE_TEXT } from '../vehicle/opsControls'
 import type { TripPlace, TripStop, TripSummary } from '../../lib/vehicleOps'
+import TypingMark from '../messages/TypingMark'
+
+// The header's typing status: the mark, then the sentence. It takes the
+// subtitle's place and its voice; the sentence is what truncates, so a narrow
+// header never clips the mark.
+//
+// The copper is set HERE, on the line, and not on the `.eyebrow` that holds it:
+// `.eyebrow` declares its own colour and sits later in the sheet than the
+// `text-active` utility, so on the same element the faint grey wins — which is
+// how the header's typing text came to be grey while its comment said accent.
+// A child element has no `.eyebrow` to lose to.
+function TypingLine({ text }: { text: string }) {
+  return (
+    <span className="flex min-w-0 items-center gap-2 text-active">
+      <TypingMark />
+      <span className="truncate">{text}</span>
+    </span>
+  )
+}
 
 // The conversation header extracted from ChatView. Purely presentational: all
 // state (search text/open, trip-route tab, panel opening) is owned by ChatView
@@ -142,7 +161,9 @@ export default function ChatHeader({
           >
             {/* The order outranks the member count: when the line is tight,
                 RowMeta drops whole segments from the END, so it goes second. */}
-            {typingText || (
+            {typingText ? (
+              <TypingLine text={typingText} />
+            ) : (
               <RowMeta
                 segments={(() => {
                   const [first, ...rest] = subtitle.split(' · ')
@@ -182,7 +203,11 @@ export default function ChatHeader({
         >
           {/* The subtitle's facts are split on the same hairline the rail's
               meta line uses, not run together with dots. */}
-          {typingText || <RowMeta segments={subtitle.split(' · ')} whole />}
+          {typingText ? (
+            <TypingLine text={typingText} />
+          ) : (
+            <RowMeta segments={subtitle.split(' · ')} whole />
+          )}
         </div>
       </div>
       )}

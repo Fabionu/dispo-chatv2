@@ -26,7 +26,8 @@ import {
 import { initials } from '../components/messages/messageUtils'
 import { MENU_GLYPH } from '../components/menuStyles'
 import { statusMeta } from '../lib/availability'
-import { typingStatusText, type TypingUser } from '../lib/typing'
+import { typingLabel, type TypingUser } from '../lib/typing'
+import TypingMark from '../components/messages/TypingMark'
 
 // One cell in a row's inline action strip. `label` is the short form shown
 // under the glyph; `title` is the full wording (tooltip + accessible name).
@@ -174,10 +175,16 @@ export default function GroupRow({
   })()
   // With a trip, the corridor moves down to the trip line (status │ corridor,
   // over the progress track) and line 1 keeps only the plate.
+  // A DM carries the person's company in the same slot and voice as a room's
+  // plate (rework canvas, user 2026-10-12: "the same look for the dm's") —
+  // with people from partner companies in the list, "who is this, and from
+  // where" is the question line 1 has to answer.
   const metaSegments =
     group.type === 'vehicle'
       ? [tractorPlate(group) ?? trailerPlate(group), trip ? null : corridor].filter(Boolean).map(String)
-      : []
+      : peer?.workspace
+        ? [peer.workspace]
+        : []
   // "FR Tremery – SK Zavar": first and last stop as country + town, postal
   // codes dropped (they are what makes a place line too long for a row).
   const corridorLong = (() => {
@@ -198,7 +205,7 @@ export default function GroupRow({
   // sidebar row stable while the composer is being used.
   const draft = useDraft(currentUserId, group.id).replace(/\s+/g, ' ').trim()
   const showDraft = !selected && Boolean(draft)
-  const typingText = typingStatusText(typingUsers, group.type === 'direct')
+  const typingText = typingLabel(typingUsers, group.type === 'direct')
 
   // ── Per-conversation row actions (inline strip under the row) ─────────────
   // Opening them expands a horizontal action bar directly beneath THIS row
@@ -479,7 +486,13 @@ export default function GroupRow({
               style={{ fontSize: 'var(--sidebar-conv-meta-font-size)' }}
             >
               {typingText ? (
-                <span role="status" aria-live="polite">{typingText}</span>
+                // The mark leads and the sentence follows — and it is the
+                // sentence that truncates, so the mark never gets cut. A flex
+                // line rather than inline content for the same reason.
+                <span role="status" aria-live="polite" className="flex min-w-0 items-center gap-2">
+                  <TypingMark />
+                  <span className="truncate">{typingText}</span>
+                </span>
               ) : showDraft ? (
                 // A local unsent draft takes over the line, its "Draft:" tag
                 // in the app's accent so it reads as a distinct, personal

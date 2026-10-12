@@ -262,6 +262,11 @@ function MessageRow({
   const pinned = Boolean(message.pinnedAt) && !deleted
   // Copy lifts the text body; disabled for attachment-only messages.
   const canCopy = !deleted && Boolean(message.body)
+  // A picture/document with words stacked on it (a caption, or the quote of the
+  // message it answers). The bubble style sizes such a block off the MEDIA and
+  // wraps the words to it — see `data-media-stack` in index.css.
+  const mediaStack =
+    !deleted && Boolean(message.attachments?.length) && Boolean(message.body || message.replyTo)
   // Optimistic + failed sends aren't real messages yet, so they shouldn't
   // expose the menu. Deleted placeholders shouldn't either.
   const canShowActions = !deleted && !pending && !failed
@@ -613,6 +618,7 @@ function MessageRow({
         // `|| undefined` so React omits the attribute entirely when false: the
         // CSS selects on presence ([data-own]), and data-own="false" is present.
         data-own={mine || undefined}
+        data-media-stack={mediaStack || undefined}
         data-head={startNewGroup || undefined}
         data-highlighted={highlighted || undefined}
         // Inline, because the value is per-author data rather than one of a

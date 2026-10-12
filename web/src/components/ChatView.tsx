@@ -76,7 +76,7 @@ import SystemMessageRow from './messages/SystemMessageRow'
 import ScheduledMessageRow from './messages/ScheduledMessageRow'
 import PinnedBar from './messages/PinnedBar'
 import TypingIndicator from './messages/TypingIndicator'
-import { typingStatusText } from '../lib/typing'
+import { typingLabel } from '../lib/typing'
 import Spinner from './Spinner'
 import type { AttachmentWorkspaceTab, LocalMessage } from './messages/types'
 import { useChatScroll } from '../hooks/useChatScroll'
@@ -482,6 +482,19 @@ export default function ChatView({
     for (const m of members) if (m.avatarVersion !== undefined) byId.set(m.id, m.avatarVersion)
     return byId
   }, [members])
+
+  // What the typing dock needs about someone typing: their hue and their photo,
+  // read from the same roster and under the same gates as a message's tile — no
+  // hue in a direct message, and never one for me. The typing event itself only
+  // carries an id and a name.
+  const typingAuthorOf = useCallback(
+    (userId: string) => ({
+      color: ruleColorFor && userId !== currentUserId ? ruleColorFor(userId) : undefined,
+      hasAvatar: authorHasAvatar.get(userId),
+      avatarVersion: authorAvatarVersion.get(userId),
+    }),
+    [ruleColorFor, currentUserId, authorHasAvatar, authorAvatarVersion],
+  )
 
   const composerHandleRef = useRef<ChatComposerHandle>(null)
   const highlightTimer = useRef<number | undefined>(undefined)
@@ -1286,7 +1299,7 @@ export default function ChatView({
       <ChatHeader
         group={group}
         subtitle={subtitle}
-        typingText={typingStatusText(typingUsers, group.type === 'direct')}
+        typingText={typingLabel(typingUsers, group.type === 'direct')}
         onOpenProfile={openProfile}
         searchOpen={searchOpen}
         searchQuery={searchQuery}
@@ -1701,12 +1714,18 @@ export default function ChatView({
               className="absolute inset-x-0 bottom-0 z-20 pointer-events-none pt-2 pb-3 pr-[var(--chat-scrollbar-gutter)]"
             >
               <div className="chat-column pointer-events-auto">
-                {/* Temporary incoming-style bubble directly ABOVE the input.
-                    It is part of the measured composer wrapper, so its animated
-                    height increases/decreases the message-list bottom reserve;
-                    the conversation visibly lifts and settles with it. */}
-                <TypingIndicator users={typingUsers} />
                 {error && <div className="text-sm text-alert mb-1.5">{error}</div>}
+                {/* The typing dock: a tab attached to the input's top edge, so
+                    it has to be the LAST thing before the composer — the error
+                    line above it would otherwise sit between the two and the
+                    tab would be floating. It is part of the measured composer
+                    wrapper, so it lifts the message-list bottom reserve when it
+                    arrives and the conversation settles with it. */}
+                <TypingIndicator
+                  users={typingUsers}
+                  tiles={group.type !== 'direct'}
+                  authorOf={typingAuthorOf}
+                />
                 <ChatComposer
                   ref={composerHandleRef}
                   placeholder={`Message ${groupLabel(group)}`}

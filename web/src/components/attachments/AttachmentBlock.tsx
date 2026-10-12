@@ -231,7 +231,7 @@ export default function AttachmentBlock({
           type="button"
           onClick={() => onActivate(attachment)}
           aria-label={`Open ${attachment.originalName}`}
-          className="block p-0 border-0 bg-transparent cursor-zoom-in"
+          className="attach-thumb block p-0 border-0 bg-transparent cursor-zoom-in"
         >
           {/* Fixed-bounds thumbnail frame. The box is reserved from the image's
               aspect ratio (known dims → zero reflow; unknown → a fallback box
@@ -241,7 +241,7 @@ export default function AttachmentBlock({
               overflows its column. */}
           <div
             ref={frameRef}
-            className="relative overflow-hidden rounded-card border border-line bg-bg"
+            className="attach-frame relative overflow-hidden rounded-card border border-line bg-bg"
             style={{
               width: box ? box.w : fallback.w,
               maxWidth: '100%',

@@ -53,6 +53,13 @@ type Props = {
    * person's is the norm, so each defaults to the answer that is usually right.
    */
   hasAvatar?: boolean
+  /**
+   * How many letters the monogram carries. Two (the default) is right from about
+   * 26px up; below that the knockout size floor (see `knockoutPx`) makes a wide
+   * pair like "MW" wider than the tile, so a tile that small — the typing dock's
+   * 20px one — asks for a single initial instead.
+   */
+  letters?: 1 | 2
   className?: string
 }
 
@@ -70,6 +77,7 @@ export default function Avatar({
   shape = 'circle',
   tint,
   hasAvatar,
+  letters = 2,
   className = '',
 }: Props) {
   // `hasAvatar === false` is a caller telling us not to bother asking, so it
@@ -152,6 +160,7 @@ export default function Avatar({
   // rendered size, which looks like a monogram jammed into its box. At 0.44 the
   // worst case still keeps ~9% of the tile clear each side.
   const knockoutPx = Math.max(12, Math.round(size * 0.44))
+  const monogram = letters === 1 ? initials(name).slice(0, 1) : initials(name)
   const fallbackNode = tinted ? (
     <span
       style={{ ...style, color: tint }}
@@ -181,7 +190,7 @@ export default function Avatar({
             letterSpacing="-0.02em"
             fill="#000"
           >
-            {initials(name)}
+            {monogram}
           </text>
         </mask>
         <rect width={size} height={size} fill="currentColor" mask={`url(#${maskId})`} />
@@ -200,7 +209,7 @@ export default function Avatar({
           style={{ fontSize: rem(letterPx) }}
           className="font-semibold leading-none tracking-tight select-none"
         >
-          {initials(name)}
+          {monogram}
         </span>
       ) : (
         <User size={rem(Math.max(13, Math.round(size * 0.52)))} strokeWidth={1.7} />
