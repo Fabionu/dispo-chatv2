@@ -1197,6 +1197,7 @@ const PREFERENCE_KEYS = [
   'dispo:notification-sound',
   'dispo:sidebar-collapsed',
   'dispo:trip-panel',
+  'dispo:fleet-collapsed',
 ]
 
 // The build, said plainly, with a one-click copy for problem reports; and what

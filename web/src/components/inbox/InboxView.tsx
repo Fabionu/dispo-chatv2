@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 're
 import {
   Activity,
   CalendarClock,
+  ChevronDown,
   ChevronRight,
   MapPinOff,
   Plus,
@@ -92,6 +93,14 @@ export default function InboxView({
   onOpenVehicleRoom,
 }: Props) {
   const [tool, setTool] = useState<'route' | 'fleet' | 'restrictions' | null>(null)
+  // Fleet table folded away — remembered on this device until unfolded.
+  const [fleetCollapsed, setFleetCollapsed] = useState(readFleetCollapsed)
+  function toggleFleet() {
+    setFleetCollapsed((was) => {
+      writeFleetCollapsed(!was)
+      return !was
+    })
+  }
   // The route legs the planner handed over, kept HERE rather than inside the
   // calculator so they survive a trip back to the planner to adjust the route —
   // which is the normal way this pair gets used, not an edge case.
@@ -228,8 +237,35 @@ export default function InboxView({
       <div className="flex-1 overflow-y-auto px-6 py-7">
         <div className="mx-auto flex max-w-[72rem] flex-col gap-9">
           <section aria-labelledby="home-fleet">
-            <div className="mb-3 flex items-baseline gap-3">
-              <h2 id="home-fleet" className="text-xl font-semibold">Fleet</h2>
+            <div className={`flex items-baseline gap-3 ${fleetCollapsed ? '' : 'mb-3'}`}>
+              {/* The heading IS the fold control (user, 2026-10-12: the fleet
+                  section should collapse and stay collapsed until reopened).
+                  Folded, it still says how many trucks it is hiding. */}
+              <h2 id="home-fleet" className="text-xl font-semibold">
+                <button
+                  type="button"
+                  onClick={toggleFleet}
+                  aria-expanded={!fleetCollapsed}
+                  aria-controls="home-fleet-table"
+                  title={fleetCollapsed ? 'Show the fleet' : 'Hide the fleet'}
+                  className="group -ml-1 inline-flex items-center gap-1.5 rounded-btn px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                >
+                  <ChevronDown
+                    size="1rem"
+                    strokeWidth={2}
+                    aria-hidden
+                    className={`shrink-0 self-center text-muted transition-transform group-hover:text-text motion-reduce:transition-none ${
+                      fleetCollapsed ? '-rotate-90' : ''
+                    }`}
+                  />
+                  Fleet
+                </button>
+              </h2>
+              {fleetCollapsed && (
+                <span className="text-base text-muted tabular-nums">
+                  {fleetRows.length} {fleetRows.length === 1 ? 'vehicle' : 'vehicles'}
+                </span>
+              )}
               <button
                 type="button"
                 onClick={() => setTool('fleet')}
@@ -238,7 +274,7 @@ export default function InboxView({
                 Open fleet status
               </button>
             </div>
-            <div className="overflow-x-auto border-t border-line">
+            <div id="home-fleet-table" hidden={fleetCollapsed} className="overflow-x-auto border-t border-line">
               <div className="min-w-[52rem]">
                 <div className={`${FLEET_GRID} border-b border-line py-2.5 text-sm font-medium text-muted`}>
                   <span>Vehicle</span>
@@ -682,4 +718,24 @@ function HomeButton({
       {children}
     </button>
   )
+}
+
+// Whether the Today board's fleet table is folded. Per device, like the trip
+// panel and the sidebar: a dispatcher who keeps it folded on a laptop can keep
+// it open on the office monitor. Cleared by Settings → About → Reset.
+const FLEET_COLLAPSED_KEY = 'dispo:fleet-collapsed'
+function readFleetCollapsed(): boolean {
+  try {
+    return localStorage.getItem(FLEET_COLLAPSED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+function writeFleetCollapsed(collapsed: boolean) {
+  try {
+    if (collapsed) localStorage.setItem(FLEET_COLLAPSED_KEY, '1')
+    else localStorage.removeItem(FLEET_COLLAPSED_KEY)
+  } catch {
+    // Storage unavailable (private mode): the fold lasts for this session.
+  }
 }

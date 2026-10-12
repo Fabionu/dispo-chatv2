@@ -49,7 +49,7 @@ export default function SidebarIdentityBar({
   const status = user.role === 'driver' ? null : away ? AWAY : profile ? statusMeta(profile.availabilityStatus) : null
 
   return (
-    <div className="shrink-0 grid grid-cols-2 gap-1 px-1.5 pt-1.5 pb-1.5 border-t border-line">
+    <div className="shrink-0 grid grid-cols-2 gap-1 px-1.5 py-1 border-t border-line">
       <button
         type="button"
         onClick={onOpenAccount}
@@ -82,7 +82,7 @@ export default function SidebarIdentityBar({
 // is what lets a long name truncate instead of pushing the grid track wider than
 // its 50%.
 const IDENTITY_CELL =
-  'min-w-0 flex items-center gap-2 px-2 py-1.5 rounded-btn text-left transition-colors ' +
+  'min-w-0 flex items-center gap-2 px-2 py-1 rounded-btn text-left transition-colors ' +
   'hover:bg-white/8 active:bg-white/16 ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20'
 
@@ -106,10 +106,10 @@ function IdentityText({
           name, so it centres on the name's text rather than on the two-line
           block. */}
       <span className="flex min-w-0 items-center gap-1.5">
-        <span
-          className="min-w-0 truncate font-medium leading-tight text-text"
-          style={{ fontSize: 'var(--sidebar-row-font-size)' }}
-        >
+        {/* `text-xl`, a step under the conversation titles above
+            (--sidebar-row-font-size): the row is chrome, not a list entry, and
+            was made lower on request (user, 2026-10-12: "should be narrower"). */}
+        <span className="min-w-0 truncate text-xl font-medium leading-tight text-text">
           {primary}
         </span>
         {status && (

@@ -642,7 +642,10 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
             onBlur={() => setHasSelection(false)}
             onCompositionStart={() => setComposing(true)}
             onCompositionEnd={() => setComposing(false)}
-            rows={2}
+            // One row at rest (user, 2026-10-12: "narrow it to fit just one row
+            // of text"); useComposerAutosize grows it a line at a time as the
+            // text wraps or breaks, up to max-h-[9em], then it scrolls.
+            rows={1}
             placeholder={editContext ? 'Edit message…' : placeholder}
             // `relative` keeps it over the mirror so it still takes the pointer.
             // The glyphs are transparent, never the caret and never a selection
