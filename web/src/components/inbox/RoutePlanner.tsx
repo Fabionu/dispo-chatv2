@@ -14,7 +14,6 @@ import {
   MapPinned,
   Navigation,
   Pencil,
-  Plus,
   Trash2,
   Truck,
   TriangleAlert,
@@ -57,7 +56,17 @@ import type {
 import type { RouteMoney, RouteTollSummary } from '../../lib/here/types'
 import PointRow from './RoutePointRow'
 import { RoleBadge, RouteRow } from './RoutePointCard'
-import { CopyCoordButton, FoldCard, NumberField, PresetSelect, Stat } from './RoutePlannerFields'
+import {
+  CopyCoordButton,
+  FoldCard,
+  FoldGroup,
+  NumberField,
+  PresetSelect,
+  ReceiptRow,
+  SegmentedControl,
+  Stat,
+  SwitchRow,
+} from './RoutePlannerFields'
 import { DateField, TimeField } from '../DateTimeField'
 import { estimateTransit } from '../../lib/transit'
 import {
@@ -180,11 +189,6 @@ function routeSigOf(coords: LatLng[], truck: TruckProfileForm): string {
   const c = coords.map((p) => `${p.lat.toFixed(6)},${p.lng.toFixed(6)}`).join('|')
   return `${c}#${JSON.stringify(toTruckProfile(truck))}`
 }
-
-// The planner's own select surface — matches PresetSelect's trigger and the
-// truck-profile inputs, so the crew card reads as part of the same panel.
-const CREW_FIELD =
-  'rounded-card h-7 w-full min-w-0 border border-line bg-transparent px-2 text-sm outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4'
 
 // DD/MM/YYYY + HH:MM as the browser's local time. Local rather than the route's
 // own zone on purpose: the planner's ETA has always been "now plus the drive"
@@ -1495,6 +1499,11 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
           <div className="flex h-8 shrink-0 items-center justify-between gap-2 pl-3 pr-1">
             <div className="flex min-w-0 items-center gap-2">
               <div className="text-base font-semibold leading-tight tracking-[-0.1px]">Route</div>
+              {points.length > 0 && (
+                <span className="text-xs tabular-nums text-faint">
+                  {points.length} {points.length === 1 ? 'point' : 'points'}
+                </span>
+              )}
               {loading && <Spinner size={12} className="shrink-0 text-muted" />}
             </div>
             <div className="flex items-center gap-0.5">
@@ -1604,14 +1613,15 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                           </button>
                         </div>
                       ) : (
-                        // A full-width ghost of a card, sitting exactly where the
-                        // new stop will appear — dashed, so it reads as an empty
-                        // slot to fill rather than another committed point.
+                        // A plain text row sitting exactly where the new stop will
+                        // appear. The dashed ring in the gutter already says
+                        // "empty slot", so the row itself no longer needs a
+                        // dashed box of its own.
                         <button
                           onClick={() => setAddingStop(true)}
-                          className="h-7 w-full flex items-center gap-1.5 px-2.5 rounded-soft border border-dashed border-line text-base text-muted transition-colors hover:border-line-2 hover:bg-white/4 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                          className="rounded-btn h-7 w-full flex items-center px-2 text-base text-muted transition-colors hover:bg-white/4 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
                         >
-                          <Plus size="0.8125rem" strokeWidth={2} /> Add stop
+                          Add stop
                         </button>
                       )}
                     </RouteRow>
@@ -1664,7 +1674,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
             {route && (
               <section
                 aria-busy={loading || undefined}
-                className={`flex flex-col gap-1.5 p-2 pt-1 transition-opacity motion-reduce:transition-none ${
+                className={`divide-y divide-line transition-opacity motion-reduce:transition-none ${
                   loading ? 'opacity-50' : ''
                 }`}
               >
@@ -1677,22 +1687,22 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                     closed, because money is the one detail worth a glance
                     without opening anything. Rests (nights / weekly) came off
                     the card on 2026-09-15 — the arrival has them priced in. */}
-                <div className="divide-y divide-line">
-                  <div className="grid grid-cols-2 divide-x divide-line">
-                    <Stat label="Distance" value={formatDistance(route.summary.length)} size="lg" />
-                    {transit && (
-                      <Stat label="Transit" value={formatDuration(transit.totalMs / 1000)} size="lg" />
-                    )}
-                  </div>
+                <div className="grid grid-cols-2 divide-x divide-line">
+                  <Stat label="Distance" value={formatDistance(route.summary.length)} size="lg" />
+                  {transit && (
+                    <Stat label="Transit" value={formatDuration(transit.totalMs / 1000)} size="lg" />
+                  )}
+                </div>
+                <div>
                   <button
                     type="button"
                     onClick={() => setDetailsOpen((o) => !o)}
                     aria-expanded={detailsOpen}
-                    className="flex h-7 w-full items-center gap-2 px-2.5 text-left text-sm text-muted transition-colors hover:bg-white/4 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20"
+                    className="flex h-8 w-full items-center gap-2 px-3 text-left text-sm text-muted transition-colors hover:bg-white/4 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20"
                   >
-                    <span>Details</span>
+                    <span className={detailsOpen ? 'text-text' : ''}>Details</span>
                     {!detailsOpen && (
-                      <span className="min-w-0 flex-1 truncate text-xs text-faint">
+                      <span className="min-w-0 flex-1 truncate text-xs tabular-nums text-faint">
                         {formatDuration(drivingSeconds)} driving · {tollSummaryValue(route.tolls, dirty)}
                       </span>
                     )}
@@ -1705,27 +1715,25 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                     />
                   </button>
                   {detailsOpen && (
-                    <div className="divide-y divide-line">
-                      <div className="grid grid-cols-2 divide-x divide-line">
-                        <Stat label="Driving" value={formatDuration(drivingSeconds)} />
-                        {/* ETA answers with the LEGAL arrival, not the moment
-                            the wheels would stop if nobody slept. A driving-only
-                            ETA beside a transit time that includes two nights
-                            would be two numbers contradicting each other. */}
-                        <Stat
-                          label="Arrival"
-                          value={
-                            transit
-                              ? formatArrival(transit.arrival, departAt)
-                              : formatArrival(departAt + drivingSeconds * 1000, departAt)
-                          }
-                        />
-                      </div>
-                      <Stat label="Tolls" value={tollSummaryValue(route.tolls, dirty)} />
+                    <div className="px-3 pb-2.5 pt-0.5">
+                      <ReceiptRow label="Driving" value={formatDuration(drivingSeconds)} />
+                      {/* ETA answers with the LEGAL arrival, not the moment
+                          the wheels would stop if nobody slept. A driving-only
+                          ETA beside a transit time that includes two nights
+                          would be two numbers contradicting each other. */}
+                      <ReceiptRow
+                        label="Arrival"
+                        value={
+                          transit
+                            ? formatArrival(transit.arrival, departAt)
+                            : formatArrival(departAt + drivingSeconds * 1000, departAt)
+                        }
+                      />
+                      <ReceiptRow label="Tolls" value={tollSummaryValue(route.tolls, dirty)} />
                       {!dirty && route.tolls && (
-                        <div className="py-1">
+                        <div className="mt-1 border-t border-line pt-1">
                           {route.tolls.details.length > 0 ? (
-                            <div className="flex max-h-40 flex-col gap-0.5 overflow-y-auto px-2.5">
+                            <div className="flex max-h-40 flex-col gap-0.5 overflow-y-auto">
                               {route.tolls.details.flatMap((detail, detailIndex) =>
                                 detail.fares.map((fare, fareIndex) => {
                                   const amount = fare.convertedPrice ?? fare.price
@@ -1758,13 +1766,13 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                               )}
                             </div>
                           ) : (
-                            <div className="px-2.5 text-xs text-muted">
+                            <div className="text-xs text-muted">
                               {route.tolls.status === 'unavailable'
                                 ? 'Toll data is unavailable for part of this route.'
                                 : 'No toll charges were found for this route.'}
                             </div>
                           )}
-                          <div className="px-2.5 pt-1 text-2xs leading-snug text-faint">
+                          <div className="pt-1.5 text-2xs leading-snug text-faint">
                             Estimated by HERE · final operator charges may differ.
                           </div>
                         </div>
@@ -1778,19 +1786,31 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                     calculator that reports an arrival time to the hour would be
                     worse than not offering the button. */}
                 {onCalculateRestrictions && !dirty && route.countries.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => onCalculateRestrictions(route.countries)}
-                    className="rounded-btn flex h-7 w-full items-center justify-center gap-1.5 border border-line bg-white/4 px-3 text-sm text-text transition-colors hover:bg-white/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
-                  >
-                    <CalendarClock size="0.8125rem" strokeWidth={1.7} />
-                    Calculate restrictions
-                    <span className="text-faint">· {route.countries.length} countries</span>
-                  </button>
+                  <div className="p-2">
+                    {/* A row that GOES somewhere (another tool), so it says
+                        where: the countries it will take with it, in route
+                        order, and a chevron. A country the route leaves and
+                        re-enters is listed once. */}
+                    <button
+                      type="button"
+                      onClick={() => onCalculateRestrictions(route.countries)}
+                      className="rounded-btn flex w-full items-center gap-2.5 border border-line px-2.5 py-2 text-left transition-colors hover:border-line-2 hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                    >
+                      <CalendarClock size="0.9375rem" strokeWidth={1.7} className="shrink-0 text-muted" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-base font-medium leading-tight text-text">
+                          Calculate restrictions
+                        </span>
+                        <span className="block truncate text-xs leading-tight tabular-nums text-faint">
+                          {Array.from(new Set(route.countries.map((c) => c.code))).join(' · ')}
+                        </span>
+                      </span>
+                      <ChevronRight size="0.8125rem" strokeWidth={1.8} className="shrink-0 text-faint" />
+                    </button>
+                  </div>
                 )}
                 {notices.length > 0 && (
-                  <div className="flex flex-col gap-1 px-0.5">
-                    <div className="eyebrow">Notices</div>
+                  <div className="flex flex-col gap-1 px-3 py-2">
                     {notices.map((n, i) => (
                       <div key={`${n.code}-${i}`} className="flex items-start gap-1.5 text-xs leading-snug text-amber-200/90">
                         <TriangleAlert size="0.75rem" className="mt-px shrink-0" strokeWidth={1.8} />
@@ -1808,13 +1828,14 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
               the inputs; the header spinner says when it is working), so the
               footer exists only while there is a message to show. */}
           {(error || snapNote) && (
-            <div className="flex shrink-0 flex-col gap-1 border-t border-line p-2">
+            <div className="flex shrink-0 flex-col gap-1 border-t border-line px-3 py-2">
               {error && (
-                <div className="rounded-card border border-alert/20 bg-alert/10 px-2.5 py-1.5 text-sm leading-snug text-alert">
-                  {error}
+                <div className="flex items-start gap-2 text-sm leading-snug text-alert">
+                  <TriangleAlert size="0.8125rem" strokeWidth={1.8} className="mt-px shrink-0" />
+                  <span>{error}</span>
                 </div>
               )}
-              {snapNote && <div className="px-1 text-xs leading-snug text-amber-200/80">{snapNote}</div>}
+              {snapNote && <div className="text-xs leading-snug text-amber-200/80">{snapNote}</div>}
             </div>
           )}
         </div>
@@ -1826,13 +1847,14 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
             over its live current value, chevron. The value stays visible while
             open, so opening the fields never hides what they add up to. */}
         <FoldCard
-          icon={<Truck size="0.875rem" strokeWidth={1.8} />}
+          icon={<Truck size="1rem" strokeWidth={1.8} />}
           title="Truck profile"
           summary={collapsedTruckLabel}
           open={truckOpen}
           onToggle={() => setTruckOpen((o) => !o)}
         >
           {/* Presets */}
+          <FoldGroup>
           <div className="flex items-center gap-1">
             <PresetSelect
               builtIn={builtInPresets()}
@@ -1882,13 +1904,18 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
-            <NumberField label="Height (cm)" value={truck.heightCm} onChange={(v) => updateTruck({ heightCm: v })} placeholder="400" />
-            <NumberField label="Width (cm)" value={truck.widthCm} onChange={(v) => updateTruck({ widthCm: v })} placeholder="255" />
-            <NumberField label="Length (cm)" value={truck.lengthCm} onChange={(v) => updateTruck({ lengthCm: v })} placeholder="1650" />
-            <NumberField label="Gross weight (kg)" value={truck.grossWeightKg} onChange={(v) => updateTruck({ grossWeightKg: v })} placeholder="40000" />
-            <NumberField label="Axle count" value={truck.axleCount} onChange={(v) => updateTruck({ axleCount: v })} placeholder="5" />
-            <NumberField label="Trailer count" value={truck.trailerCount} onChange={(v) => updateTruck({ trailerCount: v })} placeholder="1" />
+          </FoldGroup>
+
+          <FoldGroup>
+          {/* Three across: the units moved INSIDE the fields, which is what
+              made the labels short enough for a third of the card. */}
+          <div className="grid grid-cols-3 gap-x-2 gap-y-2.5">
+            <NumberField label="Height" unit="cm" value={truck.heightCm} onChange={(v) => updateTruck({ heightCm: v })} placeholder="400" />
+            <NumberField label="Width" unit="cm" value={truck.widthCm} onChange={(v) => updateTruck({ widthCm: v })} placeholder="255" />
+            <NumberField label="Length" unit="cm" value={truck.lengthCm} onChange={(v) => updateTruck({ lengthCm: v })} placeholder="1650" />
+            <NumberField label="Gross weight" unit="kg" value={truck.grossWeightKg} onChange={(v) => updateTruck({ grossWeightKg: v })} placeholder="40000" />
+            <NumberField label="Axles" value={truck.axleCount} onChange={(v) => updateTruck({ axleCount: v })} placeholder="5" />
+            <NumberField label="Trailers" value={truck.trailerCount} onChange={(v) => updateTruck({ trailerCount: v })} placeholder="1" />
           </div>
 
           {/* Below the dimension grid rather than inside it, because it is
@@ -1896,12 +1923,17 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
               decide which roads the truck may use, this one never leaves the
               browser and only decides how long the planner says those roads
               take. Blank keeps HERE’s own estimate. */}
-          <NumberField
-            label="Average speed (km/h)"
-            value={truck.averageSpeedKmh}
-            onChange={(v) => updateTruck({ averageSpeedKmh: v })}
-            placeholder="HERE estimate"
-          />
+          <div className="flex flex-col gap-1">
+            <NumberField
+              label="Average speed"
+              unit="km/h"
+              value={truck.averageSpeedKmh}
+              onChange={(v) => updateTruck({ averageSpeedKmh: v })}
+              placeholder="HERE estimate"
+            />
+            <span className="text-xs leading-snug text-faint">Changes the time estimate only. Not sent to HERE.</span>
+          </div>
+          </FoldGroup>
         </FoldCard>
 
         {/* Crew & hours — the third card, and the only inputs 561/2006 needs
@@ -1909,19 +1941,20 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
             truck profile is: it grows downward when opened instead of pushing
             the itinerary into a scrollbar. */}
         <FoldCard
-          icon={<Users size="0.875rem" strokeWidth={1.8} />}
+          icon={<Users size="1rem" strokeWidth={1.8} />}
           title="Crew & hours"
           summary={collapsedCrewLabel}
           open={crewOpen}
           onToggle={() => setCrewOpen((o) => !o)}
         >
-          <div className="flex flex-col gap-0.5">
+          <FoldGroup>
+          <div className="flex flex-col gap-1">
             <span className="text-xs leading-tight text-muted">Departure</span>
             <div className="flex items-center gap-1.5">
               <DateField
                 value={departDate}
                 onChange={setDepartDate}
-                className="flex-1"
+                className="min-w-0 flex-1"
                 ariaLabel="Departure date"
                 dense
               />
@@ -1935,27 +1968,25 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
             </div>
           </div>
 
-          <label className="flex flex-col gap-0.5">
+          <div className="flex flex-col gap-1">
             <span className="text-xs leading-tight text-muted">Drivers</span>
-            <select
+            <SegmentedControl
+              ariaLabel="Drivers"
               value={crew}
-              onChange={(e) => setCrew(Number(e.target.value) === 2 ? 2 : 1)}
-              className={CREW_FIELD}
-            >
-              <option value={1}>1 driver · 9h driving per shift</option>
-              <option value={2}>2 drivers · 18h driving per shift</option>
-            </select>
-          </label>
-
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
-            <input
-              type="checkbox"
-              checked={fullProgram}
-              onChange={(e) => setFullProgram(e.target.checked)}
-              className="h-3.5 w-3.5 accent-white"
+              onChange={setCrew}
+              options={[
+                { value: 1, label: '1 driver' },
+                { value: 2, label: '2 drivers' },
+              ]}
             />
-            Starts on a full program
-          </label>
+            <span className="text-xs leading-snug text-faint">
+              {crew === 2 ? '18 h' : '9 h'} driving per shift
+            </span>
+          </div>
+          </FoldGroup>
+
+          <FoldGroup>
+          <SwitchRow label="Starts on a full program" checked={fullProgram} onChange={setFullProgram} />
 
           {/* The Friday-afternoon case: the same route started with a full
               card and started with three hours left are two different trips,
@@ -1967,7 +1998,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                 <DateField
                   value={programDate}
                   onChange={setProgramDate}
-                  className="flex-1"
+                  className="min-w-0 flex-1"
                   ariaLabel="Program until, date"
                   dense
                 />
@@ -1982,13 +2013,18 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
             </div>
           )}
 
+          </FoldGroup>
+
+          <FoldGroup>
           {/* A crew's rest is fixed at 9h by the multi-manning rule, so there
               is no choice to offer; a solo driver's is 11h, reducible to 9h
               three times between weekly rests — which this estimator does not
               count, so it has to be stated rather than assumed. */}
           {crew === 1 ? (
             <NumberField
-              label="Daily rest (h)"
+              inline
+              label="Daily rest"
+              unit="h"
               value={dailyRestHours}
               onChange={setDailyRestHours}
               placeholder="11"
@@ -2000,15 +2036,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
             </div>
           )}
 
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
-            <input
-              type="checkbox"
-              checked={weekEnds}
-              onChange={(e) => setWeekEnds(e.target.checked)}
-              className="h-3.5 w-3.5 accent-white"
-            />
-            Weekly rest falls in this trip
-          </label>
+          <SwitchRow label="Weekly rest falls in this trip" checked={weekEnds} onChange={setWeekEnds} />
 
           {weekEnds && (
             <>
@@ -2018,7 +2046,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                   <DateField
                     value={weekDate}
                     onChange={setWeekDate}
-                    className="flex-1"
+                    className="min-w-0 flex-1"
                     ariaLabel="Can work until, date"
                     dense
                   />
@@ -2031,17 +2059,18 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                   />
                 </div>
               </div>
-              <label className="flex flex-col gap-0.5">
+              <div className="flex flex-col gap-1">
                 <span className="text-xs leading-tight text-muted">Weekly rest</span>
-                <select
+                <SegmentedControl
+                  ariaLabel="Weekly rest"
                   value={weeklyRestHours}
-                  onChange={(e) => setWeeklyRestHours(e.target.value)}
-                  className={CREW_FIELD}
-                >
-                  <option value="45">45h · regular</option>
-                  <option value="24">24h · reduced</option>
-                </select>
-              </label>
+                  onChange={setWeeklyRestHours}
+                  options={[
+                    { value: '45', label: '45 h regular' },
+                    { value: '24', label: '24 h reduced' },
+                  ]}
+                />
+              </div>
 
               {/* Whether the rest above actually applies to THIS trip.
                   Without it the field is silently inert whenever the cutoff
@@ -2064,10 +2093,14 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
             </>
           )}
 
-          <div className="text-2xs leading-snug text-faint">
-            Estimated from EC 561/2006 · driving bans are not included, use the Restriction
-            calculator for those.
-          </div>
+          </FoldGroup>
+
+          <FoldGroup className="py-2">
+            <div className="text-2xs leading-snug text-faint">
+              Estimated from EC 561/2006 · driving bans are not included, use the Restriction
+              calculator for those.
+            </div>
+          </FoldGroup>
         </FoldCard>
         </div>
 

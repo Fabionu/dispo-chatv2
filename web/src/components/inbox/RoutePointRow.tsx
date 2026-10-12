@@ -75,6 +75,8 @@ export default function PointRow({
       rowKey={rowKey}
       draggable={draggable}
       dragging={dragging}
+      invalid={invalid}
+      hoverable
       dragProps={
         draggable
           ? {
@@ -98,7 +100,6 @@ export default function PointRow({
       }
     >
       <RoutePointCard
-        state={{ dragging, invalid }}
         headline={
           // A long address truncates to one line and carries the full label as a
           // tooltip, so it can never push the card wide or wrap into three lines.

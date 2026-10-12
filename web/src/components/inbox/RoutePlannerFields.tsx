@@ -13,15 +13,24 @@ export function NumberField({
   value,
   onChange,
   placeholder,
+  unit,
+  inline = false,
 }: {
   label: string
   value: string
   onChange: (v: string) => void
   placeholder?: string
+  /** Sits INSIDE the field, after the value — so the label no longer has to carry "(cm)". */
+  unit?: string
+  /** Label on the left, a narrow field on the right: for a lone value in a settings row. */
+  inline?: boolean
 }) {
-  return (
-    <label className="flex flex-col gap-0.5">
-      <span className="text-xs leading-tight text-muted">{label}</span>
+  // The field is a wrapper that owns the border and focus state; the input is
+  // bare inside it so the unit can share the same edge. The browser's spin
+  // buttons are hidden: they sat on top of the unit and the placeholder, and
+  // the arrow keys and wheel still step the value.
+  const field = (
+    <span className="rounded-card flex h-7 min-w-0 items-center gap-1.5 border border-line px-2 transition-colors hover:border-line-2 focus-within:border-line-2 focus-within:bg-white/4">
       <input
         type="number"
         inputMode="numeric"
@@ -29,9 +38,99 @@ export function NumberField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="rounded-card h-7 border border-line bg-transparent px-2 text-base outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4 placeholder:text-faint"
+        className="min-w-0 flex-1 bg-transparent text-base tabular-nums outline-none placeholder:text-faint [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
       />
+      {unit && <span className="shrink-0 text-xs text-faint">{unit}</span>}
+    </span>
+  )
+  if (inline) {
+    return (
+      <label className="flex items-center justify-between gap-3">
+        <span className="text-base text-text">{label}</span>
+        <span className="w-24 shrink-0">{field}</span>
+      </label>
+    )
+  }
+  return (
+    <label className="flex min-w-0 flex-col gap-1">
+      <span className="text-xs leading-tight text-muted">{label}</span>
+      {field}
     </label>
+  )
+}
+
+// A two-or-three-way choice drawn as one bordered track with a sliding-looking
+// selected segment (no motion: it just changes fill). Replaces the native
+// <select> for the crew size and the weekly rest, which are each a handful of
+// fixed options — a dropdown hid the very thing being chosen between.
+export function SegmentedControl<T extends string | number>({
+  value,
+  options,
+  onChange,
+  ariaLabel,
+}: {
+  value: T
+  options: { value: T; label: string }[]
+  onChange: (v: T) => void
+  ariaLabel: string
+}) {
+  return (
+    <div role="group" aria-label={ariaLabel} className="rounded-card flex h-7 gap-0.5 border border-line p-0.5">
+      {options.map((o) => {
+        const on = o.value === value
+        return (
+          <button
+            key={String(o.value)}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onChange(o.value)}
+            className={`flex min-w-0 flex-1 items-center justify-center truncate rounded-[calc(var(--chrome-radius)_-_3px)] px-2 text-sm font-medium transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+              on ? 'bg-white/10 text-text' : 'text-muted hover:text-text'
+            }`}
+          >
+            {o.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// A yes/no setting as a labelled row with a switch on the right; the WHOLE row
+// is the button, so the label is a target as big as the track. On is the
+// app's accent (`active`, same as the primary Save button). The knob jumps
+// rather than slides, so the Animations setting has nothing to override.
+export function SwitchRow({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string
+  checked: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className="flex min-h-7 w-full items-center justify-between gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+    >
+      <span className="text-base leading-tight text-text">{label}</span>
+      <span
+        aria-hidden
+        className={`relative h-4 w-7 shrink-0 rounded-full border transition-colors motion-reduce:transition-none ${
+          checked ? 'border-active bg-active' : 'border-line-2'
+        }`}
+      >
+        <span
+          className={`absolute left-0.5 top-0.5 h-2.5 w-2.5 rounded-full ${
+            checked ? 'translate-x-3 bg-bg' : 'bg-muted'
+          }`}
+        />
+      </span>
+    </button>
   )
 }
 
@@ -310,17 +409,52 @@ export function Stat({
   // value is the same 13px as the point cards' headline rather than a step
   // up — a readout in a compact panel, not a dashboard tile.
   const large = size === 'lg'
+  // The headline readouts split into number + unit so the number carries the
+  // weight and the unit steps back ("44 h 20 min" reads as 44, 20 and two
+  // small labels). Anything that isn't a plain run of number-unit pairs —
+  // "Not calculated", a clock time — stays one string.
+  const parts = large ? splitReadout(value) : null
   return (
-    <div className={`min-w-0 flex flex-col px-2.5 ${large ? 'py-1.5' : 'py-1'}`}>
+    <div className={`min-w-0 flex flex-col px-3 ${large ? 'pt-2.5 pb-2' : 'py-1'}`}>
       <span className="text-2xs leading-tight text-faint">{label}</span>
-      <span
-        className={`font-semibold leading-tight tabular-nums truncate ${
-          large ? 'text-2xl tracking-[-0.3px]' : 'text-base tracking-[-0.1px]'
-        }`}
-        title={value}
-      >
-        {value}
-      </span>
+      {parts ? (
+        <span className="mt-1 flex items-baseline overflow-hidden whitespace-nowrap" title={value}>
+          {parts.map((p, i) => (
+            <Fragment key={i}>
+              <span className="text-2xl font-semibold leading-none tracking-[-0.4px] tabular-nums">{p.num}</span>
+              <span className="ml-0.5 mr-1.5 text-xs font-medium leading-none text-muted last:mr-0">{p.unit}</span>
+            </Fragment>
+          ))}
+        </span>
+      ) : (
+        <span
+          className={`font-semibold leading-tight tabular-nums truncate ${
+            large ? 'text-2xl tracking-[-0.3px]' : 'text-base tracking-[-0.1px]'
+          }`}
+          title={value}
+        >
+          {value}
+        </span>
+      )}
+    </div>
+  )
+}
+
+const READOUT_RE = /^(?:\d+(?:[.,]\d+)?\s*[a-zA-Z]+\s*)+$/
+function splitReadout(value: string): { num: string; unit: string }[] | null {
+  if (!READOUT_RE.test(value.trim())) return null
+  return Array.from(value.matchAll(/(\d+(?:[.,]\d+)?)\s*([a-zA-Z]+)/g), (m) => ({ num: m[1], unit: m[2] }))
+}
+
+// One line of the Details block, laid out like a receipt: the label, a dotted
+// leader, the value. The leader is what lets a label and its value that sit a
+// panel-width apart still read as one fact.
+export function ReceiptRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline gap-2 py-1">
+      <span className="text-sm text-muted">{label}</span>
+      <span aria-hidden className="min-w-[0.5rem] flex-1 -translate-y-[3px] border-b border-dotted border-line-2" />
+      <span className="text-base font-medium tabular-nums text-text">{value}</span>
     </div>
   )
 }
@@ -367,9 +501,13 @@ export function FoldCard({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20"
+        // `rounded-*-[inherit]` so the hover wash follows the card's corners:
+        // while folded the card clips it, but an open card does not.
+        className={`flex h-[2.375rem] w-full items-center gap-2.5 px-[0.6875rem] text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20 ${
+          open ? 'rounded-t-[inherit]' : 'rounded-[inherit]'
+        }`}
       >
-        <span className="h-7 w-7 shrink-0 flex items-center justify-center rounded-tile border border-line bg-white/2 text-muted">
+        <span className={`flex h-4 w-4 shrink-0 items-center justify-center ${open ? 'text-text' : 'text-muted'}`}>
           {icon}
         </span>
         <span className="planner-fold-text min-w-0 flex-1">
@@ -387,7 +525,18 @@ export function FoldCard({
         />
       </button>
 
-      {open && <div className="flex flex-col gap-2 border-t border-line p-2">{children}</div>}
+      {open && <div className="border-t border-line">{children}</div>}
+    </div>
+  )
+}
+
+// A section of an open FoldCard: the cards' fields are grouped by hairlines
+// (the way every other grouped surface in the app is) rather than by one long
+// run of stacked inputs.
+export function FoldGroup({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`flex flex-col gap-3 border-t border-line px-3 py-2.5 first:border-t-0 ${className}`}>
+      {children}
     </div>
   )
 }

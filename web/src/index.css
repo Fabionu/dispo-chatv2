@@ -2529,7 +2529,9 @@ button {
    inside the card, and an unfolded card must let them out. Registered in
    both stillness lists above. */
 .planner-fold {
-  width: 2.875rem;
+  /* A 40px square at rest: the glyph is the whole card (the inner glyph chip
+     went on 2026-10-12, so there is no box inside the box to size around). */
+  width: 2.5rem;
   transition: width 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .planner-fold:not([data-open]) {

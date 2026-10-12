@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Flag, Navigation } from 'lucide-react'
+import { Flag, Navigation, Plus } from 'lucide-react'
 import type { RoutePointRole } from '../../lib/here/types'
 
 // ── The Route planner's itinerary list ──────────────────────────────────────
@@ -23,21 +23,17 @@ import type { RoutePointRole } from '../../lib/here/types'
 //   │
 //   ⚑   Cluj-Napoca                                     ✎  ✕
 //
-// The role marker is the only colour on a row: green for the start, coral for
-// the destination, a plain numbered chip for a stop — legible, never louder than
-// the address. Cards carry no resting border: the spine and the badges give the
-// list its structure, and a 300px column can't afford six hairline boxes. Every
-// `--` state (hover / selected / dragging / invalid / disabled) is expressed on
-// the card, drawn with RINGS rather than borders so nothing shifts by a pixel
-// between them, and a caller never re-invents one.
+// The role marker is the only colour on a row: a green ring for the start, a
+// coral ring for the destination, a plain numbered ring for a stop — legible,
+// never louder than the address. A SOLID ring means the point is set, a DASHED
+// one means the slot is still open. Rows are UNBOXED (the 2026-10-12 "Ledger"
+// pass): no resting fill, no resting border — the spine and the rings give the
+// list its structure, and a 300px column can't afford six boxes inside a box.
+// The ROW carries the states (hover wash, dragging, invalid), drawn with RINGS
+// rather than borders so nothing shifts by a pixel between them, and the edit /
+// remove actions only show while the row is hovered or focused.
 
 export type RoutePointCardState = {
-  /** Row is being dragged (the source row, not the drop target). */
-  dragging?: boolean
-  /** Row is the focused/edited point. */
-  selected?: boolean
-  /** Address failed validation / the API rejected it. */
-  invalid?: boolean
   /** Route is recalculating, or the caller can't act on this row yet. */
   disabled?: boolean
 }
@@ -62,39 +58,40 @@ export function RoleBadge({
   // chrome" (see the radius scale in tailwind.config.js).
   // 20px (was 24) since the rows went compact on 2026-09-11 — the badge has
   // to sit on the centre of a 28px field and of a card's first text line, and
-  // 24 outweighed both.
-  const base = 'h-5 w-5 shrink-0 rounded-full border flex items-center justify-center'
+  // 24 outweighed both. A RING since 2026-10-12 (it was a tinted disc):
+  // thinner, and it frees the dashed variant to mean "this slot is still open".
+  const base = 'h-5 w-5 shrink-0 rounded-full border-[1.5px] flex items-center justify-center'
+  const open = 'border-dashed border-line-2 text-faint'
   if (role === 'start') {
     return (
-      <span
-        aria-hidden
-        title="Start"
-        className={`${base} ${muted ? 'border-done/20 bg-done/5 text-done/60' : 'border-done/30 bg-done/10 text-done'}`}
-      >
-        <Navigation size="0.625rem" strokeWidth={2.2} />
+      <span aria-hidden title="Start" className={`${base} ${muted ? open : 'border-done text-done'}`}>
+        <Navigation size="0.625rem" strokeWidth={2.4} />
       </span>
     )
   }
   if (role === 'destination') {
     return (
-      <span
-        aria-hidden
-        title="Destination"
-        className={`${base} ${muted ? 'border-alert/20 bg-alert/5 text-alert/60' : 'border-alert/30 bg-alert/10 text-alert'}`}
-      >
-        <Flag size="0.625rem" strokeWidth={2.2} />
+      <span aria-hidden title="Destination" className={`${base} ${muted ? open : 'border-alert text-alert'}`}>
+        <Flag size="0.625rem" strokeWidth={2.4} />
+      </span>
+    )
+  }
+  if (role === 'add') {
+    return (
+      <span aria-hidden title="New stop" className={`${base} ${open}`}>
+        <Plus size="0.625rem" strokeWidth={2.4} />
       </span>
     )
   }
   return (
     <span
       aria-hidden
-      title={role === 'add' ? 'New stop' : `Stop ${index}`}
-      className={`${base} border-line-2 bg-white/6 text-2xs font-semibold tabular-nums ${
+      title={`Stop ${index}`}
+      className={`${base} border-line-2 text-2xs font-semibold tabular-nums ${
         muted ? 'text-faint' : 'text-muted'
       }`}
     >
-      {role === 'add' ? '+' : index}
+      {index}
     </span>
   )
 }
@@ -115,6 +112,8 @@ export function RouteRow({
   connect = false,
   draggable = false,
   dragging = false,
+  invalid = false,
+  hoverable = false,
   dragProps,
 }: {
   badge: ReactNode
@@ -131,6 +130,10 @@ export function RouteRow({
   /** Row can be dragged to reorder — the whole row is the handle. */
   draggable?: boolean
   dragging?: boolean
+  /** The point has no usable coordinates — the whole row, badge included, says so. */
+  invalid?: boolean
+  /** A committed point: the row washes on hover. Search slots and the inline editor don't. */
+  hoverable?: boolean
   /** Native DnD handlers, spread onto the outer row by the planner. */
   dragProps?: React.HTMLAttributes<HTMLDivElement> & { draggable?: boolean }
 }) {
@@ -145,10 +148,21 @@ export function RouteRow({
       // The held row is lifted out of the stack (`relative z-10`) so that while
       // the rows slide past each other it crosses OVER the ones it displaces
       // rather than disappearing behind them — the point of animating the
-      // reorder is to be able to follow this row.
-      className={`group/row flex gap-2 transition-opacity motion-reduce:transition-none ${
+      // reorder is to be able to follow this row. The wash lives on the ROW
+      // (not on the card inside it) so the badge sits on it too: the row is one
+      // object. Rings, not borders, for dragging / invalid, so no state moves
+      // the text by a pixel.
+      className={`group/row flex gap-2.5 rounded-btn px-1.5 transition-[background-color,opacity] motion-reduce:transition-none ${
         draggable ? 'cursor-grab active:cursor-grabbing' : ''
-      } ${dragging ? 'relative z-10 opacity-60' : ''}`}
+      } ${
+        invalid
+          ? 'bg-alert/10 ring-1 ring-alert/30'
+          : dragging
+            ? 'relative z-10 bg-white/10 opacity-60 ring-1 ring-white/16'
+            : hoverable
+              ? 'hover:bg-white/4'
+              : ''
+      }`}
     >
       <div className="flex w-5 shrink-0 flex-col items-center pt-1">
         {/* The badge doubles as the drag affordance: the whole row is
@@ -161,7 +175,7 @@ export function RouteRow({
         >
           {badge}
         </span>
-        {connect && <span aria-hidden className="mt-1 -mb-1.5 w-px flex-1 bg-white/8" />}
+        {connect && <span aria-hidden className="mt-1 -mb-1.5 w-px flex-1 bg-line-2" />}
       </div>
       <div className="min-w-0 flex-1">{children}</div>
     </div>
@@ -185,27 +199,22 @@ export default function RoutePointCard({
   actions?: ReactNode
   state?: RoutePointCardState
 }) {
-  const { dragging, selected, invalid, disabled } = state
-  const surface = invalid
-    ? 'bg-alert/10 ring-1 ring-alert/30'
-    : dragging
-      ? 'bg-white/10 ring-1 ring-white/16'
-      : selected
-        ? 'bg-white/10'
-        : 'bg-white/4 group-hover/row:bg-white/6'
+  const { disabled } = state
 
   return (
-    <div
-      className={`rounded-soft px-2.5 py-1.5 transition-colors motion-reduce:transition-none ${surface} ${
-        disabled ? 'pointer-events-none opacity-50' : ''
-      }`}
-    >
+    <div className={`py-1.5 ${disabled ? 'pointer-events-none opacity-50' : ''}`}>
       {/* The 20px action buttons overhang the 16px headline by 2px each way
           (`-my-0.5`) rather than stretching the line to fit them — that is
-          what keeps the card at 42px instead of 46. */}
+          what keeps the card at 42px instead of 46. They only show while the
+          row is hovered or something inside it has focus, so a resting list is
+          just addresses. */}
       <div className="flex items-start gap-1">
         <div className="min-w-0 flex-1">{headline}</div>
-        {actions && <div className="-mr-1 -my-0.5 shrink-0 flex items-center gap-0.5">{actions}</div>}
+        {actions && (
+          <div className="-mr-1 -my-0.5 shrink-0 flex items-center gap-0.5 opacity-0 transition-opacity motion-reduce:transition-none group-hover/row:opacity-100 focus-within:opacity-100">
+            {actions}
+          </div>
+        )}
       </div>
       {meta && <div className="mt-px">{meta}</div>}
     </div>
