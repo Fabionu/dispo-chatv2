@@ -1490,48 +1490,18 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
           aria-hidden={panelCollapsed || streetView}
         >
         <div className="flex min-h-0 flex-col rounded-soft border border-line bg-surface shadow-overlay">
-          {/* One 32px line: the title, a spinner while the route is being
-              recomputed (the route follows the inputs — there is no button to
-              press, so this is where "working" shows), and two 24px glyph
-              actions. The tagline and the labelled Clear went on 2026-09-16:
-              in a 300px card every row of chrome is a row the itinerary does
-              not get. */}
-          <div className="flex h-8 shrink-0 items-center justify-between gap-2 pl-3 pr-1">
-            <div className="flex min-w-0 items-center gap-2">
-              <div className="text-base font-semibold leading-tight tracking-[-0.1px]">Route</div>
-              {points.length > 0 && (
-                <span className="text-xs tabular-nums text-faint">
-                  {points.length} {points.length === 1 ? 'point' : 'points'}
-                </span>
-              )}
-              {loading && <Spinner size={12} className="shrink-0 text-muted" />}
-            </div>
-            <div className="flex items-center gap-0.5">
-              {points.length > 0 && (
-                <button
-                  onClick={clearRoute}
-                  title="Clear route"
-                  aria-label="Clear route"
-                  className={ICON_ACTION_SMALL}
-                >
-                  <Trash2 size="0.8125rem" strokeWidth={1.8} />
-                </button>
-              )}
-              <button
-                onClick={() => setPanelCollapsed(true)}
-                title="Collapse panel"
-                aria-label="Collapse panel"
-                className={ICON_ACTION_SMALL}
-              >
-                <ChevronLeft size="0.875rem" strokeWidth={2} />
-              </button>
-            </div>
-          </div>
+          {/* No header bar (user, 2026-10-13: "remove the header of the card…
+              to minimize the look"): the card opens straight onto the
+              itinerary. Clear route and Collapse panel moved to where the
+              route's result sits — a third column of the Distance | Transit
+              row, below. Before a route exists there is no such row, so a slim
+              strip under the itinerary carries them instead (and the spinner,
+              which used to live in the header). */}
 
           {/* The card's ONLY scroll region. `divide-y` draws the section seams,
               so a section that isn't rendered (the summary before a route
               exists) leaves no orphaned hairline behind. */}
-          <div className="min-h-0 flex-1 overflow-y-auto border-t border-line divide-y divide-line">
+          <div className="min-h-0 flex-1 overflow-y-auto divide-y divide-line">
             {/* The itinerary. Every row hangs off the same connector spine, so
                 the list reads as one route rather than a stack of boxes; the
                 cards themselves are borderless and the badges carry the roles.
@@ -1672,12 +1642,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                 edit, hiding it for the round trip would blank the card on each
                 keystroke in the truck fields. */}
             {route && (
-              <section
-                aria-busy={loading || undefined}
-                className={`divide-y divide-line transition-opacity motion-reduce:transition-none ${
-                  loading ? 'opacity-50' : ''
-                }`}
-              >
+              <section aria-busy={loading || undefined} className="divide-y divide-line">
                 {/* Two headline readouts — the distance and the legal transit
                     time, the two numbers a dispatcher quotes — at the card's
                     largest type, and everything else (driving time, arrival,
@@ -1687,12 +1652,49 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                     closed, because money is the one detail worth a glance
                     without opening anything. Rests (nights / weekly) came off
                     the card on 2026-09-15 — the arrival has them priced in. */}
-                <div className="grid grid-cols-2 divide-x divide-line">
-                  <Stat label="Distance" value={formatDistance(route.summary.length)} size="lg" />
+                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                  {/* Only the readouts dim while recomputing — the actions
+                      beside them stay solid, so Collapse doesn't flicker on
+                      every keystroke in the truck fields. */}
+                  <div
+                    className={`min-w-0 ${transit ? '' : 'relative col-span-2'}`}
+                  >
+                    <div className={`transition-opacity motion-reduce:transition-none ${loading ? 'opacity-50' : ''}`}>
+                      <Stat label="Distance" value={formatDistance(route.summary.length)} size="lg" />
+                    </div>
+                    {!transit && loading && (
+                      <Spinner size={12} className="absolute right-2.5 top-2.5 text-muted" />
+                    )}
+                  </div>
                   {transit && (
-                    <Stat label="Transit" value={formatDuration(transit.totalMs / 1000)} size="lg" />
+                    <div className="relative min-w-0 border-l border-line">
+                      <div className={`transition-opacity motion-reduce:transition-none ${loading ? 'opacity-50' : ''}`}>
+                        <Stat label="Transit" value={formatDuration(transit.totalMs / 1000)} size="lg" />
+                      </div>
+                      {/* The "working" mark that used to sit in the header. */}
+                      {loading && <Spinner size={12} className="absolute right-2.5 top-2.5 text-muted" />}
+                    </div>
                   )}
+                  <div className="flex flex-col items-center justify-center gap-0.5 border-l border-line px-1.5">
+                    <button
+                      onClick={clearRoute}
+                      title="Clear route"
+                      aria-label="Clear route"
+                      className={ICON_ACTION_SMALL}
+                    >
+                      <Trash2 size="0.8125rem" strokeWidth={1.8} />
+                    </button>
+                    <button
+                      onClick={() => setPanelCollapsed(true)}
+                      title="Collapse panel"
+                      aria-label="Collapse panel"
+                      className={ICON_ACTION_SMALL}
+                    >
+                      <ChevronLeft size="0.875rem" strokeWidth={2} />
+                    </button>
+                  </div>
                 </div>
+                <div className={`divide-y divide-line transition-opacity motion-reduce:transition-none ${loading ? 'opacity-50' : ''}`}>
                 <div>
                   <button
                     type="button"
@@ -1819,14 +1821,49 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                     ))}
                   </div>
                 )}
+                </div>
               </section>
+            )}
+
+            {/* Before a route exists there is no summary row to hold the
+                actions (and no readout to carry the spinner), so a slim strip
+                under the itinerary does: the point count and the "working"
+                spinner on the left, Clear and Collapse on the right. It goes
+                the moment a route lands and they move up into the readout. */}
+            {!route && (
+              <div className="flex h-8 items-center justify-between gap-2 pl-3 pr-1">
+                <span className="flex min-w-0 items-center gap-2 text-xs tabular-nums text-faint">
+                  {loading && <Spinner size={12} className="shrink-0 text-muted" />}
+                  {points.length > 0 && `${points.length} ${points.length === 1 ? 'point' : 'points'}`}
+                </span>
+                <div className="flex items-center gap-0.5">
+                  {points.length > 0 && (
+                    <button
+                      onClick={clearRoute}
+                      title="Clear route"
+                      aria-label="Clear route"
+                      className={ICON_ACTION_SMALL}
+                    >
+                      <Trash2 size="0.8125rem" strokeWidth={1.8} />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setPanelCollapsed(true)}
+                    title="Collapse panel"
+                    aria-label="Collapse panel"
+                    className={ICON_ACTION_SMALL}
+                  >
+                    <ChevronLeft size="0.875rem" strokeWidth={2} />
+                  </button>
+                </div>
+              </div>
             )}
           </div>
 
           {/* Footer — only what went wrong, pinned below the scroll region.
               The button that used to draw the route is gone (the route follows
-              the inputs; the header spinner says when it is working), so the
-              footer exists only while there is a message to show. */}
+              the inputs; the spinner says when it is working), so the footer
+              exists only while there is a message to show. */}
           {(error || snapNote) && (
             <div className="flex shrink-0 flex-col gap-1 border-t border-line px-3 py-2">
               {error && (
