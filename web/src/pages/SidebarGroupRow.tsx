@@ -402,7 +402,7 @@ export default function GroupRow({
         // by `px-1.5`, so the corners have background to sit against rather than
         // dying into the rail's edge.
         className={`w-full flex items-center rounded-card text-left transition-colors border-l-2 border-transparent ${
-          selected ? 'bg-white/10 text-text' : 'text-muted hover:bg-white/8 hover:text-text'
+          selected ? 'bg-white/5 text-text' : 'text-muted hover:bg-white/8 hover:text-text'
         }`}
       >
         {/* The picture: the peer for a DM, the room's own image for a vehicle

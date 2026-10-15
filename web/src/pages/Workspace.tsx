@@ -862,13 +862,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             FilterTabBar owns the row itself: exactly one of these five is live
             at a time, and it draws the single bar that slides between them. */}
         <FilterTabBar activeKey={filter}>
-          <ArchiveToggle
-            active={filter === 'archived'}
-            label={filter === 'archived' ? 'Show conversations' : 'Show archived'}
-            onClick={() => setFilter((f) => (f === 'archived' ? 'all' : 'archived'))}
-          >
-            <Archive size="0.8125rem" strokeWidth={1.8} />
-          </ArchiveToggle>
           <FilterTab active={filter === 'all'} onClick={() => setFilter('all')}>
             All
           </FilterTab>
@@ -890,6 +883,13 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           >
             Unread
           </FilterTab>
+          <ArchiveToggle
+            active={filter === 'archived'}
+            label={filter === 'archived' ? 'Show conversations' : 'Show archived'}
+            onClick={() => setFilter((f) => (f === 'archived' ? 'all' : 'archived'))}
+          >
+            <Archive size="0.8125rem" strokeWidth={1.8} />
+          </ArchiveToggle>
         </FilterTabBar>
 
         {/* Rail list. Pending actionable items keep their OWN separated,

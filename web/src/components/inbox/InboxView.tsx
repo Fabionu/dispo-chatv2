@@ -236,7 +236,35 @@ export default function InboxView({
 
       <div className="flex-1 overflow-y-auto px-6 py-7">
         <div className="mx-auto flex max-w-[72rem] flex-col gap-9">
-          <section aria-labelledby="home-fleet">
+          {/* TOOLS FIRST (user, 2026-10-15): the three destinations lead the
+              page as one row of cards, and the fleet below is a compact list
+              that shares its row with Needs attention. */}
+          <section aria-labelledby="home-tools">
+            <h2 id="home-tools" className="mb-3 text-xl font-semibold">Tools</h2>
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-3">
+              <ToolRow
+                icon={<Route size="1.0625rem" strokeWidth={1.6} />}
+                title="Route planner"
+                subtitle="Distance, tolls and ETA for a truck route."
+                onClick={() => setTool('route')}
+              />
+              <ToolRow
+                icon={<CalendarClock size="1.0625rem" strokeWidth={1.6} />}
+                title="Restriction calculator"
+                subtitle="Arrival once bans and rests are counted."
+                onClick={() => setTool('restrictions')}
+              />
+              <ToolRow
+                icon={<Activity size="1.0625rem" strokeWidth={1.6} />}
+                title="Fleet status"
+                subtitle="Vehicles, trips and availability."
+                onClick={() => setTool('fleet')}
+              />
+            </div>
+          </section>
+
+          <div className="flex flex-wrap gap-x-8 gap-y-9">
+          <section aria-labelledby="home-fleet" className="min-w-0 flex-[1.9_1_34rem]">
             <div className={`flex items-baseline gap-3 ${fleetCollapsed ? '' : 'mb-3'}`}>
               {/* The heading IS the fold control (user, 2026-10-12: the fleet
                   section should collapse and stay collapsed until reopened).
@@ -275,12 +303,11 @@ export default function InboxView({
               </button>
             </div>
             <div id="home-fleet-table" hidden={fleetCollapsed} className="overflow-x-auto border-t border-line">
-              <div className="min-w-[52rem]">
-                <div className={`${FLEET_GRID} border-b border-line py-2.5 text-sm font-medium text-muted`}>
+              <div className="min-w-[34rem]">
+                <div className={`${FLEET_GRID} border-b border-line py-2 text-sm font-medium text-muted`}>
                   <span>Vehicle</span>
                   <span>Status</span>
                   <span>Trip</span>
-                  <span>Next</span>
                   <span>Last position</span>
                 </div>
                 {fleetRows.map((row) => (
@@ -298,8 +325,7 @@ export default function InboxView({
             </div>
           </section>
 
-          <div className="flex flex-wrap gap-x-12 gap-y-9">
-            <section aria-labelledby="home-attention" className="min-w-0 flex-[1_1_22rem]">
+          <section aria-labelledby="home-attention" className="min-w-0 flex-[1_1_18rem]">
               <h2 id="home-attention" className="mb-3 text-xl font-semibold">Needs attention</h2>
               <div className="border-t border-line">
                 {attention.length === 0 ? (
@@ -322,30 +348,6 @@ export default function InboxView({
                     </button>
                   ))
                 )}
-              </div>
-            </section>
-
-            <section aria-labelledby="home-tools" className="min-w-0 flex-[1_1_22rem]">
-              <h2 id="home-tools" className="mb-3 text-xl font-semibold">Tools</h2>
-              <div className="border-t border-line">
-                <ToolRow
-                  icon={<Route size="1.0625rem" strokeWidth={1.6} />}
-                  title="Route planner"
-                  subtitle="Plan a truck route with distance, tolls and ETA."
-                  onClick={() => setTool('route')}
-                />
-                <ToolRow
-                  icon={<CalendarClock size="1.0625rem" strokeWidth={1.6} />}
-                  title="Restriction calculator"
-                  subtitle="When the truck arrives, once bans and rests are counted."
-                  onClick={() => setTool('restrictions')}
-                />
-                <ToolRow
-                  icon={<Activity size="1.0625rem" strokeWidth={1.6} />}
-                  title="Fleet status"
-                  subtitle="Vehicles, their current trips and availability."
-                  onClick={() => setTool('fleet')}
-                />
               </div>
             </section>
           </div>
@@ -441,7 +443,7 @@ type MetaPart = { label: string; alert?: boolean }
 // The five columns, shared by the header row and every vehicle row so the cells
 // line up. The board scrolls sideways inside its own box below ~52rem.
 const FLEET_GRID =
-  'grid grid-cols-[minmax(13rem,1.3fr)_minmax(9rem,1fr)_minmax(14rem,1.6fr)_minmax(10rem,1fr)_minmax(9rem,0.9fr)] gap-x-6'
+  'grid grid-cols-[minmax(9rem,1fr)_minmax(7rem,0.8fr)_minmax(11rem,2fr)_minmax(7rem,0.8fr)] gap-x-4'
 
 // A driver who has not pinged for this long on an active trip is worth a look.
 // Long enough that a tunnel or a phone in a pocket doesn't raise it; short
@@ -583,76 +585,55 @@ function BoardPlace({ place, align = 'start' }: { place: TripPlace; align?: 'sta
 }
 
 function FleetRow({ row, onOpen }: { row: FleetRowData; onOpen: () => void }) {
+  // One line per vehicle (user, 2026-10-15: "compact"). The next stop moved
+  // out of the board; it is one click away in the room and in Fleet status.
   return (
     <button
       type="button"
       onClick={onOpen}
-      className={`${FLEET_GRID} w-full items-center border-b border-line py-3.5 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:bg-white/4`}
+      className={`${FLEET_GRID} w-full items-center border-b border-line py-2 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:bg-white/4`}
     >
-      <span className="flex min-w-0 items-center gap-3">
+      <span className="flex min-w-0 items-center gap-2.5">
         <GroupAvatar
           groupId={row.room.id}
           hasAvatar={Boolean(row.room.hasAvatar)}
           version={row.room.avatarVersion}
           shape="rounded"
-          size={38}
+          size={28}
         />
-        <span className="min-w-0">
-          <span className="block truncate text-xl font-bold tracking-[-0.015em] tabular-nums">{row.name}</span>
-          {row.plate && row.plate !== row.name && (
-            <span className="block truncate text-sm text-muted">{row.plate}</span>
-          )}
-        </span>
+        <span className="min-w-0 truncate text-lg font-bold tracking-[-0.01em] tabular-nums">{row.name}</span>
       </span>
 
       <span className={`flex min-w-0 items-center gap-2 ${TONE_TEXT[row.tone]}`}>
         <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-current" />
-        <span className="truncate text-lg font-medium text-text">{row.statusLabel}</span>
+        <span className="truncate text-base font-medium text-text">{row.statusLabel}</span>
       </span>
 
-      <span className="flex min-w-0 flex-col gap-2">
-        {row.from ? (
-          <>
-            <span className="flex min-w-0 justify-between gap-3 text-base text-muted">
-              <BoardPlace place={row.from} />
-              {row.to && <BoardPlace place={row.to} align="end" />}
+      {row.from ? (
+        <span className="flex min-w-0 items-center gap-2 text-sm text-muted">
+          <BoardPlace place={row.from} />
+          {row.pct !== null && (
+            <span aria-hidden className={`relative h-0.5 min-w-6 flex-1 rounded-full bg-line ${TONE_TEXT[row.tone]}`}>
+              <span className="absolute inset-y-0 left-0 rounded-full bg-current" style={{ width: `${row.pct * 100}%` }} />
+              <span
+                className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-current"
+                style={{ left: `${row.pct * 100}%` }}
+              />
             </span>
-            {row.pct !== null && (
-              <span aria-hidden className={`relative h-0.5 rounded-full bg-line ${TONE_TEXT[row.tone]}`}>
-                <span className="absolute inset-y-0 left-0 rounded-full bg-current" style={{ width: `${row.pct * 100}%` }} />
-                <span
-                  className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-current"
-                  style={{ left: `${row.pct * 100}%` }}
-                />
-              </span>
-            )}
-          </>
-        ) : (
-          <span className="text-base text-muted">No stops</span>
-        )}
-      </span>
+          )}
+          {row.to && <BoardPlace place={row.to} align="end" />}
+        </span>
+      ) : (
+        <span className="text-sm text-muted">No trip</span>
+      )}
 
-      <span className="min-w-0">
-        {row.next ? (
-          <>
-            <span className="block truncate text-lg">{row.next.label}</span>
-            {row.next.when && <span className="block truncate text-sm text-muted tabular-nums">{row.next.when}</span>}
-          </>
-        ) : (
-          <span className="text-base text-muted">Nothing planned</span>
-        )}
-      </span>
-
-      <span className="min-w-0">
+      <span className="min-w-0 truncate text-sm tabular-nums">
         {row.position ? (
-          <>
-            <span className="block truncate text-lg">{row.position.who}</span>
-            <span className={`block truncate text-sm tabular-nums ${row.position.quiet ? 'text-active' : 'text-muted'}`}>
-              {row.position.ago}
-            </span>
-          </>
+          <span className={row.position.quiet ? 'text-active' : 'text-muted'}>
+            {row.position.who}, {row.position.ago}
+          </span>
         ) : (
-          <span className="text-base text-muted">No position</span>
+          <span className="text-muted">No position</span>
         )}
       </span>
     </button>
@@ -676,14 +657,14 @@ function ToolRow({
     <button
       type="button"
       onClick={onClick}
-      className="group flex w-full items-center gap-3.5 border-b border-line py-3.5 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:bg-white/4"
+      className="group flex w-full items-center gap-3 rounded-card border border-line px-3.5 py-3 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
     >
       <span className="flex h-[2.375rem] w-[2.375rem] shrink-0 items-center justify-center rounded-tile border border-line text-muted transition-colors group-hover:text-text">
         {icon}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-lg font-semibold">{title}</span>
-        <span className="mt-0.5 block text-base leading-[1.45] text-muted">{subtitle}</span>
+        <span className="mt-0.5 block text-sm leading-[1.4] text-muted">{subtitle}</span>
       </span>
       <ChevronRight
         size="1rem"

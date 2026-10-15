@@ -209,6 +209,9 @@ const BADGE_TONE = {
   count: 'bg-text text-bg',
   mention: 'bg-active text-bg',
   quiet: 'bg-white/10 text-muted',
+  // The tab's count while its tab is the live one: the tab is a solid white
+  // block, so the badge flips to the field colour on it.
+  inverse: 'bg-bg text-text',
 } as const
 
 export function UnreadBadge({
@@ -287,8 +290,13 @@ export function FilterTabBar({
   const { trackRef, rect } = useTravellingMarker(activeKey, '[aria-pressed="true"]')
 
   return (
-    <div ref={trackRef} className="relative px-3 flex items-center gap-4 shrink-0">
-      <div className="flex min-w-0 flex-wrap items-center gap-4">{children}</div>
+    <div
+      ref={trackRef}
+      role="group"
+      aria-label="Filter conversations"
+      className="relative mx-3 flex shrink-0 items-stretch gap-0.5 rounded-soft border border-line p-[3px]"
+    >
+      {children}
       {rect && (
         <span
           aria-hidden
@@ -296,16 +304,17 @@ export function FilterTabBar({
           // first placement still: a transition has no previous value to run
           // from on the frame an element is inserted, so the bar appears under
           // the live tab and only travels on later changes.
-          className="travelling-marker pointer-events-none absolute left-0 top-0 h-0.5 bg-text motion-reduce:transition-none"
+          className="travelling-marker pointer-events-none absolute left-[3px] top-[3px] rounded-btn bg-text motion-reduce:transition-none"
           style={{
             width: rect.w,
+            height: rect.h,
             // One pixel above the item's bottom edge, so the 2px bar covers the
             // tab's own (permanently transparent) hairline. The row used to
             // carry a `border-b` for the bar to sit on; the rule is gone (user,
             // 2026-08-21), so the bar is now the only mark on the row and simply
             // underlines the live tab. The -1 keeps it inside the row's box
             // rather than hanging a pixel below it.
-            transform: `translate(${rect.x}px, ${rect.y + rect.h - 1}px)`,
+            transform: `translate(${rect.x - 3}px, ${rect.y - 3}px)`,
           }}
         />
       )}
@@ -346,13 +355,13 @@ export function FilterTab({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`eyebrow filter-tab inline-flex items-center gap-1.5 border-b border-transparent py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+      className={`eyebrow filter-tab relative z-10 inline-flex flex-1 items-center justify-center gap-1.5 rounded-btn py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
         active ? 'filter-tab-active' : 'hover:text-text'
       }`}
     >
       {children}
       {badge !== undefined && (
-        <UnreadBadge size="tab" tone={active ? 'count' : 'quiet'}>
+        <UnreadBadge size="tab" tone={active ? 'inverse' : 'quiet'}>
           {unreadLabel(badge)}
         </UnreadBadge>
       )}
@@ -384,8 +393,8 @@ export function ArchiveToggle({
       // the tabs beside it, so its bottom edge has to BE their bottom edge. At
       // h-6 it sat two pixels shy of them and the bar jogged upward on its way
       // in.
-      className={`w-6 self-stretch flex items-center justify-center border-b border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
-        active ? 'text-text' : 'text-faint hover:text-text'
+      className={`relative z-10 w-9 self-stretch flex items-center justify-center rounded-btn transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+        active ? 'text-bg' : 'text-faint hover:text-text'
       }`}
     >
       {children}

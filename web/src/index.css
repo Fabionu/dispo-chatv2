@@ -2054,7 +2054,9 @@ button {
    selected conversation, so "which filter am I in" is legible at a glance
    rather than a two-step comparison between greys. */
 .eyebrow.filter-tab-active {
-  color: rgb(var(--color-text));
+  /* The live tab is a solid text-coloured block (the travelling marker), so its
+     label takes the field colour. */
+  color: rgb(var(--color-bg));
 }
 
 /* ── The travelling marker ──────────────────────────────────────────────────
