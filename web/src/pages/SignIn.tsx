@@ -56,6 +56,9 @@ export default function SignIn() {
   // MEASURED off the content (a ResizeObserver) so anything that grows the form
   // later (the strength meter, an error) eases the same way. `swapped` keeps the
   // first paint still: only a switch plays the entrance, never the page load.
+  // Signing in plays a short send-off before the app takes over: the button
+  // turns into a check, the card lifts away and the Ember background surges.
+  const [leaving, setLeaving] = useState(false)
   const [swapped, setSwapped] = useState(false)
   const [boxHeight, setBoxHeight] = useState<number | null>(null)
   const contentRef = useRef<HTMLDivElement>(null)
@@ -132,6 +135,15 @@ export default function SignIn() {
         setVerification({ email: body.email, emailSent: body.emailSent })
         return
       }
+      // Signed in. The app replaces this page the moment `refresh` lands, so the
+      // send-off has to play first — skipped when motion is off.
+      const still =
+        window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ||
+        document.documentElement.dataset.animations === 'off'
+      if (!still) {
+        setLeaving(true)
+        await new Promise((resolve) => window.setTimeout(resolve, 650))
+      }
       await refresh()
     } catch {
       setError('Network error. Check your connection and try again.')
@@ -161,7 +173,7 @@ export default function SignIn() {
   }
 
   return (
-    <AuthShell>
+    <AuthShell leaving={leaving}>
       <div
         className="auth-height -m-1 overflow-clip p-1"
         style={boxHeight === null ? undefined : { height: boxHeight }}
@@ -263,6 +275,7 @@ export default function SignIn() {
 
         <AuthButton
           busy={submitting}
+          success={leaving}
           busyLabel={isSignIn ? 'Signing in…' : 'Creating workspace…'}
           trailing={
             <ArrowRight

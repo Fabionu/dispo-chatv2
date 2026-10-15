@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Check, Loader2 } from 'lucide-react'
 import AppMark from '../AppMark'
 import { RowMeta } from '../../pages/sidebarBits'
 import { FIELD_EDGE } from '../forms/fieldStyles'
@@ -42,9 +42,13 @@ const COLUMN = 'w-full max-w-[26.25rem]'
 // The page. Two columns split by one rule at `lg`, stacked under it with the
 // identity block as a header band and the rule turned horizontal — the rule
 // never disappears, it just changes axis, because it IS the layout.
-export function AuthShell({ children }: { children: ReactNode }) {
+export function AuthShell({ children, leaving = false }: { children: ReactNode; leaving?: boolean }) {
   return (
-    <div className="flex min-h-screen w-full flex-col bg-bg text-text lg:grid lg:grid-cols-2">
+    <div
+      className={`flex min-h-screen w-full flex-col bg-bg text-text lg:grid lg:grid-cols-2 ${
+        leaving ? 'auth-leaving' : ''
+      }`}
+    >
       <AuthIdentity />
       {/* Both blocks sit against the seam with equal padding, rather than each
           being centred in its own half — on a wide display centring would open
@@ -237,6 +241,7 @@ export function AuthNotice({ children, live = false }: { children: ReactNode; li
 export function AuthButton({
   children,
   busy = false,
+  success = false,
   busyLabel,
   trailing,
   type = 'submit',
@@ -244,6 +249,8 @@ export function AuthButton({
 }: {
   children: ReactNode
   busy?: boolean
+  /** The request went through: the spinner becomes a check. */
+  success?: boolean
   /** Replaces the label while the request is in flight. */
   busyLabel?: string
   /** Rest-state glyph after the label — the spinner takes its place while busy. */
@@ -258,8 +265,10 @@ export function AuthButton({
       disabled={busy}
       className="group flex h-11 w-full items-center justify-center gap-2 rounded-soft bg-text text-lg font-semibold text-bg transition-colors hover:bg-text/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-60"
     >
-      {busy && busyLabel ? busyLabel : children}
-      {busy ? (
+      {success ? 'Welcome back' : busy && busyLabel ? busyLabel : children}
+      {success ? (
+        <Check size="1rem" strokeWidth={2.4} className="auth-check" />
+      ) : busy ? (
         <Loader2
           size="0.9375rem"
           strokeWidth={2.2}

@@ -3029,3 +3029,43 @@ button {
 :root[data-animations='off'] .auth-swap > * {
   animation: none;
 }
+
+/* Auth screens: the send-off after a successful sign-in (.auth-leaving is set on
+   the shell for ~650ms before the app replaces the page). The button's spinner
+   becomes a check that pops in, the card lifts away, the identity half dims and
+   the Ember background surges, so the page does not just cut to the app. Still
+   under prefers-reduced-motion and Animations: Off — SignIn skips the wait too. */
+.auth-leaving main {
+  animation: auth-leave 560ms cubic-bezier(0.5, 0, 0.75, 0) 120ms forwards;
+}
+.auth-leaving aside > div:last-child {
+  animation: auth-dim 520ms ease-in forwards;
+}
+.auth-leaving .auth-ember-rise {
+  animation: auth-surge 640ms ease-out forwards;
+}
+.auth-leaving .auth-ember-drift {
+  animation: auth-surge 640ms ease-out 60ms forwards;
+}
+.auth-check {
+  animation: auth-pop 260ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+@keyframes auth-leave {
+  to { opacity: 0; transform: translateY(-12px) scale(0.985); filter: blur(3px); }
+}
+@keyframes auth-dim {
+  to { opacity: 0; transform: translateX(-10px); }
+}
+@keyframes auth-surge {
+  to { opacity: 1; transform: translateY(-18%) scale(1.5); }
+}
+@keyframes auth-pop {
+  from { opacity: 0; transform: scale(0.4); }
+  to { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-leaving main, .auth-leaving aside > div:last-child, .auth-leaving .auth-ember i, .auth-check { animation: none; }
+}
+:root[data-animations='off'] :where(.auth-leaving main, .auth-leaving aside > div:last-child, .auth-leaving .auth-ember i, .auth-check) {
+  animation: none;
+}
