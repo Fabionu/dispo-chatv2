@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { pool } from '../../db/pool.js'
+import { pool, type DbClient } from '../../db/pool.js'
 import { asyncHandler, withTransaction, HttpError } from '../../http.js'
 import {
   getIO,
@@ -13,6 +13,24 @@ import { authorizeRoleManager } from './authz.js'
 import { imageVersion } from '../../util/serveImage.js'
 
 export const membersRouter = Router()
+
+// Number of active admins in a room, counted while HOLDING a lock on each of
+// those rows. A plain count lets two concurrent demotions/removals of different
+// admins each see "two admins" and both commit, leaving none; with the rows
+// locked in a fixed order the second transaction waits, then recounts. Deleted
+// accounts don't count — they can't act as admins.
+async function lockActiveAdmins(client: DbClient, groupId: string): Promise<number> {
+  const { rows } = await client.query(
+    `select gm.user_id
+       from group_members gm
+       join users u on u.id = gm.user_id and u.deleted_at is null
+      where gm.group_id = $1 and gm.role = 'admin'
+      order by gm.user_id
+        for update of gm`,
+    [groupId],
+  )
+  return rows.length
+}
 
 // Load + shape a group's members for the API. Enriched for the group-info
 // panel: group role (admin/member), the user's workspace role (admin/dispatcher
@@ -120,12 +138,7 @@ membersRouter.patch(
 
       // Demotion: never drop below one admin.
       if (currentRole === 'admin' && nextRole === 'member') {
-        const { rows: adminRows } = await client.query<{ count: string }>(
-          `select count(*)::int as count from group_members
-            where group_id = $1 and role = 'admin'`,
-          [groupId],
-        )
-        if (Number(adminRows[0].count) <= 1) throw new HttpError(409, 'last_admin')
+        if ((await lockActiveAdmins(client, groupId)) <= 1) throw new HttpError(409, 'last_admin')
       }
 
       await client.query(
@@ -194,12 +207,7 @@ membersRouter.delete(
 
       // Never remove the last remaining admin (covers self-removal too).
       if (target[0].role === 'admin') {
-        const { rows: adminRows } = await client.query<{ count: string }>(
-          `select count(*)::int as count from group_members
-            where group_id = $1 and role = 'admin'`,
-          [groupId],
-        )
-        if (Number(adminRows[0].count) <= 1) throw new HttpError(409, 'last_admin')
+        if ((await lockActiveAdmins(client, groupId)) <= 1) throw new HttpError(409, 'last_admin')
       }
 
       await client.query(

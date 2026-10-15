@@ -134,6 +134,11 @@ messagesRouter.get(
     const { userId } = req.session!
     const groupId = req.params.id
     const before = typeof req.query.before === 'string' ? req.query.before : null
+    // The cursor goes straight into a timestamptz comparison; a malformed one
+    // would surface as a Postgres error and a 500.
+    if (before !== null && !Number.isFinite(Date.parse(before))) {
+      return res.status(400).json({ error: 'invalid_cursor' })
+    }
     const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100)
 
     // Authorize: must be a member of the group.
@@ -588,6 +593,10 @@ messagesRouter.patch(
           and author_id = $4
           and deleted_at is null
           and kind = 'user'
+          and exists (
+            select 1 from group_members gm
+             where gm.group_id = messages.group_id and gm.user_id = $4
+          )
        returning id, body, edited_at`,
       [parsed.data.body, messageId, groupId, userId],
     )

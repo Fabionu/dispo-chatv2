@@ -6,6 +6,7 @@ import { createAdapter } from '@socket.io/redis-adapter'
 import { createClient } from 'redis'
 import { env, isProd } from './env.js'
 import { pool } from './db/pool.js'
+import { isActiveUser } from './auth.js'
 import { log } from './util/log.js'
 import { createPresenceStore, HEARTBEAT_MS, type PresenceStore } from './presence.js'
 
@@ -156,7 +157,7 @@ export async function initRealtime(httpServer: HttpServer) {
   // The handshake carries the same httpOnly JWT cookie that REST uses.
   // Verify it here; reject the connection cleanly if invalid. We attach
   // userId/workspaceId to socket.data so handlers don't re-decode the JWT.
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     try {
       const raw = socket.handshake.headers.cookie
       if (!raw) return next(new Error('unauthenticated'))
@@ -164,6 +165,8 @@ export async function initRealtime(httpServer: HttpServer) {
       const token = cookies[COOKIE]
       if (!token) return next(new Error('unauthenticated'))
       const payload = jwt.verify(token, env.JWT_SECRET, { algorithms: ['HS256'] }) as SessionPayload
+      // A valid token for a deleted account must not open a socket.
+      if (!(await isActiveUser(payload.userId))) return next(new Error('unauthenticated'))
       socket.data.userId = payload.userId
       socket.data.workspaceId = payload.workspaceId
       return next()

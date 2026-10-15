@@ -292,6 +292,8 @@ const screenCandidateSchema = z.object({
   px: z.number().min(0).max(100000),
 })
 
+const MAX_SNAP_PROBES = 12
+
 const snapCandidatesSchema = z.object({
   candidates: z.array(screenCandidateSchema).min(1).max(40),
   // Current map zoom (logging/diagnostics only — `px` already carries scale).
@@ -986,8 +988,10 @@ hereRouter.post(
     //    returns its whole neighbourhood rather than just its nearest road, so
     //    the pool holds every road near the cursor — including the motorway that
     //    is the nearest road to none of the sampled pixels.
+    // Each probe is a billable HERE call, but the whole snap is one hit on the
+    // per-user limiter: cap the fan-out, keeping the pixels nearest the release.
     const probes = await Promise.all(
-      body.candidates.map((c) =>
+      [...body.candidates].sort((a, b) => a.px - b.px).slice(0, MAX_SNAP_PROBES).map((c) =>
         // A single failed probe degrades to "no roads at this pixel" rather than
         // failing the whole snap (nearbyStreets throws on HERE errors so they're
         // never cached — see its comment).

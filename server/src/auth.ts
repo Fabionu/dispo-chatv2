@@ -1,6 +1,8 @@
 import type { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 import { env, isProd } from './env.js'
+import { pool } from './db/pool.js'
+import { TtlCache } from './util/ttlCache.js'
 
 const COOKIE = 'dispo_session'
 const SEVEN_DAYS = 7 * 24 * 60 * 60
@@ -46,9 +48,39 @@ export function readSession(req: Request): SessionPayload | null {
   }
 }
 
+// A signed token outlives the account it was issued for (stateless 7-day JWT),
+// so deletion has to be checked against the row. Only "still active" is cached,
+// briefly: a hit costs nothing, and a deleted account loses access within the
+// TTL on other instances (immediately on this one — see forgetActiveUser).
+const ACTIVE_TTL_MS = 30_000
+const activeUsers = new TtlCache<true>(5_000, ACTIVE_TTL_MS)
+
+export async function isActiveUser(userId: string): Promise<boolean> {
+  if (activeUsers.get(userId)) return true
+  const { rowCount } = await pool.query(
+    'select 1 from users where id = $1 and deleted_at is null',
+    [userId],
+  )
+  if (!rowCount) return false
+  activeUsers.set(userId, true)
+  return true
+}
+
+export function forgetActiveUser(userId: string) {
+  activeUsers.delete(userId)
+}
+
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const session = readSession(req)
   if (!session) return res.status(401).json({ error: 'unauthenticated' })
-  req.session = session
-  next()
+  isActiveUser(session.userId)
+    .then((active) => {
+      if (!active) {
+        clearSession(res)
+        return res.status(401).json({ error: 'unauthenticated' })
+      }
+      req.session = session
+      next()
+    })
+    .catch(next)
 }

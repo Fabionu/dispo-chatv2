@@ -1,4 +1,5 @@
 import type { NextFunction, Request, RequestHandler, Response } from 'express'
+import { ZodError } from 'zod'
 import { pool, type DbClient } from './db/pool.js'
 
 // A failure that maps cleanly to an HTTP response. Throw it from anywhere in
@@ -57,6 +58,10 @@ export function errorHandler(
 ) {
   if (err instanceof HttpError) {
     return res.status(err.status).json({ error: err.code, ...(err.extra ?? {}) })
+  }
+  // A schema .parse() that threw is the caller's malformed input, not a fault.
+  if (err instanceof ZodError) {
+    return res.status(400).json({ error: 'invalid_input' })
   }
   console.error('unhandled error:', err)
   res.status(500).json({ error: 'server_error' })

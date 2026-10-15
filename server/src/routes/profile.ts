@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { Router } from 'express'
 import { z } from 'zod'
 import { pool } from '../db/pool.js'
-import { requireAuth, clearSession } from '../auth.js'
+import { requireAuth, clearSession, forgetActiveUser } from '../auth.js'
+import { getIOIfReady, roomForUser } from '../realtime.js'
 import { asyncHandler, withTransaction } from '../http.js'
 import { uploadSingle, isImage, MAX_IMAGE_BYTES } from '../middleware/upload.js'
 import { saveBuffer, deleteFile } from '../storage.js'
@@ -144,6 +145,9 @@ profileRouter.delete(
   asyncHandler(async (req, res) => {
     const userId = req.session!.userId
     const { oldAvatarPath } = await withTransaction((client) => anonymizeUser(client, userId))
+    forgetActiveUser(userId)
+    // Drop every open socket of this account, on any instance.
+    getIOIfReady()?.in(roomForUser(userId)).disconnectSockets(true)
     if (oldAvatarPath) await deleteFile(oldAvatarPath)
     clearSession(res)
     res.json({ ok: true })

@@ -8,7 +8,6 @@ import { getSocket } from '../../lib/socket'
 import {
   bestInsertionIndex,
   haversineMeters,
-  nearestPointOnPath,
   routeCourseNear,
 } from '../../lib/here/geo'
 import { computeTripRoute, tripRouteFromTruckRoute, type TripRoute } from '../../lib/tripRoute'
@@ -107,98 +106,23 @@ function coordSig(stops: VehicleStop[]): string {
  *  oncoming carriageway. Kept identical to the planner's. */
 const DRAG_COURSE_WINDOW_M = 2000
 
-/** A ping further than this from the planned route is a genuine detour, not a
- *  sampling artefact, and must not be dragged onto a road it never used. */
-const ROUTE_MATCH_MAX_M = 180
-
-/** Two consecutive pings that cannot be road-matched may still be joined
- *  directly while they are this close — over a short hop a straight line is
- *  honest. Beyond it we have no idea which way the truck went, so the line
- *  breaks instead of cutting across country. */
-const DIRECT_JOIN_MAX_M = 400
-
-// Turn one continuous run of driver pings into drawable geometry.
-//
-// Three cases per consecutive pair, in order of how much we know:
-//   1. both ends match the planned route and the second is further along it →
-//      emit the ROAD geometry between them, so minute-spaced pings follow the
-//      carriageway instead of chording across its bends;
-//   2. no usable match (a detour, a service area, a road the plan never used)
-//      but the two pings are close together → join them directly; over a few
-//      hundred metres a straight line claims nothing untrue;
-//   3. anything else → break. This is the case that matters: it is where the
-//      old code drew a diagonal across fields, and where the honest answer is
-//      to draw nothing at all.
-function roadMatchedRun(points: DriverTrailPoint[], routePath: LatLng[]): LatLng[][] {
-  if (points.length < 2) return []
-
-  const cumulative = new Array<number>(routePath.length)
-  if (routePath.length >= 2) {
-    cumulative[0] = 0
-    for (let i = 1; i < routePath.length; i++) {
-      cumulative[i] = cumulative[i - 1] + haversineMeters(routePath[i - 1], routePath[i])
-    }
-  }
-
-  const matched = points.map((point) => {
-    if (routePath.length < 2) return null
-    const match = nearestPointOnPath(point, routePath, cumulative)
-    return match && match.meters <= ROUTE_MATCH_MAX_M ? match : null
-  })
-
-  const runs: LatLng[][] = []
-  let current: LatLng[] = [positionOf(points[0], matched[0])]
-
-  for (let i = 1; i < points.length; i++) {
-    const previousMatch = matched[i - 1]
-    const match = matched[i]
-
-    // Case 1 — both on the planned route, and moving forward along it.
-    if (previousMatch && match && match.along >= previousMatch.along - 50) {
-      for (let v = 1; v < routePath.length; v++) {
-        if (cumulative[v] > previousMatch.along && cumulative[v] < match.along) {
-          current.push(routePath[v])
-        }
+/** Every recorded run of one driver → the polylines to draw for them, exactly
+ *  where the pings were. The server's own segmentation is honoured (each run is
+ *  a stretch with continuous coverage, so joining its pings is honest); nothing
+ *  is snapped to the planned route, because the whole point of this layer is to
+ *  show where the truck ACTUALLY went next to where it was PLANNED to go. */
+function drivenTrail(points: DriverTrailPoint[]): LatLng[][] {
+  return trailSegments(points)
+    .map((run) => {
+      const path: LatLng[] = []
+      for (const p of run) {
+        const last = path[path.length - 1]
+        const at = { lat: p.lat, lng: p.lng }
+        if (!last || haversineMeters(last, at) >= 1) path.push(at)
       }
-      pushDistinct(current, match.at)
-      continue
-    }
-
-    // Case 2 — a short hop we can join directly.
-    if (haversineMeters(points[i - 1], points[i]) <= DIRECT_JOIN_MAX_M) {
-      pushDistinct(current, positionOf(points[i], match))
-      continue
-    }
-
-    // Case 3 — the truck went somewhere we cannot account for. End the line.
-    if (current.length >= 2) runs.push(current)
-    current = [positionOf(points[i], match)]
-  }
-
-  if (current.length >= 2) runs.push(current)
-  return runs
-}
-
-/** The drawn position of a ping: its road-matched point when it has one, its
- *  raw coordinate otherwise. */
-function positionOf(
-  point: DriverTrailPoint,
-  match: { at: LatLng } | null,
-): LatLng {
-  return match ? match.at : { lat: point.lat, lng: point.lng }
-}
-
-function pushDistinct(path: LatLng[], point: LatLng) {
-  const last = path[path.length - 1]
-  if (!last || haversineMeters(last, point) >= 1) path.push(point)
-}
-
-/** Every recorded run of one driver → the polylines to draw for them. The
- *  server's own segmentation is honoured first (each run is already a stretch
- *  with continuous coverage), then each run is matched and may break further
- *  where the geometry cannot support a line. */
-function roadMatchedTrail(points: DriverTrailPoint[], routePath: LatLng[]): LatLng[][] {
-  return trailSegments(points).flatMap((run) => roadMatchedRun(run, routePath))
+      return path
+    })
+    .filter((path) => path.length >= 2)
 }
 
 // A fresh intermediate stop created by dropping a point on the map. Carries only
@@ -463,7 +387,7 @@ export default function TripRouteMap({
       const age = loc ? now - Date.parse(loc.recordedAt) : Number.POSITIVE_INFINITY
       const recorded = track?.drivers.some((d) => d.driverId === userId)
       if (!recorded && age > DRIVER_EXPIRE_MS) continue
-      const segments = roadMatchedTrail(points, routePath)
+      const segments = drivenTrail(points)
       if (!segments.length) continue
       out.push({
         id: userId,
@@ -472,7 +396,7 @@ export default function TripRouteMap({
       })
     }
     return out
-  }, [driverTrailPoints, driverLocs, now, routePath, track])
+  }, [driverTrailPoints, driverLocs, now, track])
 
   // ── Distance, progress and timing ─────────────────────────────────────────
   // Driven kilometres come from the server (the recorded total, then whatever

@@ -43,6 +43,10 @@ messageActionsRouter.post(
             and deleted_at is null
             and kind = 'user'
             and created_at > now() - interval '${DELETE_WINDOW_MINUTES} minutes'
+            and exists (
+              select 1 from group_members gm
+               where gm.group_id = messages.group_id and gm.user_id = $1
+            )
          returning id, deleted_at, deleted_by, created_at`,
         [userId, messageId, groupId],
       )
