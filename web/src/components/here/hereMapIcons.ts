@@ -1,6 +1,6 @@
 import type { RouteMarker } from '../../lib/here/types'
 import type { WorkspacePlaceCategory } from '../../lib/types'
-import { PLACE_CATEGORY_COLOR, PLACE_CATEGORY_GLYPH } from '../../lib/savedPlaces'
+import { PLACE_CATEGORY_COLOR } from '../../lib/savedPlaces'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -182,6 +182,15 @@ export function destSvg(): string {
   return `<svg width="${ENDPOINT_ICON_SIZE}" height="${ENDPOINT_ICON_SIZE}" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="10" r="10" fill="${ROUTE_HALO}"/><circle cx="10" cy="10" r="8" fill="${ROUTE_HALO}" stroke="${MARK_INK}" stroke-width="2"/><rect x="6.23" y="5.22" width="1.56" height="9.57" fill="${MARK_INK}"/><rect x="7.79" y="5.22" width="6.07" height="5.52" fill="${MARK_INK}"/></svg>`
 }
 
+// A via point: the spot a route-line drag pulled the route through. Not a stop,
+// so it is a bare ring — the numbered stop's plate and ink without the number.
+// 12px against the stop's 16: smaller, so the two never read as one thing.
+export const VIA_ICON_SIZE = 12
+export const VIA_ICON_ANCHOR = 6
+export function viaSvg(): string {
+  return `<svg width="${VIA_ICON_SIZE}" height="${VIA_ICON_SIZE}" viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg"><circle cx="6" cy="6" r="6" fill="${ROUTE_HALO}"/><circle cx="6" cy="6" r="4" fill="${ROUTE_HALO}" stroke="${MARK_INK}" stroke-width="1.75"/></svg>`
+}
+
 // Small translucent dot shown under the cursor while dragging the route line.
 // Kept tiny so it marks the release point without covering the road beneath it.
 export function ghostSvg(): string {
@@ -202,6 +211,9 @@ export function iconFor(H: any, marker: RouteMarker): any {
   }
   if (marker.kind === 'destination') {
     return new H.map.Icon(destSvg(), { anchor: new H.math.Point(ENDPOINT_ICON_ANCHOR, ENDPOINT_ICON_ANCHOR) })
+  }
+  if (marker.kind === 'via') {
+    return new H.map.Icon(viaSvg(), { anchor: new H.math.Point(VIA_ICON_ANCHOR, VIA_ICON_ANCHOR) })
   }
   return new H.map.Icon(stopSvg(marker.label ?? ''), { anchor: new H.math.Point(STOP_ICON_ANCHOR, STOP_ICON_ANCHOR) })
 }
@@ -238,10 +250,29 @@ export function iconFor(H: any, marker: RouteMarker): any {
 // engines wrap it differently (an H.map.Icon here, a data URL there) but the
 // picture is one function — a saved place must look the same whichever basemap
 // is under it, or toggling HGV would appear to change what was saved.
+// One pictogram per category, drawn on lucide's 24-unit grid and stroked white.
+// A letter said "Parking" only to someone who knew the legend; a pump, a wrench
+// and a warehouse say it at a glance (user, 2026-10-15). `other` has no picture
+// to offer, so it is the plain dot.
+const PLACE_CATEGORY_PICTOGRAM: Record<WorkspacePlaceCategory, string | null> = {
+  parking: 'M8 21V4h5.5a4.5 4.5 0 0 1 0 9H8',
+  depot: 'M3 21V9l9-6 9 6v12M3 21h18M9 21v-7h6v7',
+  fuel: 'M4 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16M3 21h12M14 10h2a2 2 0 0 1 2 2v4a2 2 0 0 0 4 0V8l-3-3',
+  customer: 'M5 21V4h10v17M15 9h4v12M9 8h2M9 12h2M9 16h2M3 21h18',
+  service: 'M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z',
+  customs: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4',
+  other: null,
+}
+
 export function savedPlaceSvg(category: WorkspacePlaceCategory): string {
   const color = PLACE_CATEGORY_COLOR[category]
-  const glyph = PLACE_CATEGORY_GLYPH[category]
-  return `<svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><rect width="18" height="18" fill="${ROUTE_HALO}"/><rect x="2" y="2" width="14" height="14" fill="${color}"/><text x="9" y="9.2" text-anchor="middle" dominant-baseline="central" font-family="Inter, system-ui, sans-serif" font-size="9.5" font-weight="600" fill="${ROUTE_HALO}">${glyph}</text></svg>`
+  const path = PLACE_CATEGORY_PICTOGRAM[category]
+  // 18px: a white plate, a 14px round core in the category ink, and the picture
+  // scaled to ~9px inside it (24 → 9.2 units, centred).
+  const mark = path
+    ? `<g transform="translate(4.4 4.4) scale(0.3833)" fill="none" stroke="${ROUTE_HALO}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"/></g>`
+    : `<circle cx="9" cy="9" r="2.2" fill="${ROUTE_HALO}"/>`
+  return `<svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="9" r="9" fill="${ROUTE_HALO}"/><circle cx="9" cy="9" r="7" fill="${color}"/>${mark}</svg>`
 }
 
 export function savedPlaceIconFor(H: any, category: WorkspacePlaceCategory): any {

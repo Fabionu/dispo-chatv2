@@ -294,7 +294,7 @@ export function FilterTabBar({
       ref={trackRef}
       role="group"
       aria-label="Filter conversations"
-      className="relative mx-3 flex shrink-0 items-stretch gap-0.5 rounded-soft border border-line p-[3px]"
+      className="relative mx-3 flex shrink-0 items-stretch gap-0.5 rounded-soft border border-line p-0.5"
     >
       {children}
       {rect && (
@@ -304,7 +304,7 @@ export function FilterTabBar({
           // first placement still: a transition has no previous value to run
           // from on the frame an element is inserted, so the bar appears under
           // the live tab and only travels on later changes.
-          className="travelling-marker pointer-events-none absolute left-[3px] top-[3px] rounded-btn bg-text motion-reduce:transition-none"
+          className="travelling-marker pointer-events-none absolute left-0.5 top-0.5 rounded-btn bg-text motion-reduce:transition-none"
           style={{
             width: rect.w,
             height: rect.h,
@@ -314,7 +314,7 @@ export function FilterTabBar({
             // 2026-08-21), so the bar is now the only mark on the row and simply
             // underlines the live tab. The -1 keeps it inside the row's box
             // rather than hanging a pixel below it.
-            transform: `translate(${rect.x - 3}px, ${rect.y - 3}px)`,
+            transform: `translate(${rect.x - 2}px, ${rect.y - 2}px)`,
           }}
         />
       )}
@@ -355,7 +355,7 @@ export function FilterTab({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`eyebrow filter-tab relative z-10 inline-flex flex-1 items-center justify-center gap-1.5 rounded-btn py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+      className={`eyebrow filter-tab relative z-10 inline-flex flex-1 items-center justify-center gap-1.5 rounded-btn py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
         active ? 'filter-tab-active' : 'hover:text-text'
       }`}
     >
@@ -393,7 +393,7 @@ export function ArchiveToggle({
       // the tabs beside it, so its bottom edge has to BE their bottom edge. At
       // h-6 it sat two pixels shy of them and the bar jogged upward on its way
       // in.
-      className={`relative z-10 w-9 self-stretch flex items-center justify-center rounded-btn transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+      className={`relative z-10 w-7 self-stretch flex items-center justify-center rounded-btn transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
         active ? 'text-bg' : 'text-faint hover:text-text'
       }`}
     >

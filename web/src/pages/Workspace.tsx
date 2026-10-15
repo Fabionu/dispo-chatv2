@@ -705,7 +705,21 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         // the Workspace entry above means — so the two never light up together.
         chatActive={sidebarView === 'list' && !inboxActive}
         workspaceActive={sidebarView === 'list' && inboxActive}
-        settingsActive={sidebarView === 'settings'}
+        settingsActive={sidebarView === 'account' || sidebarView === 'settings'}
+        me={{
+          id: user.id,
+          name: user.displayName,
+          hasAvatar: cachedProfile?.hasAvatar,
+          avatarVersion: cachedProfile?.avatarVersion,
+        }}
+        profileActive={sidebarView === 'profile'}
+        onOpenProfile={() => {
+          if (sidebarCollapsed) {
+            setStoredSidebarCollapsed(false)
+            setSidebarCollapsed(false)
+          }
+          openSidebarView('profile')
+        }}
         onToggleSidebar={toggleSidebar}
         // Back to the conversation list, and ONLY that. It deliberately does
         // not touch `selection`: coming back from Settings or the inbox should
@@ -730,7 +744,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             setStoredSidebarCollapsed(false)
             setSidebarCollapsed(false)
           }
-          openSidebarView('settings')
+          openSidebarView('account')
         }}
       />
 

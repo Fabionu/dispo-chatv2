@@ -142,7 +142,7 @@ export type TruckRoute = {
 // A waypoint marker to render on the map, in route order. `position` is the
 // coordinate the marker sits on (the snapped one once a route exists). `label`
 // is the badge text for intermediate stops (e.g. "1", "2").
-export type RouteMarkerKind = 'origin' | 'stop' | 'destination'
+export type RouteMarkerKind = 'origin' | 'stop' | 'via' | 'destination'
 export type RouteMarker = {
   id: string
   kind: RouteMarkerKind
@@ -208,6 +208,12 @@ export type RoutePoint = {
   // The searched place's extent (see LatLngExtent). Set by search only; a
   // map-placed or dragged point has none.
   viewport?: LatLngExtent
+  // A point the route is pulled THROUGH (a route-line drag) rather than a stop
+  // the user planned. It is routed like any intermediate stop, but it stays out
+  // of the itinerary cards and the stop numbering and is drawn as a small dot;
+  // its map popover can promote it to a real stop. Google Maps behaves the same
+  // way. Only ever set on role 'stop'.
+  via?: boolean
 }
 
 // A routing waypoint sent to the proxy: a coordinate plus an optional `course`

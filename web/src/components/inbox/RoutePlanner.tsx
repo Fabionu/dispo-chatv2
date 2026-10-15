@@ -351,6 +351,9 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
   const start = useMemo(() => points.find((p) => p.role === 'start') ?? null, [points])
   const destination = useMemo(() => points.find((p) => p.role === 'destination') ?? null, [points])
   const stops = useMemo(() => points.filter((p) => p.role === 'stop'), [points])
+  // The stops the user planned: what the cards list and what the map numbers.
+  // A `via` point (a route-line drag) is routed through but is not one of them.
+  const listStops = useMemo(() => stops.filter((s) => !s.via), [stops])
   // Drag-to-reorder is offered once there are ≥2 committed points — including the
   // start and finish, so the user can reorder the full route (not just the
   // intermediate stops). With a single point there is nothing to reorder.
@@ -584,7 +587,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
     if (stops.length >= MAX_STOPS) return
     const req = routeDragRequest(section, release, zoom)
     const course = req?.waypoints[req.dragged]?.course
-    // OPTIMISTIC: the stop appears at the raw release point the instant the
+    // OPTIMISTIC: the point appears at the raw release point the instant the
     // ghost is dropped — the round-trip must never leave dead air between
     // release and feedback. The resolved drag then patches the SAME stop by id.
     const id = uid()
@@ -596,6 +599,8 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
         source: 'drag',
         snapped: false,
         course,
+        // Pulled through, not planned: no card, no number (see RoutePoint.via).
+        via: true,
       },
       section,
     )
@@ -683,15 +688,16 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
     const out: RouteMarker[] = []
     if (start)
       out.push({ id: start.id, kind: 'origin', position: activeSnap?.origin ?? start.coordinates, viewport: start.viewport })
-    stops.forEach((s, i) =>
-      out.push({
-        id: s.id,
-        kind: 'stop',
-        position: activeSnap?.stops[i] ?? s.coordinates,
-        label: String(i + 1),
-        viewport: s.viewport,
-      }),
-    )
+    let stopNumber = 0
+    stops.forEach((s, i) => {
+      const position = activeSnap?.stops[i] ?? s.coordinates
+      if (s.via) {
+        out.push({ id: s.id, kind: 'via', position })
+        return
+      }
+      stopNumber += 1
+      out.push({ id: s.id, kind: 'stop', position, label: String(stopNumber), viewport: s.viewport })
+    })
     if (destination)
       out.push({
         id: destination.id,
@@ -779,7 +785,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
         const role: RoutePointRole =
           i === 0 ? 'start' : i === next.length - 1 ? 'destination' : 'stop'
         if (p.role === role && p.course === undefined) return p
-        return { ...p, role, course: undefined }
+        return { ...p, role, course: undefined, via: role === 'stop' ? p.via : undefined }
       })
     })
     if (route && remaining >= 2) recalcAfterDragRef.current = true
@@ -822,7 +828,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                 ? 'destination'
                 : 'stop'
         if (p.role === role && p.course === undefined) return p
-        return { ...p, role, course: undefined }
+        return { ...p, role, course: undefined, via: role === 'stop' ? p.via : undefined }
       })
     })
   }
@@ -1108,6 +1114,13 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
     setMarkerMenu(null)
   }
 
+  // A route point becomes a planned stop: it joins the cards and the numbering.
+  // The route does not change — the point was already on it.
+  function promoteViaToStop(id: string) {
+    setMarkerMenu(null)
+    setPoints((cur) => cur.map((p) => (p.id === id ? { ...p, via: undefined } : p)))
+  }
+
   // Remove a stop from the map popover, then recalc through the remaining points.
   function removeStopFromMap(id: string) {
     setMarkerMenu(null)
@@ -1337,6 +1350,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
     | { kind: 'slot'; key: string; role: 'start' | 'destination' }
     | { kind: 'add'; key: string }
 
+  const viaCount = stops.length - listStops.length
   const showDestinationSlot = !destination && (Boolean(start) || stops.length > 0)
   const showAddStop = Boolean(start && destination) && stops.length < MAX_STOPS
 
@@ -1346,7 +1360,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
       ? { kind: 'point', key: start.id, point: start, role: 'start' }
       : { kind: 'slot', key: 'slot-start', role: 'start' },
   )
-  stops.forEach((s, i) =>
+  listStops.forEach((s, i) =>
     plannerRows.push({ kind: 'point', key: s.id, point: s, role: 'stop', index: i + 1 }),
   )
   if (showAddStop) plannerRows.push({ kind: 'add', key: 'add-stop' })
@@ -1830,11 +1844,14 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                 under the itinerary does: the point count and the "working"
                 spinner on the left, Clear and Collapse on the right. It goes
                 the moment a route lands and they move up into the readout. */}
-            {!route && (
+            {/* Empty (nothing entered, nothing working): no strip at all, so the
+                card is just the Start field — and no Collapse button with it
+                (user, 2026-10-15). It comes back with the first point. */}
+            {!route && (points.length > 0 || loading) && (
               <div className="flex h-8 items-center justify-between gap-2 pl-3 pr-1">
                 <span className="flex min-w-0 items-center gap-2 text-xs tabular-nums text-faint">
                   {loading && <Spinner size={12} className="shrink-0 text-muted" />}
-                  {points.length > 0 && `${points.length} ${points.length === 1 ? 'point' : 'points'}`}
+                  {points.length > 0 && `${points.length - viaCount} ${points.length - viaCount === 1 ? 'point' : 'points'}`}
                 </span>
                 <div className="flex items-center gap-0.5">
                   {points.length > 0 && (
@@ -2181,7 +2198,9 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
               ? 'Start'
               : markerMenu.role === 'destination'
                 ? 'Destination'
-                : `Stop ${stops.findIndex((s) => s.id === markerMenu.id) + 1}`
+                : point.via
+                  ? 'Route point'
+                  : `Stop ${listStops.findIndex((s) => s.id === markerMenu.id) + 1}`
           return (
             <div
               id="route-marker-menu"
@@ -2198,13 +2217,19 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                 <span className={menuIconClass()}><Copy {...MENU_GLYPH} /></span>
                 Copy coordinates
               </button>
+              {markerMenu.role === 'stop' && point.via && (
+                <button onClick={() => promoteViaToStop(markerMenu.id)} className={menuItemClass()}>
+                  <span className={menuIconClass()}><MapPin {...MENU_GLYPH} /></span>
+                  Make it a stop
+                </button>
+              )}
               {markerMenu.role === 'stop' ? (
                 <button
                   onClick={() => removeStopFromMap(markerMenu.id)}
                   className={menuItemClass('danger')}
                 >
                   <span className={menuIconClass('danger')}><Trash2 {...MENU_GLYPH} /></span>
-                  Remove stop
+                  {point.via ? 'Remove point' : 'Remove stop'}
                 </button>
               ) : (
                 <button

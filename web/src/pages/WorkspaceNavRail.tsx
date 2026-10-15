@@ -1,3 +1,4 @@
+import Avatar from '../components/Avatar'
 import {
   LayoutGrid,
   MessagesSquare,
@@ -11,7 +12,12 @@ type Props = {
   collapsed: boolean
   chatActive: boolean
   workspaceActive: boolean
+  // Settings is the 'My account' entry: the gear opens Account (user, 2026-10-15).
   settingsActive: boolean
+  // The signed-in user, drawn as the rail's profile button.
+  me: { id: string; name: string; hasAvatar?: boolean; avatarVersion?: string | null }
+  profileActive: boolean
+  onOpenProfile: () => void
   onToggleSidebar: () => void
   onOpenChat: () => void
   onOpenWorkspace: () => void
@@ -29,6 +35,9 @@ export default function WorkspaceNavRail({
   chatActive,
   workspaceActive,
   settingsActive,
+  me,
+  profileActive,
+  onOpenProfile,
   onToggleSidebar,
   onOpenChat,
   onOpenWorkspace,
@@ -65,9 +74,30 @@ export default function WorkspaceNavRail({
       />
       <div className="flex-1" />
 
+      {/* My profile: the user's own photo (initials when there is none). */}
+      <button
+        type="button"
+        title="My profile"
+        aria-label="My profile"
+        aria-current={profileActive ? 'page' : undefined}
+        onClick={onOpenProfile}
+        className={`rounded-btn flex h-9 w-9 shrink-0 items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+          profileActive ? 'bg-white/10' : 'hover:bg-white/8'
+        }`}
+      >
+        <Avatar
+          userId={me.id}
+          name={me.name}
+          size={26}
+          hasAvatar={me.hasAvatar}
+          version={me.avatarVersion}
+          fallback="initials"
+        />
+      </button>
+
       <NavButton
         icon={Settings}
-        label="Settings"
+        label="My account"
         active={settingsActive}
         onClick={onOpenSettings}
       />

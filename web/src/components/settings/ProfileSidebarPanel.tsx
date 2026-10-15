@@ -1,15 +1,16 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { Eye, Loader2, Lock, Plus, Trash2, X } from 'lucide-react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Check, ChevronDown, Eye, Loader2, Lock, Plus, Trash2, X } from 'lucide-react'
 import type { AvailabilityStatus, Profile, Role } from '../../lib/types'
 import { api, type ProfilePatch } from '../../lib/api'
 import { PanelHeader } from './panelChrome'
-import { ProfileHero, SIDEBAR_PANEL_SURFACE } from './profileChrome'
-import { Segmented, SettingsSection } from './sectionChrome'
+import { SIDEBAR_PANEL_SURFACE } from './profileChrome'
+import { SettingsSection } from './sectionChrome'
+import Avatar from '../Avatar'
+import { MENU_CONTAINER, menuItemClass } from '../menuStyles'
 import { avatarUrl, clearAvatarCache } from '../../lib/avatarCache'
-import { AVAILABILITY } from '../../lib/availability'
+import { AVAILABILITY, statusMeta } from '../../lib/availability'
 import { RowMeta } from '../../pages/sidebarBits'
 import { usePhotoEditor } from '../AvatarPhotoEditor'
-import { initials } from '../messages/messageUtils'
 import { EditableField } from '../forms'
 import { useAuth } from '../../auth/AuthContext'
 import AvatarCropModal from './AvatarCropModal'
@@ -219,49 +220,66 @@ export default function ProfileSidebarPanel({
           <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 pt-4 pb-8">
             {/* Identity — the photo is the hero. Change/remove via the pencil
                 pinned to the banner; the banner itself opens the lightbox. */}
-            <ProfileHero
-              photo={
-                profile.hasAvatar
-                  ? {
-                      src: avatarUrl('user', profile.id, profile.avatarVersion),
-                      alt: `${profile.displayName} profile photo`,
-                    }
-                  : null
-              }
-              fallback={
-                <span className="text-[76px] font-semibold tracking-[2px]">
-                  {initials(profile.displayName)}
-                </span>
-              }
-              onPhotoClick={editor.openPreview}
-              overlay={editor.optionsButton}
-              title={profile.displayName}
-              subtitle={<RowMeta segments={[ROLE_LABEL[profile.role], profile.jobTitle ?? '']} whole />}
-              error={error}
-            />
+            {/* Compact identity (user, 2026-10-15): the 420px banner was mostly an
+                empty gradient. A 96px photo carries the picture, the Options
+                pencil rides its corner, and the status pill below the name IS
+                the availability control — there is no separate Availability
+                section. */}
+            <div className="flex items-center gap-[1.125rem] px-1 pb-6 pt-2">
+              <div className="relative shrink-0">
+                {editor.openPreview ? (
+                  <button
+                    type="button"
+                    onClick={editor.openPreview}
+                    aria-label="View your profile photo"
+                    className="block rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                  >
+                    <Avatar
+                      userId={profile.id}
+                      name={profile.displayName}
+                      size={96}
+                      version={profile.avatarVersion}
+                      hasAvatar={profile.hasAvatar}
+                      fallback="initials"
+                    />
+                  </button>
+                ) : (
+                  <Avatar
+                    userId={profile.id}
+                    name={profile.displayName}
+                    size={96}
+                    version={profile.avatarVersion}
+                    hasAvatar={profile.hasAvatar}
+                    fallback="initials"
+                  />
+                )}
+                <div className="absolute -bottom-1 -right-1 origin-bottom-right scale-75">
+                  {editor.optionsButton}
+                </div>
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="break-words text-3xl font-bold leading-tight tracking-[-0.02em]">
+                  {profile.displayName}
+                </h2>
+                <div className="mt-1 text-base text-muted">
+                  <RowMeta segments={[ROLE_LABEL[profile.role], profile.jobTitle ?? '']} whole />
+                </div>
+                {!isDriver && (
+                  <AvailabilityPill
+                    value={availability}
+                    away={away}
+                    onChange={(v) => void changeAvailability(v)}
+                  />
+                )}
+                {(error || statusError) && (
+                  <p className="mt-2 text-sm leading-[1.4] text-alert">{error ?? statusError}</p>
+                )}
+              </div>
+            </div>
+            <div className="border-t border-line" />
             {editor.chrome}
 
             <div className="px-1">
-              {!isDriver && (
-                <SettingsSection
-                  title="Availability"
-                  description={
-                    away
-                      ? 'Shown next to your name across the company. You show as Away right now, because you are idle or this tab is hidden.'
-                      : 'Shown next to your name across the company. While you are idle or this tab is hidden, you show as Away.'
-                  }
-                >
-                  <Segmented
-                    fill
-                    label="Availability"
-                    value={availability}
-                    options={AVAILABILITY.map((a) => ({ value: a.value, label: a.label, dot: a.color }))}
-                    onChange={(v) => void changeAvailability(v as AvailabilityStatus)}
-                  />
-                  {statusError && <p className="text-sm text-alert">{statusError}</p>}
-                </SettingsSection>
-              )}
-
               <SettingsSection
                 title="Contact details"
                 description="Colleagues and partners see these on your card."
@@ -389,6 +407,77 @@ export default function ProfileSidebarPanel({
 // Languages as tags: the native one first (marked), then the others, each
 // removable; "Add language" opens suggestions plus a field for anything else.
 // Every change saves at once — there is no form to submit.
+// The status pill under the name — and the only availability control on this
+// panel. A menu button: the pill shows the current status, the menu lists the
+// three the user can set. While auto-away is in force the pill says so.
+function AvailabilityPill({
+  value,
+  away,
+  onChange,
+}: {
+  value: AvailabilityStatus
+  away?: boolean
+  onChange: (next: AvailabilityStatus) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    function onDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+  const current = statusMeta(value)
+  return (
+    <div className="relative mt-2.5 inline-block" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`Availability: ${current.label}`}
+        title="Shown next to your name across the company. You show as Away while idle or when this tab is hidden."
+        className="inline-flex h-[1.875rem] items-center gap-2 rounded-soft border border-line pl-3 pr-2.5 text-base font-medium transition-colors hover:bg-white/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+      >
+        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: current.color }} />
+        {current.label}
+        {away && <span className="text-sm font-normal text-muted">· Away now</span>}
+        <ChevronDown size="0.875rem" strokeWidth={2} className="text-muted" />
+      </button>
+      {open && (
+        <div role="menu" className={`absolute left-0 top-[calc(100%+6px)] z-20 min-w-[11rem] ${MENU_CONTAINER}`}>
+          {AVAILABILITY.map((a) => (
+            <button
+              key={a.value}
+              type="button"
+              role="menuitemradio"
+              aria-checked={a.value === value}
+              onClick={() => {
+                setOpen(false)
+                onChange(a.value)
+              }}
+              className={menuItemClass()}
+            >
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: a.color }} />
+              <span className="flex-1">{a.label}</span>
+              {a.value === value && <Check size="0.875rem" strokeWidth={2} className="text-muted" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function LanguagesSetting({
   native,
   others,

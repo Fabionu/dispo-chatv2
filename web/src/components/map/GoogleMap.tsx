@@ -12,6 +12,8 @@ import {
   ROUTE_SPINE,
   STOP_ICON_ANCHOR,
   STOP_ICON_SIZE,
+  VIA_ICON_ANCHOR,
+  VIA_ICON_SIZE,
   destSvg,
   ghostSvg,
   originSvg,
@@ -19,6 +21,7 @@ import {
   routeStrokeWidths,
   savedPlaceSvg,
   stopSvg,
+  viaSvg,
 } from '../here/hereMapIcons'
 import {
   DEFAULT_CENTER,
@@ -70,6 +73,13 @@ function markerIcon(g: typeof google, marker: RouteMarker): google.maps.Icon {
   }
   if (marker.kind === 'origin') return { url: svgUrl(originSvg()), ...endpoint }
   if (marker.kind === 'destination') return { url: svgUrl(destSvg()), ...endpoint }
+  if (marker.kind === 'via') {
+    return {
+      url: svgUrl(viaSvg()),
+      anchor: new g.maps.Point(VIA_ICON_ANCHOR, VIA_ICON_ANCHOR),
+      scaledSize: new g.maps.Size(VIA_ICON_SIZE, VIA_ICON_SIZE),
+    }
+  }
   return {
     url: svgUrl(stopSvg(marker.label ?? '')),
     anchor: new g.maps.Point(STOP_ICON_ANCHOR, STOP_ICON_ANCHOR),
@@ -1515,6 +1525,9 @@ export default function GoogleMap({
     const g = gRef.current
     const map = mapRef.current
     if (!g || !map || path.length < 2) return false
+    // Never two sweeps at once: a second one would orphan the first's head dot
+    // (it is only removed through revealRef, which holds one).
+    cancelReveal()
 
     const anim = thinPath(path, REVEAL_MAX_POINTS)
     // Cumulative distance drives the sweep, so it advances at a constant ground
@@ -1596,6 +1609,12 @@ export default function GoogleMap({
 
     const sig = routeSignature(routePolylines)
     const routeChanged = sig !== drawnRouteSigRef.current
+    // Was a route on the map before this redraw? An EDIT to a drawn route (a
+    // stop added, a point dragged, a via released) must not sweep again: the
+    // line is already there, and replaying the sweep for every edit made the
+    // route re-animate on each change and leave the travelling dot behind
+    // (user, 2026-10-15). Only a route appearing from nothing is revealed.
+    const hadRoute = routeObjsRef.current.length > 0
     drawnRouteSigRef.current = sig
     // This redraw is not for a new route — a label landed, a marker moved back —
     // while a sweep of THIS route is still in flight. Let it finish over the
@@ -1756,7 +1775,7 @@ export default function GoogleMap({
     // for a CHANGED route as well as a new one — editing stops is exactly when
     // you want to watch where the route now goes — but never after a drag.
     const revealing =
-      routeChanged && all.length >= 2 && !isHandEdit && !keepHandedOffView && routeMotionAllowed()
+      routeChanged && !hadRoute && all.length >= 2 && !isHandEdit && !keepHandedOffView && routeMotionAllowed()
     if (revealing && startReveal(all)) return
     if (revealInFlight) {
       showRouteStrokes(false)
@@ -1841,7 +1860,7 @@ export default function GoogleMap({
         icon: markerIcon(g, marker),
         draggable: objectsDraggable,
         optimized: false,
-        zIndex: marker.kind === 'stop' ? 20 : 21,
+        zIndex: marker.kind === 'stop' || marker.kind === 'via' ? 20 : 21,
         title: marker.label,
       })
       m.addListener('click', () => {

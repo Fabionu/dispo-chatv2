@@ -490,7 +490,9 @@ html[data-density-mode='manual'][data-density='comfortable'] {
   --sidebar-meta-font-size: clamp(14.42px, calc((11.28px + 0.22vw) * var(--ui-scale)), 18.75px);
   --sidebar-section-font-size: clamp(12.09px, calc((9.46px + 0.184vw) * var(--ui-scale)), 15.73px);
   --sidebar-icon-size: clamp(23.25px, calc((18.19px + 0.355vw) * var(--ui-scale)), 30.25px);
-  --sidebar-search-height: clamp(39.06px, calc((30.56px + 0.596vw) * var(--ui-scale)), 50.82px);
+  /* 2026-10-15: ~20% under the old curve (39px at 1440) — the search field and the
+     + button were reading as the largest objects in the rail. */
+  --sidebar-search-height: clamp(31.25px, calc((24.45px + 0.477vw) * var(--ui-scale)), 40.66px);
   --sidebar-row-height: clamp(46.5px, calc((36.38px + 0.71vw) * var(--ui-scale)), 60.5px);
   --sidebar-row-gap: clamp(13.95px, calc((10.92px + 0.213vw) * var(--ui-scale)), 18.15px);
   --sidebar-row-pad-x: clamp(14.88px, calc((11.64px + 0.227vw) * var(--ui-scale)), 19.36px);
@@ -2041,7 +2043,9 @@ button {
    the reason `.filter-tab-active` documents below: a utility ties with
    `.eyebrow` on specificity and loses on file order. */
 .eyebrow.filter-tab {
-  font-size: var(--sidebar-meta-font-size);
+  /* A step under the rail's meta size: the segmented control is chrome and was
+     too large on a normal display (user, 2026-10-15). */
+  font-size: calc(var(--sidebar-meta-font-size) - 2px);
 }
 
 /* Rail filter tabs — SELECTION (Archived · All · Groups · Direct · Unread) ---
