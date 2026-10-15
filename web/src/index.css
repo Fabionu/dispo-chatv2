@@ -492,7 +492,7 @@ html[data-density-mode='manual'][data-density='comfortable'] {
   --sidebar-icon-size: clamp(23.25px, calc((18.19px + 0.355vw) * var(--ui-scale)), 30.25px);
   /* 2026-10-15: ~20% under the old curve (39px at 1440) — the search field and the
      + button were reading as the largest objects in the rail. */
-  --sidebar-search-height: clamp(31.25px, calc((24.45px + 0.477vw) * var(--ui-scale)), 40.66px);
+  --sidebar-search-height: clamp(27px, calc((20.5px + 0.43vw) * var(--ui-scale)), 35px);
   --sidebar-row-height: clamp(46.5px, calc((36.38px + 0.71vw) * var(--ui-scale)), 60.5px);
   --sidebar-row-gap: clamp(13.95px, calc((10.92px + 0.213vw) * var(--ui-scale)), 18.15px);
   --sidebar-row-pad-x: clamp(14.88px, calc((11.64px + 0.227vw) * var(--ui-scale)), 19.36px);
@@ -2932,4 +2932,100 @@ button {
   border: solid rgb(var(--color-bg));
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
+}
+
+/* ── Auth screens: the "Ember" background ────────────────────────────────────
+   Behind the sign-in identity half. Three blurred discs: copper rising and
+   breathing, a redder one drifting, a cool veil above. The colours are the app's
+   own accent tokens, so the light theme gets a warm wash on white instead of a
+   second palette. Motion is transform + opacity only. Still under
+   prefers-reduced-motion and under Animations: Off. */
+.auth-ember i {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(60px);
+  will-change: transform;
+}
+.auth-ember-rise {
+  left: -1.25rem;
+  bottom: -10.5rem;
+  width: 26rem;
+  height: 18.75rem;
+  background: rgb(var(--color-active) / 0.42);
+  animation: auth-rise 14s ease-in-out infinite, auth-breath 9s ease-in-out infinite;
+}
+.auth-ember-drift {
+  right: -4rem;
+  bottom: -4rem;
+  width: 15rem;
+  height: 15rem;
+  background: rgb(var(--color-alert) / 0.28);
+  animation: auth-drift 18s ease-in-out infinite;
+}
+.auth-ember-veil {
+  left: 2.5rem;
+  top: -7rem;
+  width: 18.75rem;
+  height: 12.5rem;
+  background: rgb(var(--color-wash) / 0.12);
+  animation: auth-veil 22s ease-in-out infinite;
+}
+@keyframes auth-rise {
+  0%, 100% { transform: translateY(8%) scale(1); }
+  50% { transform: translateY(-14%) scale(1.15); }
+}
+@keyframes auth-breath {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+@keyframes auth-drift {
+  0%, 100% { transform: translate(16%, 12%) scale(1.15); }
+  50% { transform: translate(-18%, -12%) scale(0.85); }
+}
+@keyframes auth-veil {
+  0%, 100% { transform: translate(8%, -10%) scale(0.9); }
+  50% { transform: translate(-14%, 12%) scale(1.2); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-ember i { animation: none; }
+}
+:root[data-animations='off'] .auth-ember i {
+  animation: none;
+}
+
+/* Auth screens: the form half sits on a faint dot grid, so the card lifts off a
+   texture instead of floating on flat black. The dots are the wash token at 7%,
+   so they invert with the theme. */
+.auth-grid {
+  background-image: radial-gradient(rgb(var(--color-wash) / 0.07) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Auth screens: switching Sign in <-> Create workspace. The content of the card is
+   re-keyed on the switch, so it enters fresh: each block fades and rises a few
+   pixels, staggered down the card, while the card (.auth-height) eases to the
+   new content's height. Transform, opacity and height only. Still under
+   prefers-reduced-motion and Animations: Off. */
+.auth-height {
+  transition: height 340ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.auth-swap > * {
+  animation: auth-swap-in 380ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.auth-swap > :nth-child(2) { animation-delay: 50ms; }
+.auth-swap > :nth-child(3) { animation-delay: 100ms; }
+.auth-swap > :nth-child(4) { animation-delay: 140ms; }
+@keyframes auth-swap-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-height { transition: none; }
+  .auth-swap > * { animation: none; }
+}
+:root[data-animations='off'] .auth-height {
+  transition: none;
+}
+:root[data-animations='off'] .auth-swap > * {
+  animation: none;
 }

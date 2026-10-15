@@ -44,7 +44,6 @@ import { preloadAvatar } from '../lib/avatarCache'
 import { useAuth } from '../auth/AuthContext'
 import GroupRow from './SidebarGroupRow'
 import ContactRow from './SidebarContactRow'
-import SidebarIdentityBar from './SidebarIdentityBar'
 import { FilterTab, FilterTabBar, ArchiveToggle, EmptyHint, MenuItem } from './sidebarBits'
 import { optimisticDirectGroup } from './workspaceUtils'
 import ConnectionStatusBanner from '../components/ConnectionStatusBanner'
@@ -717,6 +716,14 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           hasAvatar: cachedProfile?.hasAvatar,
           avatarVersion: cachedProfile?.avatarVersion,
         }}
+        companyActive={sidebarView === 'company'}
+        onOpenCompany={() => {
+          if (sidebarCollapsed) {
+            setStoredSidebarCollapsed(false)
+            setSidebarCollapsed(false)
+          }
+          openSidebarView('company')
+        }}
         profileActive={sidebarView === 'profile'}
         onOpenProfile={() => {
           if (sidebarCollapsed) {
@@ -785,14 +792,14 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             placeholder already say "field". Side by side, the single box reads as
             the button rather than as a second field. */}
         <div
-          className="px-3 pt-3 flex items-center gap-2 shrink-0"
+          className="px-3 pt-2.5 flex items-center gap-1.5 shrink-0"
           style={{ paddingBottom: 'var(--sidebar-toolbar-gap)' }}
         >
           <label
             htmlFor="rail-search"
-            className="min-w-0 flex-1 h-[var(--sidebar-search-height)] flex items-center gap-2 px-3 cursor-text rounded-card border transition-colors hover:border-strong focus-within:border-strong"
+            className="min-w-0 flex-1 h-[var(--sidebar-search-height)] flex items-center gap-1.5 px-2.5 cursor-text rounded-card border transition-colors hover:border-strong focus-within:border-strong"
           >
-            <Search size="1rem" strokeWidth={1.8} className="text-muted shrink-0" />
+            <Search size="0.875rem" strokeWidth={1.8} className="text-muted shrink-0" />
             <input
               id="rail-search"
               // The field carries no visible label (the magnifier + placeholder
@@ -804,7 +811,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 if (e.key === 'Escape') setQuery('')
               }}
               placeholder="Search plates, people, messages"
-              style={{ fontSize: 'var(--sidebar-row-font-size)' }}
+              style={{ fontSize: 'calc(var(--sidebar-meta-font-size) - 1px)' }}
               className="bg-transparent flex-1 outline-none placeholder:text-faint min-w-0"
             />
             {query && (
@@ -834,7 +841,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                   : 'text-text hover:border-strong hover:bg-white/4'
               }`}
             >
-              <Plus size="1rem" strokeWidth={1.8} />
+              <Plus size="0.875rem" strokeWidth={1.8} />
             </button>
 
             {newMenuOpen && (
@@ -1046,17 +1053,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           )}
         </nav>
 
-        {/* Fixed identity row — me on the left, the company on the right, each
-            half a drill-in trigger into a sidebar view. Sits outside the
-            scroller, so it stays put while the list moves. */}
-        <SidebarIdentityBar
-          user={user}
-          workspace={workspace}
-          profile={cachedProfile}
-          away={away}
-          onOpenAccount={() => openSidebarView('account')}
-          onOpenCompany={() => openSidebarView('company')}
-        />
         </div>
 
         {/* Drill-in panels occupy the same sidebar surface without replacing

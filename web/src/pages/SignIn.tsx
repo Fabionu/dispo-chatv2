@@ -1,16 +1,17 @@
-import { useState } from 'react'
-import { ArrowRight, Eye, EyeOff } from 'lucide-react'
+import { useLayoutEffect, useRef, useState } from 'react'
+import { ArrowRight, Building2, Eye, EyeOff, Lock, Mail } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import VerificationNotice from '../components/auth/VerificationNotice'
 import {
   AUTH_FIELD,
   AUTH_LABEL,
-  AUTH_LINK,
-  AuthAside,
   AuthButton,
+  AuthDivider,
   AuthField,
+  AuthFieldIcon,
   AuthHeading,
   AuthNotice,
+  AuthSecondaryButton,
   AuthShell,
 } from '../components/auth/authChrome'
 
@@ -49,7 +50,27 @@ export default function SignIn() {
     emailSent: boolean
   } | null>(null)
 
+  // The tab switch is animated (user, 2026-10-15): the form's content fades and
+  // rises in, staggered, and the card eases to its new height instead of
+  // snapping — Create workspace has two more fields than Sign in. The height is
+  // MEASURED off the content (a ResizeObserver) so anything that grows the form
+  // later (the strength meter, an error) eases the same way. `swapped` keeps the
+  // first paint still: only a switch plays the entrance, never the page load.
+  const [swapped, setSwapped] = useState(false)
+  const [boxHeight, setBoxHeight] = useState<number | null>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const el = contentRef.current
+    if (!el) return
+    const measure = () => setBoxHeight(el.offsetHeight + 8)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [tab, verification])
+
   function switchTab(next: Tab) {
+    setSwapped(true)
     setTab(next)
     setError(null)
   }
@@ -141,8 +162,12 @@ export default function SignIn() {
 
   return (
     <AuthShell>
+      <div
+        className="auth-height -m-1 overflow-clip p-1"
+        style={boxHeight === null ? undefined : { height: boxHeight }}
+      >
+      <div ref={contentRef} key={tab} className={swapped ? 'auth-swap' : undefined}>
       <AuthHeading
-        eyebrow={isSignIn ? 'Sign in' : 'New workspace'}
         title={isSignIn ? 'Welcome back' : 'Create your workspace'}
       >
         {isSignIn
@@ -184,6 +209,7 @@ export default function SignIn() {
           autoComplete="email"
           autoFocus
           required
+          icon={<Mail size="1rem" strokeWidth={1.7} />}
         />
 
         <div>
@@ -191,6 +217,9 @@ export default function SignIn() {
             Password
           </label>
           <div className="relative">
+            <AuthFieldIcon>
+              <Lock size="1rem" strokeWidth={1.7} />
+            </AuthFieldIcon>
             <input
               id="password"
               type={showPassword ? 'text' : 'password'}
@@ -199,7 +228,7 @@ export default function SignIn() {
               placeholder={isSignIn ? 'Enter your password' : 'At least 8 characters'}
               autoComplete={isSignIn ? 'current-password' : 'new-password'}
               required
-              className={`${AUTH_FIELD} pr-11`}
+              className={`${AUTH_FIELD} pl-10 pr-11`}
             />
             <button
               type="button"
@@ -247,16 +276,15 @@ export default function SignIn() {
         </AuthButton>
       </form>
 
-      <AuthAside>
-        {isSignIn ? 'Need a workspace?' : 'Already have an account?'}{' '}
-        <button
-          type="button"
-          onClick={() => switchTab(isSignIn ? 'signup' : 'signin')}
-          className={AUTH_LINK}
-        >
-          {isSignIn ? 'Create one' : 'Sign in'}
-        </button>
-      </AuthAside>
+      <AuthDivider>{isSignIn ? 'New here?' : 'Already registered?'}</AuthDivider>
+      <AuthSecondaryButton
+        onClick={() => switchTab(isSignIn ? 'signup' : 'signin')}
+        icon={isSignIn ? <Building2 size="1rem" strokeWidth={1.7} /> : <ArrowRight size="1rem" strokeWidth={1.8} />}
+      >
+        {isSignIn ? 'Create a workspace' : 'Sign in'}
+      </AuthSecondaryButton>
+      </div>
+      </div>
     </AuthShell>
   )
 }

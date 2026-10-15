@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { decode } from '@here/flexpolyline'
-import { Pencil, X } from 'lucide-react'
+import { Check, ChevronDown, Pencil, X } from 'lucide-react'
 import { PANEL_SURFACE } from '../settings/profileChrome'
-import { ICON_ACTION_BASE_LG, ICON_ACTION_IDLE } from '../HeaderIconButton'
+import { ICON_ACTION_BASE, ICON_ACTION_BASE_LG, ICON_ACTION_IDLE } from '../HeaderIconButton'
 import { RowMeta, RowTile } from '../../pages/sidebarBits'
 import { TONE_TEXT } from './opsControls'
 import { getSocket } from '../../lib/socket'
@@ -27,6 +27,11 @@ import {
   type VehicleOps,
 } from '../../lib/vehicleOps'
 import type { Group, GroupMember } from '../../lib/types'
+import type { DriverMapMarker, RouteMarker } from '../../lib/here/types'
+
+// The real map in the route card, loaded on demand: the Google loader is not
+// something every vehicle room that merely has a trip should pay for up front.
+const MapView = lazy(() => import('../map/MapView'))
 
 // ── Trip panel ──────────────────────────────────────────────────────────────
 // The vehicle room's trip, kept OPEN beside the thread instead of folded into a
@@ -122,6 +127,14 @@ export default function TripPanel({
   ]
   const shownDetails = details.filter(([, v]) => v?.trim())
   const routeOk = trip.route?.status === 'ok'
+  // Finished stops fold into one row; the live position and what is ahead stay.
+  const [showDone, setShowDone] = useState(false)
+  const doneCount = stops.filter((s) => s.status === 'done').length
+  const lastVisible = (() => {
+    for (let i = stops.length - 1; i >= 0; i--) if (showDone || stops[i].status !== 'done') return i
+    return -1
+  })()
+  const arrival = stops.length ? stops[stops.length - 1].eta ?? stops[stops.length - 1].plannedAt : undefined
 
   return (
     <>
@@ -135,9 +148,10 @@ export default function TripPanel({
                    xl:static xl:z-auto xl:w-[clamp(20rem,24vw,24rem)] xl:max-w-none xl:shrink-0 xl:shadow-none
                    xl:border-l xl:border-line`}
       >
-        {/* Header — the thread header's height, so its rule continues the
-            thread's across the seam. */}
-        <div className="h-[var(--header-height)] shrink-0 flex items-center gap-2.5 border-b border-line pl-5 pr-3">
+        {/* Header — kept slim (user, 2026-10-15: "narrower from top to bottom"):
+            the tool-bar height rather than the thread header's, so it no longer
+            meets the thread header's rule across the seam on purpose. */}
+        <div className="h-[var(--tool-header-height)] shrink-0 flex items-center gap-2.5 border-b border-line pl-5 pr-2">
           <h2 className="text-xl font-semibold">Trip</h2>
           <span className="min-w-0 flex-1 text-base text-muted">
             <RowMeta segments={[t?.reference ? `#${t.reference}` : undefined, t?.client]} whole />
@@ -148,7 +162,7 @@ export default function TripPanel({
               onClick={onEditTrip}
               aria-label="Edit trip"
               title="Edit trip"
-              className={`${ICON_ACTION_BASE_LG} ${ICON_ACTION_IDLE} shrink-0`}
+              className={`${ICON_ACTION_BASE} ${ICON_ACTION_IDLE} shrink-0`}
             >
               <Pencil size="1rem" strokeWidth={1.8} />
             </button>
@@ -166,39 +180,98 @@ export default function TripPanel({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable]">
-          {/* Status — the one large thing in the column. */}
-          <section className="px-5 pt-5 pb-1.5 flex flex-col gap-1">
+        <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 pb-5 pt-4 [scrollbar-gutter:stable]">
+          {/* Status — one summary card: the state, how far along, when it lands. */}
+          <section className="rounded-soft border border-line px-4 py-3.5">
             <div className={`flex items-center gap-2.5 ${TONE_TEXT[tone]}`}>
               <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full bg-current" />
               <span className="text-3xl font-semibold tracking-[-0.015em] text-text">{trip.statusLabel}</span>
+              {live && (
+                <span className="ml-auto text-sm text-muted tabular-nums">
+                  {driverLocationAgo(live.recordedAt, now)}
+                </span>
+              )}
             </div>
             {trip.progress && trip.progress.total > 0 && (
-              <span className="pl-5 text-base text-muted tabular-nums">
-                {trip.progress.done} of {trip.progress.total} stops done
-              </span>
+              <>
+                <div aria-hidden className={`mt-3 h-1.5 overflow-hidden rounded-full bg-line ${TONE_TEXT[tone]}`}>
+                  <span
+                    className="block h-full rounded-full bg-current"
+                    style={{ width: `${Math.max(0, Math.min(1, trip.progress.pct ?? 0)) * 100}%` }}
+                  />
+                </div>
+                <div className="mt-2.5 flex items-baseline justify-between gap-3 text-base tabular-nums">
+                  <span className="text-muted">
+                    {trip.progress.done} of {trip.progress.total} stops done
+                  </span>
+                  {arrival && <span>Arrives {arrival}</span>}
+                </div>
+              </>
             )}
           </section>
 
-          {/* Itinerary — the stops down a line, with the truck on it. */}
-          <section aria-label="Itinerary" className="px-5 pt-4 pb-2">
+          {/* Route — the real map first: where the truck is says more than the list. */}
+          {(routeOk || onOpenRoute) && (
+            <figure className="m-0 overflow-hidden rounded-soft border border-line">
+              <RouteMapPreview ops={ops} live={live} now={now} />
+              <figcaption className="flex items-center gap-2 border-t border-line px-3 py-2.5 text-base text-muted tabular-nums">
+                {routeOk ? (
+                  <RowMeta segments={[trip.route?.distanceText, trip.route?.durationText]} />
+                ) : (
+                  <span>Route not calculated yet</span>
+                )}
+                {onOpenRoute && (
+                  <button
+                    type="button"
+                    onClick={onOpenRoute}
+                    className="ml-auto shrink-0 font-semibold text-text hover:underline underline-offset-4 focus-visible:outline-none focus-visible:underline"
+                  >
+                    Open map
+                  </button>
+                )}
+              </figcaption>
+            </figure>
+          )}
+
+          {/* Itinerary — the stops down a line, with the truck on it. Finished
+              stops fold into one row so the live position and what is ahead are
+              what you see. */}
+          <section aria-label="Itinerary">
+            {doneCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowDone((v) => !v)}
+                aria-expanded={showDone}
+                className="mb-2.5 flex w-full items-center gap-2 text-left text-base text-muted transition-colors hover:text-text focus-visible:outline-none focus-visible:underline"
+              >
+                <Check size="0.875rem" strokeWidth={2.4} className="text-done" aria-hidden />
+                {doneCount} {doneCount === 1 ? 'stop' : 'stops'} done
+                <ChevronDown
+                  size="0.875rem"
+                  strokeWidth={1.8}
+                  className={`ml-auto transition-transform motion-reduce:transition-none ${showDone ? 'rotate-180' : ''}`}
+                />
+              </button>
+            )}
             {stops.length === 0 && !live ? (
               <p className="pb-3 text-base text-muted">No stops yet.</p>
             ) : (
               <ol className="flex flex-col">
-                {stops.map((stop, index) => (
-                  <ItineraryEntry
-                    key={stop.id}
-                    stop={stop}
-                    next={index === nextIndex}
-                    last={index === stops.length - 1 && !(live && liveAt === stops.length)}
-                    before={
-                      live && index === liveAt ? (
-                        <LiveEntry live={live} now={now} toNextM={toNextM} nextType={nextType} />
-                      ) : null
-                    }
-                  />
-                ))}
+                {stops.map((stop, index) =>
+                  stop.status === 'done' && !showDone ? null : (
+                    <ItineraryEntry
+                      key={stop.id}
+                      stop={stop}
+                      next={index === nextIndex}
+                      last={index === lastVisible && !(live && liveAt === stops.length)}
+                      before={
+                        live && index === liveAt ? (
+                          <LiveEntry live={live} now={now} toNextM={toNextM} nextType={nextType} />
+                        ) : null
+                      }
+                    />
+                  ),
+                )}
                 {live && liveAt === stops.length && (
                   <LiveEntry live={live} now={now} toNextM={null} nextType={nextType} last />
                 )}
@@ -206,70 +279,44 @@ export default function TripPanel({
             )}
           </section>
 
-          {/* Route — the trip's real geometry drawn small, with its numbers. */}
-          {(routeOk || onOpenRoute) && (
-            <section className="px-5 pb-5">
-              <figure className="m-0 overflow-hidden rounded-card border border-line">
-                <RouteSketch ops={ops} live={live} />
-                <figcaption className="flex items-center gap-2 border-t border-line px-3 py-2.5 text-base text-muted tabular-nums">
-                  {routeOk ? (
-                    <RowMeta segments={[trip.route?.distanceText, trip.route?.durationText]} />
-                  ) : (
-                    <span>Route not calculated yet</span>
-                  )}
-                  {onOpenRoute && (
-                    <button
-                      type="button"
-                      onClick={onOpenRoute}
-                      className="ml-auto shrink-0 font-semibold text-text hover:underline underline-offset-4 focus-visible:outline-none focus-visible:underline"
-                    >
-                      Open route map
-                    </button>
-                  )}
-                </figcaption>
-              </figure>
-            </section>
-          )}
-
           {shownDetails.length > 0 && (
-            <Section title="Load">
-              <dl className="flex flex-col gap-2.5 text-base">
-                {shownDetails.map(([label, value]) => (
-                  <div key={label} className="flex justify-between gap-4">
-                    <dt className="text-muted">{label}</dt>
-                    <dd className="min-w-0 truncate text-right tabular-nums" title={value}>
+            <section>
+              <h3 className="mb-2 text-lg font-semibold">Load</h3>
+              <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-soft border border-line bg-line">
+                {shownDetails.map(([label, value], i) => (
+                  <div
+                    key={label}
+                    className={`bg-bg px-3 py-2.5 ${
+                      shownDetails.length % 2 === 1 && i === shownDetails.length - 1 ? 'col-span-2' : ''
+                    }`}
+                  >
+                    <dt className="text-sm text-muted">{label}</dt>
+                    <dd className="mt-0.5 truncate text-base font-medium tabular-nums" title={value}>
                       {value}
                     </dd>
                   </div>
                 ))}
               </dl>
-            </Section>
+            </section>
           )}
 
-          <Section
-            title="Crew"
-            action={
+          {/* Crew — one line: who is on it, and the way to everyone. */}
+          <section className="flex items-center gap-2.5 border-t border-line pt-3.5">
+            {crew.length === 0 ? (
+              <p className="flex-1 text-base text-muted">No driver assigned.</p>
+            ) : (
               <button
                 type="button"
-                onClick={onOpenMembers}
-                className="text-base font-semibold text-text hover:underline underline-offset-4 focus-visible:outline-none focus-visible:underline"
+                onClick={() =>
+                  crew.length === 1
+                    ? onOpenProfile(crew[0].member.id, crew[0].member.displayName)
+                    : onOpenMembers()
+                }
+                className="flex min-w-0 flex-1 items-center gap-2.5 rounded-card text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
               >
-                All {group.memberCount} members
-              </button>
-            }
-            last
-          >
-            {crew.length === 0 ? (
-              <p className="text-base text-muted">No driver assigned.</p>
-            ) : (
-              <ul className="-mx-2 flex flex-col gap-0.5">
-                {crew.map(({ member: m, role }) => (
-                  <li key={m.id}>
-                    <button
-                      type="button"
-                      onClick={() => onOpenProfile(m.id, m.displayName)}
-                      className="w-full flex items-center gap-2.5 rounded-card px-2 py-1.5 text-left transition-colors hover:bg-white/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
-                    >
+                <span className="flex shrink-0">
+                  {crew.slice(0, 3).map(({ member: m }, i) => (
+                    <span key={m.id} className={`rounded-full ring-2 ring-bg ${i > 0 ? '-ml-2' : ''}`}>
                       <RowTile
                         kind="user"
                         id={m.id}
@@ -278,43 +325,82 @@ export default function TripPanel({
                         version={m.avatarVersion}
                         size={32}
                       />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-lg font-medium">{m.displayName}</span>
-                        <span className="block truncate text-sm text-muted">{role}</span>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+                    </span>
+                  ))}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-lg font-medium">
+                    {crew.map(({ member: m }) => m.displayName).join(', ')}
+                  </span>
+                  <span className="block truncate text-sm text-muted">
+                    {Array.from(new Set(crew.map(({ role }) => role.split(',')[0]))).join(', ')}
+                  </span>
+                </span>
+              </button>
             )}
-          </Section>
+            <button
+              type="button"
+              onClick={onOpenMembers}
+              className="shrink-0 text-base font-semibold text-text hover:underline underline-offset-4 focus-visible:outline-none focus-visible:underline"
+            >
+              All {group.memberCount}
+            </button>
+          </section>
         </div>
       </aside>
     </>
   )
 }
 
-// A titled block, separated from the one above by a hairline — the column is
-// a list of facts about one trip, not a stack of cards.
-function Section({
-  title,
-  action,
-  children,
-  last = false,
-}: {
-  title: string
-  action?: ReactNode
-  children: ReactNode
-  last?: boolean
-}) {
+// The route card's map: the REAL map (the one Open map opens), drawn small and
+// not interactive — the card is a glance, and scrolling the panel must not zoom
+// the map under the cursor. A trip with no calculated route falls back to the
+// schematic sketch below, which needs no coordinates it does not have.
+function RouteMapPreview({ ops, live, now }: { ops: VehicleOps; live: DriverLocation | undefined; now: number }) {
+  const polylines = ops.trip?.route?.polylines ?? []
+  const markers = useMemo<RouteMarker[]>(() => {
+    const pts = ops.stops
+      .filter((s) => s.status !== 'cancelled' && !isRouteVia(s))
+      .filter((s): s is typeof s & { lat: number; lng: number } => typeof s.lat === 'number' && typeof s.lng === 'number')
+    return pts.map((s, i) => ({
+      id: s.id,
+      kind: i === 0 ? 'origin' : i === pts.length - 1 ? 'destination' : 'stop',
+      position: { lat: s.lat, lng: s.lng },
+      label: i > 0 && i < pts.length - 1 ? String(i) : undefined,
+    }))
+  }, [ops.stops])
+  const driverMarkers = useMemo<DriverMapMarker[]>(
+    () =>
+      live
+        ? [
+            {
+              id: live.userId,
+              name: live.name,
+              position: { lat: live.lat, lng: live.lng },
+              stale: now - Date.parse(live.recordedAt) > DRIVER_STALE_MS,
+              ...(live.headingDeg !== undefined ? { headingDeg: live.headingDeg } : {}),
+            },
+          ]
+        : [],
+    [live, now],
+  )
+  if (polylines.length === 0) return <RouteSketch ops={ops} live={live} />
   return (
-    <section className={`border-t border-line px-5 pt-4 ${last ? 'pb-6' : 'pb-5'}`}>
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <h3 className="text-lg font-semibold">{title}</h3>
-        {action}
-      </div>
-      {children}
-    </section>
+    // `pointer-events-none` makes it a picture; the map's own zoom / style
+    // controls would not fit a card this small, so they are hidden with it.
+    <div className="pointer-events-none relative h-[10.5rem] bg-surface-2 [&_.here-map-controls-host]:hidden">
+      <Suspense fallback={null}>
+        <MapView
+          className="absolute inset-0"
+          markers={markers}
+          driverMarkers={driverMarkers}
+          routePolylines={polylines}
+          scaleRouteWidthWithZoom
+          truckOverlay={false}
+          objectsDraggable={false}
+        />
+      </Suspense>
+    </div>
   )
 }
 

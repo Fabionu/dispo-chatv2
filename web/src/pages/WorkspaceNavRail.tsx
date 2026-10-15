@@ -1,5 +1,6 @@
 import Avatar from '../components/Avatar'
 import {
+  Building2,
   LayoutGrid,
   MessagesSquare,
   PanelLeftClose,
@@ -17,6 +18,10 @@ type Props = {
   // The signed-in user, drawn as the rail's profile button.
   me: { id: string; name: string; hasAvatar?: boolean; avatarVersion?: string | null }
   profileActive: boolean
+  // The company profile used to live in the sidebar's identity footer; with the
+  // footer gone (user, 2026-10-15) the rail is its way in.
+  companyActive: boolean
+  onOpenCompany: () => void
   onOpenProfile: () => void
   onToggleSidebar: () => void
   onOpenChat: () => void
@@ -37,6 +42,8 @@ export default function WorkspaceNavRail({
   settingsActive,
   me,
   profileActive,
+  companyActive,
+  onOpenCompany,
   onOpenProfile,
   onToggleSidebar,
   onOpenChat,
@@ -73,6 +80,13 @@ export default function WorkspaceNavRail({
         onClick={onOpenWorkspace}
       />
       <div className="flex-1" />
+
+      <NavButton
+        icon={Building2}
+        label="Company"
+        active={companyActive}
+        onClick={onOpenCompany}
+      />
 
       {/* My profile: the user's own photo (initials when there is none). */}
       <button
