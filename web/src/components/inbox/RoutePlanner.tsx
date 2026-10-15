@@ -40,7 +40,7 @@ import type { MapViewport } from '../map/mapProps'
 import PlaceSearchField from '../here/PlaceSearchField'
 import Spinner from '../Spinner'
 import { ICON_ACTION_SMALL } from '../HeaderIconButton'
-import ToolHeader from './ToolHeader'
+import ToolHeader, { type ToolPin } from './ToolHeader'
 import type {
   HerePlace,
   LatLng,
@@ -58,7 +58,7 @@ import PointRow from './RoutePointRow'
 import { RoleBadge, RouteRow } from './RoutePointCard'
 import {
   CopyCoordButton,
-  FoldCard,
+  FoldRow,
   FoldGroup,
   NumberField,
   PresetSelect,
@@ -95,6 +95,7 @@ import type { WorkspacePlace, WorkspacePlaceInput } from '../../lib/types'
 
 type Props = {
   onBack: () => void
+  pin?: ToolPin
   // Hands the calculated route's country legs to the restriction calculator.
   // Optional so the planner stays usable anywhere it is mounted without one.
   onCalculateRestrictions?: (legs: RouteCountryLeg[]) => void
@@ -214,7 +215,7 @@ function nowHm(): string {
   return `${pad(now.getHours())}:${pad(now.getMinutes())}`
 }
 
-export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props) {
+export default function RoutePlanner({ onBack, onCalculateRestrictions, pin }: Props) {
   const [points, setPoints] = useRetainedState<RoutePoint[]>(RETAIN, 'points', [])
   const [truck, setTruck] = useRetainedState<TruckProfileForm>(RETAIN, 'truck', EMPTY_TRUCK)
   const [route, setRoute] = useRetainedState<TruckRoute | null>(RETAIN, 'route', null)
@@ -1351,6 +1352,14 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
     | { kind: 'add'; key: string }
 
   const viaCount = stops.length - listStops.length
+  // An empty planner has no handle (see the collapse handle below), so a panel
+  // collapsed while the last point was removed from the map must come back by
+  // itself — otherwise nothing would be left to open it.
+  useEffect(() => {
+    if (points.length === 0 && !loading && panelCollapsed) setPanelCollapsed(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [points.length, loading, panelCollapsed])
+
   const showDestinationSlot = !destination && (Boolean(start) || stops.length > 0)
   const showAddStop = Boolean(start && destination) && stops.length < MAX_STOPS
 
@@ -1376,7 +1385,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <ToolHeader title="Route planner" onBack={onBack} />
+      <ToolHeader title="Route planner" onBack={onBack} pin={pin} />
 
       {/* Map region — the panel floats over this and never resizes it. */}
       <div ref={regionRef} className="relative flex-1 min-h-[22.5rem] rounded-card overflow-hidden border border-line">
@@ -1467,16 +1476,28 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
         )}
 
         {/* Reopen tab — visible only when the panel is collapsed. */}
-        <button
-          onClick={() => setPanelCollapsed(false)}
-          aria-label="Open route panel"
-          className={`absolute z-20 top-3 left-3 flex items-center gap-1.5 h-9 pl-2.5 pr-3 rounded-btn border border-line bg-surface text-text text-sm font-medium shadow-overlay transition-opacity hover:bg-surface-2 ${
-            panelCollapsed && !streetView ? 'opacity-100' : 'opacity-0 pointer-events-none'
-          }`}
-        >
-          <ChevronRight size="1rem" strokeWidth={2} />
-          Route
-        </button>
+        {/* ONE handle for both directions (user, 2026-10-15): on the card's outer
+            right edge while the planner is open, it collapses it; the card
+            slides away and the same handle rides to the map's left edge, where
+            it brings the card back — this replaced the separate "Route" button.
+            Not drawn for an empty card, which is just the Start field. */}
+        {(points.length > 0 || loading) && !streetView && (
+          <button
+            type="button"
+            onClick={() => setPanelCollapsed(!panelCollapsed)}
+            title={panelCollapsed ? 'Open route panel' : 'Collapse panel'}
+            aria-label={panelCollapsed ? 'Open route panel' : 'Collapse panel'}
+            aria-expanded={!panelCollapsed}
+            className="absolute z-20 top-7 flex h-11 w-[1.3125rem] items-center justify-center rounded-r-soft border border-l-0 border-line bg-surface text-muted shadow-overlay transition-[left,color] duration-300 ease-out hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 motion-reduce:transition-none"
+            style={{ left: panelCollapsed ? 0 : 'min(19.5rem, calc(100% - 0.75rem))' }}
+          >
+            {panelCollapsed ? (
+              <ChevronRight size="0.875rem" strokeWidth={2} />
+            ) : (
+              <ChevronLeft size="0.875rem" strokeWidth={2} />
+            )}
+          </button>
+        )}
 
         {/* ── The floating tool: the route card, plus the truck profile ───────
             The route itself — header, itinerary, summary and the action — is ONE
@@ -1698,14 +1719,6 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                     >
                       <Trash2 size="0.8125rem" strokeWidth={1.8} />
                     </button>
-                    <button
-                      onClick={() => setPanelCollapsed(true)}
-                      title="Collapse panel"
-                      aria-label="Collapse panel"
-                      className={ICON_ACTION_SMALL}
-                    >
-                      <ChevronLeft size="0.875rem" strokeWidth={2} />
-                    </button>
                   </div>
                 </div>
                 <div className={`divide-y divide-line transition-opacity motion-reduce:transition-none ${loading ? 'opacity-50' : ''}`}>
@@ -1864,18 +1877,273 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
                       <Trash2 size="0.8125rem" strokeWidth={1.8} />
                     </button>
                   )}
-                  <button
-                    onClick={() => setPanelCollapsed(true)}
-                    title="Collapse panel"
-                    aria-label="Collapse panel"
-                    className={ICON_ACTION_SMALL}
-                  >
-                    <ChevronLeft size="0.875rem" strokeWidth={2} />
-                  </button>
                 </div>
               </div>
             )}
           </div>
+
+          {/* Truck profile and Crew & hours live INSIDE the route card (user,
+              2026-10-15): two folded rows under the result, each opening its
+              fields downward. They were separate cards, which read as three
+              stacked plates; as rows the planner is one object. They sit
+              outside the scroll region so the preset dropdown and the date
+              pickers can open past the card's edge, and they appear with the
+              first point — an empty card is just the Start field. */}
+          {points.length > 0 && (
+            <div className="shrink-0 divide-y divide-line border-t border-line">
+              <FoldRow
+                        icon={<Truck size="1rem" strokeWidth={1.8} />}
+                        title="Truck profile"
+                        summary={collapsedTruckLabel}
+                        open={truckOpen}
+                        onToggle={() => setTruckOpen((o) => !o)}
+                      >
+                        {/* Presets */}
+                        <FoldGroup>
+                        <div className="flex items-center gap-1">
+                          <PresetSelect
+                            builtIn={builtInPresets()}
+                            saved={userPresets}
+                            activeId={activePresetId}
+                            onSelect={(id) => (id ? applyPreset(id) : setActivePresetId(null))}
+                            defaultId={defaultPresetId}
+                            onSetDefault={chooseDefaultPreset}
+                          />
+                          <button
+                            onClick={() => setSavingPreset((s) => !s)}
+                            title="Save current profile as a preset"
+                            aria-label="Save preset"
+                            className="rounded-btn h-7 w-7 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 transition-colors"
+                          >
+                            <Bookmark size="0.8125rem" strokeWidth={1.8} />
+                          </button>
+                          {activePreset && !activePreset.builtIn && (
+                            <button
+                              onClick={() => removePreset(activePreset.id)}
+                              title="Delete this preset"
+                              aria-label="Delete preset"
+                              className="rounded-btn h-7 w-7 flex items-center justify-center text-muted hover:text-alert hover:bg-white/6 transition-colors"
+                            >
+                              <Trash2 size="0.8125rem" strokeWidth={1.8} />
+                            </button>
+                          )}
+                        </div>
+
+                        {savingPreset && (
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              value={presetName}
+                              onChange={(e) => setPresetName(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && commitSavePreset()}
+                              placeholder="Preset name"
+                              autoFocus
+                              className="rounded-card h-7 flex-1 min-w-0 border border-line bg-transparent px-2 text-sm outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4 placeholder:text-faint"
+                            />
+                            <button
+                              onClick={commitSavePreset}
+                              disabled={!presetName.trim()}
+                              className="h-7 px-2.5 flex items-center gap-1 rounded-btn bg-active text-bg text-sm font-semibold hover:bg-active/90 disabled:opacity-40 transition-colors"
+                            >
+                              <Check size="0.8125rem" strokeWidth={2.4} /> Save
+                            </button>
+                          </div>
+                        )}
+
+                        </FoldGroup>
+
+                        <FoldGroup>
+                        {/* Three across: the units moved INSIDE the fields, which is what
+                            made the labels short enough for a third of the card. */}
+                        <div className="grid grid-cols-3 gap-x-2 gap-y-2.5">
+                          <NumberField label="Height" unit="cm" value={truck.heightCm} onChange={(v) => updateTruck({ heightCm: v })} placeholder="400" />
+                          <NumberField label="Width" unit="cm" value={truck.widthCm} onChange={(v) => updateTruck({ widthCm: v })} placeholder="255" />
+                          <NumberField label="Length" unit="cm" value={truck.lengthCm} onChange={(v) => updateTruck({ lengthCm: v })} placeholder="1650" />
+                          <NumberField label="Gross weight" unit="kg" value={truck.grossWeightKg} onChange={(v) => updateTruck({ grossWeightKg: v })} placeholder="40000" />
+                          <NumberField label="Axles" value={truck.axleCount} onChange={(v) => updateTruck({ axleCount: v })} placeholder="5" />
+                          <NumberField label="Trailers" value={truck.trailerCount} onChange={(v) => updateTruck({ trailerCount: v })} placeholder="1" />
+                        </div>
+
+                        {/* Below the dimension grid rather than inside it, because it is
+                            not the same kind of number: the six above are sent to HERE and
+                            decide which roads the truck may use, this one never leaves the
+                            browser and only decides how long the planner says those roads
+                            take. Blank keeps HERE’s own estimate. */}
+                        <div className="flex flex-col gap-1">
+                          <NumberField
+                            label="Average speed"
+                            unit="km/h"
+                            value={truck.averageSpeedKmh}
+                            onChange={(v) => updateTruck({ averageSpeedKmh: v })}
+                            placeholder="HERE estimate"
+                          />
+                          <span className="text-xs leading-snug text-faint">Changes the time estimate only. Not sent to HERE.</span>
+                        </div>
+                        </FoldGroup>
+                      </FoldRow>
+              <FoldRow
+                        icon={<Users size="1rem" strokeWidth={1.8} />}
+                        title="Crew & hours"
+                        summary={collapsedCrewLabel}
+                        open={crewOpen}
+                        onToggle={() => setCrewOpen((o) => !o)}
+                      >
+                        <FoldGroup>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs leading-tight text-muted">Departure</span>
+                          <div className="flex items-center gap-1.5">
+                            <DateField
+                              value={departDate}
+                              onChange={setDepartDate}
+                              className="min-w-0 flex-1"
+                              ariaLabel="Departure date"
+                              dense
+                            />
+                            <TimeField
+                              value={departTime}
+                              onChange={setDepartTime}
+                              className="w-[6.5rem]"
+                              ariaLabel="Departure time"
+                              dense
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs leading-tight text-muted">Drivers</span>
+                          <SegmentedControl
+                            ariaLabel="Drivers"
+                            value={crew}
+                            onChange={setCrew}
+                            options={[
+                              { value: 1, label: '1 driver' },
+                              { value: 2, label: '2 drivers' },
+                            ]}
+                          />
+                          <span className="text-xs leading-snug text-faint">
+                            {crew === 2 ? '18 h' : '9 h'} driving per shift
+                          </span>
+                        </div>
+                        </FoldGroup>
+
+                        <FoldGroup>
+                        <SwitchRow label="Starts on a full program" checked={fullProgram} onChange={setFullProgram} />
+
+                        {/* The Friday-afternoon case: the same route started with a full
+                            card and started with three hours left are two different trips,
+                            and this is the input that tells them apart. */}
+                        {!fullProgram && (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-xs leading-tight text-muted">Program until</span>
+                            <div className="flex items-center gap-1.5">
+                              <DateField
+                                value={programDate}
+                                onChange={setProgramDate}
+                                className="min-w-0 flex-1"
+                                ariaLabel="Program until, date"
+                                dense
+                              />
+                              <TimeField
+                                value={programTime}
+                                onChange={setProgramTime}
+                                className="w-[6.5rem]"
+                                ariaLabel="Program until, time"
+                                dense
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        </FoldGroup>
+
+                        <FoldGroup>
+                        {/* A crew's rest is fixed at 9h by the multi-manning rule, so there
+                            is no choice to offer; a solo driver's is 11h, reducible to 9h
+                            three times between weekly rests — which this estimator does not
+                            count, so it has to be stated rather than assumed. */}
+                        {crew === 1 ? (
+                          <NumberField
+                            inline
+                            label="Daily rest"
+                            unit="h"
+                            value={dailyRestHours}
+                            onChange={setDailyRestHours}
+                            placeholder="11"
+                          />
+                        ) : (
+                          <div className="text-xs leading-snug text-faint">
+                            A two-driver crew rests 9h inside each 30h window — fixed by the rule, so there is
+                            nothing to set. Working breaks are taken in the moving vehicle.
+                          </div>
+                        )}
+
+                        <SwitchRow label="Weekly rest falls in this trip" checked={weekEnds} onChange={setWeekEnds} />
+
+                        {weekEnds && (
+                          <>
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-xs leading-tight text-muted">Can work until</span>
+                              <div className="flex items-center gap-1.5">
+                                <DateField
+                                  value={weekDate}
+                                  onChange={setWeekDate}
+                                  className="min-w-0 flex-1"
+                                  ariaLabel="Can work until, date"
+                                  dense
+                                />
+                                <TimeField
+                                  value={weekTime}
+                                  onChange={setWeekTime}
+                                  className="w-[6.5rem]"
+                                  ariaLabel="Can work until, time"
+                                  dense
+                                />
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <span className="text-xs leading-tight text-muted">Weekly rest</span>
+                              <SegmentedControl
+                                ariaLabel="Weekly rest"
+                                value={weeklyRestHours}
+                                onChange={setWeeklyRestHours}
+                                options={[
+                                  { value: '45', label: '45 h regular' },
+                                  { value: '24', label: '24 h reduced' },
+                                ]}
+                              />
+                            </div>
+
+                            {/* Whether the rest above actually applies to THIS trip.
+                                Without it the field is silently inert whenever the cutoff
+                                falls beyond the arrival: the truck never reaches a shift
+                                end past it, no weekly rest is taken, and switching 45h to
+                                24h changes nothing — which reads exactly like a broken
+                                control. A no-op the user cannot see is worse than one that
+                                explains itself. */}
+                            {transit && (
+                              <div
+                                className={`text-2xs leading-snug ${
+                                  transit.weeklyRestTaken ? 'text-muted' : 'text-amber-200/80'
+                                }`}
+                              >
+                                {transit.weeklyRestTaken
+                                  ? `Applies — adds ${weeklyRestHours}h to this trip.`
+                                  : `Not reached: the truck arrives before ${weekDate} ${weekTime}, so this rest changes nothing yet.`}
+                              </div>
+                            )}
+                          </>
+                        )}
+
+                        </FoldGroup>
+
+                        <FoldGroup className="py-2">
+                          <div className="text-2xs leading-snug text-faint">
+                            Estimated from EC 561/2006 · driving bans are not included, use the Restriction
+                            calculator for those.
+                          </div>
+                        </FoldGroup>
+                      </FoldRow>
+            </div>
+          )}
 
           {/* Footer — only what went wrong, pinned below the scroll region.
               The button that used to draw the route is gone (the route follows
@@ -1894,268 +2162,6 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions }: Props)
           )}
         </div>
 
-        {/* Truck profile — its own card (FoldCard: a glyph square at rest, the
-            full row on hover, the fields once unfolded), and `shrink-0` so the
-            field grid is never the thing that gets squeezed. The row is the
-            app's standard grouped-row recipe (CategoryRow): glyph chip, label
-            over its live current value, chevron. The value stays visible while
-            open, so opening the fields never hides what they add up to. */}
-        <FoldCard
-          icon={<Truck size="1rem" strokeWidth={1.8} />}
-          title="Truck profile"
-          summary={collapsedTruckLabel}
-          open={truckOpen}
-          onToggle={() => setTruckOpen((o) => !o)}
-        >
-          {/* Presets */}
-          <FoldGroup>
-          <div className="flex items-center gap-1">
-            <PresetSelect
-              builtIn={builtInPresets()}
-              saved={userPresets}
-              activeId={activePresetId}
-              onSelect={(id) => (id ? applyPreset(id) : setActivePresetId(null))}
-              defaultId={defaultPresetId}
-              onSetDefault={chooseDefaultPreset}
-            />
-            <button
-              onClick={() => setSavingPreset((s) => !s)}
-              title="Save current profile as a preset"
-              aria-label="Save preset"
-              className="rounded-btn h-7 w-7 flex items-center justify-center text-muted hover:text-text hover:bg-white/6 transition-colors"
-            >
-              <Bookmark size="0.8125rem" strokeWidth={1.8} />
-            </button>
-            {activePreset && !activePreset.builtIn && (
-              <button
-                onClick={() => removePreset(activePreset.id)}
-                title="Delete this preset"
-                aria-label="Delete preset"
-                className="rounded-btn h-7 w-7 flex items-center justify-center text-muted hover:text-alert hover:bg-white/6 transition-colors"
-              >
-                <Trash2 size="0.8125rem" strokeWidth={1.8} />
-              </button>
-            )}
-          </div>
-
-          {savingPreset && (
-            <div className="flex items-center gap-1.5">
-              <input
-                value={presetName}
-                onChange={(e) => setPresetName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && commitSavePreset()}
-                placeholder="Preset name"
-                autoFocus
-                className="rounded-card h-7 flex-1 min-w-0 border border-line bg-transparent px-2 text-sm outline-none transition-colors hover:border-line-2 focus:border-line-2 focus:bg-white/4 placeholder:text-faint"
-              />
-              <button
-                onClick={commitSavePreset}
-                disabled={!presetName.trim()}
-                className="h-7 px-2.5 flex items-center gap-1 rounded-btn bg-active text-bg text-sm font-semibold hover:bg-active/90 disabled:opacity-40 transition-colors"
-              >
-                <Check size="0.8125rem" strokeWidth={2.4} /> Save
-              </button>
-            </div>
-          )}
-
-          </FoldGroup>
-
-          <FoldGroup>
-          {/* Three across: the units moved INSIDE the fields, which is what
-              made the labels short enough for a third of the card. */}
-          <div className="grid grid-cols-3 gap-x-2 gap-y-2.5">
-            <NumberField label="Height" unit="cm" value={truck.heightCm} onChange={(v) => updateTruck({ heightCm: v })} placeholder="400" />
-            <NumberField label="Width" unit="cm" value={truck.widthCm} onChange={(v) => updateTruck({ widthCm: v })} placeholder="255" />
-            <NumberField label="Length" unit="cm" value={truck.lengthCm} onChange={(v) => updateTruck({ lengthCm: v })} placeholder="1650" />
-            <NumberField label="Gross weight" unit="kg" value={truck.grossWeightKg} onChange={(v) => updateTruck({ grossWeightKg: v })} placeholder="40000" />
-            <NumberField label="Axles" value={truck.axleCount} onChange={(v) => updateTruck({ axleCount: v })} placeholder="5" />
-            <NumberField label="Trailers" value={truck.trailerCount} onChange={(v) => updateTruck({ trailerCount: v })} placeholder="1" />
-          </div>
-
-          {/* Below the dimension grid rather than inside it, because it is
-              not the same kind of number: the six above are sent to HERE and
-              decide which roads the truck may use, this one never leaves the
-              browser and only decides how long the planner says those roads
-              take. Blank keeps HERE’s own estimate. */}
-          <div className="flex flex-col gap-1">
-            <NumberField
-              label="Average speed"
-              unit="km/h"
-              value={truck.averageSpeedKmh}
-              onChange={(v) => updateTruck({ averageSpeedKmh: v })}
-              placeholder="HERE estimate"
-            />
-            <span className="text-xs leading-snug text-faint">Changes the time estimate only. Not sent to HERE.</span>
-          </div>
-          </FoldGroup>
-        </FoldCard>
-
-        {/* Crew & hours — the third card, and the only inputs 561/2006 needs
-            that a route cannot supply. Its own card for the same reason the
-            truck profile is: it grows downward when opened instead of pushing
-            the itinerary into a scrollbar. */}
-        <FoldCard
-          icon={<Users size="1rem" strokeWidth={1.8} />}
-          title="Crew & hours"
-          summary={collapsedCrewLabel}
-          open={crewOpen}
-          onToggle={() => setCrewOpen((o) => !o)}
-        >
-          <FoldGroup>
-          <div className="flex flex-col gap-1">
-            <span className="text-xs leading-tight text-muted">Departure</span>
-            <div className="flex items-center gap-1.5">
-              <DateField
-                value={departDate}
-                onChange={setDepartDate}
-                className="min-w-0 flex-1"
-                ariaLabel="Departure date"
-                dense
-              />
-              <TimeField
-                value={departTime}
-                onChange={setDepartTime}
-                className="w-[6.5rem]"
-                ariaLabel="Departure time"
-                dense
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <span className="text-xs leading-tight text-muted">Drivers</span>
-            <SegmentedControl
-              ariaLabel="Drivers"
-              value={crew}
-              onChange={setCrew}
-              options={[
-                { value: 1, label: '1 driver' },
-                { value: 2, label: '2 drivers' },
-              ]}
-            />
-            <span className="text-xs leading-snug text-faint">
-              {crew === 2 ? '18 h' : '9 h'} driving per shift
-            </span>
-          </div>
-          </FoldGroup>
-
-          <FoldGroup>
-          <SwitchRow label="Starts on a full program" checked={fullProgram} onChange={setFullProgram} />
-
-          {/* The Friday-afternoon case: the same route started with a full
-              card and started with three hours left are two different trips,
-              and this is the input that tells them apart. */}
-          {!fullProgram && (
-            <div className="flex flex-col gap-0.5">
-              <span className="text-xs leading-tight text-muted">Program until</span>
-              <div className="flex items-center gap-1.5">
-                <DateField
-                  value={programDate}
-                  onChange={setProgramDate}
-                  className="min-w-0 flex-1"
-                  ariaLabel="Program until, date"
-                  dense
-                />
-                <TimeField
-                  value={programTime}
-                  onChange={setProgramTime}
-                  className="w-[6.5rem]"
-                  ariaLabel="Program until, time"
-                  dense
-                />
-              </div>
-            </div>
-          )}
-
-          </FoldGroup>
-
-          <FoldGroup>
-          {/* A crew's rest is fixed at 9h by the multi-manning rule, so there
-              is no choice to offer; a solo driver's is 11h, reducible to 9h
-              three times between weekly rests — which this estimator does not
-              count, so it has to be stated rather than assumed. */}
-          {crew === 1 ? (
-            <NumberField
-              inline
-              label="Daily rest"
-              unit="h"
-              value={dailyRestHours}
-              onChange={setDailyRestHours}
-              placeholder="11"
-            />
-          ) : (
-            <div className="text-xs leading-snug text-faint">
-              A two-driver crew rests 9h inside each 30h window — fixed by the rule, so there is
-              nothing to set. Working breaks are taken in the moving vehicle.
-            </div>
-          )}
-
-          <SwitchRow label="Weekly rest falls in this trip" checked={weekEnds} onChange={setWeekEnds} />
-
-          {weekEnds && (
-            <>
-              <div className="flex flex-col gap-0.5">
-                <span className="text-xs leading-tight text-muted">Can work until</span>
-                <div className="flex items-center gap-1.5">
-                  <DateField
-                    value={weekDate}
-                    onChange={setWeekDate}
-                    className="min-w-0 flex-1"
-                    ariaLabel="Can work until, date"
-                    dense
-                  />
-                  <TimeField
-                    value={weekTime}
-                    onChange={setWeekTime}
-                    className="w-[6.5rem]"
-                    ariaLabel="Can work until, time"
-                    dense
-                  />
-                </div>
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-xs leading-tight text-muted">Weekly rest</span>
-                <SegmentedControl
-                  ariaLabel="Weekly rest"
-                  value={weeklyRestHours}
-                  onChange={setWeeklyRestHours}
-                  options={[
-                    { value: '45', label: '45 h regular' },
-                    { value: '24', label: '24 h reduced' },
-                  ]}
-                />
-              </div>
-
-              {/* Whether the rest above actually applies to THIS trip.
-                  Without it the field is silently inert whenever the cutoff
-                  falls beyond the arrival: the truck never reaches a shift
-                  end past it, no weekly rest is taken, and switching 45h to
-                  24h changes nothing — which reads exactly like a broken
-                  control. A no-op the user cannot see is worse than one that
-                  explains itself. */}
-              {transit && (
-                <div
-                  className={`text-2xs leading-snug ${
-                    transit.weeklyRestTaken ? 'text-muted' : 'text-amber-200/80'
-                  }`}
-                >
-                  {transit.weeklyRestTaken
-                    ? `Applies — adds ${weeklyRestHours}h to this trip.`
-                    : `Not reached: the truck arrives before ${weekDate} ${weekTime}, so this rest changes nothing yet.`}
-                </div>
-              )}
-            </>
-          )}
-
-          </FoldGroup>
-
-          <FoldGroup className="py-2">
-            <div className="text-2xs leading-snug text-faint">
-              Estimated from EC 561/2006 · driving bans are not included, use the Restriction
-              calculator for those.
-            </div>
-          </FoldGroup>
-        </FoldCard>
         </div>
 
         {/* Right-click context menu */}

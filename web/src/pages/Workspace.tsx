@@ -1,13 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  Archive,
-  MailOpen,
-  Plus,
-  Search,
-  UserPlus,
-  Users,
-  X,
-} from 'lucide-react'
+import { Archive, MailOpen, Plus, Search, UserPlus, Users, X, Activity, CalendarClock, MessageSquare, Route } from 'lucide-react'
 import type { User, Workspace as WorkspaceT } from '../auth/AuthContext'
 import type {
   Connection,
@@ -37,7 +29,8 @@ import AccountSidebarPanel from '../components/settings/AccountSidebarPanel'
 import ProfileSidebarPanel from '../components/settings/ProfileSidebarPanel'
 import CompanySidebarPanel from '../components/settings/CompanySidebarPanel'
 import WorkspaceSettingsPanel from '../components/settings/WorkspaceSettingsPanel'
-import InboxView from '../components/inbox/InboxView'
+import InboxView, { type WorkspaceToolId } from '../components/inbox/InboxView'
+import ToolTab, { ChatToolTabs } from '../components/ChatToolTab'
 import { useIdle } from '../hooks/useIdle'
 import { usePresence } from '../hooks/usePresence'
 import { useConnections } from '../hooks/useConnections'
@@ -142,6 +135,14 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // Active members of the caller's own company (internal/trusted contacts).
   const [members, setMembers] = useState<WorkspaceMember[]>([])
   const [selection, setSelection] = useState<Selection>(initialSelection)
+  // Workspace tabs (user, 2026-10-15): a tool opened from the workspace home
+  // (Route planner, Restriction calculator, Fleet status) is owned HERE, not by
+  // the home view, so a trip to a chat does not close it. The + in a tool's
+  // header pins it into the tab strip above the main pane, next to the last
+  // conversation opened, so the user can flip between them freely.
+  const [workspaceTool, setWorkspaceTool] = useState<WorkspaceToolId | null>(null)
+  const [pinnedTools, setPinnedTools] = useState<WorkspaceToolId[]>([])
+  const [lastChatId, setLastChatId] = useState<string | null>(null)
   // Which conversation row has its inline action strip expanded. Held here, not
   // per row, so opening one collapses whichever was open.
   const [rowActionsId, setRowActionsId] = useState<string | null>(null)
@@ -637,6 +638,10 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     return groupInvites.find((i) => i.id === selection.id) ?? null
   }, [groupInvites, selection])
 
+  useEffect(() => {
+    if (selectedGroup) setLastChatId(selectedGroup.id)
+  }, [selectedGroup])
+
   // The Inbox / workspace home is showing whenever nothing else is selected —
   // i.e. selection is `inbox` or `null`. Drives the header's active state and
   // the main-pane fallback below.
@@ -1113,6 +1118,44 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           `surface`, the one remaining tone step, because they COVER content and
           have to stay distinguishable from it. */}
       <main className="workspace-main flex flex-col min-w-0 bg-bg overflow-hidden">
+        {pinnedTools.length > 0 && (() => {
+          const TOOL_TABS: Record<WorkspaceToolId, { label: string; icon: React.ReactNode }> = {
+            route: { label: 'Route planner', icon: <Route size="0.75rem" strokeWidth={2} /> },
+            restrictions: { label: 'Restrictions', icon: <CalendarClock size="0.75rem" strokeWidth={2} /> },
+            fleet: { label: 'Fleet status', icon: <Activity size="0.75rem" strokeWidth={2} /> },
+          }
+          const chat = groups.find((g) => g.id === lastChatId) ?? null
+          const activeKey = selectedGroup
+            ? `chat:${selectedGroup.id}`
+            : inboxActive && workspaceTool
+              ? `tool:${workspaceTool}`
+              : 'none'
+          return (
+            <ChatToolTabs activeKey={activeKey}>
+              {pinnedTools.map((id) => (
+                <ToolTab
+                  key={id}
+                  active={inboxActive && workspaceTool === id}
+                  icon={TOOL_TABS[id].icon}
+                  label={TOOL_TABS[id].label}
+                  onClick={() => {
+                    setSelection({ kind: 'inbox' })
+                    setWorkspaceTool(id)
+                  }}
+                  onClose={() => setPinnedTools((cur) => cur.filter((t) => t !== id))}
+                />
+              ))}
+              {chat && (
+                <ToolTab
+                  active={selectedGroup?.id === chat.id}
+                  icon={<MessageSquare size="0.75rem" strokeWidth={2} />}
+                  label={groupLabel(chat)}
+                  onClick={() => setSelection({ kind: 'group', id: chat.id })}
+                />
+              )}
+            </ChatToolTabs>
+          )
+        })()}
         {selectedGroup ? (
           <ChatView
             key={selectedGroup.id}
@@ -1173,6 +1216,12 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               />
             ) : (
               <InboxView
+                tool={workspaceTool}
+                onToolChange={setWorkspaceTool}
+                pinnedTools={pinnedTools}
+                onTogglePin={(id) =>
+                  setPinnedTools((cur) => (cur.includes(id) ? cur.filter((t) => t !== id) : [...cur, id]))
+                }
                 workspaceName={workspace.name}
                 vehicleRooms={availableVehicleRooms}
                 tripRooms={tripTargetRooms}

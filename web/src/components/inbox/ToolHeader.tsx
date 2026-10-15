@@ -1,4 +1,4 @@
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Check, Plus } from 'lucide-react'
 import { ICON_ACTION_BASE, ICON_ACTION_IDLE } from '../HeaderIconButton'
 
 // The bar over every workspace tool — Route planner, Restriction calculator,
@@ -17,12 +17,17 @@ import { ICON_ACTION_BASE, ICON_ACTION_IDLE } from '../HeaderIconButton'
 // already says what each tool covers in exactly those words. One component so
 // the three bars cannot drift apart again (they had: 36px vs 32px buttons,
 // 1.25rem vs 1rem arrows, px-4 vs px-5).
+// Keeping a tool open in a tab (user, 2026-10-15): the + pins the tool to the
+// workspace's tab strip, so leaving it for a chat is not leaving it behind.
+export type ToolPin = { pinned: boolean; onToggle: () => void }
+
 type Props = {
   title: string
   onBack: () => void
+  pin?: ToolPin
 }
 
-export default function ToolHeader({ title, onBack }: Props) {
+export default function ToolHeader({ title, onBack, pin }: Props) {
   return (
     <header className="h-[var(--tool-header-height)] flex items-center gap-3 px-4 shrink-0">
       <button
@@ -36,6 +41,18 @@ export default function ToolHeader({ title, onBack }: Props) {
       <div className="min-w-0 text-xl font-semibold tracking-[-0.2px] leading-tight truncate">
         {title}
       </div>
+      {pin && (
+        <button
+          type="button"
+          onClick={pin.onToggle}
+          aria-pressed={pin.pinned}
+          aria-label={pin.pinned ? `Remove ${title} from tabs` : `Keep ${title} open in a tab`}
+          title={pin.pinned ? 'Open in a tab — click to remove' : 'Keep open in a tab'}
+          className={`${ICON_ACTION_BASE} ${ICON_ACTION_IDLE} ${pin.pinned ? 'text-text' : ''}`}
+        >
+          {pin.pinned ? <Check size="1.0625rem" strokeWidth={2} /> : <Plus size="1.125rem" strokeWidth={1.9} />}
+        </button>
+      )}
     </header>
   )
 }

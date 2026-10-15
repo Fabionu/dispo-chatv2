@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Ban, Plus, Route as RouteIcon, X } from 'lucide-react'
-import ToolHeader from './ToolHeader'
+import ToolHeader, { type ToolPin } from './ToolHeader'
 
 import { DateField, TimeField } from '../DateTimeField'
 import { fieldClass } from '../forms/fieldStyles'
@@ -21,6 +21,7 @@ type Props = {
   /** Country legs handed over from the Route planner. `null` = no route yet. */
   legs: RouteCountryLeg[] | null
   onBack: () => void
+  pin?: ToolPin
   onPlanRoute: () => void
 }
 
@@ -52,7 +53,7 @@ type BreakBlock = { id: string; hours: number }
 let seq = 0
 const nextId = (prefix: string) => `${prefix}-${(seq += 1)}`
 
-export default function RestrictionCalculator({ legs, onBack, onPlanRoute }: Props) {
+export default function RestrictionCalculator({ legs, onBack, onPlanRoute, pin }: Props) {
   const now = useMemo(() => new Date(), [])
   const [departDate, setDepartDate] = useState(() => toDmy(now))
   const [departTime, setDepartTime] = useState(
@@ -194,7 +195,7 @@ export default function RestrictionCalculator({ legs, onBack, onPlanRoute }: Pro
 
   return (
     <>
-      <ToolHeader title="Restriction calculator" onBack={onBack} />
+      <ToolHeader title="Restriction calculator" onBack={onBack} pin={pin} />
 
       <div className="flex-1 overflow-y-auto px-5 py-5">
         <div className="mx-auto flex max-w-[57.5rem] flex-col gap-6">

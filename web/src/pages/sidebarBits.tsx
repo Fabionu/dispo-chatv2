@@ -356,7 +356,7 @@ export function FilterTab({
       onClick={onClick}
       aria-pressed={active}
       className={`eyebrow filter-tab relative z-10 inline-flex flex-1 items-center justify-center gap-1.5 rounded-btn py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
-        active ? 'filter-tab-active' : 'hover:text-text'
+        active ? 'filter-pill-active' : 'hover:text-text'
       }`}
     >
       {children}

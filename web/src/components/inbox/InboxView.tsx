@@ -54,7 +54,16 @@ const RoutePlanner = lazy(() => import('./RoutePlanner'))
 // initial bundle either.
 const RestrictionCalculator = lazy(() => import('./RestrictionCalculator'))
 
+export type WorkspaceToolId = 'route' | 'fleet' | 'restrictions'
+
 type Props = {
+  // Which tool is open (null = the workspace home). Owned by Workspace, so a
+  // detour into a chat does not forget it, and a pinned tab can reopen it.
+  tool: WorkspaceToolId | null
+  onToolChange: (tool: WorkspaceToolId | null) => void
+  // The tools kept open in a tab, and the + in each tool's header.
+  pinnedTools: WorkspaceToolId[]
+  onTogglePin: (tool: WorkspaceToolId) => void
   workspaceName: string
   vehicleRooms: Group[]
   // The subset of vehicleRooms the user may add a trip to (lib/roomPermissions):
@@ -83,6 +92,10 @@ type Props = {
 //
 // Both grids are auto-fit so future entries flow in alongside.
 export default function InboxView({
+  tool,
+  onToolChange: setTool,
+  pinnedTools,
+  onTogglePin,
   workspaceName,
   vehicleRooms,
   tripRooms,
@@ -92,7 +105,10 @@ export default function InboxView({
   onAddConnection,
   onOpenVehicleRoom,
 }: Props) {
-  const [tool, setTool] = useState<'route' | 'fleet' | 'restrictions' | null>(null)
+  const pinFor = (id: WorkspaceToolId) => ({
+    pinned: pinnedTools.includes(id),
+    onToggle: () => onTogglePin(id),
+  })
   // Fleet table folded away — remembered on this device until unfolded.
   const [fleetCollapsed, setFleetCollapsed] = useState(readFleetCollapsed)
   function toggleFleet() {
@@ -164,6 +180,7 @@ export default function InboxView({
     return (
       <Suspense fallback={<PaneLoader className="h-full" />}>
         <RoutePlanner
+          pin={pinFor('route')}
           onBack={() => setTool(null)}
           onCalculateRestrictions={(legs) => {
             setRestrictionLegs(legs)
@@ -178,6 +195,7 @@ export default function InboxView({
     return (
       <Suspense fallback={<PaneLoader className="h-full" />}>
         <RestrictionCalculator
+          pin={pinFor('restrictions')}
           legs={restrictionLegs}
           onBack={() => setTool(null)}
           onPlanRoute={() => setTool('route')}
@@ -189,6 +207,7 @@ export default function InboxView({
   if (tool === 'fleet') {
     return (
       <FleetStatus
+        pin={pinFor('fleet')}
         rooms={vehicleRooms}
         onOpenRoom={onOpenVehicleRoom}
         onBack={() => setTool(null)}

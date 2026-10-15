@@ -540,3 +540,52 @@ export function FoldGroup({ children, className = '' }: { children: React.ReactN
     </div>
   )
 }
+
+// The same two folds as FoldCard, but as a ROW inside the route card (user,
+// 2026-10-15: Truck profile and Crew & hours move into the card above). Full
+// width at rest — glyph, title over its live value, chevron — and it opens
+// downward into the card; no plate, border or shadow of its own, because the
+// card around it is the plate.
+export function FoldRow({
+  icon,
+  title,
+  summary,
+  open,
+  onToggle,
+  children,
+}: {
+  icon: React.ReactNode
+  title: string
+  /** The row's live current value, shown under the title. */
+  summary: string
+  open: boolean
+  onToggle: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex h-[2.375rem] w-full items-center gap-2.5 px-[0.6875rem] text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20"
+      >
+        <span className={`flex h-4 w-4 shrink-0 items-center justify-center ${open ? 'text-text' : 'text-muted'}`}>
+          {icon}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block whitespace-nowrap text-base font-medium leading-tight text-text">{title}</span>
+          <span className="block truncate text-xs leading-tight text-faint" title={summary}>
+            {summary}
+          </span>
+        </span>
+        <ChevronDown
+          size="0.875rem"
+          strokeWidth={1.8}
+          className={`shrink-0 text-faint transition-transform motion-reduce:transition-none ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {open && <div className="border-t border-line">{children}</div>}
+    </div>
+  )
+}

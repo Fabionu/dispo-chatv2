@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { ChevronRight, Search, Truck, X } from 'lucide-react'
-import ToolHeader from './ToolHeader'
+import ToolHeader, { type ToolPin } from './ToolHeader'
 import type { Group } from '../../lib/types'
 import { groupLabel, tractorPlate, trailerPlate } from '../../lib/types'
 import {
@@ -19,6 +19,7 @@ type Props = {
   rooms: Group[]
   onOpenRoom: (groupId: string) => void
   onBack: () => void
+  pin?: ToolPin
 }
 
 type FleetFilter = 'all' | 'active' | 'available' | 'service'
@@ -104,7 +105,7 @@ function summarizeRoom(room: Group): FleetRoom {
   }
 }
 
-export default function FleetStatus({ rooms, onOpenRoom, onBack }: Props) {
+export default function FleetStatus({ rooms, onOpenRoom, onBack, pin }: Props) {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<FleetFilter>('all')
 
@@ -134,7 +135,7 @@ export default function FleetStatus({ rooms, onOpenRoom, onBack }: Props) {
 
   return (
     <>
-      <ToolHeader title="Fleet status" onBack={onBack} />
+      <ToolHeader title="Fleet status" onBack={onBack} pin={pin} />
 
       <div className="flex-1 overflow-y-auto px-5 py-5">
         <div className="mx-auto flex max-w-[57.5rem] flex-col gap-4">
