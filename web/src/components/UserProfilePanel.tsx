@@ -282,7 +282,7 @@ export default function UserProfilePanel({
             ? `fixed top-0 right-0 bottom-0 z-40 flex w-full max-w-[25rem] flex-col overflow-hidden ${PANEL_SURFACE}
                shadow-drawer
                xl:static xl:z-auto xl:w-[clamp(22.5rem,26vw,26.25rem)] xl:max-w-none xl:shrink-0
-               xl:rounded-panel xl:shadow-none xl:border xl:border-line`
+               xl:rounded-panel xl:shadow-none`
             : `fixed left-1/2 top-1/2 z-50 h-[calc(100dvh-1.5rem)] max-h-[44rem]
                w-[calc(100%-1.5rem)] max-w-[30rem] -translate-x-1/2 -translate-y-1/2
                rounded-modal border border-line ${PANEL_SURFACE}

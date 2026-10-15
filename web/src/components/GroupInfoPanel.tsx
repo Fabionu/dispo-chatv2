@@ -374,7 +374,7 @@ export default function GroupInfoPanel({
         // reflows narrower and the panel matches the app's flat card shell.
         className={`panel-fade-in fixed top-0 right-0 bottom-0 z-40 w-full max-w-[25rem] shadow-drawer ${PANEL_SURFACE} flex flex-col
                    xl:static xl:z-auto xl:w-[clamp(22.5rem,26vw,26.25rem)] xl:max-w-none xl:shrink-0 xl:shadow-none
-                   xl:rounded-panel xl:overflow-hidden xl:border xl:border-line`}
+                   xl:rounded-panel xl:overflow-hidden`}
       >
         <PanelCloseHeader title="Group info" onClose={onClose} closeLabel="Close group info" />
 
