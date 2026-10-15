@@ -769,7 +769,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           thread by the hairline on its right edge. Its content is a small
           navigation stack (see SidebarView): the conversation list, or one
           drill-in view rendered in its place. */}
-      <aside className="workspace-sidebar-panel relative h-full min-w-0 overflow-hidden bg-bg border-r">
+      <aside className="workspace-sidebar-panel relative h-full min-w-0 overflow-hidden bg-bg">
         {/* Keep the conversation list mounted while a sidebar panel covers it.
             Rows therefore retain their image elements, decoded avatars, action
             state and scroll position instead of rebuilding on every Back. */}

@@ -1275,12 +1275,20 @@ export default function ChatView({
     // when it's closed or a narrow-screen overlay — both leave one in-flow child).
     // The trip panel is the exception: it sits on a hairline seam like the
     // rail↔thread one, so the gap goes while it is the column showing.
-    <div className={`relative flex-1 flex min-h-0 ${showTripPanel ? '' : 'xl:gap-3'}`}>
+    <div className="relative flex-1 flex min-h-0">
       {/* Chat pane — the whole conversation column (header, pinned bar,
           messages, composer). `flex-1 min-w-0` lets it shrink naturally to the
-          remaining width when the Group info column is open, and keeps the
-          drag-drop overlay scoped to the chat (never over the panel). */}
-      <div className="relative flex-1 min-w-0 flex flex-col" {...dropHandlers}>
+          remaining width when a right-hand panel opens, and keeps the
+          drag-drop overlay scoped to the chat (never over the panel).
+          It is the floating card (2026-10-15): inset from the field on every
+          side — tighter top and bottom than the sides — with a rim, the
+          chrome radius and the one `float` shadow. The panels beside it sit
+          on the field itself, so the card contracts from its sides as they
+          open. */}
+      <div
+        className="relative flex-1 min-w-0 flex flex-col my-1.5 mx-3.5 rounded-card border border-line shadow-float"
+        {...dropHandlers}
+      >
       {/* Drag-and-drop overlay. pointer-events-none so the drop still lands on
           the underlying drop zone; purely a visual affordance. */}
       {dragActive && !dropBlocked && (

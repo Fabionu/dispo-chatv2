@@ -162,6 +162,9 @@ export default {
         overlay: '0 8px 24px rgb(0 0 0 / 0.28)',
         modal: '0 16px 48px rgb(0 0 0 / 0.34)',
         drawer: '-12px 0 32px rgb(0 0 0 / 0.24)',
+        // The chat card — the one surface that floats on the field. Dark on
+        // black, so it leans on a deep spread plus a faint rim to read as lifted.
+        float: '0 0 0 1px rgb(255 255 255 / 0.04), 0 18px 48px rgb(0 0 0 / 0.9), 0 4px 12px rgb(0 0 0 / 0.8)',
       },
       // ── Radius scale — square ─────────────────────────────────────────────
       // The rework is a drawn, sharp-cornered design: a hairline grid reads as a

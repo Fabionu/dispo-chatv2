@@ -145,8 +145,7 @@ export default function TripPanel({
       <aside
         aria-label="Trip"
         className={`panel-fade-in fixed top-0 right-0 bottom-0 z-40 w-full max-w-[25rem] shadow-drawer ${PANEL_SURFACE} flex flex-col
-                   xl:static xl:z-auto xl:w-[clamp(20rem,24vw,24rem)] xl:max-w-none xl:shrink-0 xl:shadow-none
-                   xl:border-l xl:border-line`}
+                   xl:static xl:z-auto xl:w-[clamp(20rem,24vw,24rem)] xl:max-w-none xl:shrink-0 xl:shadow-none`}
       >
         {/* Header — kept slim (user, 2026-10-15: "narrower from top to bottom"):
             the tool-bar height rather than the thread header's, so it no longer
