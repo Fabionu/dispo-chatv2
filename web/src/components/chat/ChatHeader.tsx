@@ -9,6 +9,10 @@ import { TONE_TEXT } from '../vehicle/opsControls'
 import type { TripPlace, TripStop, TripSummary } from '../../lib/vehicleOps'
 import TypingMark from '../messages/TypingMark'
 
+// The room tile in the one-row trip layout (design px, rendered as rem) — a step
+// under HEADER_TILE_PX so the identity does not out-weigh the track beside it.
+const HEADER_TILE_COMPACT_PX = 34
+
 // The header's typing status: the mark, then the sentence. It takes the
 // subtitle's place and its voice; the sentence is what truncates, so a narrow
 // header never clips the mark.
@@ -90,6 +94,11 @@ export default function ChatHeader({
   const orderLine = trip
     ? [trip.reference && `#${trip.reference}`, trip.client].filter(Boolean).join(' ')
     : ''
+  // The one-row layout steps every control down a notch: its row holds a whole
+  // trip, so 40px buttons and 19px glyphs would crowd the track.
+  const compact = Boolean(itinerary)
+  const iconSize = compact ? '0.9375rem' : '1.1875rem'
+  const iconBox = compact ? 'h-8 w-8' : 'h-10 w-10'
   return (
     /* Thread header — left-aligned identity, actions at the right edge, and a
        single hairline sealing it against the timeline.
@@ -142,37 +151,28 @@ export default function ChatHeader({
             id={group.id}
             hasAvatar={group.hasAvatar}
             version={group.avatarVersion}
-            size={HEADER_TILE_PX}
+            size={itinerary ? HEADER_TILE_COMPACT_PX : HEADER_TILE_PX}
           />
         )}
       </div>
 
       {itinerary ? (
-        // One line: the plate, then trailer │ members │ order, on its
-        // baseline. Typing takes the meta's place, as it does below.
-        <div className="min-w-0 flex-1 flex items-baseline gap-3">
-          <div className="shrink-0 text-2xl font-bold tracking-[-0.02em] tabular-nums leading-tight">
+        // ONE ROW (design canvas option B, 2026-10-16): the plate, then the
+        // trip itself — near end, track, far end, summary — in the same line.
+        // The trailer │ order │ members facts that used to sit beside the plate
+        // moved to its tooltip (and live in Group info); typing takes the
+        // summary's place.
+        <div className="min-w-0 flex-1 flex items-center gap-3">
+          <div
+            title={[...subtitle.split(' · ').slice(0, 1), orderLine, ...subtitle.split(' · ').slice(1)]
+              .filter(Boolean)
+              .join(' · ')}
+            className="shrink-0 text-[1.0625rem] font-bold tracking-[-0.02em] tabular-nums leading-tight"
+          >
             {groupLabel(group)}
           </div>
-          <div
-            role={typingText ? 'status' : undefined}
-            aria-live={typingText ? 'polite' : undefined}
-            className={`min-w-0 flex-1 eyebrow truncate leading-tight ${typingText ? 'text-active' : ''}`}
-          >
-            {/* The order outranks the member count: when the line is tight,
-                RowMeta drops whole segments from the END, so it goes second. */}
-            {typingText ? (
-              <TypingLine text={typingText} />
-            ) : (
-              <RowMeta
-                segments={(() => {
-                  const [first, ...rest] = subtitle.split(' · ')
-                  return [first, orderLine, ...rest]
-                })()}
-                whole
-              />
-            )}
-          </div>
+          <span aria-hidden className="h-[1.125rem] w-px shrink-0 bg-line" />
+          <TripLine trip={itinerary} typingText={typingText} />
         </div>
       ) : (
       <div className="min-w-0 flex-1">
@@ -240,7 +240,7 @@ export default function ChatHeader({
           className={`chat-search-reveal ${searchOpen ? 'is-open' : ''}`}
         >
           <div className="min-w-0 overflow-hidden">
-            <div className="flex items-center gap-1 h-10 pl-3 pr-1 mr-1.5 rounded-card border border-strong">
+            <div className={`flex items-center gap-1 ${compact ? 'h-8' : 'h-10'} pl-3 pr-1 mr-1.5 rounded-card border border-strong`}>
               <input
                 ref={searchInputRef}
                 value={searchQuery}
@@ -278,20 +278,20 @@ export default function ChatHeader({
           aria-pressed={searchOpen}
           title={searchOpen ? 'Close search' : 'Search conversation'}
           onClick={() => (searchOpen ? onCloseSearch() : onOpenSearch())}
-          className={`chat-search-toggle h-10 w-10 flex items-center justify-center rounded-btn transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+          className={`chat-search-toggle ${iconBox} flex items-center justify-center rounded-btn transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
             searchOpen ? 'text-text bg-white/6' : 'text-muted hover:text-text hover:bg-white/6'
           }`}
         >
-          <Search size="1.1875rem" strokeWidth={1.8} />
+          <Search size={iconSize} strokeWidth={1.8} />
         </button>
         {routeMapAvailable && (
           <HeaderIconButton
             label="Trip route"
-            size="lg"
+            size={compact ? 'sm' : 'lg'}
             active={tripRouteActive}
             onClick={() => (tripRouteActive ? onCloseTripRoute() : onOpenTripRoute())}
           >
-            <Route size="1.1875rem" strokeWidth={1.8} />
+            <Route size={iconSize} strokeWidth={1.8} />
           </HeaderIconButton>
         )}
         {/* The trip panel's switch is WORDED, not just a glyph: it is the
@@ -305,24 +305,31 @@ export default function ChatHeader({
             aria-pressed={tripPanelOpen}
             aria-label={tripPanelOpen ? 'Hide trip panel' : 'Show trip panel'}
             title={tripPanelOpen ? 'Hide trip panel' : 'Show trip panel'}
-            className={`ml-1 h-10 inline-flex items-center gap-2 rounded-btn border px-3.5 text-base font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
-              tripPanelOpen
-                ? 'border-line bg-white/8 text-text'
-                : 'border-line text-muted hover:text-text hover:bg-white/6'
-            }`}
+            className={
+              compact
+                ? // Glyph only in the one-row layout — the track beside it already
+                  // says "trip"; the pressed fill still says the panel is open.
+                  `${iconBox} flex items-center justify-center rounded-btn transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+                    tripPanelOpen ? 'text-text bg-white/6' : 'text-muted hover:text-text hover:bg-white/6'
+                  }`
+                : `ml-1 h-10 inline-flex items-center gap-2 rounded-btn border px-3.5 text-base font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+                    tripPanelOpen
+                      ? 'border-line bg-white/8 text-text'
+                      : 'border-line text-muted hover:text-text hover:bg-white/6'
+                  }`
+            }
           >
-            <PanelRight size="1rem" strokeWidth={1.8} />
-            Trip
+            <PanelRight size={compact ? iconSize : '1rem'} strokeWidth={1.8} />
+            {!compact && 'Trip'}
           </button>
         )}
         {group.type === 'vehicle' && (
-          <HeaderIconButton label="Group info" size="lg" onClick={onOpenGroupInfo}>
-            <Info size="1.1875rem" strokeWidth={1.8} />
+          <HeaderIconButton label="Group info" size={compact ? 'sm' : 'lg'} onClick={onOpenGroupInfo}>
+            <Info size={iconSize} strokeWidth={1.8} />
           </HeaderIconButton>
         )}
       </div>
     </div>
-    {itinerary && <HeaderItinerary trip={itinerary} />}
     </header>
   )
 }
@@ -340,7 +347,7 @@ function town(place: TripPlace): string {
 // every stop a mark on it (the map's black-on-white marks; a stop behind the
 // truck drops to the hairline grey), the travelled part filled in the status
 // colour, and the truck as a dot where it is.
-function HeaderItinerary({ trip }: { trip: TripSummary }) {
+function TripLine({ trip, typingText }: { trip: TripSummary; typingText?: string }) {
   const stops = trip.stops
   const n = stops.length
   const nextIndex = stops.findIndex((s) => s.status === 'planned')
@@ -352,11 +359,17 @@ function HeaderItinerary({ trip }: { trip: TripSummary }) {
   const at = (i: number) => (n === 1 ? 0 : i / (n - 1))
   const tone = TONE_TEXT[trip.statusTone]
 
-  // ONE line (user, 2026-10-10: "make the header more compact"): the near end,
-  // the track, the far end. What each end IS (loading, next…) is in its
-  // tooltip; the ring on the track already says which stop is next.
+  // The summary after the far end: how far along the truck is (the status word
+  // when it has not left or has arrived), then the far stop's ETA / due time.
+  // The ends carry the town only; what each end IS (loading, next…) is in its
+  // tooltip, and the ring on the track already says which stop is next.
+  const far = stops[lastIndex]
+  const farWhen = far.eta ? `ETA ${far.eta}` : far.plannedAt
+  const pctLabel =
+    trip.progress && pct > 0 && pct < 1 ? `${Math.round(pct * 100)}%` : trip.statusLabel
+
   return (
-    <div className="flex items-center gap-3 px-5 pb-2.5">
+    <div className="min-w-0 flex flex-1 items-center gap-3">
       <ItineraryEnd stop={stops[leftIndex]} next={leftIndex === nextIndex} />
       <div className={`relative h-3 min-w-16 flex-1 ${tone}`} aria-hidden>
         <span className="absolute inset-x-0 top-1/2 h-0.5 -translate-y-1/2 rounded-full bg-line" />
@@ -382,11 +395,22 @@ function HeaderItinerary({ trip }: { trip: TripSummary }) {
         )}
       </div>
       {n > 1 && <ItineraryEnd stop={stops[lastIndex]} next={lastIndex === nextIndex} alignEnd />}
+      {typingText ? (
+        <span role="status" aria-live="polite" className="max-w-[40%] shrink-0 text-sm font-medium">
+          <TypingLine text={typingText} />
+        </span>
+      ) : (
+        <span className="shrink-0 whitespace-nowrap text-sm tabular-nums text-muted">
+          <span className={`font-semibold ${tone}`}>{pctLabel}</span>
+          {farWhen && ` · ${farWhen}`}
+        </span>
+      )}
     </div>
   )
 }
 
 function ItineraryEnd({ stop, next, alignEnd = false }: { stop: TripStop; next: boolean; alignEnd?: boolean }) {
+  // Hover text only: the on-screen line keeps just the town (see TripLine).
   const when = stop.eta ? `ETA ${stop.eta}` : stop.plannedAt
   const role = `${stop.typeLabel}${next ? ', next' : stop.status === 'done' ? ', done' : ''}`
   return (
@@ -400,7 +424,6 @@ function ItineraryEnd({ stop, next, alignEnd = false }: { stop: TripStop; next: 
       >
         {town(stop.place)}
       </span>
-      {when && <span className="shrink-0 text-sm text-muted tabular-nums">{when}</span>}
     </span>
   )
 }

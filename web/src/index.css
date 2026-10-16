@@ -37,17 +37,27 @@
    viewport-derived tier on top of it would put the old step back at 2200.
    It multiplies the fluid base here and in --sidebar-width / --thread-width. */
 html {
-  --ui-scale: 1;
-  font-size: clamp(14px, calc((12px + 0.234vw) * var(--ui-scale)), 20px);
+  /* 2026-10-16 (user: "the elements are very big, even on a higher resolution —
+     minimize everything"). --ui-base is the house size of the whole curve: every
+     token below multiplies by --ui-scale, and so do their min/max ends, so one
+     number shrinks type, controls, rails and every rem at once. --ui-density is
+     the manual Appearance choice (1 in Auto) and stacks on top of it. */
+  --ui-base: 0.85;
+  --ui-density: 1;
+  --ui-scale: calc(var(--ui-base) * var(--ui-density));
+  /* The floor (every clamp's min) shrinks half as much as the curve, so a laptop
+     window does not drop to 10px labels; big-screen sizes come down the most. */
+  --ui-floor: calc(1 - (1 - var(--ui-scale)) * 0.5);
+  font-size: clamp(calc(14px * var(--ui-floor)), calc((12px + 0.234vw) * var(--ui-scale)), calc(20px * var(--ui-scale)));
 }
 html[data-density-mode='manual'][data-density='compact'] {
-  --ui-scale: 0.92;
+  --ui-density: 0.92;
 }
 html[data-density-mode='manual'][data-density='default'] {
-  --ui-scale: 1;
+  --ui-density: 1;
 }
 html[data-density-mode='manual'][data-density='comfortable'] {
-  --ui-scale: 1.1;
+  --ui-density: 1.1;
 }
 
 :root {
@@ -95,7 +105,7 @@ html[data-density-mode='manual'][data-density='comfortable'] {
      leftover of the pre-rework bubbles, and an alias that made the token a
      no-op, which is how it survived the de-bubbling unnoticed.) */
   --color-bubble: 18 18 18;
-  --color-bubble-own: 31 31 31;
+  --color-bubble-own: 42 42 42;
   --color-surface: 17 17 17;
   --color-surface-2: 26 26 26;
 
@@ -223,7 +233,7 @@ html[data-density-mode='manual'][data-density='comfortable'] {
        --sidebar-row-pad-y        conversation row top/bottom padding
        --sidebar-section-gap      spacing between rail sections */
   /* 15.5px at 1920 (was a flat 15px from 1280 all the way to 2200). */
-  --app-font-size: clamp(14.42px, calc((11.28px + 0.22vw) * var(--ui-scale)), 18.75px);
+  --app-font-size: clamp(calc(14.42px * var(--ui-floor)), calc((11.28px + 0.22vw) * var(--ui-scale)), calc(18.75px * var(--ui-scale)));
   /* 14.5px at 1920, 15.8 at 2560, 17.5 capped. The thread's reading size and
      the composer's typing size.
      It was lifted to 16px when the whole app was too small on a wide display;
@@ -232,7 +242,7 @@ html[data-density-mode='manual'][data-density='comfortable'] {
      2026-09-06: "make the items in the chat window smaller"). Everything else in
      the thread follows from here — --msg-indent is a multiple of it, and the
      reading measure is in ch units. */
-  --chat-msg-font-size: clamp(13.48px, calc((10.55px + 0.206vw) * var(--ui-scale)), 17.54px);
+  --chat-msg-font-size: clamp(calc(13.48px * var(--ui-floor)), calc((10.55px + 0.206vw) * var(--ui-scale)), calc(17.54px * var(--ui-scale)));
   /* Thread body text — the SAME size as the composer. It briefly ran +1px, then
      +2.5px chasing the reference's proportions; both read too big in the real
      app, where messages are short operational lines rather than the mockup's
@@ -270,7 +280,7 @@ html[data-density-mode='manual'][data-density='comfortable'] {
      picture, a title and a 40px control into a bar with four pixels of air.
      Every main-pane header and the sidebar switcher share this token, so they
      all move together and the seam between rail and thread stays one line. */
-  --header-height: clamp(66.95px, calc((52.38px + 1.022vw) * var(--ui-scale)), 87.08px);
+  --header-height: clamp(calc(66.95px * var(--ui-floor)), calc((52.38px + 1.022vw) * var(--ui-scale)), calc(87.08px * var(--ui-scale)));
   /* 44px at 1920. The bar over the workspace tools (Route planner,
      Restriction calculator, Fleet status — components/inbox/ToolHeader.tsx): a
      back arrow and a title, with no rail seam to line up with and no identity
@@ -280,7 +290,7 @@ html[data-density-mode='manual'][data-density='comfortable'] {
      proportion to the 36px control inside it at every width. The workspace
      HOME header (InboxView) stays on --header-height: it is a main-pane header
      beside the rail, and that seam is what the tall token exists for. */
-  --tool-header-height: clamp(40.92px, calc((32.01px + 0.6245vw) * var(--ui-scale)), 53.24px);
+  --tool-header-height: clamp(calc(40.92px * var(--ui-floor)), calc((32.01px + 0.6245vw) * var(--ui-scale)), calc(53.24px * var(--ui-scale)));
   --workspace-nav-width: 3.25rem;
   /* FLUID, and defined exactly once (2026-08-26, user: the widths should scale
      with CSS rather than be managed per resolution). This token used to be
@@ -306,9 +316,9 @@ html[data-density-mode='manual'][data-density='comfortable'] {
      parsed, in MessageActionsPanel). Don't add a JS reader without converting
      it to `getBoundingClientRect` — getPropertyValue hands back the unevaluated
      clamp() text, not a pixel number. */
-  --sidebar-width: clamp(320px, calc((250px + 14vw) * var(--ui-scale)), 680px);
-  --composer-size: clamp(33.48px, calc((26.2px + 0.511vw) * var(--ui-scale)), 43.56px);
-  --chat-gutter: clamp(18.6px, calc((14.55px + 0.284vw) * var(--ui-scale)), 24.2px);
+  --sidebar-width: clamp(calc(320px * var(--ui-floor)), calc((250px + 14vw) * var(--ui-scale)), calc(680px * var(--ui-scale)));
+  --composer-size: clamp(calc(33.48px * var(--ui-floor)), calc((26.2px + 0.511vw) * var(--ui-scale)), calc(43.56px * var(--ui-scale)));
+  --chat-gutter: clamp(calc(18.6px * var(--ui-floor)), calc((14.55px + 0.284vw) * var(--ui-scale)), calc(24.2px * var(--ui-scale)));
 
   /* ── Thread geometry ─────────────────────────────────────────────────────
      TWO widths, and the difference between them is the whole reason this block
@@ -331,7 +341,7 @@ html[data-density-mode='manual'][data-density='comfortable'] {
                        number to change if lines feel long; never --thread-width.
        --msg-indent    gap between a message's rule and its text
        --msg-lane      the author lane left of an incoming message's rule */
-  --thread-width: clamp(640px, calc((480px + 36vw) * var(--ui-scale)), 1320px);
+  --thread-width: clamp(calc(640px * var(--ui-floor)), calc((480px + 36vw) * var(--ui-scale)), calc(1320px * var(--ui-scale)));
   --msg-body: 72ch;
   /* ~1em of body text. At 20px the rule stood too far off the words to read as
      THEIR edge — it looked like a divider that happened to be nearby, and the
@@ -351,12 +361,12 @@ html[data-density-mode='manual'][data-density='comfortable'] {
      while the tile inside it grew, and on the 4K tier the photo would run into
      the rule it is supposed to hang beside. 2.5rem against a 1.875rem (30px)
      tile leaves 0.625rem of air, at every scale. */
-  --msg-lane: 2.5rem;
+  --msg-lane: 2.75rem;
   /* The label voice's two sizes. Like the chat/sidebar tokens these are px,
      not rem steps off the type scale, because they are optical: a small label
      and a tabular stat value each have exactly one size that reads right, and
      neither wants to grow with the display. */
-  --msg-label-size: clamp(11px, calc((8.37px + 0.163vw) * var(--ui-scale)), 13.5px);
+  --msg-label-size: clamp(calc(11px * var(--ui-floor)), calc((8.37px + 0.163vw) * var(--ui-scale)), calc(13.5px * var(--ui-scale)));
   /* Timestamps (`.timestamp`). An ALIAS now, not a number. This used to be
      11.5px — half a pixel over the label beside it, because the label was
      JetBrains Mono and the clock was Inter, and Inter's smaller x-height made
@@ -461,7 +471,7 @@ html[data-density-mode='manual'][data-density='comfortable'] {
      they were drawn by the same hand at different sizes. */
   --control-radius: 6px;
   --bubble-pad-x: var(--msg-indent);
-  --bubble-pad-y: clamp(10.23px, calc((8px + 0.156vw) * var(--ui-scale)), 13.31px);
+  --bubble-pad-y: clamp(calc(10.23px * var(--ui-floor)), calc((8px + 0.156vw) * var(--ui-scale)), calc(13.31px * var(--ui-scale)));
   /* Tightened with the 2026-10-10 rework: each block now carries its clock
      UNDER it, so that line already separates a burst's messages and a new
      speaker needs less extra air to read as one. */
@@ -485,19 +495,19 @@ html[data-density-mode='manual'][data-density='comfortable'] {
      Row height leads the bump (46 -> 50 at 1920): the rows had been sized for
      text two steps smaller, and a taller row is what makes a rail read as
      scannable rather than cramped. */
-  --sidebar-title-font-size: clamp(19.53px, calc((15.28px + 0.298vw) * var(--ui-scale)), 25.41px);
-  --sidebar-row-font-size: clamp(16.74px, calc((13.1px + 0.255vw) * var(--ui-scale)), 21.78px);
-  --sidebar-meta-font-size: clamp(14.42px, calc((11.28px + 0.22vw) * var(--ui-scale)), 18.75px);
-  --sidebar-section-font-size: clamp(12.09px, calc((9.46px + 0.184vw) * var(--ui-scale)), 15.73px);
-  --sidebar-icon-size: clamp(23.25px, calc((18.19px + 0.355vw) * var(--ui-scale)), 30.25px);
+  --sidebar-title-font-size: clamp(calc(19.53px * var(--ui-floor)), calc((15.28px + 0.298vw) * var(--ui-scale)), calc(25.41px * var(--ui-scale)));
+  --sidebar-row-font-size: clamp(calc(16.74px * var(--ui-floor)), calc((13.1px + 0.255vw) * var(--ui-scale)), calc(21.78px * var(--ui-scale)));
+  --sidebar-meta-font-size: clamp(calc(14.42px * var(--ui-floor)), calc((11.28px + 0.22vw) * var(--ui-scale)), calc(18.75px * var(--ui-scale)));
+  --sidebar-section-font-size: clamp(calc(12.09px * var(--ui-floor)), calc((9.46px + 0.184vw) * var(--ui-scale)), calc(15.73px * var(--ui-scale)));
+  --sidebar-icon-size: clamp(calc(23.25px * var(--ui-floor)), calc((18.19px + 0.355vw) * var(--ui-scale)), calc(30.25px * var(--ui-scale)));
   /* 2026-10-15: ~20% under the old curve (39px at 1440) — the search field and the
      + button were reading as the largest objects in the rail. */
-  --sidebar-search-height: clamp(27px, calc((20.5px + 0.43vw) * var(--ui-scale)), 35px);
-  --sidebar-row-height: clamp(46.5px, calc((36.38px + 0.71vw) * var(--ui-scale)), 60.5px);
-  --sidebar-row-gap: clamp(13.95px, calc((10.92px + 0.213vw) * var(--ui-scale)), 18.15px);
-  --sidebar-row-pad-x: clamp(14.88px, calc((11.64px + 0.227vw) * var(--ui-scale)), 19.36px);
-  --sidebar-row-pad-y: clamp(7.44px, calc((5.82px + 0.114vw) * var(--ui-scale)), 9.68px);
-  --sidebar-section-gap: clamp(29.76px, calc((23.29px + 0.454vw) * var(--ui-scale)), 38.72px);
+  --sidebar-search-height: clamp(calc(27px * var(--ui-floor)), calc((20.5px + 0.43vw) * var(--ui-scale)), calc(35px * var(--ui-scale)));
+  --sidebar-row-height: clamp(calc(46.5px * var(--ui-floor)), calc((36.38px + 0.71vw) * var(--ui-scale)), calc(60.5px * var(--ui-scale)));
+  --sidebar-row-gap: clamp(calc(13.95px * var(--ui-floor)), calc((10.92px + 0.213vw) * var(--ui-scale)), calc(18.15px * var(--ui-scale)));
+  --sidebar-row-pad-x: clamp(calc(14.88px * var(--ui-floor)), calc((11.64px + 0.227vw) * var(--ui-scale)), calc(19.36px * var(--ui-scale)));
+  --sidebar-row-pad-y: clamp(calc(7.44px * var(--ui-floor)), calc((5.82px + 0.114vw) * var(--ui-scale)), calc(9.68px * var(--ui-scale)));
+  --sidebar-section-gap: clamp(calc(29.76px * var(--ui-floor)), calc((23.29px + 0.454vw) * var(--ui-scale)), calc(38.72px * var(--ui-scale)));
 }
 
 /* Light theme — the same flat field, inverted, with ONE difference from a
@@ -1319,7 +1329,7 @@ html[data-theme='light'] {
    screen", and the timeline is not that screen any more. */
 .msg-author-tile span,
 .msg-author-tile img {
-  border-radius: var(--control-radius);
+  border-radius: 9999px;
 }
 
 /* ── Structured data blocks ─────────────────────────────────────────────────

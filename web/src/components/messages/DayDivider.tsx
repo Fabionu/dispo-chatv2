@@ -16,12 +16,12 @@ export default function DayDivider({
 }) {
   const day = formatDayLong(iso)
   return (
-    <div className="day-divider flex items-center gap-4 pt-8 pb-2" role="separator">
-      <span className="h-px flex-1 bg-line" aria-hidden="true" />
-      <span className="eyebrow shrink-0">
+    // Outlined pill (design canvas option A, 2026-10-16): a hairline-bordered
+    // pill, no rules running out of it.
+    <div className="day-divider flex justify-center pt-8 pb-2" role="separator">
+      <span className="shrink-0 rounded-full border border-line px-2.5 py-[3px] text-sm text-muted">
         {conversationStart ? `Conversation started · ${day}` : day}
       </span>
-      <span className="h-px flex-1 bg-line" aria-hidden="true" />
     </div>
   )
 }

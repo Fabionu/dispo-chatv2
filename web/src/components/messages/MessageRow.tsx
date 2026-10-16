@@ -111,7 +111,7 @@ const GROUP_WINDOW_MS = 7 * 60 * 1000
 // Top-aligned with the attribution row rather than centred on the message: a
 // burst head can be one line or twenty, and a tile that floats to the middle of
 // a long one stops pointing at the name it belongs to.
-const AUTHOR_TILE_PX = 30
+const AUTHOR_TILE_PX = 34
 
 type Props = {
   message: LocalMessage
@@ -126,6 +126,8 @@ type Props = {
   // of my rows, so its reference is stable unless the roster actually changes.
   readers?: Reader[]
   prev?: LocalMessage
+  /** The row below, so a block can drop its clock when the next one repeats it. */
+  next?: LocalMessage
   // True when this is the very first message of the whole thread (no older page
   // to load) — the day divider then reads "Conversation started · <date>".
   conversationStart?: boolean
@@ -199,6 +201,7 @@ function MessageRow({
   currentUserId,
   readers,
   prev,
+  next,
   conversationStart,
   unreadStart,
   groupType,
@@ -463,6 +466,17 @@ function MessageRow({
   const highlightSkin = highlighted ? 'bg-active/10' : ''
   const authorLabel = (mine ? message.authorName || 'You' : message.authorName) || 'Member'
   const time = formatTime(message.createdAt)
+  // A run of blocks from one person inside the same minute carries ONE clock,
+  // on the LAST of them (user, 2026-10-16: it reads as the time the burst
+  // ended, under the newest bubble). So a block hides its time when the block
+  // BELOW it is the same author, the same day and the same minute. Another
+  // person's block, a system row or a date break underneath still lets it stamp.
+  const repeatsNextTime =
+    next !== undefined &&
+    next.kind !== 'system' &&
+    next.authorId === message.authorId &&
+    new Date(next.createdAt).toDateString() === new Date(message.createdAt).toDateString() &&
+    formatTime(next.createdAt) === time
 
   // WHO gets a photo. Gated exactly like `ruleColor`, and for the same reason:
   // a face answers "which of the people in this room is talking", and a direct
@@ -764,10 +778,13 @@ function MessageRow({
             own messages alike — outside the fill, so the bubble holds only what
             was said. Every block still carries its own time, which is what lets
             a burst follow-up show it at no cost. */}
-        {bubble && (
+        {/* Nothing left to say (same minute as the block above, no flags, no
+            ticks) means no row at all — an empty one would still cost its
+            margin. */}
+        {bubble && !(repeatsNextTime && !hasLiveMeta) && (
           <div className="msg-meta">
             {messageFlags}
-            <span className="timestamp">{time}</span>
+            {!repeatsNextTime && <span className="timestamp">{time}</span>}
             {deliveryTicks}
           </div>
         )}
@@ -832,6 +849,7 @@ function propsEqual(a: Props, b: Props): boolean {
   return (
     a.message === b.message &&
     a.prev === b.prev &&
+    a.next === b.next &&
     a.conversationStart === b.conversationStart &&
     a.unreadStart === b.unreadStart &&
     a.mine === b.mine &&

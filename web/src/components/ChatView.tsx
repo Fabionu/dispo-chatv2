@@ -1608,6 +1608,7 @@ export default function ChatView({
                           // undefined so they don't re-render on read updates.
                           readers={m.authorId === currentUserId ? readers : undefined}
                           prev={visibleMessages[i - 1]}
+                          next={visibleMessages[i + 1]}
                           conversationStart={i === 0 && !nextCursor}
                           unreadStart={m.id === firstUnreadId}
                           groupType={group.type}

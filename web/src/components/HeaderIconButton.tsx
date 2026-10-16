@@ -30,6 +30,12 @@ export const ICON_ACTION_BASE_LG =
   'rounded-btn h-10 w-10 flex items-center justify-center transition-colors ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ' +
   'disabled:opacity-30 disabled:cursor-default'
+// The one-row trip header's step down (design canvas option B, 2026-10-16): the
+// whole room fits in a single line, so its glyph buttons shrink with it.
+export const ICON_ACTION_BASE_SM =
+  'rounded-btn h-8 w-8 flex items-center justify-center transition-colors ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ' +
+  'disabled:opacity-30 disabled:cursor-default'
 export const ICON_ACTION_IDLE = 'text-muted hover:text-text hover:bg-white/6'
 export const ICON_ACTION_ACTIVE = 'text-text bg-white/6'
 
@@ -68,8 +74,9 @@ type Props = {
   /** Tags the button with `data-search-region` so ChatView's outside-click
    *  handler treats clicks on it as inside the search UI. */
   searchRegion?: boolean
-  /** 'lg' swaps the 36px box for 40px — the thread header only. */
-  size?: 'md' | 'lg'
+  /** 'lg' swaps the 36px box for 40px — the thread header only; 'sm' is 32px,
+   *  for the thread header's one-row trip layout. */
+  size?: 'sm' | 'md' | 'lg'
 }
 
 // The app's standard borderless header / overlay action button: a 36×36 square
@@ -97,7 +104,7 @@ export default function HeaderIconButton({
       aria-pressed={active}
       title={title ?? label}
       data-search-region={searchRegion ? '' : undefined}
-      className={`${size === 'lg' ? ICON_ACTION_BASE_LG : ICON_ACTION_BASE} ${
+      className={`${size === 'lg' ? ICON_ACTION_BASE_LG : size === 'sm' ? ICON_ACTION_BASE_SM : ICON_ACTION_BASE} ${
         active ? ICON_ACTION_ACTIVE : ICON_ACTION_IDLE
       }`}
     >

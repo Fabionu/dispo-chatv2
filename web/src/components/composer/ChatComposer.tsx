@@ -8,17 +8,21 @@ import {
 } from 'react'
 import {
   ArrowUp,
+  AtSign,
   Bold,
+  ChevronLeft,
   Clock3,
   FileText,
+  Hash,
   Image as ImageIcon,
   Italic,
   MapPin,
   MessageSquareText,
+  Plus,
   Route,
   type LucideIcon,
 } from 'lucide-react'
-import { MENU_CONTAINER, menuItemClass } from '../menuStyles'
+import { MENU_CONTAINER, MENU_SEPARATOR, menuItemClass } from '../menuStyles'
 import type { GroupMember, ReplyToPreview } from '../../lib/types'
 import { DOC_ACCEPT, IMAGE_ACCEPT, fileError } from '../attachments/attachmentUtils'
 import { ComposerContextSlot } from '../messages/ComposerContextRow'
@@ -352,6 +356,21 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
     pendingCaretRef.current = next.length
   }
 
+  // The + menu's Mention / Trip reference rows type the trigger character for
+  // you at the caret and open the same picker typing it would.
+  function insertTrigger(ch: '@' | '#') {
+    const el = textareaRef.current
+    const caret = el?.selectionStart ?? text.length
+    const before = text.slice(0, caret)
+    const lead = before && !/\s$/.test(before) ? ' ' : ''
+    const anchor = before.length + lead.length
+    onTextChange(before + lead + ch + text.slice(caret))
+    pendingCaretRef.current = anchor + 1
+    if (ch === '@') setMention({ anchor, query: '' })
+    else setTripMention({ anchor, query: '' })
+    setActiveIndex(0)
+  }
+
   function pickKind(accept: string) {
     const input = fileInputRef.current
     if (!input) return
@@ -595,7 +614,22 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
           and the quick-message chips that used to float over the thread — the
           footer is deliberately low (user: "narrower from top to bottom"), so
           the composer grows by one slim row, not by a second bar. */}
-      <div className="composer-bar flex items-center px-1.5 pt-1.5 pb-1">
+      <div className="composer-bar flex items-end gap-1 px-1.5 py-1.5">
+        {!editContext && (
+          <ComposerAddMenu
+            hasTrip={Boolean(activeTrip)}
+            canMention={members.length > 0}
+            locations={locations}
+            quickReplies={quickReplies}
+            onFormat={applyFormat}
+            onInsertTrigger={insertTrigger}
+            onPickSnippet={insertSnippet}
+            onPhoto={() => pickKind(IMAGE_ACCEPT)}
+            onDocument={() => pickKind(DOC_ACCEPT)}
+            onAddTrip={onAddTrip}
+            onSchedule={onSchedule}
+          />
+        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -655,94 +689,62 @@ const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer
             }`}
           />
         </div>
-      </div>
-
-      {/* The footer. Named tools rather than bare glyphs: a dispatcher should
-          not have to hover to find out which square is "document". While
-          editing a message only Save remains — an edit can't carry a file. */}
-      <div className="composer-tools flex items-center gap-0.5 border-t border-line px-1 py-[3px]">
-        {!editContext && (
-          <>
-            <ComposerTool icon={ImageIcon} label="Photo" onClick={() => pickKind(IMAGE_ACCEPT)} />
-            <ComposerTool icon={FileText} label="Document" onClick={() => pickKind(DOC_ACCEPT)} />
-            {locations && locations.length > 0 && (
-              <ComposerToolMenu icon={MapPin} label="Location" items={locations} onPick={insertSnippet} />
-            )}
-            {quickReplies && quickReplies.length > 0 && (
-              <ComposerToolMenu
-                icon={MessageSquareText}
-                label="Quick messages"
-                items={quickReplies}
-                onPick={insertSnippet}
-              />
-            )}
-            <ComposerTool icon={Clock3} label="Schedule" onClick={onSchedule} />
-            {onAddTrip && <ComposerTool icon={Route} label="Add trip" onClick={onAddTrip} />}
-          </>
-        )}
-        <span className="flex-1" />
+        {/* Send is an icon only (user, 2026-10-16: "minimal, I don't want to see
+            the text send"). The fill IS the state: undrawn while there is
+            nothing to send, solid the moment there is — the one filled control
+            in the thread. */}
         <button
           type="button"
           onClick={onSend}
           disabled={disabled}
           aria-label={editContext ? 'Save edit' : 'Send message'}
-          // The fill IS the state: undrawn while there is nothing to send,
-          // solid the moment there is — the one filled control in the thread.
-          className={`rounded-btn h-7 shrink-0 inline-flex items-center gap-1.5 px-2.5 text-sm font-semibold transition-colors ${
+          title={editContext ? 'Save edit' : 'Send message'}
+          className={`rounded-btn h-7 w-7 shrink-0 inline-flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
             disabled ? 'text-faint cursor-default' : 'bg-text text-bg hover:bg-white'
           }`}
         >
-          {editContext ? 'Save' : 'Send'}
-          <ArrowUp size="0.875rem" strokeWidth={2.2} />
+          <ArrowUp size="0.9375rem" strokeWidth={2.2} />
         </button>
       </div>
     </div>
   )
 })
 
-// One named tool in the composer footer: glyph + label, undrawn until hovered.
-function ComposerTool({
-  icon: Icon,
-  label,
-  onClick,
-  active = false,
+// The single + at the left of the field. Everything you can add to a message
+// lives in one list that opens upward (user, 2026-10-16: every action in one
+// button, minimal composer). Rows are grouped Format / Insert / Attach, then
+// Schedule send; Location and Quick messages open their own short list in
+// place, with a back row. Picking anything closes the menu; nothing sends.
+//
+// onMouseDown preventDefault on the panel keeps the textarea focused and its
+// selection intact, which Bold / Italic need to find the text they wrap.
+function ComposerAddMenu({
+  hasTrip,
+  canMention,
+  locations,
+  quickReplies,
+  onFormat,
+  onInsertTrigger,
+  onPickSnippet,
+  onPhoto,
+  onDocument,
+  onAddTrip,
+  onSchedule,
 }: {
-  icon: LucideIcon
-  label: string
-  onClick: () => void
-  active?: boolean
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      aria-expanded={active || undefined}
-      className={`rounded-btn h-7 shrink-0 inline-flex items-center gap-1.5 px-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
-        active ? 'bg-white/10 text-text' : 'text-muted hover:bg-white/6 hover:text-text'
-      }`}
-    >
-      <Icon size="0.875rem" strokeWidth={1.8} />
-      <span className="composer-tool-label">{label}</span>
-    </button>
-  )
-}
-
-// A footer tool that opens a short list upward (Location, Quick messages).
-// Picking an entry hands its text to the composer; nothing is sent.
-function ComposerToolMenu({
-  icon,
-  label,
-  items,
-  onPick,
-}: {
-  icon: LucideIcon
-  label: string
-  items: ComposerSnippet[]
-  onPick: (text: string) => void
+  hasTrip: boolean
+  canMention: boolean
+  locations?: ComposerSnippet[]
+  quickReplies?: ComposerSnippet[]
+  onFormat: (marker: '*' | '_') => void
+  onInsertTrigger: (ch: '@' | '#') => void
+  onPickSnippet: (text: string) => void
+  onPhoto: () => void
+  onDocument: () => void
+  onAddTrip?: () => void
+  onSchedule: () => void
 }) {
   const [open, setOpen] = useState(false)
+  const [sub, setSub] = useState<'location' | 'quick' | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!open) return
@@ -759,30 +761,108 @@ function ComposerToolMenu({
       document.removeEventListener('keydown', onKey)
     }
   }, [open])
+  useEffect(() => {
+    if (!open) setSub(null)
+  }, [open])
+
+  const hasLocations = Boolean(locations && locations.length > 0)
+  const hasQuick = Boolean(quickReplies && quickReplies.length > 0)
+  const run = (fn: () => void) => () => {
+    setOpen(false)
+    fn()
+  }
+  const glyph = { size: '0.875rem', strokeWidth: 1.8 } as const
+  const sectionLabel = 'eyebrow px-2.5 pt-1.5 pb-0.5 text-faint'
+
+  function Row({
+    icon: Icon,
+    label,
+    hint,
+    onClick,
+  }: {
+    icon: LucideIcon
+    label: string
+    hint?: string
+    onClick: () => void
+  }) {
+    return (
+      <button type="button" role="menuitem" onClick={onClick} className={menuItemClass()}>
+        <Icon {...glyph} />
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        {hint && <span className="shrink-0 text-xs text-faint">{hint}</span>}
+      </button>
+    )
+  }
+
+  const items = sub === 'location' ? locations : sub === 'quick' ? quickReplies : undefined
+
   return (
     <div className="relative shrink-0" ref={ref}>
-      <ComposerTool icon={icon} label={label} active={open} onClick={() => setOpen((v) => !v)} />
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Add to message"
+        title="Add to message"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={`rounded-btn h-7 w-7 inline-flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+          open ? 'bg-white/10 text-text' : 'text-muted hover:bg-white/6 hover:text-text'
+        }`}
+      >
+        <Plus size="0.9375rem" strokeWidth={1.8} />
+      </button>
       {open && (
         <div
           role="menu"
-          aria-label={label}
-          className={`action-strip-enter-up origin-bottom-left absolute bottom-[calc(100%+6px)] left-0 w-[17rem] max-w-[80vw] ${MENU_CONTAINER} z-20`}
+          aria-label="Add to message"
+          onMouseDown={(e) => e.preventDefault()}
+          className={`action-strip-enter-up origin-bottom-left absolute bottom-[calc(100%+6px)] left-0 w-[15rem] max-w-[80vw] ${MENU_CONTAINER} z-20`}
         >
-          {items.map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              role="menuitem"
-              title={item.text}
-              onClick={() => {
-                setOpen(false)
-                onPick(item.text)
-              }}
-              className={menuItemClass()}
-            >
-              <span className="min-w-0 truncate">{item.label}</span>
-            </button>
-          ))}
+          {sub && items ? (
+            <>
+              <button type="button" onClick={() => setSub(null)} className={menuItemClass()}>
+                <ChevronLeft {...glyph} />
+                <span className="min-w-0 flex-1 truncate">
+                  {sub === 'location' ? 'Location' : 'Quick messages'}
+                </span>
+              </button>
+              {items.map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  role="menuitem"
+                  title={item.text}
+                  onClick={run(() => onPickSnippet(item.text))}
+                  className={menuItemClass()}
+                >
+                  <span className="min-w-0 truncate">{item.label}</span>
+                </button>
+              ))}
+            </>
+          ) : (
+            <>
+              <div className={sectionLabel}>Format</div>
+              <Row icon={Bold} label="Bold" hint="Ctrl B" onClick={run(() => onFormat('*'))} />
+              <Row icon={Italic} label="Italic" hint="Ctrl I" onClick={run(() => onFormat('_'))} />
+              <div className={sectionLabel}>Insert</div>
+              {canMention && (
+                <Row icon={AtSign} label="Mention a member" hint="@" onClick={run(() => onInsertTrigger('@'))} />
+              )}
+              {hasTrip && (
+                <Row icon={Hash} label="Trip reference" hint="#" onClick={run(() => onInsertTrigger('#'))} />
+              )}
+              {hasLocations && <Row icon={MapPin} label="Location" onClick={() => setSub('location')} />}
+              {hasQuick && (
+                <Row icon={MessageSquareText} label="Quick messages" onClick={() => setSub('quick')} />
+              )}
+              <div className={sectionLabel}>Attach</div>
+              <Row icon={ImageIcon} label="Photo" onClick={run(onPhoto)} />
+              <Row icon={FileText} label="Document" onClick={run(onDocument)} />
+              {onAddTrip && <Row icon={Route} label="Add trip" onClick={run(onAddTrip)} />}
+              <div className={MENU_SEPARATOR} />
+              <Row icon={Clock3} label="Schedule send" onClick={run(onSchedule)} />
+            </>
+          )}
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-import { CheckCheck, Clock } from 'lucide-react'
+import { Check, CheckCheck, Clock } from 'lucide-react'
 
 // One potential reader of a sent message — a group member other than the
 // author. `lastReadAt` is their conversation "read up to" marker; the message
@@ -46,7 +46,7 @@ export default function ReadReceipts({
   if (others.length === 0) {
     return (
       <span className="inline-flex items-center" aria-label="Sent" title="Sent">
-        <CheckCheck size={glyphSize} strokeWidth={2} className="text-faint" />
+        <Check size={glyphSize} strokeWidth={2} className="text-faint" />
       </span>
     )
   }
