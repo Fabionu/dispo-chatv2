@@ -192,14 +192,14 @@ const SPECS: Record<
   // on: a full-screen view is ~50 tiles, and zooming through five levels
   // asks for all of them each time. The browser caches a tile for a day and
   // the server for six hours, so honest traffic is front-loaded and then
-  // quiet; 1500/min per user (25/s) absorbs a hard pan-and-zoom session and
+  // quiet; 600/min per user (10/s) absorbs a hard pan-and-zoom session and
   // still bounds a scripted crawl of the tile space. A refused tile is just
   // an empty tile to the overlay (hgvOverlay.ts ignores !ok), never an error.
   hereTiles: {
     prefix: 'heretiles:',
     options: {
       windowMs: 60 * 1000,
-      limit: 1500,
+      limit: 600,
       standardHeaders: 'draft-7',
       legacyHeaders: false,
       keyGenerator: keyByUserOrIp,

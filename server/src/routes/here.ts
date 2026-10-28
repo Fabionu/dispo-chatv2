@@ -6,6 +6,8 @@ import { env } from '../env.js'
 import { TtlCache, cachedAsync } from '../util/ttlCache.js'
 import { hereLimiter, hereTilesLimiter } from '../middleware/rateLimit.js'
 import { legSections } from './hereLegs.js'
+import { getRedisClient } from '../redis.js'
+import { extractSigns } from '../util/hgvSigns.js'
 
 export const hereRouter = Router()
 hereRouter.use(requireAuth)
@@ -380,8 +382,8 @@ async function hereJson<T>(url: URL): Promise<T> {
 // API v3 has no truck-only resource — the legacy Map Tile API's `truckonlytile`
 // is gone (410) — but its LABEL resource in the `logistics.day` style is a
 // transparent PNG carrying the restriction signs (height / weight / width
-// limits, no-truck roads) together with the street names; the client keeps
-// the signs and drops the names (web/src/components/map/hgvOverlay.ts).
+// limits, no-truck roads) together with the street names; the signs are kept and
+// the names dropped server-side (util/hgvSigns.ts).
 // `pois:disabled` already strips the POI labels here. 512px tiles so the
 // signs are crisp on a hi-DPI screen at Google's 256px tile grid, and
 // `ppi=200` so they are drawn at ~1.5× — at the default 100 a sign came out
@@ -394,10 +396,56 @@ async function hereJson<T>(url: URL): Promise<T> {
 // so a small in-memory cache absorbs the pan-back-and-forth of one session;
 // the browser caches for a day on top of that.
 const tileBase = 'https://maps.hereapi.com/v3/label/mc'
-const tileCache = new TtlCache<Promise<Buffer | null>>(600, 6 * 60 * 60 * 1000)
-// Bump when the upstream query changes, so a tile cached under the old
-// parameters is not served for the new ones.
-const TILE_VARIANT = 'ppi200'
+// The cached value is the FINISHED tile (signs only, see util/hgvSigns.ts), or
+// null for one with no sign. Two layers: this per-process LRU, and Redis (when
+// configured) so a tile is bought from HERE once for all instances and across
+// deploys — HERE bills every upstream request. Map data changes slowly, so a
+// long TTL is fine.
+const tileCache = new TtlCache<Promise<Buffer | null>>(2000, 24 * 60 * 60 * 1000)
+const TILE_REDIS_TTL_S = 14 * 24 * 60 * 60
+const TILE_EMPTY = '-'
+// Bump when the upstream query or the sign filter changes, so a tile cached
+// under the old parameters is not served for the new ones.
+const TILE_VARIANT = 'signs-ppi200'
+
+async function loadHgvTile(apiKey: string, z: number, x: number, y: number): Promise<Buffer | null> {
+  const redisKey = `hgvtile:${TILE_VARIANT}:${z}/${x}/${y}`
+  const redis = getRedisClient()
+  if (redis) {
+    try {
+      const hit = await redis.get(redisKey)
+      if (hit !== null) return hit === TILE_EMPTY ? null : Buffer.from(hit, 'base64')
+    } catch {
+      // Redis is an optimisation here; fall through to HERE.
+    }
+  }
+  const url = new URL(`${tileBase}/${z}/${x}/${y}/png8`)
+  url.searchParams.set('style', 'logistics.day')
+  url.searchParams.set('features', 'vehicle_restrictions:active_and_inactive,pois:disabled')
+  url.searchParams.set('size', '512')
+  url.searchParams.set('ppi', '200')
+  url.searchParams.set('apiKey', apiKey)
+  const upstream = await hereFetch(url)
+  let signs: Buffer | null
+  if (upstream.ok) {
+    signs = await extractSigns(Buffer.from(await upstream.arrayBuffer()))
+  } else {
+    const body = await upstream.text().catch(() => '')
+    console.warn('HERE tile request failed', { status: upstream.status, body: body.slice(0, 300) })
+    // A tile HERE does not have (404) is simply empty; anything else is an
+    // error the client should see rather than cache.
+    if (upstream.status !== 404) {
+      throw new HttpError(upstream.status >= 500 ? 502 : upstream.status, 'here_request_failed')
+    }
+    signs = null
+  }
+  if (redis) {
+    redis
+      .set(redisKey, signs ? signs.toString('base64') : TILE_EMPTY, { EX: TILE_REDIS_TTL_S })
+      .catch(() => {})
+  }
+  return signs
+}
 
 hereRouter.get(
   '/tiles/hgv/:z/:x/:y',
@@ -414,25 +462,10 @@ hereRouter.get(
     ) {
       throw new HttpError(400, 'bad_tile')
     }
-    const png = await cachedAsync(tileCache, `${TILE_VARIANT}/${z}/${x}/${y}`, async () => {
-      const url = new URL(`${tileBase}/${z}/${x}/${y}/png8`)
-      url.searchParams.set('style', 'logistics.day')
-      url.searchParams.set('features', 'vehicle_restrictions:active_and_inactive,pois:disabled')
-      url.searchParams.set('size', '512')
-      url.searchParams.set('ppi', '200')
-      url.searchParams.set('apiKey', apiKey)
-      const upstream = await hereFetch(url)
-      if (!upstream.ok) {
-        const body = await upstream.text().catch(() => '')
-        console.warn('HERE tile request failed', { status: upstream.status, body: body.slice(0, 300) })
-        // A tile HERE does not have (404) is simply empty; anything else is
-        // an error the client should see rather than cache.
-        if (upstream.status === 404) return null
-        throw new HttpError(upstream.status >= 500 ? 502 : upstream.status, 'here_request_failed')
-      }
-      return Buffer.from(await upstream.arrayBuffer())
-    })
-    res.setHeader('Cache-Control', 'private, max-age=86400')
+    const png = await cachedAsync(tileCache, `${TILE_VARIANT}/${z}/${x}/${y}`, () =>
+      loadHgvTile(apiKey, z, x, y),
+    )
+    res.setHeader('Cache-Control', 'private, max-age=604800')
     if (!png) return res.status(204).end()
     res.setHeader('Content-Type', 'image/png')
     res.send(png)
