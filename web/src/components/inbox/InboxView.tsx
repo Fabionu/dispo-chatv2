@@ -56,6 +56,10 @@ const RestrictionCalculator = lazy(() => import('./RestrictionCalculator'))
 
 export type WorkspaceToolId = 'route' | 'fleet' | 'restrictions'
 
+// Route planner is switched off for now (user, 2026-10-29). Flip to true to
+// bring back its home card, its tab, and the calculator's "Open route planner".
+export const ROUTE_PLANNER_ENABLED = false
+
 type Props = {
   // Which tool is open (null = the workspace home). Owned by Workspace, so a
   // detour into a chat does not forget it, and a pinned tab can reopen it.
@@ -176,7 +180,7 @@ export default function InboxView({
     return () => window.clearTimeout(timer)
   }, [])
 
-  if (tool === 'route') {
+  if (tool === 'route' && ROUTE_PLANNER_ENABLED) {
     return (
       <Suspense fallback={<PaneLoader className="h-full" />}>
         <RoutePlanner
@@ -198,7 +202,7 @@ export default function InboxView({
           pin={pinFor('restrictions')}
           legs={restrictionLegs}
           onBack={() => setTool(null)}
-          onPlanRoute={() => setTool('route')}
+          onPlanRoute={ROUTE_PLANNER_ENABLED ? () => setTool('route') : undefined}
         />
       </Suspense>
     )
@@ -261,12 +265,14 @@ export default function InboxView({
           <section aria-labelledby="home-tools">
             <h2 id="home-tools" className="mb-3 text-xl font-semibold">Tools</h2>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-3">
-              <ToolRow
-                icon={<Route size="1.0625rem" strokeWidth={1.6} />}
-                title="Route planner"
-                subtitle="Distance, tolls and ETA for a truck route."
-                onClick={() => setTool('route')}
-              />
+              {ROUTE_PLANNER_ENABLED && (
+                <ToolRow
+                  icon={<Route size="1.0625rem" strokeWidth={1.6} />}
+                  title="Route planner"
+                  subtitle="Distance, tolls and ETA for a truck route."
+                  onClick={() => setTool('route')}
+                />
+              )}
               <ToolRow
                 icon={<CalendarClock size="1.0625rem" strokeWidth={1.6} />}
                 title="Restriction calculator"

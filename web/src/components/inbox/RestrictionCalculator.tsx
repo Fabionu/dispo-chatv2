@@ -22,7 +22,7 @@ type Props = {
   legs: RouteCountryLeg[] | null
   onBack: () => void
   pin?: ToolPin
-  onPlanRoute: () => void
+  onPlanRoute?: () => void
 }
 
 const DEFAULT_BREAK_HOURS = '9'
@@ -395,7 +395,7 @@ function Field({
 
 // A route is the calculator's only real input, so with none in hand the screen
 // points at the tool that produces one rather than showing an inert form.
-function EmptyState({ onPlanRoute }: { onPlanRoute: () => void }) {
+function EmptyState({ onPlanRoute }: { onPlanRoute?: () => void }) {
   return (
     <div className="rounded-soft flex flex-col items-center border border-line bg-white/2 px-6 py-10 text-center">
       <span className="flex h-10 w-10 items-center justify-center rounded-tile border border-active/20 bg-active/10 text-active">
@@ -406,13 +406,15 @@ function EmptyState({ onPlanRoute }: { onPlanRoute: () => void }) {
         The calculator works from the countries a route passes through. Plan one, then send it here
         from the route summary.
       </p>
-      <button
-        type="button"
-        onClick={onPlanRoute}
-        className="rounded-btn mt-4 h-9 border border-line bg-white/6 px-4 text-base text-text transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
-      >
-        Open route planner
-      </button>
+      {onPlanRoute && (
+        <button
+          type="button"
+          onClick={onPlanRoute}
+          className="rounded-btn mt-4 h-9 border border-line bg-white/6 px-4 text-base text-text transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+        >
+          Open route planner
+        </button>
+      )}
     </div>
   )
 }

@@ -29,7 +29,7 @@ import AccountPopover from '../components/settings/AccountPopover'
 import ProfileWindow from '../components/settings/ProfileWindow'
 import CompanySidebarPanel from '../components/settings/CompanySidebarPanel'
 import WorkspaceSettingsPanel from '../components/settings/WorkspaceSettingsPanel'
-import InboxView, { type WorkspaceToolId } from '../components/inbox/InboxView'
+import InboxView, { ROUTE_PLANNER_ENABLED, type WorkspaceToolId } from '../components/inbox/InboxView'
 import { useIdle } from '../hooks/useIdle'
 import { usePresence } from '../hooks/usePresence'
 import { useConnections } from '../hooks/useConnections'
@@ -757,7 +757,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   }
   const topTabs: TopTab[] = openTabs.flatMap((key): TopTab[] => {
     if (key.startsWith('tool:')) {
-      const tool = TOOL_TABS[key.slice(5) as WorkspaceToolId]
+      const id = key.slice(5) as WorkspaceToolId
+      const tool = id === 'route' && !ROUTE_PLANNER_ENABLED ? undefined : TOOL_TABS[id]
       return tool ? [{ key, kind: 'tool', label: tool.label, icon: tool.icon }] : []
     }
     const g = groups.find((x) => x.id === key.slice(5))
