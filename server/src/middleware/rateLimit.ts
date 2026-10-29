@@ -199,7 +199,7 @@ const SPECS: Record<
     prefix: 'heretiles:',
     options: {
       windowMs: 60 * 1000,
-      limit: 1500,
+      limit: 600,
       standardHeaders: 'draft-7',
       legacyHeaders: false,
       keyGenerator: keyByUserOrIp,

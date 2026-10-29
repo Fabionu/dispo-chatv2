@@ -28,9 +28,10 @@
 // Google's tile grid is 256 CSS px; HERE serves 512 so the signs are sharp.
 const TILE_CSS = 256
 const TILE_PX = 512
-// HERE draws the signs from about z11; below z10 the tile is street names
-// only and the fetch would be spent on pixels that all get dropped.
-const MIN_ZOOM = 10
+// HERE draws the signs from about z11; below that the tile is street names
+// only and the fetch (a billed tile) would be spent on pixels that all get
+// dropped.
+const MIN_ZOOM = 11
 const MAX_ZOOM = 20
 // The sign ring's ink (sampled off a live tile) and how far from a ring pixel
 // a pixel may be and still belong to the sign — the ring's own radius (~31px

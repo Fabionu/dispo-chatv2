@@ -394,7 +394,11 @@ async function hereJson<T>(url: URL): Promise<T> {
 // so a small in-memory cache absorbs the pan-back-and-forth of one session;
 // the browser caches for a day on top of that.
 const tileBase = 'https://maps.hereapi.com/v3/label/mc'
-const tileCache = new TtlCache<Promise<Buffer | null>>(600, 6 * 60 * 60 * 1000)
+// Every cache miss is a billed Advanced Raster Tile request (2026-10-29: the
+// bill was dominated by these), so hold plenty — a png8 label tile is tens of
+// KB — and for long: restriction signs change on a map-release scale, not
+// hourly.
+const tileCache = new TtlCache<Promise<Buffer | null>>(2000, 24 * 60 * 60 * 1000)
 // Bump when the upstream query changes, so a tile cached under the old
 // parameters is not served for the new ones.
 const TILE_VARIANT = 'ppi200'
@@ -1117,11 +1121,22 @@ hereRouter.post(
   }),
 )
 
+// Whole truck-route answers, ~100 KB each on a long route, so the cap is modest.
+const truckRouteCache = new TtlCache<object>(300, 30 * 60 * 1000)
+
 hereRouter.post(
   '/routes/truck',
   asyncHandler(async (req, res) => {
     const apiKey = requireHereKey()
     const body = truckRouteSchema.parse(req.body)
+
+    // An identical request (same stops, truck, tolls, departure) is answered
+    // from memory: reopening a trip map or re-saving unchanged stops used to
+    // bill a fresh Routing call each time. Zod emits keys in schema order, so
+    // the JSON is a stable key.
+    const routeKey = JSON.stringify(body)
+    const cachedRoute = truckRouteCache.get(routeKey)
+    if (cachedRoute) return res.json(cachedRoute)
 
     // Format a waypoint for HERE: `lat,lng` plus an optional `;course=DEG` so
     // HERE matches the waypoint to a road link travelling in that direction
@@ -1188,7 +1203,7 @@ hereRouter.post(
       arrival: section.arrival?.place?.location ?? null,
     }))
 
-    res.json({
+    const payload = {
       route: {
         id: route.id,
         sections,
@@ -1202,6 +1217,8 @@ hereRouter.post(
         countries: normalizeCountryLegs(route.sections),
         ...(body.includeTolls ? { tolls: normalizeTolls(route.sections, tollCurrency) } : {}),
       },
-    })
+    }
+    truckRouteCache.set(routeKey, payload)
+    res.json(payload)
   }),
 )
