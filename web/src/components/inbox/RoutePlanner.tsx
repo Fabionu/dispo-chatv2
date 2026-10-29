@@ -778,9 +778,25 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions, pin }: P
   // changed); when a route is already drawn and ≥2 points remain it recalcs
   // through the new ordering (no stale leg, markers/badges follow the roles).
   function removePoint(id: string) {
-    const remaining = points.length - 1
+    const removed = points.find((p) => p.id === id)
+    // Dragged-in `via` points are never planned places, so deleting an endpoint
+    // must not promote one into the start/finish field: they are dropped when
+    // they would land outside the real points (before the first / after the
+    // last non-via one).
+    const dropOutsideVias = removed !== undefined && !removed.via
+    const keptIds = new Set(
+      (() => {
+        const next = points.filter((p) => p.id !== id)
+        if (!dropOutsideVias) return next.map((p) => p.id)
+        const first = next.findIndex((p) => !p.via)
+        const last = next.length - 1 - [...next].reverse().findIndex((p) => !p.via)
+        if (first < 0) return []
+        return next.slice(first, last + 1).map((p) => p.id)
+      })(),
+    )
+    const remaining = keptIds.size
     setPoints((prev) => {
-      const next = prev.filter((p) => p.id !== id)
+      const next = prev.filter((p) => p.id !== id && keptIds.has(p.id))
       if (next.length < 2) return next
       return next.map((p, i) => {
         const role: RoutePointRole =
