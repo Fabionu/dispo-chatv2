@@ -92,7 +92,7 @@ function keepSignsOnly(image: ImageData): ImageData {
   return image
 }
 
-type Tile = HTMLCanvasElement & { __hgv?: { cancelled: boolean } }
+type Tile = HTMLCanvasElement & { __hgv?: { cancelled: boolean; abort: AbortController } }
 
 /**
  * A Google `MapType` for `map.overlayMapTypes`. One instance per map; push to
@@ -113,7 +113,8 @@ export function createHgvOverlay(g: typeof google): google.maps.MapType {
       canvas.height = TILE_PX
       canvas.style.width = `${TILE_CSS}px`
       canvas.style.height = `${TILE_CSS}px`
-      const state = { cancelled: false }
+      const abort = new AbortController()
+      const state = { cancelled: false, abort }
       canvas.__hgv = state
       if (!coord || zoom < MIN_ZOOM || zoom > MAX_ZOOM) return canvas
       // Google hands x past the antimeridian as-is; wrap it into the grid.
@@ -121,12 +122,22 @@ export function createHgvOverlay(g: typeof google): google.maps.MapType {
       const x = ((coord.x % n) + n) % n
       const y = coord.y
       if (y < 0 || y >= n) return canvas
-      void fetch(`/api/here/tiles/hgv/${zoom}/${x}/${y}`, { credentials: 'include' })
+      // The signal matters for cost: the browser only runs ~6 requests per host
+      // at once, so during a pan or zoom most tile requests are still QUEUED
+      // when Google releases them. Aborting drops those before they reach the
+      // server (and so before they become billed HERE calls).
+      void fetch(`/api/here/tiles/hgv/${zoom}/${x}/${y}`, {
+        credentials: 'include',
+        signal: abort.signal,
+      })
         .then(async (res) => {
           if (state.cancelled || res.status === 204 || !res.ok) return
           const bitmap = await createImageBitmap(await res.blob())
-          if (state.cancelled) return
-          const ctx = canvas.getContext('2d')
+          if (state.cancelled) {
+            bitmap.close()
+            return
+          }
+          const ctx = canvas.getContext('2d', { willReadFrequently: true })
           if (!ctx) return
           ctx.drawImage(bitmap, 0, 0, TILE_PX, TILE_PX)
           ctx.putImageData(keepSignsOnly(ctx.getImageData(0, 0, TILE_PX, TILE_PX)), 0, 0)
@@ -139,7 +150,10 @@ export function createHgvOverlay(g: typeof google): google.maps.MapType {
     },
     releaseTile(tile: Element | null) {
       const state = (tile as Tile | null)?.__hgv
-      if (state) state.cancelled = true
+      if (state) {
+        state.cancelled = true
+        state.abort.abort()
+      }
     },
   }
 }
