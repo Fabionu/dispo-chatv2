@@ -13,7 +13,7 @@ import {
 import type { Group } from '../lib/types'
 import { groupLabel, groupPreview, isUnread, tractorPlate, trailerPlate } from '../lib/types'
 import { useDraft } from '../lib/draftStorage'
-import { getOps, tripSummary } from '../lib/vehicleOps'
+import { getOps, placeTown, tripSummary } from '../lib/vehicleOps'
 import { TONE_TEXT } from '../components/vehicle/opsControls'
 import {
   RowActionsTrigger,
@@ -63,7 +63,9 @@ function relTime(iso: string | null): string {
   return `${day}/${month}`
 }
 
-// One conversation in the unified rail — an identity tile and two lines.
+// One conversation in the unified rail. A person: an identity tile and two
+// lines. A vehicle room (rework, 2026-10-29): no tile, three lines — plate,
+// trip, last message (see below).
 //
 // The tile came back on 2026-08-26 (user) after six days without one. What it
 // is NOT is the old identity slot: that one encoded the conversation's TYPE by
@@ -157,48 +159,39 @@ export default function GroupRow({
   const preview = groupPreview(group, currentUserId)
   const time = relTime(group.lastMessageAt)
 
-  // The meta line's facts, in scan order: what this vehicle IS, then what
-  // it is DOING. Only vehicle rooms produce any — a DM's most useful second
-  // line is still the last thing the person said, not their company name.
-  //
-  // The corridor is the trip's first and last country codes (`RO→IT`), which is
-  // how dispatchers talk about a run. It collapses to one code for a domestic
-  // trip and falls back to the status label when the stops carry no countries,
-  // so the segment is never an empty arrow.
-  const corridor = (() => {
-    if (!trip) return null
-    const codes = trip.routePlaces.map((p) => p.code).filter(Boolean) as string[]
-    if (codes.length === 0) return trip.statusLabel
-    const from = codes[0]
-    const to = codes[codes.length - 1]
-    return from === to ? from : `${from}→${to}`
-  })()
-  // With a trip, the corridor moves down to the trip line (status │ corridor,
-  // over the progress track) and line 1 keeps only the plate.
   // A DM carries the person's company in the same slot and voice as a room's
   // plate (rework canvas, user 2026-10-12: "the same look for the dm's") —
   // with people from partner companies in the list, "who is this, and from
   // where" is the question line 1 has to answer.
-  const metaSegments =
-    group.type === 'vehicle'
-      ? [tractorPlate(group) ?? trailerPlate(group), trip ? null : corridor].filter(Boolean).map(String)
-      : peer?.workspace
-        ? [peer.workspace]
-        : []
-  // "FR Tremery – SK Zavar": first and last stop as country + town, postal
-  // codes dropped (they are what makes a place line too long for a row).
-  const corridorLong = (() => {
-    if (!trip || trip.routePlaces.length === 0) return null
-    const short = (text: string) =>
-      text
-        .split(/\s+/)
-        .filter((token) => token && !/\d/.test(token))
-        .join(' ')
-    const first = short(trip.routePlaces[0].text)
-    const last = short(trip.routePlaces[trip.routePlaces.length - 1].text)
-    if (!first && !last) return corridor
-    return first === last || !last ? first : `${first} – ${last}`
+  //
+  // A vehicle room is titled by its PLATE (user, 2026-10-29 canvas) — that is
+  // what a dispatcher scans for — with the room's own name after it in the
+  // label voice, when the two differ.
+  const isVehicle = group.type === 'vehicle'
+  const plate = isVehicle ? tractorPlate(group) ?? trailerPlate(group) : null
+  const rowTitle = plate ?? groupLabel(group)
+  const metaSegments = isVehicle
+    ? plate && plate !== groupLabel(group)
+      ? [groupLabel(group)]
+      : []
+    : peer?.workspace
+      ? [peer.workspace]
+      : []
+  // The trip line's two ends and its figure: the stop being driven to (or the
+  // first stop once that is the last one), the final stop, and how far along
+  // the truck is — the status word before it has left or once it has arrived.
+  const tripEnds = (() => {
+    if (!trip || trip.stops.length === 0) return null
+    const last = trip.stops.length - 1
+    const next = trip.stops.findIndex((s) => s.status === 'planned')
+    const left = next >= 0 && next < last ? next : 0
+    return {
+      from: placeTown(trip.stops[left].place),
+      to: last > 0 ? placeTown(trip.stops[last].place) : null,
+    }
   })()
+  const tripFigure =
+    trip && trip.progress && tripPct > 0 && tripPct < 1 ? `${Math.round(tripPct * 100)}%` : trip?.statusLabel
   // Local unsent draft for THIS conversation (this user/device only — never
   // synced). It is persisted while typing, but only replaces the last-message
   // preview after the user leaves this conversation. This keeps the active
@@ -408,7 +401,10 @@ export default function GroupRow({
         {/* The picture: the peer for a DM, the room's own image for a vehicle
             group. It rides the button's existing `--sidebar-row-gap`, which has
             been the identity slot's gutter all along. */}
-        {isDirect ? (
+        {/* Vehicle rooms carry no picture (user, 2026-10-29 canvas): the plate
+            leads the row and the trip line under it does the identifying, so
+            people keep the only faces in the rail. */}
+        {isVehicle ? null : isDirect ? (
           <RowTile
             kind="user"
             id={peer?.id ?? ''}
@@ -437,7 +433,7 @@ export default function GroupRow({
                 }`}
                 style={{ fontSize: 'var(--sidebar-conv-font-size)' }}
               >
-                {groupLabel(group)}
+                {isVehicle ? <span className="tabular-nums">{rowTitle}</span> : rowTitle}
               </span>
               {/* The peer's presence, TRAILING the name — it belongs to the
                   person, so it reads as part of their identity rather than as
@@ -477,6 +473,42 @@ export default function GroupRow({
               {time && <span className="timestamp shrink-0 leading-tight">{time}</span>}
             </span>
           </span>
+          {/* Vehicle rooms only — the trip, between the plate and what was said
+              (user, 2026-10-29 canvas): the town being driven to, the trip as a
+              hairline with the truck as a dot on it, the final town, and how
+              far along it is. A room without a trip says so quietly, so every
+              vehicle row keeps the same three-line shape. Pulls in from the
+              right on hover/open like the lines around it. */}
+          {isVehicle && (
+            <span
+              className={`my-1 flex min-w-0 items-center gap-2 text-xs leading-tight transition-[margin] duration-200 ease-out group-hover/row:mr-7 group-focus-within/row:mr-7 ${
+                menuOpen ? 'mr-7' : ''
+              }`}
+              title={tripLineFull ?? undefined}
+            >
+              {trip && tripEnds ? (
+                <>
+                  <span className="max-w-[34%] shrink-0 truncate font-medium text-text/85">{tripEnds.from}</span>
+                  <span aria-hidden className={`relative h-0.5 min-w-10 flex-1 rounded-full bg-line ${TONE_TEXT[trip.statusTone]}`}>
+                    <span
+                      className="absolute inset-y-0 left-0 rounded-full bg-current"
+                      style={{ width: `${tripPct * 100}%` }}
+                    />
+                    <span
+                      className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-current"
+                      style={{ left: `${tripPct * 100}%` }}
+                    />
+                  </span>
+                  {tripEnds.to && (
+                    <span className="max-w-[34%] shrink-0 truncate font-medium text-text/85">{tripEnds.to}</span>
+                  )}
+                  <span className={`shrink-0 font-semibold tabular-nums ${TONE_TEXT[trip.statusTone]}`}>{tripFigure}</span>
+                </>
+              ) : (
+                <span className="truncate text-faint">No trip</span>
+              )}
+            </span>
+          )}
           {/* Line 2 — human text at reading size: typing wins, then a draft,
               then the last-message preview. State icons sit inline at the right
               and slide left on hover/open, exposing the arrow menu. */}
@@ -543,39 +575,6 @@ export default function GroupRow({
               {mutedIcon}
             </span>
           </span>
-          {/* Line 3, vehicle rooms with a trip only: the status in its tone and
-              the trip's progress as a hairline with the truck as a dot on it —
-              the same track the thread's trip bar and trip panel draw, so the
-              rail scans as a fleet. Pulls in from the right on hover/open like
-              the lines above, clearing the actions arrow's column. */}
-          {trip && (
-            <span
-              className={`flex flex-col transition-[margin] duration-200 ease-out group-hover/row:mr-7 group-focus-within/row:mr-7 ${
-                menuOpen ? 'mr-7' : ''
-              }`}
-              title={tripLineFull ?? undefined}
-            >
-              <span className="mt-0.5 flex min-w-0 items-center gap-2 text-xs leading-tight">
-                <span className={`shrink-0 font-medium ${TONE_TEXT[trip.statusTone]}`}>{trip.statusLabel}</span>
-                {corridorLong && (
-                  <>
-                    <span aria-hidden className="h-2.5 w-px shrink-0 bg-line-2" />
-                    <span className="min-w-0 truncate text-muted">{corridorLong}</span>
-                  </>
-                )}
-              </span>
-              <span aria-hidden className={`relative mt-2 mb-0.5 h-0.5 rounded-full bg-line ${TONE_TEXT[trip.statusTone]}`}>
-                <span
-                  className="absolute inset-y-0 left-0 rounded-full bg-current"
-                  style={{ width: `${tripPct * 100}%` }}
-                />
-                <span
-                  className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-current"
-                  style={{ left: `${tripPct * 100}%` }}
-                />
-              </span>
-            </span>
-          )}
         </span>
         </button>
         {rowActions}

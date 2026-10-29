@@ -609,6 +609,15 @@ export type TripSummary = {
   route?: TripRoute
 }
 
+// The town alone, for a place drawn where only a word fits (the thread header's
+// track ends, the rail's trip line): postal codes and a leading country code
+// dropped, falling back to whatever text there is.
+export function placeTown(place: TripPlace): string {
+  const words = place.text.split(/\s+/).filter((w) => w && !/\d/.test(w))
+  const withoutCode = place.code && words[0]?.toUpperCase() === place.code ? words.slice(1) : words
+  return withoutCode.join(' ') || place.text || place.code || '—'
+}
+
 export function tripSummary(ops: VehicleOps): TripSummary | null {
   const t = ops.trip
   if (!t) return null

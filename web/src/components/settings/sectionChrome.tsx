@@ -15,11 +15,14 @@ export function NavRow({
   title,
   value,
   onClick,
+  trailing,
 }: {
   icon: ReactNode
   title: string
   value: string[]
   onClick: () => void
+  /** Replaces the chevron — e.g. a window glyph for a row that opens a window. */
+  trailing?: ReactNode
 }) {
   return (
     <button
@@ -36,11 +39,13 @@ export function NavRow({
           <RowMeta segments={value} whole />
         </span>
       </span>
-      <ChevronRight
-        size="1rem"
-        strokeWidth={1.8}
-        className="shrink-0 text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-muted"
-      />
+      {trailing ?? (
+        <ChevronRight
+          size="1rem"
+          strokeWidth={1.8}
+          className="shrink-0 text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-muted"
+        />
+      )}
     </button>
   )
 }

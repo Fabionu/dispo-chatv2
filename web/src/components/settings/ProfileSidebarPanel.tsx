@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Check, ChevronDown, Eye, Loader2, Lock, Plus, Trash2, X } from 'lucide-react'
 import type { AvailabilityStatus, Profile, Role } from '../../lib/types'
 import { api, type ProfilePatch } from '../../lib/api'
-import { PanelHeader } from './panelChrome'
+import { PanelCloseHeader, PanelHeader } from './panelChrome'
 import { SIDEBAR_PANEL_SURFACE } from './profileChrome'
 import { SettingsSection } from './sectionChrome'
 import Avatar from '../Avatar'
@@ -30,6 +30,8 @@ type Props = {
   onSaved: (profile: Profile) => void
   /** Opens your own card the way colleagues open it (the user-details panel). */
   onPreview?: () => void
+  /** Shown in its own window (ProfileWindow) — a close X instead of a back arrow. */
+  inWindow?: boolean
 }
 
 // Workspace-role display labels — shared with the read-only user details panel
@@ -58,8 +60,9 @@ const LANGUAGE_SUGGESTIONS = [
   'Turkish',
 ]
 
-// "My profile" as a sidebar drawer (replaces the conversation list) rather than
-// a floating modal — the chat stays visible on the right.
+// "My profile". Since 2026-10-29 (canvas, user) the account window opens it in
+// a window of its own over the workspace (ProfileWindow, `inWindow`), so the
+// conversation list stays where it was; the drawer form is kept for reuse.
 //
 // Reworked 2026-10-12 from the "Profile & group info rework" canvas into the
 // section language of Workspace settings. The banner stays (it is where the
@@ -77,6 +80,7 @@ export default function ProfileSidebarPanel({
   backLabel = 'Back',
   onSaved,
   onPreview,
+  inWindow = false,
 }: Props) {
   const [profile, setProfile] = useState<Profile | null>(initialProfile ?? null)
   const [availability, setAvailability] = useState<AvailabilityStatus>(
@@ -190,27 +194,26 @@ export default function ProfileSidebarPanel({
     onError: setError,
   })
 
+  const previewButton = onPreview && (
+    <button
+      type="button"
+      onClick={onPreview}
+      title="See your card the way colleagues see it"
+      className="flex h-[2.125rem] items-center gap-1.5 rounded-btn border border-line-2 px-3 text-base font-semibold text-text transition-colors hover:bg-white/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+    >
+      <Eye size="0.875rem" strokeWidth={1.9} />
+      Preview
+    </button>
+  )
+
   return (
     <>
-      <div className={`flex flex-col h-full ${SIDEBAR_PANEL_SURFACE}`}>
-        <PanelHeader
-          title="My profile"
-          onBack={onBack}
-          backLabel={backLabel}
-          action={
-            onPreview && (
-              <button
-                type="button"
-                onClick={onPreview}
-                title="See your card the way colleagues see it"
-                className="flex h-[2.125rem] items-center gap-1.5 rounded-btn border border-line-2 px-3 text-base font-semibold text-text transition-colors hover:bg-white/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
-              >
-                <Eye size="0.875rem" strokeWidth={1.9} />
-                Preview
-              </button>
-            )
-          }
-        />
+      <div className={`flex flex-col h-full ${inWindow ? 'bg-surface' : SIDEBAR_PANEL_SURFACE}`}>
+        {inWindow ? (
+          <PanelCloseHeader title="My profile" onClose={onBack} closeLabel={backLabel} action={previewButton} />
+        ) : (
+          <PanelHeader title="My profile" onBack={onBack} backLabel={backLabel} action={previewButton} />
+        )}
 
         {!profile ? (
           <div className="flex-1 flex items-center justify-center text-sm text-faint">

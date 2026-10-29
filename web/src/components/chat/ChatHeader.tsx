@@ -1,17 +1,17 @@
 import type { RefObject } from 'react'
 import { Info, PanelRight, Route, Search, X } from 'lucide-react'
 import type { Group } from '../../lib/types'
-import { groupLabel } from '../../lib/types'
+import { groupLabel, tractorPlate, trailerPlate } from '../../lib/types'
 import HeaderIconButton from '../HeaderIconButton'
-import { HEADER_TILE_PX, RowMeta, RowTile } from '../../pages/sidebarBits'
+import { RowMeta, RowTile } from '../../pages/sidebarBits'
 import CountryFlag from '../CountryFlag'
 import { TONE_TEXT } from '../vehicle/opsControls'
-import type { TripPlace, TripStop, TripSummary } from '../../lib/vehicleOps'
+import { placeTown, type TripStop, type TripSummary } from '../../lib/vehicleOps'
 import TypingMark from '../messages/TypingMark'
 
-// The room tile in the one-row trip layout (design px, rendered as rem) — a step
-// under HEADER_TILE_PX so the identity does not out-weigh the track beside it.
-const HEADER_TILE_COMPACT_PX = 34
+// A DM peer's picture in the one-row header (design px, rendered as rem) — a
+// step under the rail's tile so it fits the slim row. Vehicle rooms have none.
+const HEADER_TILE_COMPACT_PX = 30
 
 // The header's typing status: the mark, then the sentence. It takes the
 // subtitle's place and its voice; the sentence is what truncates, so a narrow
@@ -94,9 +94,10 @@ export default function ChatHeader({
   const orderLine = trip
     ? [trip.reference && `#${trip.reference}`, trip.client].filter(Boolean).join(' ')
     : ''
-  // The one-row layout steps every control down a notch: its row holds a whole
-  // trip, so 40px buttons and 19px glyphs would crowd the track.
-  const compact = Boolean(itinerary)
+  // COMPACT ALWAYS (user, 2026-10-29 canvas: "compact the header"): every
+  // thread header is one slim row on --tool-header-height now, trip or not, so
+  // the controls are always the stepped-down set.
+  const compact = true
   const iconSize = compact ? '0.9375rem' : '1.1875rem'
   const iconBox = compact ? 'h-8 w-8' : 'h-10 w-10'
   return (
@@ -130,87 +131,66 @@ export default function ChatHeader({
        nothing for an expanding search field to shift, so it can simply squeeze
        the title instead of floating over it. */
     <header className="shrink-0 border-b">
-    <div className="h-[var(--header-height)] flex items-center gap-3 px-5 overflow-hidden">
-      {/* Not a button, though the DM title beside it is one. Two adjacent
-          controls firing the same action is one tab stop too many and reads
-          twice to a screen reader; the picture is here to be recognised, not
-          pressed. */}
-      <div className="shrink-0">
-        {group.type === 'direct' ? (
+    <div className="h-[var(--tool-header-height)] flex items-center gap-2.5 pl-4 pr-2.5 overflow-hidden">
+      {/* A person keeps their picture; a vehicle room has none (user,
+          2026-10-29 canvas) — its plate is the identity, as in the rail. Not a
+          button, though the DM title beside it is one: two adjacent controls
+          firing the same action is one tab stop too many. */}
+      {group.type === 'direct' && (
+        <div className="shrink-0">
           <RowTile
             kind="user"
             id={group.directPeer?.id ?? ''}
             name={groupLabel(group)}
             hasAvatar={group.directPeer?.hasAvatar}
             version={group.directPeer?.avatarVersion}
-            size={HEADER_TILE_PX}
+            size={HEADER_TILE_COMPACT_PX}
           />
-        ) : (
-          <RowTile
-            kind="group"
-            id={group.id}
-            hasAvatar={group.hasAvatar}
-            version={group.avatarVersion}
-            size={itinerary ? HEADER_TILE_COMPACT_PX : HEADER_TILE_PX}
-          />
-        )}
-      </div>
-
-      {itinerary ? (
-        // ONE ROW (design canvas option B, 2026-10-16): the plate, then the
-        // trip itself — near end, track, far end, summary — in the same line.
-        // The trailer │ order │ members facts that used to sit beside the plate
-        // moved to its tooltip (and live in Group info); typing takes the
-        // summary's place.
-        <div className="min-w-0 flex-1 flex items-center gap-3">
-          <div
-            title={[...subtitle.split(' · ').slice(0, 1), orderLine, ...subtitle.split(' · ').slice(1)]
-              .filter(Boolean)
-              .join(' · ')}
-            className="shrink-0 text-[1.0625rem] font-bold tracking-[-0.02em] tabular-nums leading-tight"
-          >
-            {groupLabel(group)}
-          </div>
-          <span aria-hidden className="h-[1.125rem] w-px shrink-0 bg-line" />
-          <TripLine trip={itinerary} typingText={typingText} />
         </div>
-      ) : (
-      <div className="min-w-0 flex-1">
+      )}
+
+      {/* ONE ROW, always: the title, a short divider, then either the trip
+          (near end, track, far end, summary — design canvas option B,
+          2026-10-16) or the room's facts in the label voice. Typing takes the
+          trip summary's / the facts' place. The trailer │ order │ members facts
+          also ride along as the title's tooltip when a trip has the row. */}
+      <div className="min-w-0 flex-1 flex items-center gap-2.5">
         {group.type === 'direct' ? (
           <button
             type="button"
             onClick={() =>
               onOpenProfile(group.directPeer?.id ?? '', group.directPeer?.name ?? groupLabel(group))
             }
-            className="block max-w-full text-left text-xl font-semibold tracking-[-0.2px] truncate leading-tight hover:underline underline-offset-4 focus-visible:outline-none focus-visible:underline"
+            className="min-w-0 max-w-[50%] shrink truncate text-left text-[1.0625rem] font-semibold tracking-[-0.2px] leading-tight hover:underline underline-offset-4 focus-visible:outline-none focus-visible:underline"
           >
             {groupLabel(group)}
           </button>
         ) : (
-          // A vehicle room's title is a plate: set heavier and a step larger
-          // than a person's name, in tabular figures (rework, 2026-10-10).
-          <div className="text-2xl font-bold tracking-[-0.02em] tabular-nums truncate leading-tight">
-            {groupLabel(group)}
+          // A vehicle room's title is its plate, in tabular figures.
+          <div
+            title={[groupLabel(group), ...subtitle.split(' · '), orderLine].filter(Boolean).join(' · ')}
+            className="min-w-0 max-w-[50%] shrink truncate text-[1.0625rem] font-bold tracking-[-0.02em] tabular-nums leading-tight"
+          >
+            {tractorPlate(group) ?? trailerPlate(group) ?? groupLabel(group)}
           </div>
         )}
-        {/* The operational line — `.eyebrow`, because it is structure rather
-            than something somebody said; `text-active` when someone is typing,
-            since that IS content arriving. */}
-        <div
-          role={typingText ? 'status' : undefined}
-          aria-live={typingText ? 'polite' : undefined}
-          className={`eyebrow truncate leading-tight mt-1 ${typingText ? 'text-active' : ''}`}
-        >
-          {/* The subtitle's facts are split on the same hairline the rail's
-              meta line uses, not run together with dots. */}
-          {typingText ? (
-            <TypingLine text={typingText} />
-          ) : (
-            <RowMeta segments={subtitle.split(' · ')} whole />
-          )}
-        </div>
+        <span aria-hidden className="h-3.5 w-px shrink-0 bg-line" />
+        {itinerary ? (
+          <TripLine trip={itinerary} typingText={typingText} />
+        ) : (
+          <div
+            role={typingText ? 'status' : undefined}
+            aria-live={typingText ? 'polite' : undefined}
+            className={`eyebrow min-w-0 flex-1 truncate leading-tight ${typingText ? 'text-active' : ''}`}
+          >
+            {typingText ? (
+              <TypingLine text={typingText} />
+            ) : (
+              <RowMeta segments={subtitle.split(' · ')} whole />
+            )}
+          </div>
+        )}
       </div>
-      )}
 
       {/* Search is offered in EVERY conversation (DM + vehicle); Group info
           stays vehicle-only. */}
@@ -336,11 +316,7 @@ export default function ChatHeader({
 
 // "FR 57010 Tremery" → "Tremery": the flag already says the country, and a
 // postal code is not what anyone scans a header for.
-function town(place: TripPlace): string {
-  const words = place.text.split(/\s+/).filter((w) => w && !/\d/.test(w))
-  const withoutCode = place.code && words[0]?.toUpperCase() === place.code ? words.slice(1) : words
-  return withoutCode.join(' ') || place.text || place.code || '—'
-}
+const town = placeTown
 
 // The header's second row: the stop the truck is heading for on the left, the
 // trip's final stop on the right, and the trip drawn as a track under them —

@@ -1286,7 +1286,7 @@ export default function ChatView({
           on the field itself, so the card contracts from its sides as they
           open. */}
       <div
-        className="relative flex-1 min-w-0 flex flex-col my-1.5 mx-3.5 rounded-card border border-line shadow-float overflow-hidden"
+        className="chat-card relative flex-1 min-w-0 flex flex-col my-1.5 mx-3.5 rounded-card border border-line shadow-float overflow-hidden"
         {...dropHandlers}
       >
       {/* Drag-and-drop overlay. pointer-events-none so the drop still lands on

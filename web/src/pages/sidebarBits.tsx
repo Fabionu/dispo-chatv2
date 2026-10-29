@@ -40,11 +40,6 @@ import GroupAvatar from '../components/GroupAvatar'
 // just gained.
 export const SIDEBAR_TILE_PX = 38
 
-/** The thread header's copy of the tile. Larger, because it is not one of
- *  thirty rows being scanned — it is the single identity of the conversation
- *  that is open, and it sits alone in a header with room around it. */
-export const HEADER_TILE_PX = 42
-
 export function RowTile(
   props:
     // `hasAvatar` is optional on purpose. The roster types that carry it

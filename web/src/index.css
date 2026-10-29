@@ -104,8 +104,8 @@ html[data-density-mode='manual'][data-density='comfortable'] {
      (--color-bubble-own aliased --color-bg until the bubble style existed — a
      leftover of the pre-rework bubbles, and an alias that made the token a
      no-op, which is how it survived the de-bubbling unnoticed.) */
-  --color-bubble: 18 18 18;
-  --color-bubble-own: 42 42 42;
+  --color-bubble: 14 14 14;
+  --color-bubble-own: 34 34 34;
   --color-surface: 17 17 17;
   --color-surface-2: 26 26 26;
 
@@ -291,7 +291,6 @@ html[data-density-mode='manual'][data-density='comfortable'] {
      HOME header (InboxView) stays on --header-height: it is a main-pane header
      beside the rail, and that seam is what the tall token exists for. */
   --tool-header-height: clamp(calc(40.92px * var(--ui-floor)), calc((32.01px + 0.6245vw) * var(--ui-scale)), calc(53.24px * var(--ui-scale)));
-  --workspace-nav-width: 3.25rem;
   /* FLUID, and defined exactly once (2026-08-26, user: the widths should scale
      with CSS rather than be managed per resolution). This token used to be
      enumerated in eight places — three density tiers, three no-JS media
@@ -530,6 +529,26 @@ html[data-density-mode='manual'][data-density='comfortable'] {
    that actually differ are restated; sidebar/chat/panel/rail/composer resolve
    through --color-bg and follow automatically. To go WARM instead, swap the
    wash to a stone black (e.g. 41 37 36) and move the greys the same way. */
+/* The chat card is LIFTED (user, 2026-10-29 canvas, "lifted" tone): one step
+   off the black field, on the surface tone, so the conversation reads as a
+   sheet over the workspace. Everything inside that paints the field (header,
+   composer, panels) is re-pointed here — the aliases resolve at :root, so each
+   has to be restated, not just --color-bg. The bubbles are re-stepped to stay
+   one and two notches over the card (slightly darker than before, by request). */
+.chat-card {
+  --color-bg: var(--color-surface);
+  --color-chat: var(--color-surface);
+  --color-composer: var(--color-surface);
+  --color-panel: var(--color-surface);
+  --color-bubble: 25 25 25;
+  --color-bubble-own: 40 40 40;
+  background: rgb(var(--color-surface));
+}
+html[data-theme='light'] .chat-card {
+  --color-bubble: 233 237 243;
+  --color-bubble-own: 218 224 233;
+}
+
 html[data-theme='light'] {
   color-scheme: light;
   --color-bg: 255 255 255;
@@ -617,19 +636,20 @@ html[data-theme='light'] {
    not claim. */
 
 /* Workspace layout ---------------------------------------------------------
-   Grid owns the persistent nav, animated sidebar and main-pane tracks. It
+   Grid owns the top bar, the animated sidebar and the main-pane tracks. It
    prevents the chat pane from being squeezed by intrinsic content and lets
    Auto use a genuinely fluid sidebar; manual appearance modes continue to use
-   their exact --sidebar-width token. */
+   their exact --sidebar-width token.
+   The top bar (WorkspaceTopBar, 2026-10-29) spans both columns on its own row;
+   it replaced the left nav rail that used to be a third, narrow column. */
 .workspace-shell {
   display: grid;
-  /* No gap and no outer padding: the app is edge-to-edge and the three tracks
-     are separated by the hairline each one carries on its right (see the
-     border-r in WorkspaceNavRail / the sidebar aside). A gap would put the
-     window background between panels, which is exactly the floating-card look
-     the rework removed. */
+  /* No gap and no outer padding: the app is edge-to-edge. The top bar is
+     sealed by its bottom hairline; the sidebar and the chat card need nothing
+     between them, since the card floats on the field. */
   gap: 0;
-  grid-template-columns: var(--workspace-nav-width) var(--sidebar-width) minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   /* NO transition on the tracks. There was a 300ms ease here, and it was right
      while --sidebar-width was a fixed number per tier: the only time the track
      changed was a tier boundary or a density toggle, and easing that reads as
@@ -644,7 +664,11 @@ html[data-theme='light'] {
 }
 
 .workspace-shell--collapsed {
-  grid-template-columns: var(--workspace-nav-width) 0px minmax(0, 1fr);
+  grid-template-columns: 0px minmax(0, 1fr);
+}
+
+.workspace-topbar {
+  grid-column: 1 / -1;
 }
 
 .workspace-sidebar-panel {

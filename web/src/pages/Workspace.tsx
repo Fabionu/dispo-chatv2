@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Archive, MailOpen, Plus, Search, UserPlus, Users, X, Activity, CalendarClock, MessageSquare, Route } from 'lucide-react'
+import { Archive, MailOpen, Plus, Search, UserPlus, Users, X, Activity, CalendarClock, Route } from 'lucide-react'
 import type { User, Workspace as WorkspaceT } from '../auth/AuthContext'
 import type {
   Connection,
@@ -25,12 +25,11 @@ import { MENU_CONTAINER, MENU_GLYPH, MENU_SEPARATOR } from '../components/menuSt
 import Spinner from '../components/Spinner'
 import CreateVehicleGroupModal from '../components/CreateVehicleGroupModal'
 import NewMessageModal from '../components/NewMessageModal'
-import AccountSidebarPanel from '../components/settings/AccountSidebarPanel'
-import ProfileSidebarPanel from '../components/settings/ProfileSidebarPanel'
+import AccountPopover from '../components/settings/AccountPopover'
+import ProfileWindow from '../components/settings/ProfileWindow'
 import CompanySidebarPanel from '../components/settings/CompanySidebarPanel'
 import WorkspaceSettingsPanel from '../components/settings/WorkspaceSettingsPanel'
 import InboxView, { type WorkspaceToolId } from '../components/inbox/InboxView'
-import ToolTab, { ChatToolTabs } from '../components/ChatToolTab'
 import { useIdle } from '../hooks/useIdle'
 import { usePresence } from '../hooks/usePresence'
 import { useConnections } from '../hooks/useConnections'
@@ -49,7 +48,8 @@ import { optimisticDirectGroup } from './workspaceUtils'
 import ConnectionStatusBanner from '../components/ConnectionStatusBanner'
 import { NOTIFICATION_OPEN_EVENT } from '../lib/browserNotifications'
 import UserProfilePanel from '../components/UserProfilePanel'
-import WorkspaceNavRail from './WorkspaceNavRail'
+import WorkspaceTopBar, { type TopTab } from './WorkspaceTopBar'
+import { AWAY, statusMeta } from '../lib/availability'
 import { useTravellingMarker } from '../components/useTravellingMarker'
 
 type Props = {
@@ -62,13 +62,34 @@ type NewGroupKind = 'vehicle' | 'direct'
 
 // What the LEFT RAIL is showing. The rail is a small navigation stack, not a set
 // of popovers: 'list' is the conversation list (home), and every other value is a
-// drill-in view that REPLACES it inside the same panel. Each level's Back goes
-// one step left along this chain:
-//   list ← account ← profile / settings
-//   list ← company
+// drill-in view that REPLACES it inside the same panel, opened from the top
+// bar's account window (which used to be the 'account' level here); each one's
+// Back returns to the list:
+//   list ← profile / company / settings
 // The list's own state (selection, search text, filter, scroll offset) is held
 // here in Workspace and therefore survives every drill-in unchanged.
-type SidebarView = 'list' | 'account' | 'profile' | 'company' | 'settings'
+type SidebarView = 'list' | 'company' | 'settings'
+
+// The top bar's open tabs, per user on this device. Validated on read: a
+// malformed or foreign value yields an empty bar rather than a crash.
+const OPEN_TABS_KEY = 'dispo:open-tabs:v1:'
+function getStoredOpenTabs(userId: string): string[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(OPEN_TABS_KEY + userId) ?? '[]')
+    return Array.isArray(raw)
+      ? raw.filter((k): k is string => typeof k === 'string' && /^(chat|tool):/.test(k))
+      : []
+  } catch {
+    return []
+  }
+}
+function setStoredOpenTabs(userId: string, tabs: string[]) {
+  try {
+    localStorage.setItem(OPEN_TABS_KEY + userId, JSON.stringify(tabs))
+  } catch {
+    /* storage unavailable — the tabs still work for this session */
+  }
+}
 
 // Sidebar pill filter — which slice of the single unified list is shown.
 //   'all'      → active (non-archived) vehicle rooms + DMs + company contacts
@@ -140,8 +161,17 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // header pins it into the tab strip above the main pane, next to the last
   // conversation opened, so the user can flip between them freely.
   const [workspaceTool, setWorkspaceTool] = useState<WorkspaceToolId | null>(null)
-  const [pinnedTools, setPinnedTools] = useState<WorkspaceToolId[]>([])
-  const [lastChatId, setLastChatId] = useState<string | null>(null)
+  // The top bar's open tabs (see "Open tabs" below). Pinned tools are the
+  // `tool:` entries of the same list, so a pin and a tab are one thing.
+  const [openTabs, setOpenTabs] = useState<string[]>(() => getStoredOpenTabs(user.id))
+  const pinnedTools = useMemo(
+    () => openTabs.filter((k) => k.startsWith('tool:')).map((k) => k.slice(5) as WorkspaceToolId),
+    [openTabs],
+  )
+  // The account window hanging from the top bar's photo.
+  const [accountOpen, setAccountOpen] = useState(false)
+  // My profile opens in its own window, not as a sidebar drill-in.
+  const [profileWindowOpen, setProfileWindowOpen] = useState(false)
   // Which conversation row has its inline action strip expanded. Held here, not
   // per row, so opening one collapses whichever was open.
   const [rowActionsId, setRowActionsId] = useState<string | null>(null)
@@ -337,9 +367,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     }
   }, [refreshMembers])
 
-  // Close the rail's actions menu on outside click / Esc. It is the only
-  // floating menu the rail still raises — the account menu that used to hang off
-  // the footer is now the 'account' sidebar view.
+  // Close the rail's actions menu on outside click / Esc. (The account window
+  // is the top bar's, and closes itself the same way.)
   useEffect(() => {
     if (!newMenuOpen) return
     function onMouseDown(e: MouseEvent) {
@@ -637,9 +666,29 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     return groupInvites.find((i) => i.id === selection.id) ?? null
   }, [groupInvites, selection])
 
+  // ── Open tabs (top bar) ────────────────────────────────────────────────
+  // Every conversation you open gets a tab and keeps it until you close it;
+  // a tool the user pins from the workspace home is a tab too. One ordered list
+  // of keys (`chat:<groupId>` / `tool:<toolId>`), remembered per user on this
+  // device so the working set survives a reload.
   useEffect(() => {
-    if (selectedGroup) setLastChatId(selectedGroup.id)
+    if (!selectedGroup) return
+    const key = `chat:${selectedGroup.id}`
+    setOpenTabs((cur) => (cur.includes(key) ? cur : [...cur, key]))
   }, [selectedGroup])
+  // A conversation that left the list (deleted, left, hidden on another device)
+  // takes its tab with it — once the list has actually loaded.
+  useEffect(() => {
+    if (loadingGroups) return
+    const ids = new Set(groups.map((g) => g.id))
+    setOpenTabs((cur) => {
+      const next = cur.filter((k) => !k.startsWith('chat:') || ids.has(k.slice(5)))
+      return next.length === cur.length ? cur : next
+    })
+  }, [groups, loadingGroups])
+  useEffect(() => {
+    setStoredOpenTabs(user.id, openTabs)
+  }, [user.id, openTabs])
 
   // The Inbox / workspace home is showing whenever nothing else is selected —
   // i.e. selection is `inbox` or `null`. Drives the header's active state and
@@ -689,9 +738,82 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     setSelection({ kind: 'group', id: groupId })
   }, [])
 
-  // App shell: edge to edge, one field colour, three tracks divided by the
-  // hairline each carries on its right. There is no outer padding and no gap —
-  // nothing here floats, so nothing needs a background behind it to float on.
+  // A sidebar drill-in opened from the account window: expand a collapsed
+  // sidebar first (a panel nobody can see would do nothing), then close the
+  // window behind it.
+  const openFromAccount = (view: SidebarView) => {
+    if (sidebarCollapsed) {
+      setStoredSidebarCollapsed(false)
+      setSidebarCollapsed(false)
+    }
+    setAccountOpen(false)
+    openSidebarView(view)
+  }
+
+  const TOOL_TABS: Record<WorkspaceToolId, { label: string; icon: React.ReactNode }> = {
+    route: { label: 'Route planner', icon: <Route size="1.0625rem" strokeWidth={1.75} /> },
+    restrictions: { label: 'Restrictions', icon: <CalendarClock size="1.0625rem" strokeWidth={1.75} /> },
+    fleet: { label: 'Fleet status', icon: <Activity size="1.0625rem" strokeWidth={1.75} /> },
+  }
+  const topTabs: TopTab[] = openTabs.flatMap((key): TopTab[] => {
+    if (key.startsWith('tool:')) {
+      const tool = TOOL_TABS[key.slice(5) as WorkspaceToolId]
+      return tool ? [{ key, kind: 'tool', label: tool.label, icon: tool.icon }] : []
+    }
+    const g = groups.find((x) => x.id === key.slice(5))
+    if (!g) return []
+    const unread = g.unreadCount ?? 0
+    return g.type === 'direct'
+      ? [{
+          key,
+          kind: 'person',
+          label: groupLabel(g),
+          unread,
+          person: g.directPeer
+            ? {
+                id: g.directPeer.id,
+                name: g.directPeer.name ?? groupLabel(g),
+                hasAvatar: g.directPeer.hasAvatar,
+                avatarVersion: g.directPeer.avatarVersion,
+              }
+            : undefined,
+        }]
+      : [{ key, kind: 'vehicle', label: tractorPlate(g) ?? groupLabel(g), unread }]
+  })
+  const activeTabKey = selectedGroup
+    ? `chat:${selectedGroup.id}`
+    : inboxActive && workspaceTool && openTabs.includes(`tool:${workspaceTool}`)
+      ? `tool:${workspaceTool}`
+      : ''
+  const selectTab = (key: string) => {
+    if (key.startsWith('tool:')) {
+      setSelection({ kind: 'inbox' })
+      setWorkspaceTool(key.slice(5) as WorkspaceToolId)
+    } else {
+      setSelection({ kind: 'group', id: key.slice(5) })
+    }
+  }
+  // Closing the live tab moves to its neighbour (the next one, else the one
+  // before), the way a browser does; closing the last returns to the
+  // workspace home.
+  const closeTab = (key: string) => {
+    const index = openTabs.indexOf(key)
+    const rest = openTabs.filter((k) => k !== key)
+    setOpenTabs(rest)
+    if (key !== activeTabKey) return
+    const neighbour = rest[Math.min(index, rest.length - 1)]
+    if (neighbour) {
+      selectTab(neighbour)
+    } else {
+      if (key.startsWith('tool:')) setWorkspaceTool(null)
+      setSelection({ kind: 'inbox' })
+    }
+  }
+  const myStatus =
+    user.role === 'driver' ? null : away ? AWAY : statusMeta(cachedProfile?.availabilityStatus ?? 'available')
+
+  // App shell: edge to edge, one field colour. The top bar spans the width;
+  // under it the sidebar and the main pane, where the chat floats as its card.
   return (
     <div
       className={`workspace-shell h-screen w-full bg-bg text-text overflow-hidden ${
@@ -699,39 +821,49 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
       }`}
     >
       <ConnectionStatusBanner />
-      {/* Persistent application navigation. Unlike the conversation sidebar,
-          this narrow rail never disappears, so Workspace and the main sections
-          stay reachable from chats and every sidebar drill-in. */}
-      <WorkspaceNavRail
+      {/* Persistent application navigation + the open tabs. Unlike the
+          conversation sidebar it never disappears, so Workspace, your account
+          and every open conversation stay reachable from anywhere. */}
+      <WorkspaceTopBar
         collapsed={sidebarCollapsed}
         // Chat is "the rail is showing conversations AND one is open". With
         // nothing selected the main pane IS the workspace inbox, which is what
-        // the Workspace entry above means — so the two never light up together.
+        // the Workspace entry means — so the two never light up together.
         chatActive={sidebarView === 'list' && !inboxActive}
         workspaceActive={sidebarView === 'list' && inboxActive}
-        settingsActive={sidebarView === 'account' || sidebarView === 'settings'}
         me={{
           id: user.id,
           name: user.displayName,
           hasAvatar: cachedProfile?.hasAvatar,
           avatarVersion: cachedProfile?.avatarVersion,
         }}
-        companyActive={sidebarView === 'company'}
-        onOpenCompany={() => {
-          if (sidebarCollapsed) {
-            setStoredSidebarCollapsed(false)
-            setSidebarCollapsed(false)
-          }
-          openSidebarView('company')
-        }}
-        profileActive={sidebarView === 'profile'}
-        onOpenProfile={() => {
-          if (sidebarCollapsed) {
-            setStoredSidebarCollapsed(false)
-            setSidebarCollapsed(false)
-          }
-          openSidebarView('profile')
-        }}
+        statusColor={myStatus?.color ?? null}
+        tabs={topTabs}
+        activeKey={activeTabKey}
+        onSelectTab={selectTab}
+        onCloseTab={closeTab}
+        accountOpen={accountOpen}
+        onAccountOpenChange={setAccountOpen}
+        account={
+          <AccountPopover
+            user={user}
+            profile={cachedProfile}
+            away={away}
+            companyName={workspace.name}
+            onClose={() => setAccountOpen(false)}
+            onOpenProfile={() => {
+              setAccountOpen(false)
+              setProfileWindowOpen(true)
+            }}
+            onOpenCompany={() => openFromAccount('company')}
+            onOpenSettings={() => openFromAccount('settings')}
+            onSignOut={() => void onSignOut()}
+            onProfileSaved={(p) => {
+              setCachedProfile(p)
+              void refresh()
+            }}
+          />
+        }
         onToggleSidebar={toggleSidebar}
         // Back to the conversation list, and ONLY that. It deliberately does
         // not touch `selection`: coming back from Settings or the inbox should
@@ -750,13 +882,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           setNewMenuOpen(false)
           setSidebarView('list')
           setSelection({ kind: 'inbox' })
-        }}
-        onOpenSettings={() => {
-          if (sidebarCollapsed) {
-            setStoredSidebarCollapsed(false)
-            setSidebarCollapsed(false)
-          }
-          openSidebarView('account')
         }}
       />
 
@@ -1063,34 +1188,7 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             key={sidebarView}
             className="panel-fade-in absolute inset-0 z-10 flex min-h-0 flex-col bg-sidebar"
           >
-            {sidebarView === 'account' ? (
-              <AccountSidebarPanel
-                user={user}
-                profile={cachedProfile}
-                away={away}
-                companyName={workspace.name}
-                onBack={() => setSidebarView('list')}
-                onOpenProfile={() => setSidebarView('profile')}
-                onOpenSettings={() => setSidebarView('settings')}
-                onSignOut={() => void onSignOut()}
-                onProfileSaved={(p) => {
-                  setCachedProfile(p)
-                  void refresh()
-                }}
-              />
-            ) : sidebarView === 'profile' ? (
-              <ProfileSidebarPanel
-                initialProfile={cachedProfile}
-                away={away}
-                onBack={() => setSidebarView('account')}
-                backLabel="Back to Account"
-                onSaved={(p) => {
-                  setCachedProfile(p)
-                  void refresh()
-                }}
-                onPreview={() => setProfileTarget({ id: user.id, name: user.displayName })}
-              />
-            ) : sidebarView === 'company' ? (
+            {sidebarView === 'company' ? (
               <CompanySidebarPanel
                 onBack={() => setSidebarView('list')}
                 backLabel="Back to conversations"
@@ -1100,8 +1198,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               />
             ) : (
               <WorkspaceSettingsPanel
-                onBack={() => setSidebarView('account')}
-                backLabel="Back to Account"
+                onBack={() => setSidebarView('list')}
+                backLabel="Back to conversations"
               />
             )}
           </div>
@@ -1114,44 +1212,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
           `surface`, the one remaining tone step, because they COVER content and
           have to stay distinguishable from it. */}
       <main className="workspace-main flex flex-col min-w-0 bg-bg overflow-hidden">
-        {pinnedTools.length > 0 && (() => {
-          const TOOL_TABS: Record<WorkspaceToolId, { label: string; icon: React.ReactNode }> = {
-            route: { label: 'Route planner', icon: <Route size="0.75rem" strokeWidth={2} /> },
-            restrictions: { label: 'Restrictions', icon: <CalendarClock size="0.75rem" strokeWidth={2} /> },
-            fleet: { label: 'Fleet status', icon: <Activity size="0.75rem" strokeWidth={2} /> },
-          }
-          const chat = groups.find((g) => g.id === lastChatId) ?? null
-          const activeKey = selectedGroup
-            ? `chat:${selectedGroup.id}`
-            : inboxActive && workspaceTool
-              ? `tool:${workspaceTool}`
-              : 'none'
-          return (
-            <ChatToolTabs activeKey={activeKey}>
-              {pinnedTools.map((id) => (
-                <ToolTab
-                  key={id}
-                  active={inboxActive && workspaceTool === id}
-                  icon={TOOL_TABS[id].icon}
-                  label={TOOL_TABS[id].label}
-                  onClick={() => {
-                    setSelection({ kind: 'inbox' })
-                    setWorkspaceTool(id)
-                  }}
-                  onClose={() => setPinnedTools((cur) => cur.filter((t) => t !== id))}
-                />
-              ))}
-              {chat && (
-                <ToolTab
-                  active={selectedGroup?.id === chat.id}
-                  icon={<MessageSquare size="0.75rem" strokeWidth={2} />}
-                  label={groupLabel(chat)}
-                  onClick={() => setSelection({ kind: 'group', id: chat.id })}
-                />
-              )}
-            </ChatToolTabs>
-          )
-        })()}
         {selectedGroup ? (
           <ChatView
             key={selectedGroup.id}
@@ -1216,7 +1276,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
                 onToolChange={setWorkspaceTool}
                 pinnedTools={pinnedTools}
                 onTogglePin={(id) =>
-                  setPinnedTools((cur) => (cur.includes(id) ? cur.filter((t) => t !== id) : [...cur, id]))
+                  setOpenTabs((cur) =>
+                    cur.includes(`tool:${id}`) ? cur.filter((k) => k !== `tool:${id}`) : [...cur, `tool:${id}`],
+                  )
                 }
                 workspaceName={workspace.name}
                 vehicleRooms={availableVehicleRooms}
@@ -1238,6 +1300,21 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
       )}
       {modal === 'direct' && (
         <NewMessageModal onClose={() => setModal(null)} onOpenGroup={handleCreated} />
+      )}
+      {profileWindowOpen && (
+        <ProfileWindow
+          initialProfile={cachedProfile}
+          away={away}
+          onClose={() => setProfileWindowOpen(false)}
+          onSaved={(p) => {
+            setCachedProfile(p)
+            void refresh()
+          }}
+          onPreview={() => {
+            setProfileWindowOpen(false)
+            setProfileTarget({ id: user.id, name: user.displayName })
+          }}
+        />
       )}
       {profileTarget && (
         <UserProfilePanel
