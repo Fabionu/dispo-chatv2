@@ -2540,6 +2540,50 @@ button {
   opacity: 0.42;
   cursor: not-allowed;
 }
+/* HGV, the second switch in the Map view panel (user, 2026-10-30: the
+   planner's separate HGV button moves into the menu). It is built from the
+   Traffic row — same grid, same switch — so the only piece of its own is the
+   thumbnail: an icon on the field colour instead of a picture, since there is
+   no meaningful picture of "restriction signs". */
+.here-map-hgv-thumb {
+  display: grid;
+  width: 2.75rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid rgb(var(--color-line));
+  border-radius: var(--control-radius);
+  background: rgb(var(--color-surface-2));
+  color: rgb(var(--color-text));
+}
+.here-map-hgv-thumb svg {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* The column of controls in the bottom-LEFT corner instead of the right
+   (user, 2026-10-30), for the maps that ask for it (`data-side="left"`, the
+   Route planner's). Same offsets from the bottom — they clear Google's
+   attribution row and its logo, which the terms keep — and the panel opens
+   rightward from the button instead of leftward. */
+.here-map-controls-host[data-side='left'] .here-map-style-control,
+.here-map-controls-host[data-side='left'] .here-map-zoom-control,
+.here-map-controls-host[data-side='left'] .here-map-streetview-control {
+  right: auto;
+  left: 0.75rem;
+}
+.here-map-controls-host[data-side='left'] .here-map-style-trigger,
+.here-map-controls-host[data-side='left'] .here-map-streetview-trigger {
+  margin-left: 0;
+  margin-right: auto;
+}
+.here-map-controls-host[data-side='left'] .here-map-style-panel {
+  right: auto;
+  left: 0;
+}
 /* NOTE: hovering the route line no longer changes the cursor (user,
    2026-09-03). It used to swap in a drawn `grab` — the line is draggable, and a
    drawn glyph was used because the platform's white hand disappears over a road

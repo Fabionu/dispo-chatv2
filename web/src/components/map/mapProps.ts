@@ -47,6 +47,15 @@ export type MapSurfaceProps = {
   /** Whether the HGV truck-restriction overlay is on. */
   truckOverlay: boolean
   onTruckOverlayAvailabilityChange?: (available: boolean) => void
+  /**
+   * Given, the map's own Map view menu carries the HGV switch and reports its
+   * changes here (the Route planner's — the separate HGV button went into the
+   * menu on 2026-10-30). The state itself stays with the caller: `truckOverlay`
+   * is what is drawn, and the switch follows it.
+   */
+  onTruckOverlayChange?: (on: boolean) => void
+  /** Which bottom corner the map's own controls (view, zoom, Street View) sit in. */
+  controlsSide?: 'left' | 'right'
   onMapContextMenu?: (info: {
     lat: number
     lng: number

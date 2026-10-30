@@ -14,6 +14,8 @@ import {
   MapPinned,
   Navigation,
   Pencil,
+  Clock,
+  Route as RouteIcon,
   Trash2,
   Truck,
   TriangleAlert,
@@ -58,7 +60,8 @@ import PointRow from './RoutePointRow'
 import { RoleBadge, RouteRow } from './RoutePointCard'
 import {
   CopyCoordButton,
-  FoldRow,
+  FoldPanel,
+  FoldTabs,
   FoldGroup,
   NumberField,
   PresetSelect,
@@ -271,7 +274,6 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions, pin }: P
   const [placeError, setPlaceError] = useState<string | null>(null)
   const [placeToDelete, setPlaceToDelete] = useState<WorkspacePlace | null>(null)
   const [truckOverlay, setTruckOverlay] = useRetainedState(RETAIN, 'truckOverlay', false)
-  const [overlayAvailable, setOverlayAvailable] = useState(false)
 
   // Presets (built-in + user/localStorage). `activePresetId` is cleared on any
   // manual field edit so the summary never claims a preset that no longer matches.
@@ -1416,7 +1418,8 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions, pin }: P
           }}
           onStreetViewChange={setStreetView}
           truckOverlay={truckOverlay}
-          onTruckOverlayAvailabilityChange={setOverlayAvailable}
+          onTruckOverlayChange={setTruckOverlay}
+          controlsSide="left"
           onMapContextMenu={openMenu}
           onMapViewChange={() => {
             setMenu(null)
@@ -1436,13 +1439,13 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions, pin }: P
           className="absolute inset-0"
         />
 
-        {/* Compact map layers/actions. Both are TOGGLES, and both say "on" the
-            way the whole app says it — a solid `bg-text` block with `text-bg`
-            on it, which inverts per theme for free. HGV used to say it in
-            `--color-active` instead; that token means a mention or an alert
-            here, and spending it on a map layer made the overlay look like a
-            warning. Drawn on `surface` rather than the field colour because
-            they float over the map, which is the one case that token is for. */}
+        {/* The Places toggle says "on" the way the whole app says it — a solid
+            `bg-text` block with `text-bg` on it, which inverts per theme for
+            free. Drawn on `surface` rather than the field colour because it
+            floats over the map, which is the one case that token is for. The
+            HGV toggle used to sit beside it; it is a switch in the map's own
+            Map view menu now (bottom-left, with the zoom and Street View
+            buttons), so the corner holds the one button. */}
         <div className={`absolute z-20 right-3 top-3 flex items-center gap-1.5 ${streetView ? 'hidden' : ''}`}>
           <button
             onClick={() => setPlacesOpen((value) => !value)}
@@ -1454,23 +1457,6 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions, pin }: P
           >
             <MapPinned size="0.875rem" strokeWidth={2} />
             Places{places.length > 0 ? ` · ${places.length}` : ''}
-          </button>
-          <button
-            onClick={() => setTruckOverlay((v) => !v)}
-            disabled={!overlayAvailable}
-            title={
-              overlayAvailable
-                ? 'Toggle HERE truck/HGV restriction overlay'
-                : 'Truck overlay not available on this HERE plan'
-            }
-            className={`flex h-8 items-center gap-1.5 rounded-btn border px-3 text-sm font-medium shadow-overlay transition-colors ${
-              truckOverlay
-                ? 'border-text bg-text text-bg'
-                : 'border-line bg-surface text-text hover:bg-surface-2'
-            } disabled:cursor-not-allowed disabled:opacity-40`}
-          >
-            <Truck size="0.875rem" strokeWidth={2} />
-            HGV
           </button>
         </div>
 
@@ -1530,7 +1516,7 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions, pin }: P
         <div
           // `hidden` (not unmounted) in Street View, so every field keeps what
           // was typed in it and the cards come back exactly as they were.
-          className={`absolute z-20 top-3 left-3 flex w-[18.75rem] max-w-[calc(100%-1.5rem)] max-h-[calc(100%-1.5rem)] flex-col gap-2 transition-transform duration-300 ease-out ${
+          className={`absolute z-20 top-3 left-3 flex w-[18.75rem] max-w-[calc(100%-1.5rem)] max-h-[calc(100%-13rem)] flex-col gap-2 transition-transform duration-300 ease-out ${
             streetView ? 'hidden' : ''
           }`}
           style={{ transform: panelCollapsed ? 'translateX(calc(-100% - 1rem))' : 'translateX(0)' }}
@@ -1699,7 +1685,10 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions, pin }: P
                     closed, because money is the one detail worth a glance
                     without opening anything. Rests (nights / weekly) came off
                     the card on 2026-09-15 — the arrival has them priced in. */}
-                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                {/* The distance gets the wider share (1.3 : 1): "1 842 km" is
+                    wider than "2d 3h" at this size, and an even split clipped
+                    it. */}
+                <div className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto]">
                   {/* Only the readouts dim while recomputing — the actions
                       beside them stay solid, so Collapse doesn't flicker on
                       every keystroke in the truck fields. */}
@@ -1707,7 +1696,11 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions, pin }: P
                     className={`min-w-0 ${transit ? '' : 'relative col-span-2'}`}
                   >
                     <div className={`transition-opacity motion-reduce:transition-none ${loading ? 'opacity-50' : ''}`}>
-                      <Stat label="Distance" value={formatDistance(route.summary.length)} size="lg" />
+                      <Stat
+                        label="Distance"
+                        value={formatDistance(route.summary.length)}
+                        icon={<RouteIcon size="1.0625rem" strokeWidth={1.8} />}
+                      />
                     </div>
                     {!transit && loading && (
                       <Spinner size={12} className="absolute right-2.5 top-2.5 text-muted" />
@@ -1716,7 +1709,11 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions, pin }: P
                   {transit && (
                     <div className="relative min-w-0 border-l border-line">
                       <div className={`transition-opacity motion-reduce:transition-none ${loading ? 'opacity-50' : ''}`}>
-                        <Stat label="Transit" value={formatDuration(transit.totalMs / 1000)} size="lg" />
+                        <Stat
+                          label="Transit"
+                          value={formatDuration(transit.totalMs / 1000)}
+                          icon={<Clock size="1.0625rem" strokeWidth={1.8} />}
+                        />
                       </div>
                       {/* The "working" mark that used to sit in the header. */}
                       {loading && <Spinner size={12} className="absolute right-2.5 top-2.5 text-muted" />}
@@ -1916,14 +1913,29 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions, pin }: P
               pickers can open past the card's edge, and they appear with the
               first point — an empty card is just the Start field. */}
           {points.length > 0 && (
-            <div className="shrink-0 divide-y divide-line border-t border-line">
-              <FoldRow
-                        icon={<Truck size="1rem" strokeWidth={1.8} />}
-                        title="Truck profile"
-                        summary={collapsedTruckLabel}
-                        open={truckOpen}
-                        onToggle={() => setTruckOpen((o) => !o)}
-                      >
+            <div className="shrink-0 border-t border-line">
+              <FoldTabs
+                tabs={[
+                  {
+                    key: 'truck',
+                    icon: <Truck size="1rem" strokeWidth={1.8} />,
+                    title: 'Truck profile',
+                    summary: collapsedTruckLabel,
+                    open: truckOpen,
+                    onToggle: () => setTruckOpen((o) => !o),
+                  },
+                  {
+                    key: 'crew',
+                    icon: <Users size="1rem" strokeWidth={1.8} />,
+                    title: 'Crew & hours',
+                    summary: collapsedCrewLabel,
+                    open: crewOpen,
+                    onToggle: () => setCrewOpen((o) => !o),
+                  },
+                ]}
+              />
+              {truckOpen && (
+                      <FoldPanel>
                         {/* Presets */}
                         <FoldGroup>
                         <div className="flex items-center gap-1">
@@ -2005,14 +2017,10 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions, pin }: P
                           <span className="text-xs leading-snug text-faint">Changes the time estimate only. Not sent to HERE.</span>
                         </div>
                         </FoldGroup>
-                      </FoldRow>
-              <FoldRow
-                        icon={<Users size="1rem" strokeWidth={1.8} />}
-                        title="Crew & hours"
-                        summary={collapsedCrewLabel}
-                        open={crewOpen}
-                        onToggle={() => setCrewOpen((o) => !o)}
-                      >
+                      </FoldPanel>
+              )}
+              {crewOpen && (
+                      <FoldPanel>
                         <FoldGroup>
                         <div className="flex flex-col gap-1">
                           <span className="text-xs leading-tight text-muted">Departure</span>
@@ -2167,7 +2175,8 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions, pin }: P
                             calculator for those.
                           </div>
                         </FoldGroup>
-                      </FoldRow>
+                      </FoldPanel>
+              )}
             </div>
           )}
 

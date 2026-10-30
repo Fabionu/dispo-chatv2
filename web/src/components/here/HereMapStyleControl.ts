@@ -10,12 +10,16 @@ type Options = {
   trafficAvailable: boolean
   onBaseModeChange: (mode: BaseMapMode) => void
   onTrafficChange: (enabled: boolean) => void
+  /** Given, the panel carries an HGV switch below Traffic; absent, there is none. */
+  onHgvChange?: (enabled: boolean) => void
 }
 
 export type HereMapStyleControlHandle = {
   close: () => void
   dispose: () => void
   setTruckMode: (active: boolean) => void
+  /** Mirror the HGV state held by the owner of the layer (no callback fires). */
+  setHgv: (active: boolean) => void
 }
 
 const layersIcon = `
@@ -30,12 +34,20 @@ const checkIcon = `
     <path d="m5 10 3 3 7-7" />
   </svg>`
 
+const truckIcon = `
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M10 17h4V5H2v12h3M14 9h4l4 4v4h-3" />
+    <circle cx="7.5" cy="17.5" r="2.5" />
+    <circle cx="17.5" cy="17.5" r="2.5" />
+  </svg>`
+
 export function createHereMapStyleControl({
   container,
   satelliteAvailable,
   trafficAvailable,
   onBaseModeChange,
   onTrafficChange,
+  onHgvChange,
 }: Options): HereMapStyleControlHandle {
   const root = document.createElement('div')
   root.className = 'here-map-style-control'
@@ -68,6 +80,19 @@ export function createHereMapStyleControl({
         </span>
         <span class="here-map-style-switch" aria-hidden="true"><span></span></span>
       </button>
+      ${
+        onHgvChange
+          ? `<div class="here-map-style-divider"></div>
+      <button type="button" class="here-map-traffic-option here-map-hgv-option" aria-pressed="false">
+        <span class="here-map-hgv-thumb" aria-hidden="true">${truckIcon}</span>
+        <span class="here-map-traffic-copy">
+          <strong>HGV</strong>
+          <small>Truck restriction signs</small>
+        </span>
+        <span class="here-map-style-switch" aria-hidden="true"><span></span></span>
+      </button>`
+          : ''
+      }
     </section>
     <button type="button" class="here-map-style-trigger" aria-label="Map view" title="Map view" aria-expanded="false">
       ${layersIcon}
@@ -78,6 +103,8 @@ export function createHereMapStyleControl({
   const modeButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-map-mode]'))
   const trafficButton = root.querySelector<HTMLButtonElement>('.here-map-traffic-option')!
   const hgvNote = root.querySelector<HTMLElement>('.here-map-style-hgv-note')!
+  const hgvButton = root.querySelector<HTMLButtonElement>('.here-map-hgv-option')
+  let hgvEnabled = false
   let open = false
   let selectedMode: BaseMapMode = 'map'
   let trafficEnabled = false
@@ -112,6 +139,15 @@ export function createHereMapStyleControl({
     trafficButton.setAttribute('aria-pressed', String(trafficEnabled))
     onTrafficChange(trafficEnabled)
   }
+  const showHgv = (enabled: boolean) => {
+    hgvEnabled = enabled
+    hgvButton?.classList.toggle('is-active', enabled)
+    hgvButton?.setAttribute('aria-pressed', String(enabled))
+  }
+  const onHgvClick = () => {
+    showHgv(!hgvEnabled)
+    onHgvChange?.(hgvEnabled)
+  }
   const stopMapPointer = (event: Event) => event.stopPropagation()
   const onDocumentPointerDown = (event: PointerEvent) => {
     if (open && !root.contains(event.target as Node)) setOpen(false)
@@ -120,6 +156,7 @@ export function createHereMapStyleControl({
   trigger.addEventListener('click', onTriggerClick)
   for (const button of modeButtons) button.addEventListener('click', onModeClick)
   trafficButton.addEventListener('click', onTrafficClick)
+  hgvButton?.addEventListener('click', onHgvClick)
   root.addEventListener('pointerdown', stopMapPointer)
   root.addEventListener('dblclick', stopMapPointer)
   root.addEventListener('wheel', stopMapPointer)
@@ -135,10 +172,12 @@ export function createHereMapStyleControl({
       }
       hgvNote.hidden = !active
     },
+    setHgv: showHgv,
     dispose: () => {
       trigger.removeEventListener('click', onTriggerClick)
       for (const button of modeButtons) button.removeEventListener('click', onModeClick)
       trafficButton.removeEventListener('click', onTrafficClick)
+      hgvButton?.removeEventListener('click', onHgvClick)
       root.removeEventListener('pointerdown', stopMapPointer)
       root.removeEventListener('dblclick', stopMapPointer)
       root.removeEventListener('wheel', stopMapPointer)

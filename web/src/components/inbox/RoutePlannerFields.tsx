@@ -393,49 +393,44 @@ export function PresetSelect({
 export function Stat({
   label,
   value,
-  size = 'base',
+  icon,
 }: {
+  /** Names the readout for assistive tech; it is no longer drawn (the icon says it). */
   label: string
   value: string
-  /**
-   * `lg` is the one headline readout of the card — the total distance, on a
-   * row of its own (user, 2026-09-15: "mai mare, pe un singur rand"). It is
-   * the number a dispatcher quotes, so it gets the card's largest type; every
-   * other stat stays at the compact size and shares a row with a neighbour.
-   */
-  size?: 'base' | 'lg'
+  icon: React.ReactNode
 }) {
-  // 34px per cell (was 46): the label sits directly on the value, and the
-  // value is the same 13px as the point cards' headline rather than a step
-  // up — a readout in a compact panel, not a dashboard tile.
-  const large = size === 'lg'
-  // The headline readouts split into number + unit so the number carries the
-  // weight and the unit steps back ("44 h 20 min" reads as 44, 20 and two
-  // small labels). Anything that isn't a plain run of number-unit pairs —
-  // "Not calculated", a clock time — stays one string.
-  const parts = large ? splitReadout(value) : null
+  // One line: an icon, then the number (user, 2026-10-30, option D — the
+  // stacked label-over-number cell read as a dashboard tile in a compact
+  // card). The icon replaces the label, which is why the label is an aria
+  // name now.
+  //
+  // The readout splits into number + unit so the number carries the weight and
+  // the unit steps back, hugging it ("2d 3h"). Anything that isn't a plain run
+  // of number-unit pairs — "Not calculated", a clock time — stays one string.
+  const parts = splitReadout(value)
   return (
-    <div className={`min-w-0 flex flex-col px-3 ${large ? 'pt-2.5 pb-2' : 'py-1'}`}>
-      <span className="text-2xs leading-tight text-faint">{label}</span>
-      {parts ? (
-        <span className="mt-1 flex items-baseline overflow-hidden whitespace-nowrap" title={value}>
-          {parts.map((p, i) => (
+    <div
+      role="group"
+      aria-label={`${label}: ${value}`}
+      title={value}
+      className="flex h-14 min-w-0 items-center gap-2.5 px-3"
+    >
+      <span aria-hidden className="flex h-4 w-4 shrink-0 items-center justify-center text-muted">
+        {icon}
+      </span>
+      <span className="flex min-w-0 items-baseline overflow-hidden whitespace-nowrap text-2xl font-medium leading-none tracking-[-0.3px] tabular-nums">
+        {parts ? (
+          parts.map((p, i) => (
             <Fragment key={i}>
-              <span className="text-2xl font-semibold leading-none tracking-[-0.4px] tabular-nums">{p.num}</span>
-              <span className="ml-0.5 mr-1.5 text-xs font-medium leading-none text-muted last:mr-0">{p.unit}</span>
+              <span>{p.num}</span>
+              <span className="ml-0.5 mr-1.5 text-xs font-medium text-muted last:mr-0">{p.unit}</span>
             </Fragment>
-          ))}
-        </span>
-      ) : (
-        <span
-          className={`font-semibold leading-tight tabular-nums truncate ${
-            large ? 'text-2xl tracking-[-0.3px]' : 'text-base tracking-[-0.1px]'
-          }`}
-          title={value}
-        >
-          {value}
-        </span>
-      )}
+          ))
+        ) : (
+          <span className="truncate">{value}</span>
+        )}
+      </span>
     </div>
   )
 }
@@ -541,51 +536,54 @@ export function FoldGroup({ children, className = '' }: { children: React.ReactN
   )
 }
 
-// The same two folds as FoldCard, but as a ROW inside the route card (user,
-// 2026-10-15: Truck profile and Crew & hours move into the card above). Full
-// width at rest — glyph, title over its live value, chevron — and it opens
-// downward into the card; no plate, border or shadow of its own, because the
-// card around it is the plate.
-export function FoldRow({
-  icon,
-  title,
-  summary,
-  open,
-  onToggle,
-  children,
-}: {
+// The same two folds as FoldCard, as ONE ROW of tabs inside the route card
+// (user, 2026-10-30: Truck profile and Crew & hours "inline, in the same row").
+// Each tab is glyph + title + chevron, half the card wide; the live value that
+// used to sit under the title moved into the tooltip, because a half-width tab
+// has no room for a second line. Clicking a tab folds or unfolds ITS panel
+// (FoldPanel, rendered by the caller under the row), and the two are
+// independent — both can be open. No plate, border or shadow of their own: the
+// card around them is the plate.
+export type FoldTab = {
+  key: string
   icon: React.ReactNode
   title: string
-  /** The row's live current value, shown under the title. */
+  /** The tab's live current value, shown as its tooltip. */
   summary: string
   open: boolean
   onToggle: () => void
-  children: React.ReactNode
-}) {
+}
+
+export function FoldTabs({ tabs }: { tabs: FoldTab[] }) {
   return (
-    <div>
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        className="flex h-[2.375rem] w-full items-center gap-2.5 px-[0.6875rem] text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20"
-      >
-        <span className={`flex h-4 w-4 shrink-0 items-center justify-center ${open ? 'text-text' : 'text-muted'}`}>
-          {icon}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block whitespace-nowrap text-base font-medium leading-tight text-text">{title}</span>
-          <span className="block truncate text-xs leading-tight text-faint" title={summary}>
-            {summary}
+    <div className="flex divide-x divide-line">
+      {tabs.map((tab) => (
+        <button
+          key={tab.key}
+          type="button"
+          onClick={tab.onToggle}
+          aria-expanded={tab.open}
+          title={`${tab.title} · ${tab.summary}`}
+          className="flex h-[2.375rem] min-w-0 flex-1 items-center gap-2 px-2.5 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20"
+        >
+          <span className={`flex h-4 w-4 shrink-0 items-center justify-center ${tab.open ? 'text-text' : 'text-muted'}`}>
+            {tab.icon}
           </span>
-        </span>
-        <ChevronDown
-          size="0.875rem"
-          strokeWidth={1.8}
-          className={`shrink-0 text-faint transition-transform motion-reduce:transition-none ${open ? 'rotate-180' : ''}`}
-        />
-      </button>
-      {open && <div className="border-t border-line">{children}</div>}
+          <span className="min-w-0 flex-1 truncate whitespace-nowrap text-sm font-medium text-text">{tab.title}</span>
+          <ChevronDown
+            size="0.875rem"
+            strokeWidth={1.8}
+            className={`shrink-0 text-faint transition-transform motion-reduce:transition-none ${
+              tab.open ? 'rotate-180' : ''
+            }`}
+          />
+        </button>
+      ))}
     </div>
   )
+}
+
+/** An open tab's fields, full card width under the tab row. */
+export function FoldPanel({ children }: { children: React.ReactNode }) {
+  return <div className="border-t border-line">{children}</div>
 }

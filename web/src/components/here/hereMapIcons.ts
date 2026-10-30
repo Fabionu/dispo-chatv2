@@ -254,7 +254,7 @@ export function iconFor(H: any, marker: RouteMarker): any {
 // A letter said "Parking" only to someone who knew the legend; a pump, a wrench
 // and a warehouse say it at a glance (user, 2026-10-15). `other` has no picture
 // to offer, so it is the plain dot.
-const PLACE_CATEGORY_PICTOGRAM: Record<WorkspacePlaceCategory, string | null> = {
+export const PLACE_CATEGORY_PICTOGRAM: Record<WorkspacePlaceCategory, string | null> = {
   parking: 'M8 21V4h5.5a4.5 4.5 0 0 1 0 9H8',
   depot: 'M3 21V9l9-6 9 6v12M3 21h18M9 21v-7h6v7',
   fuel: 'M4 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16M3 21h12M14 10h2a2 2 0 0 1 2 2v4a2 2 0 0 0 4 0V8l-3-3',

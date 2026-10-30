@@ -529,6 +529,8 @@ export default function GoogleMap({
   routeTimeLabel,
   truckOverlay,
   onTruckOverlayAvailabilityChange,
+  onTruckOverlayChange,
+  controlsSide = 'right',
   onMapContextMenu,
   onMapViewChange,
   onMarkerDragEnd,
@@ -598,6 +600,7 @@ export default function GoogleMap({
   // Latest callbacks in refs, so the once-only listeners below never go stale
   // and never need re-subscribing.
   const cb = useRef({
+    onTruckOverlayChange,
     onMapContextMenu,
     onMapViewChange,
     onMarkerDragEnd,
@@ -610,6 +613,7 @@ export default function GoogleMap({
     onStreetViewChange,
   })
   cb.current = {
+    onTruckOverlayChange,
     onMapContextMenu,
     onMapViewChange,
     onMarkerDragEnd,
@@ -1196,6 +1200,11 @@ export default function GoogleMap({
                 trafficLayerRef.current?.setMap(null)
               }
             },
+            // The HGV switch is offered only to a map whose owner listens for
+            // it; the others (trip maps, the stop picker) have no HGV layer.
+            onHgvChange: cb.current.onTruckOverlayChange
+              ? (enabled) => cb.current.onTruckOverlayChange?.(enabled)
+              : undefined,
           })
           zoomControlRef.current = createHereMapZoomControl({
             container: controlsHostRef.current,
@@ -2061,6 +2070,12 @@ export default function GoogleMap({
     }
   }, [liveMap, truckOverlay])
 
+  // The Map view menu's HGV switch follows the layer's state — it is also
+  // restored from the planner's retained state when the map is rebuilt.
+  useEffect(() => {
+    styleControlRef.current?.setHgv(truckOverlay)
+  }, [liveMap, truckOverlay])
+
   // ── External recenter ──────────────────────────────────────────────────────
   useEffect(() => {
     const map = liveMap
@@ -2073,7 +2088,12 @@ export default function GoogleMap({
   return (
     <div ref={rootRef} className={['google-map-root', className].filter(Boolean).join(' ')}>
       <div ref={containerRef} className="google-map-surface absolute inset-0" />
-      <div ref={controlsHostRef} className="here-map-controls-host" aria-label="Map controls" />
+      <div
+        ref={controlsHostRef}
+        className="here-map-controls-host"
+        data-side={controlsSide}
+        aria-label="Map controls"
+      />
       {status !== 'ready' && (
         <div className="absolute inset-0 flex items-center justify-center bg-bg text-sm text-muted">
           {status === 'error' ? (
