@@ -61,7 +61,7 @@ export type WorkspaceToolId = 'route' | 'fleet' | 'restrictions'
 
 // Route planner is switched off for now (user, 2026-10-29). Flip to true to
 // bring back its home card, its tab, and the calculator's "Open route planner".
-export const ROUTE_PLANNER_ENABLED = false
+export const ROUTE_PLANNER_ENABLED = true
 
 // The home's Fleet table and Needs attention list are off for now (user,
 // 2026-10-30 canvas: "remove this for now along side the needs attention

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { requireAuth } from '../auth.js'
 import { asyncHandler, HttpError } from '../http.js'
 import { env } from '../env.js'
+import { pool } from '../db/pool.js'
 import { TtlCache, cachedAsync } from '../util/ttlCache.js'
 import { hereLimiter, hereTilesLimiter } from '../middleware/rateLimit.js'
 import { legSections } from './hereLegs.js'
@@ -403,6 +404,52 @@ const tileCache = new TtlCache<Promise<Buffer | null>>(2000, 24 * 60 * 60 * 1000
 // parameters is not served for the new ones.
 const TILE_VARIANT = 'ppi200'
 
+// The durable layer under tileCache (table here_tile_cache, migration 0034):
+// a miss in memory checks Postgres before paying HERE, so a redeploy or a
+// second instance no longer re-buys tiles already fetched. Both helpers are
+// best-effort — a database hiccup falls through to HERE (a bill, not an
+// outage) and a failed write only means the tile is bought again later.
+const STORED_TILE_TTL_DAYS = 45
+
+/** The stored tile (null = HERE has none there), or undefined when not stored / stale. */
+async function readStoredTile(key: string): Promise<Buffer | null | undefined> {
+  try {
+    const { rows } = await pool.query<{ png: Buffer }>(
+      `select png from here_tile_cache
+        where cache_key = $1 and fetched_at > now() - make_interval(days => $2)`,
+      [key, STORED_TILE_TTL_DAYS],
+    )
+    if (rows.length === 0) return undefined
+    return rows[0].png.length === 0 ? null : rows[0].png
+  } catch (err) {
+    console.warn('HERE tile cache read failed', { message: String((err as Error)?.message ?? err) })
+    return undefined
+  }
+}
+
+let tilePurged = false
+
+async function storeTile(key: string, png: Buffer | null): Promise<void> {
+  try {
+    await pool.query(
+      `insert into here_tile_cache (cache_key, png) values ($1, $2)
+       on conflict (cache_key) do update set png = excluded.png, fetched_at = now()`,
+      [key, png ?? Buffer.alloc(0)],
+    )
+    // Once per process, drop what has outlived its use so the table cannot grow
+    // without bound (read ignores stale rows anyway).
+    if (!tilePurged) {
+      tilePurged = true
+      await pool.query(
+        `delete from here_tile_cache where fetched_at < now() - make_interval(days => $1)`,
+        [STORED_TILE_TTL_DAYS * 2],
+      )
+    }
+  } catch (err) {
+    console.warn('HERE tile cache write failed', { message: String((err as Error)?.message ?? err) })
+  }
+}
+
 hereRouter.get(
   '/tiles/hgv/:z/:x/:y',
   hereTilesLimiter,
@@ -418,7 +465,10 @@ hereRouter.get(
     ) {
       throw new HttpError(400, 'bad_tile')
     }
-    const png = await cachedAsync(tileCache, `${TILE_VARIANT}/${z}/${x}/${y}`, async () => {
+    const tileKey = `${TILE_VARIANT}/${z}/${x}/${y}`
+    const png = await cachedAsync(tileCache, tileKey, async () => {
+      const stored = await readStoredTile(tileKey)
+      if (stored !== undefined) return stored
       const url = new URL(`${tileBase}/${z}/${x}/${y}/png8`)
       url.searchParams.set('style', 'logistics.day')
       url.searchParams.set('features', 'vehicle_restrictions:active_and_inactive,pois:disabled')
@@ -431,10 +481,15 @@ hereRouter.get(
         console.warn('HERE tile request failed', { status: upstream.status, body: body.slice(0, 300) })
         // A tile HERE does not have (404) is simply empty; anything else is
         // an error the client should see rather than cache.
-        if (upstream.status === 404) return null
+        if (upstream.status === 404) {
+          void storeTile(tileKey, null)
+          return null
+        }
         throw new HttpError(upstream.status >= 500 ? 502 : upstream.status, 'here_request_failed')
       }
-      return Buffer.from(await upstream.arrayBuffer())
+      const buf = Buffer.from(await upstream.arrayBuffer())
+      void storeTile(tileKey, buf)
+      return buf
     })
     res.setHeader('Cache-Control', 'private, max-age=86400')
     if (!png) return res.status(204).end()

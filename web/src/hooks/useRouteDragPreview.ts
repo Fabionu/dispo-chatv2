@@ -49,6 +49,8 @@ export type DragPreview = {
 const SNAP_PX = 8
 const SNAP_MIN_M = 25
 const SNAP_MAX_M = 30_000
+// Minimum gap between two preview requests of one drag (each is billed).
+const PREVIEW_MIN_INTERVAL_MS = 450
 
 /** Metres that SNAP_PX screen pixels cover at this zoom and latitude (Web Mercator). */
 export function snapRadiusForZoom(zoom: number, lat: number): number {
@@ -96,6 +98,7 @@ export function useRouteDragPreview() {
     // Bumped on release/cancel; an answer from an older generation is dropped.
     gen: 0,
     mounted: true,
+    lastStart: 0,
   })
 
   useEffect(() => {
@@ -110,9 +113,19 @@ export function useRouteDragPreview() {
     const s = st.current
     if (s.inflight) return
     while (s.pending) {
-      const req = s.pending
-      s.pending = null
       s.inflight = true
+      // Every preview is a billed Routing call, so a drag asks at most once per
+      // PREVIEW_MIN_INTERVAL_MS. The wait sits before `pending` is read, so
+      // whatever the cursor reached during it is what gets asked for.
+      const wait = s.lastStart + PREVIEW_MIN_INTERVAL_MS - Date.now()
+      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait))
+      const req = s.pending
+      if (!req) {
+        s.inflight = false
+        break
+      }
+      s.pending = null
+      s.lastStart = Date.now()
       const gen = s.gen
       try {
         const result = await fetchPreview(req)

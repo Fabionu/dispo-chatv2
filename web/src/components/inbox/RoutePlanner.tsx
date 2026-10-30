@@ -172,10 +172,8 @@ function readablePaymentMethod(value: string): string {
 const DRAG_COURSE_WINDOW_M = 2000
 
 // How long the auto-route waits after the last input change before asking
-// the router, and how long after a toll-free route lands before it asks for
-// the tolls (see the auto-route effect).
+// the router (see the auto-route effect).
 const AUTO_ROUTE_DEBOUNCE_MS = 350
-const AUTO_TOLLS_DEBOUNCE_MS = 900
 
 // The planner's inputs and its route outlive the component (see
 // hooks/useRetainedState): leaving for the Restriction calculator and coming
@@ -384,7 +382,9 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions, pin }: P
   // auto-route effect below and by the drag paths; the drawn route is never
   // cleared on failure, so a recompute that fails leaves the last good line on
   // the map with an error beside it.
-  async function calculate(includeTolls = true) {
+  // Tolls are a second billed HERE transaction, so they are only requested when
+  // the user asks (the Tolls row's button), never as part of an auto-route.
+  async function calculate(includeTolls = false) {
     if (!start || !destination || loading) return
     const id = ++reqIdRef.current
     const sig = routeSig
@@ -440,23 +440,19 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions, pin }: P
   // button, make the route automatically"): once both ends are set, any change
   // to the points or the truck recomputes it, and a route that arrived without
   // tolls (a drag adopts its preview, which is the light, toll-free request)
-  // gets its tolls fetched after. Debounced, because the truck fields are
-  // typed a digit at a time; the toll follow-up waits longer, so a run of
-  // drags computes tolls once at the end rather than once per drag. Nothing is
-  // scheduled while a request is in flight — `loading` is a dependency, so
+  // stays toll-free: tolls are fetched only on request (calculate(true)).
+  // Debounced, because the truck fields are typed a digit at a time. Nothing
+  // is scheduled while a request is in flight — `loading` is a dependency, so
   // the effect looks again the moment it clears and catches any edit made in
   // the meantime.
   const [failedSig, setFailedSig] = useState('')
-  const tollsPending = Boolean(route) && routeSig === calculatedSig && route?.tolls === undefined
   useEffect(() => {
     if (!routeSig || loading) return
-    const stale = routeSig !== calculatedSig
-    if (!stale && !tollsPending) return
-    if (stale && routeSig === failedSig) return
-    const timer = window.setTimeout(() => void calculate(true), stale ? AUTO_ROUTE_DEBOUNCE_MS : AUTO_TOLLS_DEBOUNCE_MS)
+    if (routeSig === calculatedSig || routeSig === failedSig) return
+    const timer = window.setTimeout(() => void calculate(false), AUTO_ROUTE_DEBOUNCE_MS)
     return () => window.clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeSig, calculatedSig, tollsPending, failedSig, loading])
+  }, [routeSig, calculatedSig, failedSig, loading])
 
   // When a route-line drag adds a stop we recalc immediately (drag-route feel),
   // unlike normal edits which wait for the button. This ref flags that intent so
@@ -1774,7 +1770,21 @@ export default function RoutePlanner({ onBack, onCalculateRestrictions, pin }: P
                             : formatArrival(departAt + drivingSeconds * 1000, departAt)
                         }
                       />
-                      <ReceiptRow label="Tolls" value={tollSummaryValue(route.tolls, dirty)} />
+                      {!dirty && !route.tolls ? (
+                        <div className="flex items-center gap-2 py-1">
+                          <span className="text-sm text-muted">Tolls</span>
+                          <button
+                            type="button"
+                            onClick={() => void calculate(true)}
+                            disabled={loading}
+                            className="ml-auto h-6 rounded-(--control-radius) border border-line-2 px-2 text-xs text-text transition-colors hover:bg-white/4 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                          >
+                            Calculate tolls
+                          </button>
+                        </div>
+                      ) : (
+                        <ReceiptRow label="Tolls" value={tollSummaryValue(route.tolls, dirty)} />
+                      )}
                       {!dirty && route.tolls && (
                         <div className="mt-1 border-t border-line pt-1">
                           {route.tolls.details.length > 0 ? (
