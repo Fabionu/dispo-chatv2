@@ -35,6 +35,10 @@ import { statusMeta } from '../lib/availability'
 import { typingLabel, type TypingUser } from '../lib/typing'
 import TypingMark from '../components/messages/TypingMark'
 
+// A direct message's picture, in design px: bigger than the 38px room tile
+// (SIDEBAR_TILE_PX) because a DM is recognised by a face, not by a plate.
+const DM_TILE_PX = 44
+
 // One item in a row's actions list. `label` is the wording shown in the list;
 // `title` is the full sentence for the accessible name.
 type RowAction = {
@@ -391,6 +395,42 @@ export default function GroupRow({
     <RowStateIcon icon={BellOff} label="Notifications muted" />
   ) : null
 
+  // The row's state marks — pin, mention, unread count or dot, muted. One piece,
+  // two homes: at the right end of the preview line for rooms, and under the
+  // time in the right-hand column of a DM row (see `isDirect` below).
+  const stateCluster = (
+    <>
+      {pinned && <RowStateIcon icon={Pin} label="Pinned" />}
+      {hasUnreadMention && (
+        <UnreadBadge tone="mention" label="You were mentioned">
+          @
+        </UnreadBadge>
+      )}
+      {unread && hasCount && unreadCount > 0 && (
+        <UnreadBadge label={`${unreadCount} unread`}>{unreadLabel(unreadCount)}</UnreadBadge>
+      )}
+      {/* Unread, but the server sent no number to put in a badge (see
+          `hasCount`). A dot, not an empty chip — a chip's whole shape is "there
+          is a figure in here". */}
+      {unread && !hasCount && (
+        <span
+          role="img"
+          aria-label="Unread"
+          title="Unread"
+          className="h-1.5 w-1.5 shrink-0 rounded-full bg-text"
+        />
+      )}
+      {mutedIcon}
+    </>
+  )
+  // The DM row's right-hand column slides left on hover/open exactly like the
+  // room rows' metadata does (metaShift), but it is a vertical stack, so it
+  // must not inherit that string's `justify-end` (which would sink it to the
+  // bottom of the row).
+  const dmShift = `min-w-5 transition-transform duration-200 ease-out group-hover/row:-translate-x-7 group-focus-within/row:-translate-x-7${
+    menuOpen ? ' -translate-x-7' : ''
+  }`
+
   return (
     <div ref={rowWrapperRef} className="relative group/row" onContextMenu={toggleMenuAtCursor}>
       {/* Anchor the disclosure trigger to the fixed-height conversation row.
@@ -433,13 +473,28 @@ export default function GroupRow({
             leads the row and the trip line under it does the identifying, so
             people keep the only faces in the rail. */}
         {isVehicle ? null : isDirect ? (
-          <RowTile
-            kind="user"
-            id={peer?.id ?? ''}
-            name={groupLabel(group)}
-            hasAvatar={peer?.hasAvatar}
-            version={peer?.avatarVersion}
-          />
+          // A DM is faces first (user, 2026-10-30, canvas option D): a 44px
+          // picture, with the peer's presence on its corner — it belongs to the
+          // person, and a corner dot is where every messenger puts it. Rooms
+          // keep the 38px tile and the trailing dot.
+          <span className="relative shrink-0">
+            <RowTile
+              kind="user"
+              id={peer?.id ?? ''}
+              name={groupLabel(group)}
+              hasAvatar={peer?.hasAvatar}
+              version={peer?.avatarVersion}
+              size={DM_TILE_PX}
+            />
+            {peerDot && (
+              <span
+                title={peerDot.label}
+                aria-label={peerDot.label}
+                className="absolute -bottom-px -right-px h-[0.6875rem] w-[0.6875rem] rounded-full border-2 border-bg"
+                style={{ backgroundColor: peerDot.color }}
+              />
+            )}
+          </span>
         ) : (
           <RowTile kind="group" id={group.id} hasAvatar={group.hasAvatar} version={group.avatarVersion} />
         )}
@@ -459,7 +514,11 @@ export default function GroupRow({
                 className={`min-w-0 shrink truncate leading-tight ${
                   unread ? 'text-text font-semibold' : 'text-text/90 font-medium'
                 }`}
-                style={{ fontSize: 'var(--sidebar-conv-font-size)' }}
+                style={{
+                  fontSize: isDirect
+                    ? 'calc(var(--sidebar-conv-font-size) + 1px)'
+                    : 'var(--sidebar-conv-font-size)',
+                }}
               >
                 {isVehicle ? <span className="tabular-nums">{rowTitle}</span> : rowTitle}
               </span>
@@ -473,7 +532,7 @@ export default function GroupRow({
                   `self-center` against the baseline row: the disc has no
                   baseline worth aligning, so it centres on the middle of the
                   name's line box instead of hanging off its baseline. */}
-              {peerDot && (
+              {peerDot && !isDirect && (
                 <span
                   title={peerDot.label}
                   aria-label={peerDot.label}
@@ -495,11 +554,13 @@ export default function GroupRow({
             </span>
             {/* The timestamp shares line 2's shift, so the actions arrow always
                 has a clear column between the two metadata clusters. */}
-            <span className={`flex items-center gap-2 shrink-0 ${metaShift}`}>
-              {/* `.timestamp`: structure, not content. Tabular figures stop the
-                  column jittering as times change width. */}
-              {time && <span className="timestamp shrink-0 leading-tight">{time}</span>}
-            </span>
+            {!isDirect && (
+              <span className={`flex items-center gap-2 shrink-0 ${metaShift}`}>
+                {/* `.timestamp`: structure, not content. Tabular figures stop the
+                    column jittering as times change width. */}
+                {time && <span className="timestamp shrink-0 leading-tight">{time}</span>}
+              </span>
+            )}
           </span>
           {/* Vehicle rooms only — the trip, between the plate and what was said
               (user, 2026-10-29 canvas): the town being driven to, the trip as a
@@ -540,7 +601,11 @@ export default function GroupRow({
           <span className="flex items-center gap-2">
             <span
               className={`flex-1 min-w-0 truncate leading-tight ${typingText ? 'text-active font-medium' : unread ? 'text-text/80' : 'text-muted'}`}
-              style={{ fontSize: 'var(--sidebar-conv-meta-font-size)' }}
+              style={{
+                fontSize: isDirect
+                  ? 'calc(var(--sidebar-conv-meta-font-size) + 0.5px)'
+                  : 'var(--sidebar-conv-meta-font-size)',
+              }}
             >
               {typingText ? (
                 // The mark leads and the sentence follows — and it is the
@@ -569,38 +634,20 @@ export default function GroupRow({
                 </>
               )}
             </span>
-            <span className={`flex items-center gap-2 shrink-0 ${metaShift}`}>
-              {pinned && <RowStateIcon icon={Pin} label="Pinned" />}
-              {hasUnreadMention && (
-                <UnreadBadge tone="mention" label="You were mentioned">
-                  @
-                </UnreadBadge>
-              )}
-              {unread && hasCount && unreadCount > 0 && (
-                <UnreadBadge label={`${unreadCount} unread`}>
-                  {unreadLabel(unreadCount)}
-                </UnreadBadge>
-              )}
-              {/* Unread, but the server sent no number to put in a badge (see
-                  `hasCount`). The fallback the comment up there always promised
-                  and the row never actually drew: without it an older server
-                  left the row with NO unread mark at all, only a slightly
-                  bolder name. A dot, not an empty chip — a chip's whole shape
-                  is "there is a figure in here". Round, and the one round mark
-                  the rail keeps beside the presence disc it is sized to match:
-                  a dot is exactly what the radius scale still allows one for. */}
-              {unread && !hasCount && (
-                <span
-                  role="img"
-                  aria-label="Unread"
-                  title="Unread"
-                  className="h-1.5 w-1.5 shrink-0 rounded-full bg-text"
-                />
-              )}
-              {mutedIcon}
-            </span>
+            {!isDirect && (
+              <span className={`flex items-center gap-2 shrink-0 ${metaShift}`}>{stateCluster}</span>
+            )}
           </span>
         </span>
+        {/* A DM's right-hand column: the time over the state marks, stacked and
+            right-aligned (canvas option D). Slides left on hover/open like the
+            metadata of every other row, clearing the actions trigger. */}
+        {isDirect && (
+          <span className={`flex shrink-0 flex-col items-end justify-center gap-1.5 ${dmShift}`}>
+            {time && <span className="timestamp shrink-0 leading-tight">{time}</span>}
+            <span className="flex items-center gap-2 empty:hidden">{stateCluster}</span>
+          </span>
+        )}
         </button>
         {rowActions}
       </div>
