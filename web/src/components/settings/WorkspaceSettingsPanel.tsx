@@ -12,7 +12,6 @@ import {
   Monitor,
   Palette,
   Play,
-  Users,
 } from 'lucide-react'
 import {
   useDensity,
@@ -34,11 +33,9 @@ import { setTheme, useTheme, type Theme } from '../../lib/theme'
 import { api, ApiError } from '../../lib/api'
 import type { Role, WorkspaceInvite, WorkspaceInviteCreated, WorkspaceMember } from '../../lib/types'
 import { ROLE_LABEL } from './ProfileSidebarPanel'
-import { PanelHeader } from './panelChrome'
-import { SIDEBAR_PANEL_SURFACE } from './profileChrome'
 import { MENU_CONTAINER, menuItemClass } from '../menuStyles'
 import { RowTile } from '../../pages/sidebarBits'
-import { NavRow, RadioMark, Segmented, SettingsSection, Switch } from './sectionChrome'
+import { RadioMark, Segmented, SettingsSection, Switch } from './sectionChrome'
 import { usePresence } from '../../hooks/usePresence'
 import AppMark from '../AppMark'
 import {
@@ -68,14 +65,8 @@ const INVITE_ROLE_HINT: Record<Role, string> = {
 // doesn't touch the picker gets the previous behaviour.
 const DEFAULT_INVITE_ROLE: Role = 'dispatcher'
 
-type Props = {
-  onBack: () => void
-  /** Names the back target of the FIRST level (the category list). */
-  backLabel?: string
-}
-
 // The settings categories. New ones drop in as another nav row + detail view.
-type Category = 'appearance' | 'notifications' | 'members' | 'about'
+type Category = 'appearance' | 'notifications' | 'about'
 
 // The app version, shared by the About detail and the category list summary.
 const APP_VERSION: string = import.meta.env.VITE_APP_VERSION ?? '0.3.2'
@@ -86,140 +77,62 @@ const DENSITY_LABEL: Record<Density, string> = {
   comfortable: 'Comfortable',
 }
 
-// Workspace settings as a sidebar drill-in — consistent with "My profile" /
-// "Company profile" (replaces the conversation list; the chat stays on the
-// right).
+// Workspace settings — the content of its window (WindowShell, `size="wide"`;
+// user 2026-10-30 canvas). A window has room for both halves of what the
+// sidebar used to show one at a time, so the categories stay in a slim list on
+// the left and the open one fills the right.
 //
-// REWORK (2026-10-12, from the "Workspace settings rework" canvas): the list is
-// grouped by WHO a setting affects — "Your preferences" are saved on this
-// device, "<company>" applies to everyone in it, "App" is about the build — and
-// every detail says the same in its header (This device / Whole company), so
-// the old footnote ("saved in this browser…") under each card is gone. Details
-// are hairline-separated sections (title, one line of why, then the control),
-// with visual pickers wherever a choice is visual (theme, message style).
-export default function WorkspaceSettingsPanel({ onBack, backLabel = 'Back' }: Props) {
-  // Which category's detail is open (null = the category list). Local UI state;
-  // no routing needed — the drawer is a self-contained master/detail.
-  const [category, setCategory] = useState<Category | null>(null)
-  // Only workspace admins manage company members; the row is hidden otherwise
-  // (the server enforces this too). Auth is always signed-in inside this panel.
-  const auth = useAuth()
-  const isAdmin = auth.status === 'signed_in' && auth.user.role === 'admin'
-  const companyName = auth.status === 'signed_in' ? auth.workspace.name : 'Company'
-  // Live values for the nav-row summaries (the hooks subscribe, so the
-  // summaries refresh when the user returns from a detail view).
-  const theme = useTheme()
-  const messageStyle = useMessageStyle()
-  const notificationSound = useNotificationSound()
-  const browserNotifications = useBrowserNotifications()
-  const densityOverride = getStoredDensity()
-
-  // The Members row says how many people and pending invites there are. Fetched
-  // when the list shows (admins only), so it is fresh after a detail visit.
-  const [memberSummary, setMemberSummary] = useState<string[] | null>(null)
-  useEffect(() => {
-    if (!isAdmin || category) return
-    let live = true
-    Promise.all([api.workspace.members(), api.workspaceInvites.list()])
-      .then(([{ members }, { invites }]) => {
-        if (!live) return
-        const pending = invites.filter((invite) => invite.status === 'active').length
-        // /workspace/members lists everyone EXCEPT the caller (it feeds the
-        // contacts rail), so the viewer is counted back in.
-        const meId = auth.status === 'signed_in' ? auth.user.id : ''
-        const count = members.length + (members.some((m) => m.id === meId) ? 0 : 1)
-        setMemberSummary([
-          `${count} ${count === 1 ? 'person' : 'people'}`,
-          pending > 0 ? `${pending} invite${pending === 1 ? '' : 's'} pending` : 'No pending invites',
-        ])
-      })
-      .catch(() => {})
-    return () => {
-      live = false
-    }
-  }, [isAdmin, category])
-
-  // ── Detail views ────────────────────────────────────────────────────────────
-  // Every screen of this panel — each detail AND the list — enters with
-  // `panel-fade-in`, keyed on the category so React remounts the root when it
-  // changes (the sidebar's drill-in wrapper only fades the TOP-level view).
-  if (category) {
-    const title = {
-      appearance: 'Appearance',
-      notifications: 'Notifications',
-      members: 'Members',
-      about: 'About',
-    }[category]
-    const scope = category === 'members' ? 'company' : category === 'about' ? null : 'device'
-    return (
-      <div key={category} className={`panel-fade-in flex flex-col h-full ${SIDEBAR_PANEL_SURFACE}`}>
-        <PanelHeader
-          title={title}
-          onBack={() => setCategory(null)}
-          backLabel="Back to Workspace settings"
-          action={scope ? <ScopeTag scope={scope} /> : undefined}
-        />
-        <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-5 pb-8">
-          {category === 'appearance' ? (
-            <AppearanceSettings />
-          ) : category === 'notifications' ? (
-            <NotificationSettings />
-          ) : category === 'members' ? (
-            <CompanyMembersSettings />
-          ) : (
-            <AboutSettings />
-          )}
-        </div>
-      </div>
-    )
-  }
-
-  // ── Category list ───────────────────────────────────────────────────────────
-  const soundLabel =
-    NOTIFICATION_SOUNDS.find((sound) => sound.value === notificationSound)?.label ?? 'Soft Pop'
+// Grouped by WHO a setting affects — "Your preferences" are saved on this
+// device, "App" is about the build — and each detail says the same in its
+// header. Members is NOT here any more: it is an admin's company tool and opens
+// from the account window (user, 2026-10-30). Details are hairline-separated
+// sections (title, one line of why, then the control), with visual pickers
+// wherever a choice is visual (theme, message style).
+export default function WorkspaceSettingsPanel() {
+  const [category, setCategory] = useState<Category>('appearance')
+  const title = { appearance: 'Appearance', notifications: 'Notifications', about: 'About' }[category]
 
   return (
-    <div key="list" className={`panel-fade-in flex flex-col h-full ${SIDEBAR_PANEL_SURFACE}`}>
-      <PanelHeader title="Workspace settings" onBack={onBack} backLabel={backLabel} />
-      <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-2.5 pt-2 pb-6 flex flex-col gap-6">
-        <NavGroup title="Your preferences" scope="This device">
-          <NavRow
-            icon={<Palette size="1.0625rem" strokeWidth={1.7} />}
-            title="Appearance"
-            value={[
-              theme === 'light' ? 'Light' : 'Dark',
-              MESSAGE_STYLE_LABEL[messageStyle],
-              densityOverride ? `${DENSITY_LABEL[densityOverride]} density` : 'Auto density',
-            ]}
+    <div className="flex min-h-0 flex-1 border-t border-line">
+      <nav aria-label="Settings" className="flex w-[13.25rem] shrink-0 flex-col gap-4 overflow-y-auto border-r border-line bg-white/2 px-2.5 py-3.5">
+        <NavGroup title="Your preferences" scope="Saved on this device">
+          <CategoryItem
+            icon={<Palette size="1rem" strokeWidth={1.7} />}
+            label="Appearance"
+            on={category === 'appearance'}
             onClick={() => setCategory('appearance')}
           />
-          <NavRow
-            icon={<Bell size="1.0625rem" strokeWidth={1.7} />}
-            title="Notifications"
-            value={[browserNotifications.enabled ? 'On' : 'Off', soundLabel]}
+          <CategoryItem
+            icon={<Bell size="1rem" strokeWidth={1.7} />}
+            label="Notifications"
+            on={category === 'notifications'}
             onClick={() => setCategory('notifications')}
           />
         </NavGroup>
-
-        {isAdmin && (
-          <NavGroup title={companyName} scope="Everyone in the company">
-            <NavRow
-              icon={<Users size="1.0625rem" strokeWidth={1.7} />}
-              title="Members"
-              value={memberSummary ?? ['People and invite links']}
-              onClick={() => setCategory('members')}
-            />
-          </NavGroup>
-        )}
-
         <NavGroup title="App">
-          <NavRow
-            icon={<Info size="1.0625rem" strokeWidth={1.7} />}
-            title="About"
-            value={[`Version ${APP_VERSION}`]}
+          <CategoryItem
+            icon={<Info size="1rem" strokeWidth={1.7} />}
+            label="About"
+            on={category === 'about'}
             onClick={() => setCategory('about')}
           />
         </NavGroup>
+      </nav>
+
+      {/* Keyed on the category so each detail enters with the panel fade and
+          starts at the top. */}
+      <div key={category} className="panel-fade-in min-w-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] px-5 pb-6">
+        <div className="flex items-center justify-between gap-3 pt-3.5 pb-1">
+          <h2 className="text-xl font-bold tracking-[-0.01em]">{title}</h2>
+          {category !== 'about' && <ScopeTag scope="device" />}
+        </div>
+        {category === 'appearance' ? (
+          <AppearanceSettings />
+        ) : category === 'notifications' ? (
+          <NotificationSettings />
+        ) : (
+          <AboutSettings />
+        )}
       </div>
     </div>
   )
@@ -227,21 +140,48 @@ export default function WorkspaceSettingsPanel({ onBack, backLabel = 'Back' }: P
 
 // ── Navigation pieces ─────────────────────────────────────────────────────────
 
-// One group of the settings list: its name, and — on the right — who it
-// affects. The scope is the point of the grouping, so it is said once here
-// rather than as a footnote under every card.
+// One group of the category list: a quiet caption, and under it who the group
+// affects.
 function NavGroup({ title, scope, children }: { title: string; scope?: string; children: ReactNode }) {
   return (
-    <section className="flex flex-col gap-0.5">
-      <div className="flex items-baseline justify-between gap-3 px-3 pb-1.5">
-        <h2 className="min-w-0 truncate text-base font-semibold text-text">{title}</h2>
-        {scope && <span className="shrink-0 text-sm text-faint">{scope}</span>}
+    <section className="flex flex-col gap-px">
+      <div className="flex flex-col gap-px px-2.5 pb-1.5">
+        <h3 className="text-xs font-semibold text-muted">{title}</h3>
+        {scope && <span className="text-xs text-faint">{scope}</span>}
       </div>
       {children}
     </section>
   )
 }
 
+// One category: a glyph and its name on one line. The open one carries the
+// conversation rail's own selection mark — a 2px rule at the left edge.
+function CategoryItem({
+  icon,
+  label,
+  on,
+  onClick,
+}: {
+  icon: ReactNode
+  label: string
+  on: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={on ? 'page' : undefined}
+      className={`rounded-btn relative flex h-[2.125rem] w-full items-center gap-2.5 px-2.5 text-left text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+        on ? 'bg-white/8 font-semibold text-text' : 'font-medium text-muted hover:bg-white/6 hover:text-text'
+      }`}
+    >
+      {on && <span aria-hidden className="absolute -left-2.5 top-2 bottom-2 w-0.5 rounded-r-sm bg-text" />}
+      <span className="flex shrink-0">{icon}</span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+    </button>
+  )
+}
 
 // Who a detail's changes reach, in its header: this browser, or the company.
 function ScopeTag({ scope }: { scope: 'device' | 'company' }) {
@@ -270,21 +210,62 @@ function AppearanceSettings() {
   )
 }
 
-// Each theme drawn as itself — a rail, two incoming blocks and my own — so the
-// choice is seen, not read. The swatches are literal on purpose: a light
-// preview has to look light while the app around it is dark.
-const THEME_PREVIEW: Record<Theme, { label: string; ground: string; line: string; bubble: string; own: string }> = {
-  dark: { label: 'Dark', ground: '#000000', line: '#2C2C2C', bubble: '#1A1A1A', own: '#2A2A2A' },
-  light: { label: 'Light', ground: '#FFFFFF', line: '#D0D7E0', bubble: '#F1F4F8', own: '#E2E7EE' },
+// Each theme drawn as itself — a rail of conversations and a little thread in
+// the message style you have picked, so the choice is seen, not read (user,
+// 2026-10-30 canvas). The swatches are literal on purpose: a light preview has
+// to look light while the app around it is dark.
+type ThemeSwatch = {
+  label: string
+  ground: string
+  line: string
+  row: string
+  rowOn: string
+  bubble: string
+  own: string
+  ink: string
+  time: string
+  tick: string
+  me: string
 }
+const THEME_PREVIEW: Record<Theme, ThemeSwatch> = {
+  dark: {
+    label: 'Dark',
+    ground: '#000000',
+    line: '#2C2C2C',
+    row: '#141414',
+    rowOn: '#262626',
+    bubble: '#191919',
+    own: '#282828',
+    ink: '#5A5A5A',
+    time: '#4A4A4A',
+    tick: '#C89572',
+    me: '#F2F2F2',
+  },
+  light: {
+    label: 'Light',
+    ground: '#FFFFFF',
+    line: '#D0D7E0',
+    row: '#F1F4F8',
+    rowOn: '#E2E7EE',
+    bubble: '#F1F4F8',
+    own: '#E2E7EE',
+    ink: '#B8C1CC',
+    time: '#CBD2DB',
+    tick: '#9A5A32',
+    me: '#111827',
+  },
+}
+// Author colours of the two senders in the thumbnails (dark-theme author ramp).
+const PREVIEW_AUTHOR = ['#59AFC0', '#59C072'] as const
 
 function ThemeSetting() {
   const theme = useTheme()
+  const style = useMessageStyle()
   return (
     <SettingsSection title="Theme" description="The palette for the whole app.">
       <div role="radiogroup" aria-label="Theme" className="grid grid-cols-2 gap-3">
         {(Object.keys(THEME_PREVIEW) as Theme[]).map((value) => {
-          const preview = THEME_PREVIEW[value]
+          const t = THEME_PREVIEW[value]
           const on = theme === value
           return (
             <button
@@ -297,34 +278,87 @@ function ThemeSetting() {
             >
               <span
                 aria-hidden
-                className={`flex h-24 overflow-hidden rounded-card border-2 transition-colors group-focus-visible:ring-2 group-focus-visible:ring-white/20 ${
+                className={`flex h-28 overflow-hidden rounded-card border-2 transition-colors group-focus-visible:ring-2 group-focus-visible:ring-white/20 ${
                   on ? 'border-text' : 'border-line group-hover:border-line-2'
                 }`}
-                style={{ background: preview.ground }}
+                style={{ background: t.ground }}
               >
-                <span
-                  className="flex w-[34%] flex-col gap-1.5 px-2 py-2.5"
-                  style={{ borderRight: `1px solid ${preview.line}` }}
-                >
-                  {[80, 60, 70].map((w) => (
-                    <span key={w} className="h-[5px] rounded-full" style={{ width: `${w}%`, background: preview.line }} />
+                <span className="flex w-[28%] shrink-0 flex-col gap-[5px] px-1.5 py-2.5" style={{ borderRight: `1px solid ${t.line}` }}>
+                  {[t.row, t.rowOn, t.row].map((c, i) => (
+                    <span key={i} className="h-3 rounded-[3px]" style={{ background: c }} />
                   ))}
                 </span>
-                <span className="flex flex-1 flex-col justify-end gap-[5px] px-2 py-2.5">
-                  <span className="h-3 w-[70%] rounded" style={{ background: preview.bubble }} />
-                  <span className="h-3 w-[55%] rounded" style={{ background: preview.bubble }} />
-                  <span className="h-3 w-[60%] self-end rounded" style={{ background: preview.own }} />
+                <span className="flex min-w-0 flex-1 items-center px-2.5">
+                  <ThreadThumb t={t} style={style} />
                 </span>
               </span>
               <span className="flex items-center gap-2 text-lg font-medium">
                 <RadioMark on={on} />
-                {preview.label}
+                {t.label}
+                <span className="text-base font-normal text-muted">· {MESSAGE_STYLE_LABEL[style]}</span>
               </span>
             </button>
           )
         })}
       </div>
     </SettingsSection>
+  )
+}
+
+// A three-message thread in one message style, drawn in one theme's swatches.
+function ThreadThumb({ t, style }: { t: ThemeSwatch; style: MessageStyle }) {
+  const bar = (w: number, color = t.ink, h = 3) => (
+    <span className="block shrink-0 rounded-full" style={{ width: w, height: h, background: color }} />
+  )
+  if (style === 'bubble') {
+    return (
+      <span className="flex w-full flex-col gap-[3px]">
+        <span className="ml-[3px]">{bar(22, PREVIEW_AUTHOR[0])}</span>
+        <span className="flex w-fit flex-col gap-[3px] rounded-[6px] px-[7px] py-[5px]" style={{ background: t.bubble }}>
+          {bar(64)}
+          {bar(42)}
+        </span>
+        <span className="flex w-fit flex-col gap-[3px] rounded-[6px] px-[7px] py-[5px]" style={{ background: t.bubble }}>
+          {bar(52)}
+        </span>
+        <span className="mt-1 flex flex-col items-end gap-[2px] self-end">
+          <span className="flex flex-col gap-[3px] rounded-[6px] px-[7px] py-[5px]" style={{ background: t.own }}>
+            {bar(44)}
+            {bar(30)}
+          </span>
+          <span className="mr-[2px] flex items-center gap-[3px]">
+            {bar(12, t.time)}
+            {bar(7, t.tick, 4)}
+          </span>
+        </span>
+      </span>
+    )
+  }
+  if (style === 'timeline') {
+    return (
+      <span className="flex w-full flex-col gap-1.5">
+        <span className="flex flex-col gap-[3px] border-l-2 pl-1.5" style={{ borderColor: PREVIEW_AUTHOR[0] }}>
+          {bar(26, PREVIEW_AUTHOR[0], 4)}
+          {bar(70)}
+          {bar(48)}
+        </span>
+        <span className="flex flex-col items-end gap-[3px] self-end border-r-2 pr-1.5" style={{ borderColor: t.me }}>
+          {bar(26, t.time, 4)}
+          {bar(56)}
+        </span>
+      </span>
+    )
+  }
+  return (
+    <span className="flex w-full flex-col gap-1.5">
+      {([PREVIEW_AUTHOR[0], PREVIEW_AUTHOR[1], t.me, PREVIEW_AUTHOR[0]] as const).map((c, i) => (
+        <span key={i} className="flex items-center gap-1.5">
+          {bar(14, t.time, 4)}
+          {bar(22, c, 5)}
+          <span className="block h-[5px] flex-1 rounded-full" style={{ background: t.ink, maxWidth: [60, 44, 52, 36][i] }} />
+        </span>
+      ))}
+    </span>
   )
 }
 
@@ -627,7 +661,7 @@ function NotificationSettings() {
 // the people already in the company, and the invite links with their state.
 // The raw link is shown ONCE, right after it is created (the server keeps only a
 // token hash), so the list afterwards carries status and timing only.
-function CompanyMembersSettings() {
+export function CompanyMembersSettings() {
   const auth = useAuth()
   const meId = auth.status === 'signed_in' ? auth.user.id : ''
   const { online } = usePresence()

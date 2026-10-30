@@ -1,14 +1,11 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Check, ChevronDown, Eye, Loader2, Lock, Plus, Trash2, X } from 'lucide-react'
+import { useEffect, useState, type FormEvent } from 'react'
+import { Eye, Loader2, Lock, Plus, Trash2, X } from 'lucide-react'
 import type { AvailabilityStatus, Profile, Role } from '../../lib/types'
 import { api, type ProfilePatch } from '../../lib/api'
-import { PanelCloseHeader, PanelHeader } from './panelChrome'
-import { SIDEBAR_PANEL_SURFACE } from './profileChrome'
+import StatusSelect from './StatusSelect'
 import { SettingsSection } from './sectionChrome'
 import Avatar from '../Avatar'
-import { MENU_CONTAINER, menuItemClass } from '../menuStyles'
 import { avatarUrl, clearAvatarCache } from '../../lib/avatarCache'
-import { AVAILABILITY, statusMeta } from '../../lib/availability'
 import { RowMeta } from '../../pages/sidebarBits'
 import { usePhotoEditor } from '../AvatarPhotoEditor'
 import { EditableField } from '../forms'
@@ -21,17 +18,12 @@ type Props = {
   initialProfile?: Profile | null
   // Auto-away presence (idle / tab hidden). Mentioned under Availability.
   away?: boolean
-  onBack: () => void
-  /** Names the back target (this panel is reached from the Account view). */
-  backLabel?: string
   // Bubble saved data up so the sidebar user footer (avatar + name) updates
   // immediately. A new photo arrives as a new `profile.avatarVersion`, which is
   // a new image URL everywhere that reads it.
   onSaved: (profile: Profile) => void
   /** Opens your own card the way colleagues open it (the user-details panel). */
   onPreview?: () => void
-  /** Shown in its own window (ProfileWindow) — a close X instead of a back arrow. */
-  inWindow?: boolean
 }
 
 // Workspace-role display labels — shared with the read-only user details panel
@@ -60,9 +52,9 @@ const LANGUAGE_SUGGESTIONS = [
   'Turkish',
 ]
 
-// "My profile". Since 2026-10-29 (canvas, user) the account window opens it in
-// a window of its own over the workspace (ProfileWindow, `inWindow`), so the
-// conversation list stays where it was; the drawer form is kept for reuse.
+// "My profile" — the content of its window (WindowShell, opened from the
+// account window; user 2026-10-29/30 canvases). The frame brings the title and
+// the close button; this is the identity card and the sections under it.
 //
 // Reworked 2026-10-12 from the "Profile & group info rework" canvas into the
 // section language of Workspace settings. The banner stays (it is where the
@@ -76,11 +68,8 @@ const LANGUAGE_SUGGESTIONS = [
 export default function ProfileSidebarPanel({
   initialProfile,
   away = false,
-  onBack,
-  backLabel = 'Back',
   onSaved,
   onPreview,
-  inWindow = false,
 }: Props) {
   const [profile, setProfile] = useState<Profile | null>(initialProfile ?? null)
   const [availability, setAvailability] = useState<AvailabilityStatus>(
@@ -202,84 +191,85 @@ export default function ProfileSidebarPanel({
       className="flex h-[2.125rem] items-center gap-1.5 rounded-btn border border-line-2 px-3 text-base font-semibold text-text transition-colors hover:bg-white/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
     >
       <Eye size="0.875rem" strokeWidth={1.9} />
-      Preview
+      Preview card
     </button>
+  )
+
+  const photo = (
+    <Avatar
+      userId={profile?.id ?? ''}
+      name={profile?.displayName ?? ''}
+      size={72}
+      version={profile?.avatarVersion}
+      hasAvatar={profile?.hasAvatar}
+      fallback="initials"
+    />
   )
 
   return (
     <>
-      <div className={`flex flex-col h-full ${inWindow ? 'bg-surface' : SIDEBAR_PANEL_SURFACE}`}>
-        {inWindow ? (
-          <PanelCloseHeader title="My profile" onClose={onBack} closeLabel={backLabel} action={previewButton} />
-        ) : (
-          <PanelHeader title="My profile" onBack={onBack} backLabel={backLabel} action={previewButton} />
-        )}
-
+      <div className="flex min-h-0 flex-1 flex-col">
         {!profile ? (
           <div className="flex-1 flex items-center justify-center text-sm text-faint">
             {error ?? 'Loading…'}
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 pt-4 pb-8">
-            {/* Identity — the photo is the hero. Change/remove via the pencil
-                pinned to the banner; the banner itself opens the lightbox. */}
-            {/* Compact identity (user, 2026-10-15): the 420px banner was mostly an
-                empty gradient. A 96px photo carries the picture, the Options
-                pencil rides its corner, and the status pill below the name IS
-                the availability control — there is no separate Availability
-                section. */}
-            <div className="flex items-center gap-[1.125rem] px-1 pb-6 pt-2">
-              <div className="relative shrink-0">
-                {editor.openPreview ? (
-                  <button
-                    type="button"
-                    onClick={editor.openPreview}
-                    aria-label="View your profile photo"
-                    className="block rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
-                  >
-                    <Avatar
-                      userId={profile.id}
-                      name={profile.displayName}
-                      size={96}
-                      version={profile.avatarVersion}
-                      hasAvatar={profile.hasAvatar}
-                      fallback="initials"
+          <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] px-4 pt-1 pb-8">
+            {/* Identity card (user, 2026-10-30 canvas): who you are on top —
+                photo with its Options pencil, name, title │ role │ company and
+                the sign-in email — with Preview card beside it; your status as
+                one compact field row underneath. */}
+            <div className="rounded-card border border-line bg-white/2">
+              <div className="flex items-center gap-4 py-4 pl-[1.125rem] pr-4">
+                <div className="relative shrink-0">
+                  {editor.openPreview ? (
+                    <button
+                      type="button"
+                      onClick={editor.openPreview}
+                      aria-label="View your profile photo"
+                      className="block rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                    >
+                      {photo}
+                    </button>
+                  ) : (
+                    photo
+                  )}
+                  <div className="absolute -bottom-1 -right-1 origin-bottom-right scale-[0.7]">
+                    {editor.optionsButton}
+                  </div>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h2 className="truncate text-2xl font-bold leading-tight tracking-[-0.02em]">
+                    {profile.displayName}
+                  </h2>
+                  <div className="mt-1 text-base text-muted">
+                    <RowMeta
+                      segments={[profile.jobTitle ?? '', ROLE_LABEL[profile.role], profile.company].filter(Boolean)}
+                      whole
                     />
-                  </button>
-                ) : (
-                  <Avatar
-                    userId={profile.id}
-                    name={profile.displayName}
-                    size={96}
-                    version={profile.avatarVersion}
-                    hasAvatar={profile.hasAvatar}
-                    fallback="initials"
-                  />
-                )}
-                <div className="absolute -bottom-1 -right-1 origin-bottom-right scale-75">
-                  {editor.optionsButton}
+                  </div>
+                  <div className="mt-0.5 truncate text-sm text-faint">{profile.email}</div>
                 </div>
+                {previewButton && <div className="shrink-0 self-start">{previewButton}</div>}
               </div>
-              <div className="min-w-0 flex-1">
-                <h2 className="break-words text-3xl font-bold leading-tight tracking-[-0.02em]">
-                  {profile.displayName}
-                </h2>
-                <div className="mt-1 text-base text-muted">
-                  <RowMeta segments={[ROLE_LABEL[profile.role], profile.jobTitle ?? '']} whole />
-                </div>
-                {!isDriver && (
-                  <AvailabilityPill
+              {!isDriver && (
+                <div className="flex items-center gap-3 border-t border-line py-2 pl-[1.125rem] pr-2.5">
+                  <span className="shrink-0 text-base text-muted">Status</span>
+                  <StatusSelect
                     value={availability}
-                    away={away}
                     onChange={(v) => void changeAvailability(v)}
+                    title={
+                      away
+                        ? 'You show as Away right now: idle or this tab is hidden'
+                        : 'Shown next to your name across the company'
+                    }
                   />
-                )}
-                {(error || statusError) && (
-                  <p className="mt-2 text-sm leading-[1.4] text-alert">{error ?? statusError}</p>
-                )}
-              </div>
+                </div>
+              )}
             </div>
-            <div className="border-t border-line" />
+            {(error || statusError) && (
+              <p className="mt-2 px-1 text-sm leading-[1.4] text-alert">{error ?? statusError}</p>
+            )}
             {editor.chrome}
 
             <div className="px-1">
@@ -334,17 +324,16 @@ export default function ProfileSidebarPanel({
                 <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] rounded-card border border-line px-3.5">
                   {(
                     [
-                      ['Name', profile.displayName, null],
-                      ['Work email', profile.email, 'Used to sign in'],
-                      ['Role', ROLE_LABEL[profile.role], null],
-                      ['Company', profile.company, null],
+                      ['Name', profile.displayName],
+                      ['Work email', profile.email],
+                      ['Role', ROLE_LABEL[profile.role]],
+                      ['Company', profile.company],
                     ] as const
-                  ).map(([label, value, note], i) => (
+                  ).map(([label, value], i) => (
                     <div key={label} className={`contents ${i === 0 ? '' : '[&>*]:border-t [&>*]:border-line'}`}>
-                      <dt className="py-3 text-base text-muted">{label}</dt>
-                      <dd className="flex min-w-0 flex-col items-end gap-0.5 py-3 text-right">
+                      <dt className="flex h-11 items-center text-base text-muted">{label}</dt>
+                      <dd className="flex h-11 min-w-0 items-center justify-end">
                         <span className="max-w-full truncate text-base font-medium">{value}</span>
-                        {note && <span className="text-sm text-faint">{note}</span>}
                       </dd>
                     </div>
                   ))}
@@ -410,77 +399,6 @@ export default function ProfileSidebarPanel({
 // Languages as tags: the native one first (marked), then the others, each
 // removable; "Add language" opens suggestions plus a field for anything else.
 // Every change saves at once — there is no form to submit.
-// The status pill under the name — and the only availability control on this
-// panel. A menu button: the pill shows the current status, the menu lists the
-// three the user can set. While auto-away is in force the pill says so.
-function AvailabilityPill({
-  value,
-  away,
-  onChange,
-}: {
-  value: AvailabilityStatus
-  away?: boolean
-  onChange: (next: AvailabilityStatus) => void
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    function onDown(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
-  const current = statusMeta(value)
-  return (
-    <div className="relative mt-2.5 inline-block" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={`Availability: ${current.label}`}
-        title="Shown next to your name across the company. You show as Away while idle or when this tab is hidden."
-        className="inline-flex h-[1.875rem] items-center gap-2 rounded-soft border border-line pl-3 pr-2.5 text-base font-medium transition-colors hover:bg-white/6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
-      >
-        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: current.color }} />
-        {current.label}
-        {away && <span className="text-sm font-normal text-muted">· Away now</span>}
-        <ChevronDown size="0.875rem" strokeWidth={2} className="text-muted" />
-      </button>
-      {open && (
-        <div role="menu" className={`absolute left-0 top-[calc(100%+6px)] z-20 min-w-[11rem] ${MENU_CONTAINER}`}>
-          {AVAILABILITY.map((a) => (
-            <button
-              key={a.value}
-              type="button"
-              role="menuitemradio"
-              aria-checked={a.value === value}
-              onClick={() => {
-                setOpen(false)
-                onChange(a.value)
-              }}
-              className={menuItemClass()}
-            >
-              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: a.color }} />
-              <span className="flex-1">{a.label}</span>
-              {a.value === value && <Check size="0.875rem" strokeWidth={2} className="text-muted" />}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 function LanguagesSetting({
   native,
   others,

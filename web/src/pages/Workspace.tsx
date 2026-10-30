@@ -26,9 +26,10 @@ import Spinner from '../components/Spinner'
 import CreateVehicleGroupModal from '../components/CreateVehicleGroupModal'
 import NewMessageModal from '../components/NewMessageModal'
 import AccountPopover from '../components/settings/AccountPopover'
-import ProfileWindow from '../components/settings/ProfileWindow'
+import WindowShell from '../components/settings/WindowShell'
+import ProfileSidebarPanel from '../components/settings/ProfileSidebarPanel'
 import CompanySidebarPanel from '../components/settings/CompanySidebarPanel'
-import WorkspaceSettingsPanel from '../components/settings/WorkspaceSettingsPanel'
+import WorkspaceSettingsPanel, { CompanyMembersSettings } from '../components/settings/WorkspaceSettingsPanel'
 import InboxView, { ROUTE_PLANNER_ENABLED, type WorkspaceToolId } from '../components/inbox/InboxView'
 import { useIdle } from '../hooks/useIdle'
 import { usePresence } from '../hooks/usePresence'
@@ -68,7 +69,13 @@ type NewGroupKind = 'vehicle' | 'direct'
 //   list ← profile / company / settings
 // The list's own state (selection, search text, filter, scroll offset) is held
 // here in Workspace and therefore survives every drill-in unchanged.
-type SidebarView = 'list' | 'company' | 'settings'
+type AccountWindow = 'profile' | 'company' | 'members' | 'settings'
+const ACCOUNT_WINDOW_TITLE: Record<AccountWindow, string> = {
+  profile: 'My profile',
+  company: 'Company',
+  members: 'Members',
+  settings: 'Workspace settings',
+}
 
 // The top bar's open tabs, per user on this device. Validated on read: a
 // malformed or foreign value yields an empty bar rather than a crash.
@@ -142,11 +149,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   // touches the current selection.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(getStoredSidebarCollapsed)
   const [modal, setModal] = useState<NewGroupKind | null>(null)
-  // Which view the rail is on. Account / profile / company / settings all render
-  // INSIDE the rail in place of the conversation list (the chat stays visible on
-  // the right); the list itself is never unmounted from the app's state, only
-  // from the DOM, and comes back exactly as it was (see listScroll below).
-  const [sidebarView, setSidebarView] = useState<SidebarView>('list')
   const [profileTarget, setProfileTarget] = useState<{ id: string; name: string } | null>(null)
   // Prefetched once at mount so opening "My profile" is instant (the panel
   // remounts each open, so without this it would refetch every time and flash
@@ -170,8 +172,10 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
   )
   // The account window hanging from the top bar's photo.
   const [accountOpen, setAccountOpen] = useState(false)
-  // My profile opens in its own window, not as a sidebar drill-in.
-  const [profileWindowOpen, setProfileWindowOpen] = useState(false)
+  // The windows the account window opens (user, 2026-10-29/30 canvases) — My
+  // profile, Company, Members (admins) and Workspace settings each open over
+  // the workspace instead of as a drill-in that replaced the conversation list.
+  const [accountWindow, setAccountWindow] = useState<AccountWindow | null>(null)
   // Which conversation row has its inline action strip expanded. Held here, not
   // per row, so opening one collapses whichever was open.
   const [rowActionsId, setRowActionsId] = useState<string | null>(null)
@@ -201,24 +205,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
 
   const newMenuRef = useRef<HTMLDivElement>(null)
   const sidebarSlotRef = useRef<HTMLDivElement>(null)
-  // Where the conversation list was scrolled to. A drill-in view unmounts the
-  // scroller, so the offset is read off the live node the moment we navigate away
-  // (openSidebarView) and re-applied by the callback ref as soon as the list
-  // mounts again — during the commit, before paint, so coming back from
-  // Account/Profile/Company never flashes the rail at the top.
-  const listRef = useRef<HTMLElement | null>(null)
-  const listScrollTop = useRef(0)
-  const attachList = useCallback((node: HTMLElement | null) => {
-    listRef.current = node
-    if (node) node.scrollTop = listScrollTop.current
-  }, [])
-  // The single entry point for leaving the conversation list: it snapshots the
-  // scroll offset first, so restoring never depends on a scroll event having
-  // been delivered.
-  const openSidebarView = useCallback((view: SidebarView) => {
-    if (listRef.current) listScrollTop.current = listRef.current.scrollTop
-    setSidebarView(view)
-  }, [])
 
   // Keep the animated-but-mounted sidebar out of keyboard navigation while its
   // grid track is collapsed. React 18's HTML typings do not expose `inert` as a
@@ -738,16 +724,10 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
     setSelection({ kind: 'group', id: groupId })
   }, [])
 
-  // A sidebar drill-in opened from the account window: expand a collapsed
-  // sidebar first (a panel nobody can see would do nothing), then close the
-  // window behind it.
-  const openFromAccount = (view: SidebarView) => {
-    if (sidebarCollapsed) {
-      setStoredSidebarCollapsed(false)
-      setSidebarCollapsed(false)
-    }
+  // A window opened from the account window closes the account window behind it.
+  const openFromAccount = (view: AccountWindow) => {
     setAccountOpen(false)
-    openSidebarView(view)
+    setAccountWindow(view)
   }
 
   const TOOL_TABS: Record<WorkspaceToolId, { label: string; icon: React.ReactNode }> = {
@@ -830,8 +810,8 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         // Chat is "the rail is showing conversations AND one is open". With
         // nothing selected the main pane IS the workspace inbox, which is what
         // the Workspace entry means — so the two never light up together.
-        chatActive={sidebarView === 'list' && !inboxActive}
-        workspaceActive={sidebarView === 'list' && inboxActive}
+        chatActive={!inboxActive}
+        workspaceActive={inboxActive}
         me={{
           id: user.id,
           name: user.displayName,
@@ -852,12 +832,10 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             away={away}
             companyName={workspace.name}
             onClose={() => setAccountOpen(false)}
-            onOpenProfile={() => {
-              setAccountOpen(false)
-              setProfileWindowOpen(true)
-            }}
+            onOpenProfile={() => openFromAccount('profile')}
             onOpenCompany={() => openFromAccount('company')}
             onOpenSettings={() => openFromAccount('settings')}
+            onOpenMembers={user.role === 'admin' ? () => openFromAccount('members') : undefined}
             onSignOut={() => void onSignOut()}
             onProfileSaved={(p) => {
               setCachedProfile(p)
@@ -877,11 +855,9 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             setStoredSidebarCollapsed(false)
             setSidebarCollapsed(false)
           }
-          openSidebarView('list')
         }}
         onOpenWorkspace={() => {
           setNewMenuOpen(false)
-          setSidebarView('list')
           setSelection({ kind: 'inbox' })
         }}
       />
@@ -892,19 +868,10 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         aria-hidden={sidebarCollapsed}
       >
       {/* Left rail — the same field as everything else, separated from the
-          thread by the hairline on its right edge. Its content is a small
-          navigation stack (see SidebarView): the conversation list, or one
-          drill-in view rendered in its place. */}
+          thread by the hairline on its right edge. It only ever shows the
+          conversation list now: the account's panels open as windows. */}
       <aside className="workspace-sidebar-panel relative h-full min-w-0 overflow-hidden bg-bg">
-        {/* Keep the conversation list mounted while a sidebar panel covers it.
-            Rows therefore retain their image elements, decoded avatars, action
-            state and scroll position instead of rebuilding on every Back. */}
-        <div
-          aria-hidden={sidebarView !== 'list'}
-          className={`h-full min-h-0 flex flex-col ${
-            sidebarView === 'list' ? '' : 'invisible pointer-events-none'
-          }`}
-        >
+        <div className="h-full min-h-0 flex flex-col">
         {/* Top toolbar — ONE row: the search field takes the width, the new-thread
             control sits inline at its right as a square `+`.
             It used to be a full-width bordered `New thread` button STACKED above
@@ -1051,7 +1018,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             Sections use the larger inter-section gap; the unified list inside its
             wrapper stays tight. */}
         <nav
-          ref={attachList}
           className="flex-1 min-h-0 overflow-y-auto px-1.5 pt-3 pb-1.5 flex flex-col"
           style={{ gap: 'var(--sidebar-section-gap)' }}
         >
@@ -1180,31 +1146,6 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
         </nav>
 
         </div>
-
-        {/* Drill-in panels occupy the same sidebar surface without replacing
-            the mounted conversation layer underneath. Only the active panel is
-            mounted; its own form state may reset when intentionally left. */}
-        {sidebarView !== 'list' && (
-          <div
-            key={sidebarView}
-            className="panel-fade-in absolute inset-0 z-10 flex min-h-0 flex-col bg-sidebar"
-          >
-            {sidebarView === 'company' ? (
-              <CompanySidebarPanel
-                onBack={() => setSidebarView('list')}
-                backLabel="Back to conversations"
-                onSaved={() => {
-                  void refresh()
-                }}
-              />
-            ) : (
-              <WorkspaceSettingsPanel
-                onBack={() => setSidebarView('list')}
-                backLabel="Back to conversations"
-              />
-            )}
-          </div>
-        )}
       </aside>
       </div>
 
@@ -1302,20 +1243,36 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
       {modal === 'direct' && (
         <NewMessageModal onClose={() => setModal(null)} onOpenGroup={handleCreated} />
       )}
-      {profileWindowOpen && (
-        <ProfileWindow
-          initialProfile={cachedProfile}
-          away={away}
-          onClose={() => setProfileWindowOpen(false)}
-          onSaved={(p) => {
-            setCachedProfile(p)
-            void refresh()
-          }}
-          onPreview={() => {
-            setProfileWindowOpen(false)
-            setProfileTarget({ id: user.id, name: user.displayName })
-          }}
-        />
+      {accountWindow && (
+        <WindowShell
+          key={accountWindow}
+          title={ACCOUNT_WINDOW_TITLE[accountWindow]}
+          size={accountWindow === 'settings' ? 'wide' : 'narrow'}
+          onClose={() => setAccountWindow(null)}
+        >
+          {accountWindow === 'profile' ? (
+            <ProfileSidebarPanel
+              initialProfile={cachedProfile}
+              away={away}
+              onSaved={(p) => {
+                setCachedProfile(p)
+                void refresh()
+              }}
+              onPreview={() => {
+                setAccountWindow(null)
+                setProfileTarget({ id: user.id, name: user.displayName })
+              }}
+            />
+          ) : accountWindow === 'company' ? (
+            <CompanySidebarPanel onSaved={() => void refresh()} />
+          ) : accountWindow === 'members' ? (
+            <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] border-t border-line px-5 pb-6">
+              <CompanyMembersSettings />
+            </div>
+          ) : (
+            <WorkspaceSettingsPanel />
+          )}
+        </WindowShell>
       )}
       {profileTarget && (
         <UserProfilePanel

@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
-import { AppWindow, Building2, Check, ChevronDown, CircleUser, LogOut, Settings, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { AppWindow, Building2, CircleUser, LogOut, Settings, Users, X } from 'lucide-react'
 import type { User } from '../../auth/AuthContext'
 import type { AvailabilityStatus, Profile } from '../../lib/types'
 import { api } from '../../lib/api'
-import { AVAILABILITY, AWAY, statusMeta } from '../../lib/availability'
+import { AWAY, statusMeta } from '../../lib/availability'
 import { avatarUrl } from '../../lib/avatarCache'
 import { useTheme } from '../../lib/theme'
 import { MESSAGE_STYLE_LABEL, useMessageStyle } from '../../lib/messageStyle'
@@ -13,6 +13,7 @@ import Avatar from '../Avatar'
 import { usePhotoEditor } from '../AvatarPhotoEditor'
 import { NavRow } from './sectionChrome'
 import { ROLE_LABEL } from './ProfileSidebarPanel'
+import StatusSelect from './StatusSelect'
 
 type Props = {
   user: User
@@ -26,6 +27,8 @@ type Props = {
   onOpenProfile: () => void
   onOpenCompany: () => void
   onOpenSettings: () => void
+  /** Admins only — the row is hidden when this is absent. */
+  onOpenMembers?: () => void
   onSignOut: () => void
   /** A status change saved here flows up like a My profile save does. */
   onProfileSaved: (profile: Profile) => void
@@ -36,10 +39,11 @@ type Props = {
 // stack; it floats now, and it is the ONE way into everything about you and
 // your company — Company and Settings lost their own nav buttons to it.
 //
-// Status is one collapsed field showing the current choice; pressing it drops
-// the three options under it (user, 2026-10-29: "a field from where we select
-// it"). My profile opens in its own window (ProfileWindow); Company and
-// Workspace settings still open in the sidebar.
+// Status is one compact row: the label and a collapsed field (StatusSelect).
+// Every row below opens its own window (WindowShell) — My profile, Company,
+// Members (admins only, user 2026-10-30: it belongs here, not in Workspace
+// settings) and Workspace settings — so each carries a window glyph, not a
+// drill-in chevron.
 export default function AccountPopover({
   user,
   profile,
@@ -49,6 +53,7 @@ export default function AccountPopover({
   onOpenProfile,
   onOpenCompany,
   onOpenSettings,
+  onOpenMembers,
   onSignOut,
   onProfileSaved,
 }: Props) {
@@ -76,6 +81,31 @@ export default function AccountPopover({
       setError('Could not change your availability. Try again.')
     }
   }
+
+  // The Members row says how many people and pending invites there are —
+  // fetched when the window opens, for admins only (the server gates it too).
+  const [membersSummary, setMembersSummary] = useState<string[] | null>(null)
+  const showMembers = Boolean(onOpenMembers)
+  useEffect(() => {
+    if (!showMembers) return
+    let live = true
+    Promise.all([api.workspace.members(), api.workspaceInvites.list()])
+      .then(([{ members }, { invites }]) => {
+        if (!live) return
+        const pending = invites.filter((invite) => invite.status === 'active').length
+        // /workspace/members lists everyone EXCEPT the caller, so they are
+        // counted back in.
+        const count = members.length + (members.some((m) => m.id === user.id) ? 0 : 1)
+        setMembersSummary([
+          `${count} ${count === 1 ? 'person' : 'people'}`,
+          pending > 0 ? `${pending} invite${pending === 1 ? '' : 's'} pending` : 'No pending invites',
+        ])
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [showMembers, user.id])
 
   // Drivers have no availability — same rule as the top bar's photo dot.
   const dot = isDriver ? null : away ? AWAY : statusMeta(availability)
@@ -108,6 +138,15 @@ export default function AccountPopover({
           : `${languageCount} language${languageCount === 1 ? '' : 's'}`,
       ]
     : ['Photo, contact details, languages']
+
+  const windowGlyph = (
+    <AppWindow
+      size="1rem"
+      strokeWidth={1.8}
+      aria-label="Opens in a window"
+      className="shrink-0 text-faint transition-colors group-hover:text-muted"
+    />
+  )
 
   const photo = (
     <span className="relative block shrink-0">
@@ -168,15 +207,16 @@ export default function AccountPopover({
         {viewer.chrome}
 
         {!isDriver && (
-          <div className="border-t border-line px-2 pt-2 pb-2.5">
-            <div className="px-2.5 pt-1 pb-1 text-xs font-medium text-faint">Status</div>
-            <StatusSelect value={availability} onChange={(v) => void changeAvailability(v)} />
-            <p className="px-2.5 pt-1.5 text-xs leading-snug text-faint">
-              {away
-                ? 'You show as Away right now, because you are idle or this tab is hidden.'
-                : 'Away is set for you while you are idle or this tab is hidden.'}
-            </p>
-            {error && <p className="px-2.5 pt-1 text-sm text-alert">{error}</p>}
+          <div className="border-t border-line py-2 pl-4 pr-2.5">
+            <div className="flex items-center gap-3">
+              <span className="shrink-0 text-base text-muted">Status</span>
+              <StatusSelect
+                value={availability}
+                onChange={(v) => void changeAvailability(v)}
+                title={away ? 'You show as Away right now: idle or this tab is hidden' : 'Shown next to your name across the company'}
+              />
+            </div>
+            {error && <p className="pt-1.5 text-sm text-alert">{error}</p>}
           </div>
         )}
 
@@ -186,21 +226,24 @@ export default function AccountPopover({
             title="My profile"
             value={profileSummary}
             onClick={onOpenProfile}
-            trailing={
-              <AppWindow
-                size="1rem"
-                strokeWidth={1.8}
-                aria-label="Opens in a window"
-                className="shrink-0 text-faint transition-colors group-hover:text-muted"
-              />
-            }
+            trailing={windowGlyph}
           />
           <NavRow
             icon={<Building2 size="1.0625rem" strokeWidth={1.7} />}
             title="Company"
-            value={[companyName, 'Profile, people, places']}
+            value={[companyName, 'Registration, location, dispatch']}
             onClick={onOpenCompany}
+            trailing={windowGlyph}
           />
+          {onOpenMembers && (
+            <NavRow
+              icon={<Users size="1.0625rem" strokeWidth={1.7} />}
+              title="Members"
+              value={membersSummary ?? ['People and invite links']}
+              onClick={onOpenMembers}
+              trailing={windowGlyph}
+            />
+          )}
           <NavRow
             icon={<Settings size="1.0625rem" strokeWidth={1.7} />}
             title="Workspace settings"
@@ -210,6 +253,7 @@ export default function AccountPopover({
               notifications.enabled ? 'Notifications on' : 'Notifications off',
             ]}
             onClick={onOpenSettings}
+            trailing={windowGlyph}
           />
         </nav>
 
@@ -231,92 +275,6 @@ export default function AccountPopover({
           </button>
         </div>
       </div>
-    </div>
-  )
-}
-
-// The Status field: collapsed, it shows the current choice with a chevron;
-// open, the three options drop under it as a small menu. Escape or a press
-// outside closes it (Escape is consumed so the account window stays open).
-function StatusSelect({
-  value,
-  onChange,
-}: {
-  value: AvailabilityStatus
-  onChange: (next: AvailabilityStatus) => void
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  const current = statusMeta(value)
-
-  useEffect(() => {
-    if (!open) return
-    function onKey(e: KeyboardEvent) {
-      if (e.key !== 'Escape') return
-      e.stopPropagation()
-      setOpen(false)
-    }
-    function onPointerDown(e: MouseEvent) {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('keydown', onKey, true)
-    document.addEventListener('mousedown', onPointerDown, true)
-    return () => {
-      document.removeEventListener('keydown', onKey, true)
-      document.removeEventListener('mousedown', onPointerDown, true)
-    }
-  }, [open])
-
-  return (
-    <div ref={ref} className="relative px-0.5">
-      <button
-        type="button"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label={`Status: ${current.label}`}
-        onClick={() => setOpen((o) => !o)}
-        className={`rounded-btn flex h-9 w-full items-center gap-2.5 border pl-3 pr-2.5 text-left text-base font-medium text-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
-          open ? 'border-line-2 bg-white/4' : 'border-line hover:border-line-2'
-        }`}
-      >
-        <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: current.color }} />
-        <span className="flex-1">{current.label}</span>
-        <ChevronDown
-          size="0.9375rem"
-          strokeWidth={1.8}
-          className={`shrink-0 text-muted transition-transform ${open ? 'rotate-180' : ''}`}
-        />
-      </button>
-      {open && (
-        <div
-          role="listbox"
-          aria-label="Availability"
-          className="panel-fade-in absolute inset-x-0.5 top-[calc(100%+0.25rem)] z-10 flex flex-col gap-px rounded-card border border-line bg-surface p-1 shadow-overlay"
-        >
-          {AVAILABILITY.map((a) => {
-            const on = a.value === value
-            return (
-              <button
-                key={a.value}
-                type="button"
-                role="option"
-                aria-selected={on}
-                onClick={() => {
-                  setOpen(false)
-                  onChange(a.value)
-                }}
-                className={`rounded-btn flex h-8 w-full items-center gap-2.5 px-2.5 text-left text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
-                  on ? 'bg-white/8 font-medium text-text' : 'text-muted hover:bg-white/6 hover:text-text'
-                }`}
-              >
-                <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: a.color }} />
-                <span className="flex-1">{a.label}</span>
-                {on && <Check size="0.9375rem" strokeWidth={2} />}
-              </button>
-            )
-          })}
-        </div>
-      )}
     </div>
   )
 }

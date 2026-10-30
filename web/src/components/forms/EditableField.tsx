@@ -294,7 +294,15 @@ export default function EditableField({
         />
       </button>
     ) : (
-      <div className="flex items-center gap-3 py-2.5 pl-3.5 pr-3">{body}</div>
+      <div className="flex items-center gap-3 py-2.5 pl-3.5 pr-3">
+        {body}
+        {/* A locked field says so where the pencil would be; the reason is its hover. */}
+        {hint && (
+          <span title={hint} className="flex shrink-0 text-faint">
+            <Lock size="0.875rem" strokeWidth={1.9} aria-label={hint} />
+          </span>
+        )}
+      </div>
     )
   }
 
