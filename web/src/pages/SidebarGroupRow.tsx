@@ -476,18 +476,18 @@ export default function GroupRow({
           {/* Vehicle rooms only — the trip, between the plate and what was said
               (user, 2026-10-29 canvas): the town being driven to, the trip as a
               hairline with the truck as a dot on it, the final town, and how
-              far along it is. A room without a trip says so quietly, so every
-              vehicle row keeps the same three-line shape. Pulls in from the
-              right on hover/open like the lines around it. */}
-          {isVehicle && (
+              far along it is. A room WITHOUT a trip draws no line at all (user,
+              2026-10-30: "if there is no trip, don't show the badge"), so the
+              rows that have one stand out. Pulls in from the right on
+              hover/open like the lines around it. */}
+          {isVehicle && trip && tripEnds && (
             <span
               className={`my-1 flex min-w-0 items-center gap-2 text-xs leading-tight transition-[margin] duration-200 ease-out group-hover/row:mr-7 group-focus-within/row:mr-7 ${
                 menuOpen ? 'mr-7' : ''
               }`}
               title={tripLineFull ?? undefined}
             >
-              {trip && tripEnds ? (
-                <>
+              <>
                   <span className="max-w-[34%] shrink-0 truncate font-medium text-text/85">{tripEnds.from}</span>
                   <span aria-hidden className={`relative h-0.5 min-w-10 flex-1 rounded-full bg-line ${TONE_TEXT[trip.statusTone]}`}>
                     <span
@@ -503,10 +503,7 @@ export default function GroupRow({
                     <span className="max-w-[34%] shrink-0 truncate font-medium text-text/85">{tripEnds.to}</span>
                   )}
                   <span className={`shrink-0 font-semibold tabular-nums ${TONE_TEXT[trip.statusTone]}`}>{tripFigure}</span>
-                </>
-              ) : (
-                <span className="truncate text-faint">No trip</span>
-              )}
+              </>
             </span>
           )}
           {/* Line 2 — human text at reading size: typing wins, then a draft,

@@ -29,7 +29,7 @@ import AccountPopover from '../components/settings/AccountPopover'
 import WindowShell from '../components/settings/WindowShell'
 import ProfileSidebarPanel from '../components/settings/ProfileSidebarPanel'
 import CompanySidebarPanel from '../components/settings/CompanySidebarPanel'
-import WorkspaceSettingsPanel, { CompanyMembersSettings } from '../components/settings/WorkspaceSettingsPanel'
+import WorkspaceSettingsPanel, { CompanyMembersSettings, ScopeTag } from '../components/settings/WorkspaceSettingsPanel'
 import InboxView, { ROUTE_PLANNER_ENABLED, type WorkspaceToolId } from '../components/inbox/InboxView'
 import { useIdle } from '../hooks/useIdle'
 import { usePresence } from '../hooks/usePresence'
@@ -879,20 +879,19 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             action that is universally a plus. Inline, the row reads the way the
             rail's rows do — content first, affordance at the trailing edge — and
             the list starts one row higher.
-            The division of labour that made the stacked version work is kept: the
-            `+` is the only BORDERED thing here, because it is the one control in
-            the rail, and the search stays UNBORDERED because the magnifier plus
-            placeholder already say "field". Side by side, the single box reads as
-            the button rather than as a second field. */}
+            2026-10-30 canvas: both are SOFT FILLED and the same height, so the row
+            reads as one control strip — no outlines until the field has focus
+            (then it drops to the field colour with a hairline), and the `+` is a
+            filled square in the same tone. */}
         <div
-          className="px-3 pt-2.5 flex items-center gap-1.5 shrink-0"
+          className="px-3 pt-2.5 flex items-center gap-2 shrink-0"
           style={{ paddingBottom: 'var(--sidebar-toolbar-gap)' }}
         >
           <label
             htmlFor="rail-search"
-            className="min-w-0 flex-1 h-[var(--sidebar-search-height)] flex items-center gap-1.5 px-2.5 cursor-text rounded-card border transition-colors hover:border-strong focus-within:border-strong"
+            className="min-w-0 flex-1 h-[var(--sidebar-search-height)] flex items-center gap-2 px-3 cursor-text rounded-card border border-transparent bg-white/6 transition-colors hover:bg-white/8 focus-within:border-line-2 focus-within:bg-bg"
           >
-            <Search size="0.875rem" strokeWidth={1.8} className="text-muted shrink-0" />
+            <Search size="0.9375rem" strokeWidth={1.8} className="text-muted shrink-0" />
             <input
               id="rail-search"
               // The field carries no visible label (the magnifier + placeholder
@@ -928,13 +927,11 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
               // new user what the square does.
               aria-label="New thread"
               title="New thread"
-              className={`h-[var(--sidebar-search-height)] w-[var(--sidebar-search-height)] flex items-center justify-center rounded-card border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
-                newMenuOpen
-                  ? 'border-strong bg-white/6 text-text'
-                  : 'text-text hover:border-strong hover:bg-white/4'
+              className={`h-[var(--sidebar-search-height)] w-[var(--sidebar-search-height)] flex items-center justify-center rounded-card border text-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+                newMenuOpen ? 'border-line-2 bg-white/10' : 'border-transparent bg-white/6 hover:bg-white/10'
               }`}
             >
-              <Plus size="0.875rem" strokeWidth={1.8} />
+              <Plus size="1rem" strokeWidth={2} />
             </button>
 
             {newMenuOpen && (
@@ -1267,6 +1264,10 @@ export default function Workspace({ user, workspace, onSignOut }: Props) {
             <CompanySidebarPanel onSaved={() => void refresh()} />
           ) : accountWindow === 'members' ? (
             <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] border-t border-line px-5 pb-6">
+              <div className="flex items-center justify-between gap-3 pt-3.5 pb-1">
+                <h2 className="truncate text-xl font-bold tracking-[-0.01em]">{workspace.name}</h2>
+                <ScopeTag scope="company" />
+              </div>
               <CompanyMembersSettings />
             </div>
           ) : (

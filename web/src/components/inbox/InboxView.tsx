@@ -1,10 +1,13 @@
 import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   Activity,
+  ArrowUpRight,
   CalendarClock,
   ChevronDown,
   ChevronRight,
   MapPinOff,
+  Pin,
+  PinOff,
   Plus,
   Route,
   Truck,
@@ -59,6 +62,11 @@ export type WorkspaceToolId = 'route' | 'fleet' | 'restrictions'
 // Route planner is switched off for now (user, 2026-10-29). Flip to true to
 // bring back its home card, its tab, and the calculator's "Open route planner".
 export const ROUTE_PLANNER_ENABLED = false
+
+// The home's Fleet table and Needs attention list are off for now (user,
+// 2026-10-30 canvas: "remove this for now along side the needs attention
+// card"). Flip to true to bring both back under the tools.
+const HOME_BOARD_ENABLED = false
 
 type Props = {
   // Which tool is open (null = the workspace home). Owned by Workspace, so a
@@ -235,12 +243,16 @@ export default function InboxView({
 
   return (
     <>
-      <header className="h-[var(--header-height)] shrink-0 flex items-center gap-4 border-b border-line px-6">
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-3xl font-bold tracking-[-0.02em] leading-tight">{workspaceName}</h1>
-          <div className="mt-0.5 text-base text-muted">
-            <RowMeta segments={headerCounts} whole />
-          </div>
+      {/* The home sits on the SAME lifted card as the chat window (user,
+          2026-10-30 canvas): inset from the field, rim, radius, one shadow,
+          and the surface tone through `.chat-card`. */}
+      <div className="chat-card relative my-1.5 mx-3.5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-card border border-line shadow-float">
+      <header className="h-[var(--tool-header-height)] shrink-0 flex items-center gap-4 border-b border-line pl-5 pr-3.5">
+        <div className="flex min-w-0 flex-1 items-baseline gap-3">
+          <h1 className="truncate text-2xl font-bold tracking-[-0.02em] leading-tight">{workspaceName}</h1>
+          <span className="hidden shrink-0 text-base text-muted 2xl:inline">
+            {HOME_BOARD_ENABLED ? <RowMeta segments={headerCounts} whole /> : 'Workspace'}
+          </span>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           <HomeButton onClick={onAddConnection} icon={<UserPlus size="0.9375rem" strokeWidth={1.7} />}>
@@ -257,37 +269,41 @@ export default function InboxView({
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto px-6 py-7">
-        <div className="mx-auto flex max-w-[72rem] flex-col gap-9">
-          {/* TOOLS FIRST (user, 2026-10-15): the three destinations lead the
-              page as one row of cards, and the fleet below is a compact list
-              that shares its row with Needs attention. */}
+      <div className="flex-1 overflow-y-auto px-5 pt-[1.125rem] pb-5">
+        <div className="flex flex-col gap-9">
+          {/* TOOLS FIRST (user, 2026-10-15; canvas 2026-10-30): the tools lead
+              the card as compact one-row cards — the card opens the tool, the
+              pin sends it to the top bar as a tab. */}
           <section aria-labelledby="home-tools">
-            <h2 id="home-tools" className="mb-3 text-xl font-semibold">Tools</h2>
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-3">
+            <h2 id="home-tools" className="sr-only">Tools</h2>
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(17rem,1fr))] gap-3">
               {ROUTE_PLANNER_ENABLED && (
-                <ToolRow
-                  icon={<Route size="1.0625rem" strokeWidth={1.6} />}
+                <ToolCard
+                  icon={<Route size="1.125rem" strokeWidth={1.7} />}
                   title="Route planner"
                   subtitle="Distance, tolls and ETA for a truck route."
                   onClick={() => setTool('route')}
+                  pin={pinFor('route')}
                 />
               )}
-              <ToolRow
-                icon={<CalendarClock size="1.0625rem" strokeWidth={1.6} />}
+              <ToolCard
+                icon={<CalendarClock size="1.125rem" strokeWidth={1.7} />}
                 title="Restriction calculator"
-                subtitle="Arrival once bans and rests are counted."
+                subtitle="Arrival once driving bans and rests are counted."
                 onClick={() => setTool('restrictions')}
+                pin={pinFor('restrictions')}
               />
-              <ToolRow
-                icon={<Activity size="1.0625rem" strokeWidth={1.6} />}
+              <ToolCard
+                icon={<Activity size="1.125rem" strokeWidth={1.7} />}
                 title="Fleet status"
-                subtitle="Vehicles, trips and availability."
+                subtitle="Every vehicle, its trip and its last position."
                 onClick={() => setTool('fleet')}
+                pin={pinFor('fleet')}
               />
             </div>
           </section>
 
+          {HOME_BOARD_ENABLED && (
           <div className="flex flex-wrap gap-x-8 gap-y-9">
           <section aria-labelledby="home-fleet" className="min-w-0 flex-[1.9_1_34rem]">
             <div className={`flex items-baseline gap-3 ${fleetCollapsed ? '' : 'mb-3'}`}>
@@ -376,7 +392,9 @@ export default function InboxView({
               </div>
             </section>
           </div>
+          )}
         </div>
+      </div>
       </div>
       {tripPickerOpen && (
         <VehicleRoomPicker
@@ -667,40 +685,60 @@ function FleetRow({ row, onOpen }: { row: FleetRowData; onOpen: () => void }) {
 
 // A tool as a list row: tile, name over what it does, chevron. A destination,
 // so it gets the chevron; the header buttons above are actions and do not.
-function ToolRow({
+function ToolCard({
   icon,
   title,
   subtitle,
   onClick,
+  pin,
 }: {
   icon: ReactNode
   title: string
   subtitle: string
   onClick: () => void
+  pin: { pinned: boolean; onToggle: () => void }
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group flex w-full items-center gap-3 rounded-card border border-line px-3.5 py-3 text-left transition-colors hover:bg-white/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
-    >
-      <span className="flex h-[2.375rem] w-[2.375rem] shrink-0 items-center justify-center rounded-tile border border-line text-muted transition-colors group-hover:text-text">
-        {icon}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-lg font-semibold">{title}</span>
-        <span className="mt-0.5 block text-sm leading-[1.4] text-muted">{subtitle}</span>
-      </span>
-      <ChevronRight
-        size="1rem"
-        strokeWidth={1.7}
-        className="shrink-0 text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-muted"
-      />
-    </button>
+    <div className="group relative rounded-card border border-line bg-white/2 transition-colors hover:border-line-2 hover:bg-white/6">
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex w-full items-center gap-3 rounded-card py-3 pl-3.5 pr-14 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+      >
+        <span className="flex h-[2.125rem] w-[2.125rem] shrink-0 items-center justify-center rounded-tile border border-line-2 bg-surface text-text">
+          {icon}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-lg font-semibold tracking-[-0.01em]">{title}</span>
+          <span className="mt-0.5 block truncate text-sm text-muted">{subtitle}</span>
+        </span>
+        <ArrowUpRight
+          size="1rem"
+          strokeWidth={1.8}
+          aria-hidden
+          className="shrink-0 text-faint transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-text motion-reduce:transition-none"
+        />
+      </button>
+      <button
+        type="button"
+        onClick={pin.onToggle}
+        aria-pressed={pin.pinned}
+        aria-label={pin.pinned ? `Unpin ${title} from the top bar` : `Pin ${title} to the top bar`}
+        title={pin.pinned ? 'Unpin from the top bar' : 'Pin to the top bar'}
+        className={`rounded-btn absolute right-2.5 top-1/2 flex h-[1.875rem] w-[1.875rem] -translate-y-1/2 items-center justify-center transition-colors hover:bg-white/8 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+          pin.pinned ? 'text-text' : 'text-faint'
+        }`}
+      >
+        {pin.pinned ? <PinOff size="0.9375rem" strokeWidth={1.8} /> : <Pin size="0.9375rem" strokeWidth={1.8} />}
+      </button>
+    </div>
   )
 }
 
 // The header's actions: hairline controls, with the one primary action filled.
+// On narrower screens the secondary actions drop to their glyph (named by
+// aria-label and tooltip) so the company name keeps its room; the primary one
+// always keeps its words.
 function HomeButton({
   icon,
   primary = false,
@@ -710,18 +748,22 @@ function HomeButton({
   icon: ReactNode
   primary?: boolean
   onClick: () => void
-  children: ReactNode
+  children: string
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex h-9 items-center gap-2 rounded-btn px-3.5 text-base font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
-        primary ? 'bg-text font-semibold text-bg hover:bg-white' : 'border border-line text-text hover:bg-white/6'
+      aria-label={children}
+      title={children}
+      className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-btn text-base font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+        primary
+          ? 'bg-text px-3.5 font-semibold text-bg hover:bg-white'
+          : 'w-9 justify-center border border-line text-text hover:bg-white/6 xl:w-auto xl:px-3.5'
       }`}
     >
       {icon}
-      {children}
+      <span className={primary ? '' : 'hidden xl:inline'}>{children}</span>
     </button>
   )
 }

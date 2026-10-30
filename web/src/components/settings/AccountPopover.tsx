@@ -239,6 +239,7 @@ export default function AccountPopover({
             <NavRow
               icon={<Users size="1.0625rem" strokeWidth={1.7} />}
               title="Members"
+              tag="Admin"
               value={membersSummary ?? ['People and invite links']}
               onClick={onOpenMembers}
               trailing={windowGlyph}

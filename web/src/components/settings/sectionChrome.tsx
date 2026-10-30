@@ -16,11 +16,14 @@ export function NavRow({
   value,
   onClick,
   trailing,
+  tag,
 }: {
   icon: ReactNode
   title: string
   value: string[]
   onClick: () => void
+  /** A quiet tag beside the title — who the row is for ("Admin"). */
+  tag?: string
   /** Replaces the chevron — e.g. a window glyph for a row that opens a window. */
   trailing?: ReactNode
 }) {
@@ -34,7 +37,12 @@ export function NavRow({
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-lg font-semibold leading-tight">{title}</span>
+        <span className="flex items-center gap-2 text-lg font-semibold leading-tight">
+          {title}
+          {tag && (
+            <span className="rounded-btn border border-line px-1.5 py-px text-xs font-medium text-faint">{tag}</span>
+          )}
+        </span>
         <span className="mt-1 block text-muted">
           <RowMeta segments={value} whole />
         </span>

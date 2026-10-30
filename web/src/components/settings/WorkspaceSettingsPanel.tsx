@@ -184,7 +184,7 @@ function CategoryItem({
 }
 
 // Who a detail's changes reach, in its header: this browser, or the company.
-function ScopeTag({ scope }: { scope: 'device' | 'company' }) {
+export function ScopeTag({ scope }: { scope: 'device' | 'company' }) {
   return (
     <span className="flex shrink-0 items-center gap-1.5 pr-1 text-sm text-faint">
       {scope === 'device' ? (

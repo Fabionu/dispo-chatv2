@@ -37,12 +37,13 @@
    viewport-derived tier on top of it would put the old step back at 2200.
    It multiplies the fluid base here and in --sidebar-width / --thread-width. */
 html {
-  /* 2026-10-16 (user: "the elements are very big, even on a higher resolution —
-     minimize everything"). --ui-base is the house size of the whole curve: every
-     token below multiplies by --ui-scale, and so do their min/max ends, so one
-     number shrinks type, controls, rails and every rem at once. --ui-density is
-     the manual Appearance choice (1 in Auto) and stacks on top of it. */
-  --ui-base: 0.85;
+  /* --ui-base is the house size of the whole curve: every token below multiplies
+     by --ui-scale, and so do their min/max ends, so one number moves type,
+     controls, rails and every rem at once. --ui-density is the manual
+     Appearance choice (1 in Auto) and stacks on top of it.
+     History: 1 → 0.85 on 2026-10-16 ("the elements are very big … minimize
+     everything"), back to 1 on 2026-10-30 ("everything is too small"). */
+  --ui-base: 1;
   --ui-density: 1;
   --ui-scale: calc(var(--ui-base) * var(--ui-density));
   /* The floor (every clamp's min) shrinks half as much as the curve, so a laptop
