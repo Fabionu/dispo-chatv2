@@ -1,13 +1,16 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { MENU_CONTAINER, MENU_SEPARATOR, menuIconClass, menuItemClass } from '../menuStyles'
 
 export type MessageAction = {
   label: string
   onClick: () => void
   disabled?: boolean
   tone?: 'default' | 'alert'
-  // Lucide glyph — the ONLY thing rendered; the label lives in the tooltip and
-  // the accessible name.
+  // Lucide glyph, drawn in the row's leading slot beside the label.
   icon?: ReactNode
+  // Actions of one group sit together; a hairline is drawn wherever the group
+  // changes (respond / manage / destructive — see buildMessageActions).
+  group?: string
 }
 
 type Props = {
@@ -22,25 +25,15 @@ type Props = {
 // right-click. Anchored to the message it belongs to, on that message's own
 // side, so it never floats free of its subject.
 //
-// A single straight run of glyphs — ten actions in the width of a short
-// message, which a column of named rows can't manage without covering the
-// conversation underneath. The common verbs are already spelled out in the
-// row's own text strip (ThreadActions in MessageRow); this is the overflow, so
-// it optimises for staying out of the way.
+// A NAMED LIST, grouped (user, 2026-10-30, replacing a straight run of ten
+// glyphs that could only be told apart by tooltip): respond to it, manage it,
+// delete it — a hairline where the group changes, so the destructive pair is
+// always the last thing and never next to Reply. It is the app's shared action
+// menu (menuStyles), which is what every other anchored menu already is; the
+// strip it replaces was drawn like the composer, a one-off.
 //
-// DRAWN LIKE THE COMPOSER, which is this app's other control floating over the
-// thread: `bg-bg` and one hairline, with no tone step and no shadow. Earlier
-// passes gave it `surface` + `shadow-overlay` — that was the old floating-card
-// vocabulary, and against a flat field it read as a foreign pill rather than
-// part of the same drawing.
-//
-// Internally: equal cells inside one drawn box, with NOTHING between them. The
-// cells used to be divided by a 1px rule each (and a `line-2` one at the
-// destructive boundary), which turned a seven-glyph strip into a seven-panel
-// grid — more lines than glyphs. The hover wash is the only cell boundary now:
-// it appears under the cell you're actually addressing, which is the only
-// moment the division matters. Destructive actions still separate themselves,
-// by colour.
+// The common verbs are still spelled out in the row's own text strip
+// (ThreadActions in MessageRow); this is the full list behind MORE.
 //
 // ABSOLUTE, not in flow: in flow it would stretch the message block (and its
 // rule) to the strip's width the moment the menu opened. A menu overlaying the
@@ -155,11 +148,9 @@ export default function MessageActionsPanel({ actions, open, side, onClose }: Pr
       // to the box's own edge — same anchor, and the same reason, as the hover
       // action strip (see ThreadActions in thread/threadChrome).
       //
-      // `rounded-btn` (the CONTROL step), not the 10px `MENU_SURFACE` the named
-      // action menus use: this is a 28px-tall row of buttons, and a surface
-      // radius on it reads as a lozenge rather than a strip. `overflow-hidden`
-      // is what makes the radius safe — the end buttons are edge-to-edge and
-      // their hover fill would otherwise square the corners off.
+      // MENU_CONTAINER: the surface, the 10px radius and the edge-to-edge item
+      // hovers every named action menu shares. A fixed 14rem column keeps the
+      // longest label ("Delete for everyone") on one line.
       data-side={side}
       className={`msg-anchored ${
         open
@@ -167,35 +158,35 @@ export default function MessageActionsPanel({ actions, open, side, onClose }: Pr
             ? 'action-strip-enter-up'
             : 'action-strip-enter'
           : `${above ? 'action-strip-exit-up' : 'action-strip-exit'} pointer-events-none`
-      } absolute z-20 flex w-max items-stretch overflow-hidden rounded-btn border bg-bg ${
+      } ${MENU_CONTAINER} absolute z-20 w-56 ${
         side === 'right' ? 'right-[var(--msg-indent)]' : 'left-[var(--msg-indent)]'
       } ${above ? 'bottom-full mb-2 origin-bottom' : 'top-full mt-2 origin-top'}`}
     >
       {actions.map((a, i) => {
         const alert = a.tone === 'alert'
+        const tone = alert ? 'danger' : 'default'
+        // A hairline wherever the group changes, never above the first item.
+        const startsGroup = i > 0 && a.group !== actions[i - 1].group
         return (
-          <button
-            key={i}
-            type="button"
-            role="menuitem"
-            disabled={a.disabled}
-            // Native tooltip: the same affordance the rest of the app uses for
-            // icon-only controls (sidebar badges, header actions).
-            title={a.label}
-            aria-label={a.label}
-            onClick={() => {
-              if (a.disabled) return
-              a.onClick()
-              onClose()
-            }}
-            className={`flex h-7 w-8 shrink-0 items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent ${
-              alert
-                ? 'text-alert hover:bg-alert/10'
-                : 'text-muted hover:bg-white/6 hover:text-text'
-            }`}
-          >
-            {a.icon}
-          </button>
+          <Fragment key={i}>
+            {startsGroup && <div role="separator" className={MENU_SEPARATOR} />}
+            <button
+              type="button"
+              role="menuitem"
+              disabled={a.disabled}
+              onClick={() => {
+                if (a.disabled) return
+                a.onClick()
+                onClose()
+              }}
+              className={`${menuItemClass(tone)} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20`}
+            >
+              <span aria-hidden className={menuIconClass(tone)}>
+                {a.icon}
+              </span>
+              {a.label}
+            </button>
+          </Fragment>
         )
       })}
     </div>

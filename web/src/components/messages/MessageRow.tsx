@@ -494,6 +494,9 @@ function MessageRow({
   // never hover-revealed, so a burst of my own messages keeps a clock-and-ticks
   // row per message — it just stops repeating my name at me.
   const hasLiveMeta = pinned || forwarded || edited || failed || (mine && !deleted)
+  // The flags alone — what keeps a bubble's sign-off row when its clock and
+  // ticks have moved to the last block of the run.
+  const hasFlagMeta = pinned || forwarded || edited || failed
 
   // The photo, drawn square and IN ITS OWN COLOURS.
   //
@@ -781,11 +784,17 @@ function MessageRow({
         {/* Nothing left to say (same minute as the block above, no flags, no
             ticks) means no row at all — an empty one would still cost its
             margin. */}
-        {bubble && !(repeatsNextTime && !hasLiveMeta) && (
+        {/* The delivery ticks follow the clock: one pair, on the LAST block of a
+            same-minute run (user, 2026-10-30: the clock was already single but
+            every bubble kept its own ticks). Read state only moves forward, so
+            the newest block's ticks say it for the whole run. A block still
+            SENDING keeps its own clock glyph, because that is exactly the
+            moment the blocks above it are not the answer. */}
+        {bubble && (hasFlagMeta || !repeatsNextTime || pending) && (
           <div className="msg-meta">
             {messageFlags}
             {!repeatsNextTime && <span className="timestamp">{time}</span>}
-            {deliveryTicks}
+            {(!repeatsNextTime || pending) && deliveryTicks}
           </div>
         )}
         {dense && (pinned || forwarded || edited || failed) && (

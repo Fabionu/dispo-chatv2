@@ -6,7 +6,7 @@
 
 import { Fragment, type ReactNode } from 'react'
 import { useTravellingMarker } from '../components/useTravellingMarker'
-import { ChevronDown, type LucideIcon } from 'lucide-react'
+import { Ellipsis, type LucideIcon } from 'lucide-react'
 import { menuIconClass, menuItemClass } from '../components/menuStyles'
 import Avatar from '../components/Avatar'
 import GroupAvatar from '../components/GroupAvatar'
@@ -118,9 +118,10 @@ export function RowStateIcon({ icon: Icon, label }: { icon: LucideIcon; label: s
   )
 }
 
-// The row's actions trigger: the same chevron as the message bubble's, with the
-// three states the rest of the app uses — idle (hidden until the row is hovered
-// or focused), hover/focus (warms + fills), open (stays visible, flipped).
+// The row's actions trigger — a "⋯" (user, 2026-10-30: the chevron opened a
+// strip, the dots open a list) — with the three states the rest of the app
+// uses: idle (hidden until the row is hovered or focused), hover/focus (warms +
+// fills), open (stays visible, filled).
 export function RowActionsTrigger({
   open,
   label,
@@ -147,13 +148,7 @@ export function RowActionsTrigger({
         open ? 'bg-white/8 text-text' : 'text-muted hover:text-text hover:bg-white/6'
       }`}
     >
-      <ChevronDown
-        {...ROW_GLYPH}
-        aria-hidden
-        className={`transition-transform duration-200 ease-out motion-reduce:transition-none ${
-          open ? 'rotate-180' : ''
-        }`}
-      />
+      <Ellipsis {...ROW_GLYPH} aria-hidden />
     </button>
   )
 }

@@ -62,33 +62,28 @@ export function buildMessageActions({
   onDeleteForMe,
   onDeleteForEveryone,
 }: MessageActionParams): MessageAction[] {
+  // Three groups, in this order (the panel draws a hairline between them):
+  // answering or passing the message on, managing it, and deleting it.
   return [
-    { label: 'Reply', onClick: () => onReply(message), icon: <Reply {...MENU_GLYPH} /> },
-    {
-      label: pinned ? 'Unpin message' : 'Pin message',
-      onClick: () => (pinned ? onUnpin(message) : onPin(message)),
-      icon: pinned ? (
-        <PinOff {...MENU_GLYPH} />
-      ) : (
-        <Pin {...MENU_GLYPH} />
-      ),
-    },
+    { label: 'Reply', onClick: () => onReply(message), icon: <Reply {...MENU_GLYPH} />, group: 'respond' },
+    { label: 'Forward', onClick: () => onForward(message), icon: <Forward {...MENU_GLYPH} />, group: 'respond' },
     {
       label: 'Copy',
       onClick: () => onCopy(message),
       disabled: !canCopy,
       icon: <Copy {...MENU_GLYPH} />,
+      group: 'respond',
     },
-    { label: 'Forward', onClick: () => onForward(message), icon: <Forward {...MENU_GLYPH} /> },
-    // Download sits with Copy/Forward, before the delete group. Only present
-    // when the message has at least one server-backed attachment. One file →
-    // direct download; multiple → each is downloaded in turn.
+    // Download sits with Copy/Forward. Only present when the message has at
+    // least one server-backed attachment. One file → direct download; multiple
+    // → each is downloaded in turn.
     ...(downloadable.length > 0
       ? [
           {
             label: 'Download',
             onClick: () => downloadable.forEach((a) => downloadAttachment(a)),
             icon: <Download {...MENU_GLYPH} />,
+            group: 'respond',
           },
         ]
       : []),
@@ -98,14 +93,26 @@ export function buildMessageActions({
             label: 'Reply privately',
             onClick: () => onReplyPrivately(message),
             icon: <Reply {...MENU_GLYPH} />,
+            group: 'respond',
           },
           {
             label: 'Send private message',
             onClick: () => onSendPrivate(message),
             icon: <MessageCircle {...MENU_GLYPH} />,
+            group: 'respond',
           },
         ]
       : []),
+    {
+      label: pinned ? 'Unpin message' : 'Pin message',
+      onClick: () => (pinned ? onUnpin(message) : onPin(message)),
+      icon: pinned ? (
+        <PinOff {...MENU_GLYPH} />
+      ) : (
+        <Pin {...MENU_GLYPH} />
+      ),
+      group: 'manage',
+    },
     ...(mine
       ? [
           {
@@ -113,6 +120,7 @@ export function buildMessageActions({
             onClick: () => onEdit(message),
             disabled: !canEdit,
             icon: <Pencil {...MENU_GLYPH} />,
+            group: 'manage',
           },
         ]
       : []),
@@ -121,6 +129,7 @@ export function buildMessageActions({
       onClick: () => onDeleteForMe(message),
       tone: 'alert' as const,
       icon: <Trash2 {...MENU_GLYPH} />,
+      group: 'danger',
     },
     ...(mine
       ? [
@@ -130,6 +139,7 @@ export function buildMessageActions({
             disabled: !canDeleteForEveryone,
             tone: 'alert' as const,
             icon: <Trash2 {...MENU_GLYPH} />,
+            group: 'danger',
           },
         ]
       : []),

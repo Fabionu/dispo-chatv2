@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import {
   Archive,
   ArchiveRestore,
@@ -9,6 +9,7 @@ import {
   Pin,
   PinOff,
   Trash2,
+  User,
 } from 'lucide-react'
 import type { Group } from '../lib/types'
 import { groupLabel, groupPreview, isUnread, tractorPlate, trailerPlate } from '../lib/types'
@@ -23,14 +24,19 @@ import {
   UnreadBadge,
   unreadLabel,
 } from './sidebarBits'
-import { initials } from '../components/messages/messageUtils'
-import { MENU_GLYPH } from '../components/menuStyles'
+import {
+  MENU_CONTAINER,
+  MENU_GLYPH,
+  MENU_SEPARATOR,
+  menuIconClass,
+  menuItemClass,
+} from '../components/menuStyles'
 import { statusMeta } from '../lib/availability'
 import { typingLabel, type TypingUser } from '../lib/typing'
 import TypingMark from '../components/messages/TypingMark'
 
-// One cell in a row's inline action strip. `label` is the short form shown
-// under the glyph; `title` is the full wording (tooltip + accessible name).
+// One item in a row's actions list. `label` is the wording shown in the list;
+// `title` is the full sentence for the accessible name.
 type RowAction = {
   key: string
   label: string
@@ -39,9 +45,22 @@ type RowAction = {
   onSelect: () => void
   // Destructive styling (alert colour).
   danger?: boolean
-  // When set, the FIRST click swaps the cell to this label and a second click
+  // When set, the FIRST click swaps the item to this label and a second click
   // runs onSelect — an inline confirmation, no separate modal.
   confirmLabel?: string
+  // A hairline above this item — where the list changes kind (settings above,
+  // archive and delete below).
+  separatorBefore?: boolean
+}
+
+// The nearest scrolling ancestor, or null for the page: the box a row's list has
+// to fit inside, which is what decides whether it opens below the row or above.
+function scrollParentOf(el: HTMLElement): HTMLElement | null {
+  for (let node = el.parentElement; node; node = node.parentElement) {
+    const overflowY = getComputedStyle(node).overflowY
+    if (overflowY === 'auto' || overflowY === 'scroll') return node
+  }
+  return null
 }
 
 // Compact last-activity stamp: today → HH:MM, yesterday → "Yesterday", otherwise
@@ -200,10 +219,12 @@ export default function GroupRow({
   const showDraft = !selected && Boolean(draft)
   const typingText = typingLabel(typingUsers, group.type === 'direct')
 
-  // ── Per-conversation row actions (inline strip under the row) ─────────────
-  // Opening them expands a horizontal action bar directly beneath THIS row
-  // rather than floating a popover over the rail: the actions stay tied to the
-  // conversation they belong to, and nothing covers the rest of the list.
+  // ── Per-conversation row actions (a named list under the row) ─────────────
+  // The "⋯" opens a list of named actions anchored to THIS row's right edge
+  // (user, 2026-10-30: it was a strip of six icon-and-label cells that
+  // pushed the rail down, and the labels had to be squeezed to "Read"/"Unread").
+  // It floats over the rows beneath it like every other action menu, below the
+  // row — or above it when the rail has no room left underneath.
   // While it's open the row stays in its "actions active" state — the trigger
   // stays visible and the preview-line indicators remain shifted left even
   // after the cursor leaves the row.
@@ -216,8 +237,28 @@ export default function GroupRow({
   }, [menuOpen])
   const closeActions = () => onActionsOpenChange(false)
   const rowWrapperRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  // Opens upward when there is no room below the row inside the rail's scroller
+  // (the last rows of a short list) but room above it. Measured before paint, so
+  // the list never flashes in the wrong place.
+  const [flipUp, setFlipUp] = useState(false)
+  useLayoutEffect(() => {
+    const menu = menuRef.current
+    const wrap = rowWrapperRef.current
+    if (!menuOpen || !menu || !wrap) {
+      setFlipUp(false)
+      return
+    }
+    const port = scrollParentOf(wrap)
+    const bounds = port?.getBoundingClientRect()
+    const top = bounds?.top ?? 0
+    const bottom = bounds?.bottom ?? window.innerHeight
+    const row = wrap.getBoundingClientRect()
+    const need = menu.offsetHeight + 8
+    setFlipUp(bottom - row.bottom < need && row.top - top > need)
+  }, [menuOpen])
   // Right-clicking anywhere on the row TOGGLES the same actions: once to open,
-  // again to close. Right-clicking a DIFFERENT row moves the strip there (the
+  // again to close. Right-clicking a DIFFERENT row moves the list there (the
   // list owns the open id, so only one is ever open) — and the outside-press
   // handler below has already closed this one by the time that row's
   // contextmenu fires. `preventDefault` keeps the browser menu away, and a
@@ -267,70 +308,57 @@ export default function GroupRow({
   const actuallyUnread = (group.unreadCount ?? 0) > 0
   const ICON = MENU_GLYPH
   const isDirect = group.type === 'direct'
-  // Labels stay SHORT: the cells share the rail's width, so "Mark as read"
-  // becomes "Read". The aria-label carries the full wording.
+  // Named actions, in the wording the list can afford (the strip had to squeeze
+  // "Mark as read" into "Read"). The icons stay the lucide set; a DM's
+  // profile entry takes a person glyph where the strip drew the peer's initials,
+  // because a list row has the name in the row above it already.
   const rowMenuActions: RowAction[] = [
-    // Leads the strip: the one purely informational action, and the reason most
+    // Leads the list: the one purely informational action, and the reason most
     // people open this menu. Its meaning follows the conversation type — a DM
     // has a person behind it, a vehicle room has a truck.
-    //
-    // A DM's cell carries the peer's INITIALS rather than a contact glyph, for
-    // the same reason the row's own avatar does (Avatar's `fallback="initials"`
-    // above): a glyph depicts someone, whereas initials name WHICH someone the
-    // action targets. Sized to the same 14px box as the lucide glyphs beside it,
-    // and inheriting currentColor, so the strip's rhythm and hover states are
-    // unchanged.
     {
       key: 'details',
-      label: isDirect ? 'Profile' : 'Info',
+      label: isDirect ? 'View profile' : 'View group info',
       title: isDirect ? 'View user profile' : 'View group info',
-      icon: isDirect ? (
-        <span
-          aria-hidden
-          className="flex h-3.5 items-center justify-center text-base font-semibold leading-none tracking-tight"
-        >
-          {initials(peer?.name ?? groupLabel(group))}
-        </span>
-      ) : (
-        <Info {...ICON} />
-      ),
+      icon: isDirect ? <User {...ICON} /> : <Info {...ICON} />,
       onSelect: () => onViewDetails(group),
     },
     {
       key: 'pin',
-      label: pinned ? 'Unpin' : 'Pin',
+      label: pinned ? 'Unpin from top' : 'Pin to top',
       title: pinned ? 'Unpin conversation' : 'Pin conversation',
       icon: pinned ? <PinOff {...ICON} /> : <Pin {...ICON} />,
       onSelect: () => onTogglePin(group, !pinned),
     },
     {
       key: 'read',
-      label: actuallyUnread ? 'Read' : 'Unread',
+      label: actuallyUnread ? 'Mark as read' : 'Mark as unread',
       title: actuallyUnread ? 'Mark as read' : 'Mark as unread',
       icon: <MailOpen {...ICON} />,
       onSelect: () => (actuallyUnread ? onMarkRead(group) : onMarkUnread(group)),
     },
     {
       key: 'mute',
-      label: muted ? 'Unmute' : 'Mute',
+      label: muted ? 'Unmute notifications' : 'Mute notifications',
       title: muted ? 'Unmute notifications' : 'Mute notifications',
       icon: muted ? <Bell {...ICON} /> : <BellOff {...ICON} />,
       onSelect: () => onToggleMute(group, !muted),
     },
     {
       key: 'archive',
-      label: archived ? 'Restore' : 'Archive',
+      label: archived ? 'Restore from archive' : 'Archive',
       title: archived ? 'Unarchive conversation' : 'Archive conversation',
       icon: archived ? <ArchiveRestore {...ICON} /> : <Archive {...ICON} />,
       onSelect: () => onToggleArchive(group, !archived),
+      separatorBefore: true,
     },
     {
       key: 'delete',
-      label: 'Delete',
+      label: 'Delete conversation',
       title: 'Delete conversation',
       icon: <Trash2 {...ICON} />,
       danger: true,
-      confirmLabel: 'Sure?',
+      confirmLabel: 'Sure? Delete it',
       onSelect: () => onDelete(group),
     },
   ]
@@ -577,39 +605,35 @@ export default function GroupRow({
         {rowActions}
       </div>
 
-      {/* The actions themselves: a horizontal strip directly under this row.
-          Animated with a 0fr→1fr grid row so the height transitions without a
-          hard-coded max-height, and kept out of the tab order while closed. */}
-      <div
-        className={`grid transition-[grid-template-rows] duration-200 ease-out ${
-          menuOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
-        }`}
-      >
-        <div className="overflow-hidden">
-          {/* No surface of its own: a tinted card under a row on the rail's
-              near-black background reads as a different material. The cells run
-              the row's full width and only light up on hover. */}
-          <div
-            role="group"
-            aria-label={`Actions for ${groupLabel(group)}`}
-            className={`mb-1 flex w-full origin-top items-stretch transition-[opacity,transform] duration-150 ease-out ${
-              menuOpen
-                ? 'action-strip-enter opacity-100 translate-y-0 scale-100'
-                : 'opacity-0 -translate-y-1 scale-[0.98]'
-            }`}
-          >
-            {rowMenuActions.map((a) => {
-              const confirming = a.confirmLabel != null && confirmDelete
-              const danger = a.danger || confirming
-              return (
+      {/* The actions themselves: a named list hanging from the row's right
+          edge — the shared action-menu surface, rendered only while open, so
+          nothing in it is in the tab order when closed. Floats over the rows
+          below (or above, see `flipUp`) instead of moving them. */}
+      {menuOpen && (
+        <div
+          ref={menuRef}
+          role="menu"
+          aria-label={`Actions for ${groupLabel(group)}`}
+          className={`${MENU_CONTAINER} absolute right-2 z-30 w-56 ${
+            flipUp
+              ? 'action-strip-enter-up bottom-full mb-1 origin-bottom'
+              : 'action-strip-enter top-full mt-1 origin-top'
+          }`}
+        >
+          {rowMenuActions.map((a) => {
+            const confirming = a.confirmLabel != null && confirmDelete
+            const tone = a.danger || confirming ? 'danger' : 'default'
+            return (
+              <Fragment key={a.key}>
+                {a.separatorBefore && <div role="separator" className={MENU_SEPARATOR} />}
                 <button
-                  key={a.key}
                   type="button"
-                  tabIndex={menuOpen ? 0 : -1}
+                  role="menuitem"
                   aria-label={confirming ? `${a.title} — confirm` : a.title}
-                  title={a.title}
                   onClick={(e) => {
                     e.stopPropagation()
+                    // Delete asks once, in place: the first click re-labels the
+                    // item, the second one does it.
                     if (a.confirmLabel && !confirmDelete) {
                       setConfirmDelete(true)
                       return
@@ -617,20 +641,18 @@ export default function GroupRow({
                     closeActions()
                     a.onSelect()
                   }}
-                  className={`flex-1 min-w-0 flex flex-col items-center gap-1 rounded-btn px-1 py-1.5 transition-colors ${
-                    danger ? 'text-alert hover:bg-alert/10' : 'text-muted hover:bg-white/6 hover:text-text'
-                  }`}
+                  className={`${menuItemClass(tone)} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/20`}
                 >
-                  {a.icon}
-                  <span className="text-2xs leading-none truncate max-w-full">
-                    {confirming ? a.confirmLabel : a.label}
+                  <span aria-hidden className={menuIconClass(tone)}>
+                    {a.icon}
                   </span>
+                  {confirming ? a.confirmLabel : a.label}
                 </button>
-              )
-            })}
-          </div>
+              </Fragment>
+            )
+          })}
         </div>
-      </div>
+      )}
     </div>
   )
 }
