@@ -291,6 +291,10 @@ html[data-density-mode='manual'][data-density='comfortable'] {
      proportion to the 36px control inside it at every width. The workspace
      HOME header (InboxView) stays on --header-height: it is a main-pane header
      beside the rail, and that seam is what the tall token exists for. */
+  /* The conversation's header (user, 2026-10-30 canvas: "make the header a bit
+     bigger, also the svgs inside it"): ~27% taller than the tool bars so it
+     holds 36px controls and 19px glyphs, on the same fluid curve. */
+  --chat-header-height: clamp(calc(50px * var(--ui-floor)), calc((40px + 0.8vw) * var(--ui-scale)), calc(68px * var(--ui-scale)));
   --tool-header-height: clamp(calc(40.92px * var(--ui-floor)), calc((32.01px + 0.6245vw) * var(--ui-scale)), calc(53.24px * var(--ui-scale)));
   /* FLUID, and defined exactly once (2026-08-26, user: the widths should scale
      with CSS rather than be managed per resolution). This token used to be

@@ -98,8 +98,9 @@ export default function ChatHeader({
   // thread header is one slim row on --tool-header-height now, trip or not, so
   // the controls are always the stepped-down set.
   const compact = true
-  const iconSize = compact ? '0.9375rem' : '1.1875rem'
-  const iconBox = compact ? 'h-8 w-8' : 'h-10 w-10'
+  // Bigger in the 2026-10-30 canvas: 36px controls with 19px glyphs.
+  const iconSize = '1.1875rem'
+  const iconBox = 'h-9 w-9'
   return (
     /* Thread header — left-aligned identity, actions at the right edge, and a
        single hairline sealing it against the timeline.
@@ -131,7 +132,7 @@ export default function ChatHeader({
        nothing for an expanding search field to shift, so it can simply squeeze
        the title instead of floating over it. */
     <header className="shrink-0 border-b">
-    <div className="h-[var(--tool-header-height)] flex items-center gap-2.5 pl-4 pr-2.5 overflow-hidden">
+    <div className="h-[var(--chat-header-height)] flex items-center gap-3 pl-5 pr-3 overflow-hidden">
       {/* A person keeps their picture; a vehicle room has none (user,
           2026-10-29 canvas) — its plate is the identity, as in the rail. Not a
           button, though the DM title beside it is one: two adjacent controls
@@ -154,14 +155,14 @@ export default function ChatHeader({
           2026-10-16) or the room's facts in the label voice. Typing takes the
           trip summary's / the facts' place. The trailer │ order │ members facts
           also ride along as the title's tooltip when a trip has the row. */}
-      <div className="min-w-0 flex-1 flex items-center gap-2.5">
+      <div className="min-w-0 flex-1 flex items-center gap-3">
         {group.type === 'direct' ? (
           <button
             type="button"
             onClick={() =>
               onOpenProfile(group.directPeer?.id ?? '', group.directPeer?.name ?? groupLabel(group))
             }
-            className="min-w-0 max-w-[50%] shrink truncate text-left text-[1.0625rem] font-semibold tracking-[-0.2px] leading-tight hover:underline underline-offset-4 focus-visible:outline-none focus-visible:underline"
+            className="min-w-0 max-w-[50%] shrink truncate text-left text-[1.25rem] font-semibold tracking-[-0.2px] leading-tight hover:underline underline-offset-4 focus-visible:outline-none focus-visible:underline"
           >
             {groupLabel(group)}
           </button>
@@ -169,12 +170,12 @@ export default function ChatHeader({
           // A vehicle room's title is its plate, in tabular figures.
           <div
             title={[groupLabel(group), ...subtitle.split(' · '), orderLine].filter(Boolean).join(' · ')}
-            className="min-w-0 max-w-[50%] shrink truncate text-[1.0625rem] font-bold tracking-[-0.02em] tabular-nums leading-tight"
+            className="min-w-0 max-w-[50%] shrink truncate text-[1.25rem] font-bold tracking-[-0.02em] tabular-nums leading-tight"
           >
             {tractorPlate(group) ?? trailerPlate(group) ?? groupLabel(group)}
           </div>
         )}
-        <span aria-hidden className="h-3.5 w-px shrink-0 bg-line" />
+        <span aria-hidden className="h-[1.125rem] w-px shrink-0 bg-line" />
         {itinerary ? (
           <TripLine trip={itinerary} typingText={typingText} />
         ) : (
@@ -194,7 +195,7 @@ export default function ChatHeader({
 
       {/* Search is offered in EVERY conversation (DM + vehicle); Group info
           stays vehicle-only. */}
-      <div className="flex items-center gap-0.5 shrink-0">
+      <div className="flex items-center gap-1 shrink-0">
         {/* Inline search field — unfolds to the LEFT of the search button when
             the button is pressed, so it stays inside the header action area
             instead of taking a full row under the header. A drawn, rounded
@@ -220,7 +221,7 @@ export default function ChatHeader({
           className={`chat-search-reveal ${searchOpen ? 'is-open' : ''}`}
         >
           <div className="min-w-0 overflow-hidden">
-            <div className={`flex items-center gap-1 ${compact ? 'h-8' : 'h-10'} pl-3 pr-1 mr-1.5 rounded-card border border-strong`}>
+            <div className="flex items-center gap-1 h-9 pl-3 pr-1 mr-1.5 rounded-card border border-strong">
               <input
                 ref={searchInputRef}
                 value={searchQuery}
@@ -267,7 +268,7 @@ export default function ChatHeader({
         {routeMapAvailable && (
           <HeaderIconButton
             label="Trip route"
-            size={compact ? 'sm' : 'lg'}
+            size="md"
             active={tripRouteActive}
             onClick={() => (tripRouteActive ? onCloseTripRoute() : onOpenTripRoute())}
           >
@@ -299,12 +300,12 @@ export default function ChatHeader({
                   }`
             }
           >
-            <PanelRight size={compact ? iconSize : '1rem'} strokeWidth={1.8} />
+            <PanelRight size={iconSize} strokeWidth={1.8} />
             {!compact && 'Trip'}
           </button>
         )}
         {group.type === 'vehicle' && (
-          <HeaderIconButton label="Group info" size={compact ? 'sm' : 'lg'} onClick={onOpenGroupInfo}>
+          <HeaderIconButton label="Group info" size="md" onClick={onOpenGroupInfo}>
             <Info size={iconSize} strokeWidth={1.8} />
           </HeaderIconButton>
         )}
@@ -345,9 +346,9 @@ function TripLine({ trip, typingText }: { trip: TripSummary; typingText?: string
     trip.progress && pct > 0 && pct < 1 ? `${Math.round(pct * 100)}%` : trip.statusLabel
 
   return (
-    <div className="min-w-0 flex flex-1 items-center gap-3">
+    <div className="min-w-0 flex flex-1 items-center gap-3.5">
       <ItineraryEnd stop={stops[leftIndex]} next={leftIndex === nextIndex} />
-      <div className={`relative h-3 min-w-16 flex-1 ${tone}`} aria-hidden>
+      <div className={`relative h-3.5 min-w-16 flex-1 ${tone}`} aria-hidden>
         <span className="absolute inset-x-0 top-1/2 h-0.5 -translate-y-1/2 rounded-full bg-line" />
         <span
           className="absolute left-0 top-1/2 h-0.5 -translate-y-1/2 rounded-full bg-current"
@@ -356,27 +357,27 @@ function TripLine({ trip, typingText }: { trip: TripSummary; typingText?: string
         {stops.map((stop, i) => (
           <span
             key={stop.id}
-            className={`absolute top-1/2 box-border h-3 w-3 -translate-y-1/2 rounded-full border-[3px] bg-bg ${
+            className={`absolute top-1/2 box-border h-3.5 w-3.5 -translate-y-1/2 rounded-full border-[3px] bg-bg ${
               stop.status === 'done' ? 'border-line-2' : 'border-text'
             }`}
             // Ends sit flush with the row's edges; the rest centre on their mark.
-            style={{ left: `calc(${at(i) * 100}% - ${at(i) * 0.75}rem)` }}
+            style={{ left: `calc(${at(i) * 100}% - ${at(i) * 0.875}rem)` }}
           />
         ))}
         {trip.progress && pct > 0 && pct < 1 && (
           <span
-            className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-current ring-[3px] ring-bg"
+            className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-current ring-[3px] ring-bg"
             style={{ left: `${pct * 100}%` }}
           />
         )}
       </div>
       {n > 1 && <ItineraryEnd stop={stops[lastIndex]} next={lastIndex === nextIndex} alignEnd />}
       {typingText ? (
-        <span role="status" aria-live="polite" className="max-w-[40%] shrink-0 text-sm font-medium">
+        <span role="status" aria-live="polite" className="max-w-[40%] shrink-0 text-base font-medium">
           <TypingLine text={typingText} />
         </span>
       ) : (
-        <span className="shrink-0 whitespace-nowrap text-sm tabular-nums text-muted">
+        <span className="shrink-0 whitespace-nowrap text-base tabular-nums text-muted">
           <span className={`font-semibold ${tone}`}>{pctLabel}</span>
           {farWhen && ` · ${farWhen}`}
         </span>
@@ -394,9 +395,9 @@ function ItineraryEnd({ stop, next, alignEnd = false }: { stop: TripStop; next: 
       title={`${role}: ${stop.place.text}${when ? `, ${when}` : ''}`}
       className={`flex min-w-0 max-w-[45%] shrink items-center gap-2 ${alignEnd ? 'flex-row-reverse' : ''}`}
     >
-      <CountryFlag code={stop.place.code} />
+      <CountryFlag code={stop.place.code} className="!h-3.5 !w-5" />
       <span
-        className={`truncate text-base font-semibold ${stop.status === 'done' ? 'text-muted' : 'text-text'}`}
+        className={`truncate text-lg font-semibold ${stop.status === 'done' ? 'text-muted' : 'text-text'}`}
       >
         {town(stop.place)}
       </span>
