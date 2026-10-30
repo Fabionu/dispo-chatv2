@@ -511,8 +511,11 @@ export default function GroupRow({
                   label voice is for. Setting the name in that voice too made
                   every row read as a serial number instead of a conversation. */}
               <span
+                // 400 read / 500 unread (user, 2026-10-30: the "lighter" names
+                // from the typeface canvas) — it was 500 / 600. Unread still
+                // reads as heavier than read, one step apart as before.
                 className={`min-w-0 shrink truncate leading-tight ${
-                  unread ? 'text-text font-semibold' : 'text-text/90 font-medium'
+                  unread ? 'text-text font-medium' : 'text-text/90 font-normal'
                 }`}
                 style={{
                   fontSize: isDirect
