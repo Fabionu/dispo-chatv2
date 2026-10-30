@@ -24,7 +24,8 @@ export function NavRow({
   onClick: () => void
   /** A quiet tag beside the title — who the row is for ("Admin"). */
   tag?: string
-  /** Replaces the chevron — e.g. a window glyph for a row that opens a window. */
+  /** Replaces the chevron; `null` shows nothing at the end of the row at all
+   *  (the account window's rows open windows, which no glyph needs to say). */
   trailing?: ReactNode
 }) {
   return (
@@ -47,7 +48,9 @@ export function NavRow({
           <RowMeta segments={value} whole />
         </span>
       </span>
-      {trailing ?? (
+      {trailing !== undefined ? (
+        trailing
+      ) : (
         <ChevronRight
           size="1rem"
           strokeWidth={1.8}

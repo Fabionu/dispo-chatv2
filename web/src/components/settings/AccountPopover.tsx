@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AppWindow, Building2, CircleUser, LogOut, Settings, Users, X } from 'lucide-react'
+import { Building2, CircleUser, LogOut, Settings, Users, X } from 'lucide-react'
 import type { User } from '../../auth/AuthContext'
 import type { AvailabilityStatus, Profile } from '../../lib/types'
 import { api } from '../../lib/api'
@@ -42,8 +42,9 @@ type Props = {
 // Status is one compact row: the label and a collapsed field (StatusSelect).
 // Every row below opens its own window (WindowShell) — My profile, Company,
 // Members (admins only, user 2026-10-30: it belongs here, not in Workspace
-// settings) and Workspace settings — so each carries a window glyph, not a
-// drill-in chevron.
+// settings) and Workspace settings — so none carries a drill-in chevron, and
+// none carries a window glyph either (user, 2026-10-30: it said nothing the
+// row's own tap does not).
 export default function AccountPopover({
   user,
   profile,
@@ -139,15 +140,6 @@ export default function AccountPopover({
       ]
     : ['Photo, contact details, languages']
 
-  const windowGlyph = (
-    <AppWindow
-      size="1rem"
-      strokeWidth={1.8}
-      aria-label="Opens in a window"
-      className="shrink-0 text-faint transition-colors group-hover:text-muted"
-    />
-  )
-
   const photo = (
     <span className="relative block shrink-0">
       <Avatar
@@ -226,14 +218,14 @@ export default function AccountPopover({
             title="My profile"
             value={profileSummary}
             onClick={onOpenProfile}
-            trailing={windowGlyph}
+            trailing={null}
           />
           <NavRow
             icon={<Building2 size="1.0625rem" strokeWidth={1.7} />}
             title="Company"
             value={[companyName, 'Registration, location, dispatch']}
             onClick={onOpenCompany}
-            trailing={windowGlyph}
+            trailing={null}
           />
           {onOpenMembers && (
             <NavRow
@@ -242,7 +234,7 @@ export default function AccountPopover({
               tag="Admin"
               value={membersSummary ?? ['People and invite links']}
               onClick={onOpenMembers}
-              trailing={windowGlyph}
+              trailing={null}
             />
           )}
           <NavRow
@@ -254,7 +246,7 @@ export default function AccountPopover({
               notifications.enabled ? 'Notifications on' : 'Notifications off',
             ]}
             onClick={onOpenSettings}
-            trailing={windowGlyph}
+            trailing={null}
           />
         </nav>
 

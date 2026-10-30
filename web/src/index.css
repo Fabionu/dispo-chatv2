@@ -389,6 +389,11 @@ html[data-density-mode='manual'][data-density='comfortable'] {
      field are eaten into rather than spread, so 300 there is not "the same text,
      calmer", it is thin and washed out. See the light block. */
   --msg-body-weight: 300;
+  /* Weight of the text INSIDE a bubble (user, 2026-10-30: it read bold at 400
+     — "Inter, 15px, 350"). Between the timeline's 300 and the 400 it had; the
+     page loads Inter as a VARIABLE font (index.html, wght 300..700) so the
+     in-between value is a real weight and not a rounding to the nearest file. */
+  --bubble-body-weight: 350;
   /* The author's name in a message's attribution row, which is NOT on the
      label scale above (see Attribution). A point larger than the 11px label
      beside it, because the name has to hold the row on size alone — it never
@@ -589,6 +594,7 @@ html[data-theme='light'] {
   --color-line-msg: var(--color-line-2);
   /* 400, not the dark theme's 300 — see --msg-body-weight above. */
   --msg-body-weight: 400;
+  --bubble-body-weight: 400;
   /* The slate text ladder: ink #111827, muted #475569, faint #646F80. Faint
      was #858585 (3.5:1) — legal for large text and nothing else, and it is
      what every meta line, timestamp and placeholder is set in. #646F80 clears
@@ -936,10 +942,13 @@ html[data-theme='light'] {
 
 /* Bubble text (rework, 2026-10-10): a step larger, at regular weight and a
    tighter leading than the timeline's light 1.6. Inside a fill the text no
-   longer has a rule to carry it, and light text on #121212 read as faint. */
+   longer has a rule to carry it, and light text on #121212 read as faint.
+   Pulled back on 2026-10-30 (user: too big and too bold — "Inter, 15px, 350"):
+   1.1× was 16px at 1920, now ×1.035 = 15px there, and still on the fluid
+   curve; the weight is --bubble-body-weight (350 dark, 400 light). */
 [data-msg-style='bubble'] .msg-content .msg-body {
-  font-size: calc(var(--chat-plain-font-size) * 1.1);
-  font-weight: 400;
+  font-size: calc(var(--chat-plain-font-size) * 1.035);
+  font-weight: var(--bubble-body-weight);
   line-height: 1.45;
 }
 
@@ -1837,6 +1846,45 @@ input, button, textarea, select {
   margin-left: -0.25rem;
 }
 
+/* The account window (WorkspaceTopBar), from the photo at the top-right
+   (user, 2026-10-30, canvas option B): it drops six pixels and grows from 96%
+   out of the photo's corner, and folds back into it faster than it came —
+   closing should never make anyone wait. Out of the same family as the action
+   strips above, with the origin moved to the corner it hangs from. */
+@keyframes account-menu-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes account-menu-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.96);
+  }
+}
+
+.account-menu-enter {
+  animation: account-menu-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transform-origin: top right;
+  will-change: opacity, transform;
+}
+
+.account-menu-exit {
+  animation: account-menu-exit 120ms ease-in both;
+  transform-origin: top right;
+  will-change: opacity, transform;
+}
+
 /* ── Stillness ──────────────────────────────────────────────────────────────
    TWO ways the app stops moving, and they are not the same thing:
 
@@ -1863,6 +1911,8 @@ input, button, textarea, select {
   .action-strip-enter-up,
   .action-strip-exit,
   .action-strip-exit-up,
+  .account-menu-enter,
+  .account-menu-exit,
   .composer-ink,
   .composer-pulse {
     animation: none;
@@ -1879,7 +1929,8 @@ input, button, textarea, select {
   }
 
   .action-strip-exit,
-  .action-strip-exit-up {
+  .action-strip-exit-up,
+  .account-menu-exit {
     opacity: 0;
   }
 
@@ -1898,6 +1949,8 @@ input, button, textarea, select {
   .action-strip-enter-up,
   .action-strip-exit,
   .action-strip-exit-up,
+  .account-menu-enter,
+  .account-menu-exit,
   .composer-ink,
   .composer-pulse
 ) {
@@ -1919,7 +1972,7 @@ input, button, textarea, select {
 
 /* An exit that no longer animates has to be hidden outright, or it would sit
    there at full opacity until its unmount timer fires. */
-:root[data-animations='off'] :where(.action-strip-exit, .action-strip-exit-up) {
+:root[data-animations='off'] :where(.action-strip-exit, .action-strip-exit-up, .account-menu-exit) {
   opacity: 0;
 }
 

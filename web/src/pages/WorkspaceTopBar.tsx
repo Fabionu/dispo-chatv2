@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { LayoutGrid, MessagesSquare, PanelLeftClose, PanelLeftOpen, Truck, X } from 'lucide-react'
 import Avatar from '../components/Avatar'
 import { useTravellingMarker } from '../components/useTravellingMarker'
@@ -16,6 +16,10 @@ export type TopTab = {
   person?: { id: string; name: string; hasAvatar?: boolean; avatarVersion?: string | null }
   unread?: number
 }
+
+// How long the account window's exit animation runs (index.css
+// `account-menu-exit`, 120ms) — it unmounts when this has elapsed.
+const ACCOUNT_EXIT_MS = 120
 
 type Props = {
   collapsed: boolean
@@ -69,6 +73,19 @@ export default function WorkspaceTopBar({
   const { trackRef, rect } = useTravellingMarker(`${activeKey}|${tabs.length}`, '[data-top-tab="active"]')
 
   const accountRef = useRef<HTMLDivElement>(null)
+  // The window stays mounted for its exit (index.css `account-menu-exit`) after
+  // `accountOpen` goes false, then unmounts — so closing animates out instead of
+  // vanishing. With animations off the exit class is `opacity: 0`, and the timer
+  // is the same short beat before it is gone for good.
+  const [accountMounted, setAccountMounted] = useState(accountOpen)
+  useEffect(() => {
+    if (accountOpen) {
+      setAccountMounted(true)
+      return
+    }
+    const timer = window.setTimeout(() => setAccountMounted(false), ACCOUNT_EXIT_MS)
+    return () => window.clearTimeout(timer)
+  }, [accountOpen])
   useEffect(() => {
     if (!accountOpen) return
     function onKey(e: KeyboardEvent) {
@@ -168,11 +185,16 @@ export default function WorkspaceTopBar({
             />
           )}
         </button>
-        {accountOpen && (
+        {accountMounted && (
           <div
             role="dialog"
             aria-label="Account"
-            className="panel-fade-in absolute right-0 top-[calc(100%+0.5rem)] z-50 w-[23.75rem] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-card border border-line bg-surface shadow-overlay"
+            aria-hidden={accountOpen ? undefined : true}
+            // Drops out of the photo's corner (origin top-right) and folds back
+            // into it; a window on its way out takes no clicks.
+            className={`${
+              accountOpen ? 'account-menu-enter' : 'account-menu-exit pointer-events-none'
+            } absolute right-0 top-[calc(100%+0.5rem)] z-50 w-[23.75rem] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-card border border-line bg-surface shadow-overlay`}
           >
             {account}
           </div>
